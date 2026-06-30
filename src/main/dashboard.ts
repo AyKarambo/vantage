@@ -8,6 +8,7 @@ import {
 export interface DashboardFilters {
   account?: string; // 'all' or account name
   role?: string; // 'all' | tank | damage | support | openQ
+  mode?: string; // 'all' or game type (Competitive, Quick Play, …)
   days?: number | 'all';
 }
 
@@ -78,11 +79,13 @@ export function computeDashboard(all: GameRecord[], filters: DashboardFilters, i
     filters: {
       account: filters.account ?? 'all',
       role: filters.role ?? 'all',
+      mode: filters.mode ?? 'all',
       days: filters.days ?? 30,
     },
     options: {
       accounts: distinct(all.map((g) => g.account)).sort(),
       roles: distinct(all.map((g) => g.role)),
+      modes: distinct(all.map((g) => g.gameType)).sort(),
     },
     overall,
     streak: streak(games),
@@ -104,6 +107,7 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
   let out = games;
   if (f.account && f.account !== 'all') out = out.filter((g) => g.account === f.account);
   if (f.role && f.role !== 'all') out = out.filter((g) => g.role === f.role);
+  if (f.mode && f.mode !== 'all') out = out.filter((g) => g.gameType === f.mode);
   if (f.days && f.days !== 'all') {
     const cutoff = Date.now() - (f.days as number) * 86400000;
     out = out.filter((g) => g.timestamp >= cutoff);

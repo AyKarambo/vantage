@@ -8,7 +8,29 @@
 
   function readFilters() {
     const days = $('fDays').value;
-    return { account: $('fAccount').value, role: $('fRole').value, days: days === 'all' ? 'all' : Number(days) };
+    return {
+      account: $('fAccount').value,
+      role: $('fRole').value,
+      mode: $('fMode').value,
+      days: days === 'all' ? 'all' : Number(days),
+    };
+  }
+
+  function saveFilters() {
+    try { localStorage.setItem('owsFilters', JSON.stringify(readFilters())); } catch (e) { /* ignore */ }
+  }
+  function applySavedFilters() {
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem('owsFilters') || '{}'); } catch (e) { return; }
+    let changed = false;
+    const set = (id, val) => {
+      const el = $(id);
+      if (val != null && [...el.options].some((o) => o.value === String(val)) && el.value !== String(val)) {
+        el.value = String(val); changed = true;
+      }
+    };
+    set('fAccount', saved.account); set('fRole', saved.role); set('fMode', saved.mode); set('fDays', saved.days);
+    if (changed) refresh();
   }
 
   function fmt(n) {
@@ -25,7 +47,8 @@
 
   function render(d) {
     $('sampleBadge').classList.toggle('hidden', !d.isSample);
-    if (!optionsReady) populateOptions(d.options);
+    if (!optionsReady) { populateOptions(d.options); applySavedFilters(); }
+    saveFilters();
 
     $('kGames').textContent = d.overall.games;
     const wrEl = $('kWinrate');
@@ -43,7 +66,10 @@
     Charts.vbars($('cAccount'), d.byAccount.map((a) => ({ label: a.key, winrate: a.winrate, games: a.games })));
     Charts.vbars($('cMode'), d.byMode.map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })));
     renderCalendar(d.calendar);
-    Charts.hbars($('cMap'), d.byMap.map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })));
+    Charts.hbars(
+      $('cMap'),
+      [...d.byMap].sort((a, b) => b.winrate - a.winrate).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })),
+    );
 
     renderFocus(d.focusMaps);
     heroRows = d.heroStats;
@@ -54,10 +80,9 @@
   }
 
   function populateOptions(opts) {
-    const acc = $('fAccount');
-    acc.innerHTML = '<option value="all">All</option>' + opts.accounts.map((a) => `<option value="${a}">${a}</option>`).join('');
-    const role = $('fRole');
-    role.innerHTML = '<option value="all">All</option>' + opts.roles.map((r) => `<option value="${r}">${ROLE_LABEL[r] || r}</option>`).join('');
+    $('fAccount').innerHTML = '<option value="all">All</option>' + opts.accounts.map((a) => `<option value="${a}">${a}</option>`).join('');
+    $('fRole').innerHTML = '<option value="all">All</option>' + opts.roles.map((r) => `<option value="${r}">${ROLE_LABEL[r] || r}</option>`).join('');
+    $('fMode').innerHTML = '<option value="all">All</option>' + (opts.modes || []).map((m) => `<option value="${m}">${m}</option>`).join('');
     optionsReady = true;
   }
 
@@ -66,25 +91,25 @@
     c.innerHTML = '';
     const losing = items.filter((i) => i.net > 0);
     if (!losing.length) {
-      c.innerHTML = '<div class="focus-empty">No net-losing maps in this range — nice. 🎯</div>';
+      c.innerHTML = '<div class="focus-empty">No net-losing maps here — nice. 🎯</div>';
       return;
     }
     const max = losing[0].net;
     for (const it of losing) {
       const row = document.createElement('div');
       row.className = 'focus-row';
-      const bar = document.createElement('div');
-      bar.className = 'focus-bar';
-      const span = document.createElement('span');
-      span.style.width = Math.round((it.net / max) * 100) + '%';
-      bar.appendChild(span);
       const name = document.createElement('div');
       name.className = 'fname';
       name.textContent = it.key;
       const meta = document.createElement('div');
       meta.className = 'focus-meta';
-      meta.textContent = `−${it.net} net · ${Charts.pct(it.winrate)} (${it.games}g)`;
-      row.append(name, bar, meta);
+      meta.textContent = `−${it.net} · ${Charts.pct(it.winrate)} (${it.games}g)`;
+      const barWrap = document.createElement('div');
+      barWrap.className = 'focus-bar-wrap';
+      const span = document.createElement('span');
+      span.style.width = Math.round((it.net / max) * 100) + '%';
+      barWrap.appendChild(span);
+      row.append(name, meta, barWrap);
       c.appendChild(row);
     }
   }
@@ -207,7 +232,7 @@
     btn.disabled = false;
   }
 
-  ['fAccount', 'fRole', 'fDays'].forEach((id) => $(id).addEventListener('change', refresh));
+  ['fAccount', 'fRole', 'fMode', 'fDays'].forEach((id) => $(id).addEventListener('change', refresh));
   $('exportBtn').addEventListener('click', exportNotion);
   $('drawerClose').addEventListener('click', () => $('drawer').classList.add('hidden'));
   $('drawer').addEventListener('click', (e) => { if (e.target.id === 'drawer') $('drawer').classList.add('hidden'); });

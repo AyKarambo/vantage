@@ -28,7 +28,7 @@
   function vbars(container, data) {
     clear(container);
     if (!data.length) return empty(container);
-    const padL = 8, padR = 8, padT = 26, padB = 34, barW = 46, gap = 26, H = 220;
+    const padL = 6, padR = 6, padT = 18, padB = 28, barW = 34, gap = 18, H = 152;
     const W = padL + padR + data.length * barW + (data.length - 1) * gap;
     const top = padT, bot = H - padB, plot = bot - top;
     const s = svg(Math.max(W, 240), H);
@@ -40,9 +40,9 @@
       const x = padL + i * (barW + gap);
       const h = Math.max(2, d.winrate * plot);
       s.appendChild(el('rect', { x, y: bot - h, width: barW, height: h, rx: 5, fill: wrColor(d.winrate) }));
-      s.appendChild(text(x + barW / 2, bot - h - 7, pct(d.winrate), 'bar-label'));
-      s.appendChild(text(x + barW / 2, bot + 15, d.label.length > 8 ? d.label.slice(0, 7) + '…' : d.label));
-      s.appendChild(text(x + barW / 2, bot + 28, d.games + 'g'));
+      s.appendChild(text(x + barW / 2, bot - h - 6, pct(d.winrate), 'bar-label'));
+      s.appendChild(text(x + barW / 2, bot + 13, d.label.length > 9 ? d.label.slice(0, 8) + '…' : d.label));
+      s.appendChild(text(x + barW / 2, bot + 24, d.games + 'g'));
     });
     container.appendChild(s);
   }
@@ -51,7 +51,7 @@
   function hbars(container, data) {
     clear(container);
     if (!data.length) return empty(container);
-    const rowH = 24, gap = 6, padT = 6, labelW = 150, valW = 70;
+    const rowH = 18, gap = 5, padT = 4, labelW = 132, valW = 66;
     const W = 720, barX = labelW, barW = W - labelW - valW;
     const H = padT * 2 + data.length * (rowH + gap);
     const s = svg(W, H);
@@ -69,7 +69,7 @@
   function line(container, points) {
     clear(container);
     if (points.length < 2) return empty(container);
-    const padL = 36, padR = 14, padT = 16, padB = 26, H = 240, W = 720;
+    const padL = 32, padR = 12, padT = 12, padB = 22, H = 170, W = 720;
     const top = padT, bot = H - padB, plotH = bot - top, plotW = W - padL - padR;
     const s = svg(W, H);
     [0, 0.5, 1].forEach((g) => {

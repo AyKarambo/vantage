@@ -61,6 +61,8 @@ export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
     const wr = clamp(ACCOUNT_WR[account] + (ROLE_WR[role] - 0.5) + mapMod[map], 0.2, 0.82);
     const roll = rnd();
     const result: Result = roll < wr ? 'Win' : roll < wr + 0.06 ? 'Draw' : 'Loss';
+    const gt = rnd();
+    const gameType = gt < 0.68 ? 'Competitive' : gt < 0.92 ? 'Quick Play' : 'Arcade';
 
     const heroCount = rnd() < 0.45 ? 2 : 1;
     const heroPool = HEROES[role];
@@ -78,7 +80,7 @@ export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
       role,
       map,
       result,
-      gameType: 'Competitive',
+      gameType,
       durationMinutes: duration,
       heroes,
       perHero,
