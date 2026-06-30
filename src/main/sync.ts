@@ -4,8 +4,8 @@ import { resolveAccount } from '../core/resolvers/account';
 import { resolveRole } from '../core/resolvers/role';
 import { resolveResult } from '../core/resolvers/result';
 import { shouldLog } from '../core/matchFilter';
-import { NotionWriter, type ResolvedMatch } from '../notion/notionWriter';
-import { MapsCache } from '../notion/mapsCache';
+import type { NotionWriter, ResolvedMatch } from '../notion/notionWriter';
+import type { MapsCache } from '../notion/mapsCache';
 import { OutboxStore } from '../store/outbox';
 
 export interface Notifier {
@@ -24,6 +24,9 @@ export class SyncService {
   private writer?: NotionWriter;
   private maps?: MapsCache;
   private warnedNoNotion = false;
+  /** Match ids whose write is currently in flight — guards against a concurrent
+   *  immediate-write and retry-loop write creating duplicate rows. */
+  private inFlight = new Set<string>();
 
   constructor(
     private config: AppConfig,
@@ -93,33 +96,42 @@ export class SyncService {
   }
 
   private async writeOrQueue(record: MatchRecord): Promise<void> {
-    const ok = await this.tryWrite(record, /* notifyWarnings */ true);
-    if (ok) {
+    // Persist BEFORE attempting the write, so a hard crash mid-write still leaves
+    // the match queued for retry. The Match ID dedupe makes a re-send safe.
+    this.outbox.enqueue(record);
+    if (await this.tryWrite(record, /* notifyWarnings */ true)) {
+      this.outbox.remove(record.matchId);
       this.outbox.markProcessed(record.matchId);
-    } else {
-      this.outbox.enqueue(record);
     }
+    // On failure the record stays in the outbox; the retry loop handles it.
   }
 
   private async tryWrite(record: MatchRecord, notifyWarnings = false): Promise<boolean> {
     if (!this.ready()) return false;
-    let resolved: ResolvedMatch;
+    // Skip if this exact match is already being written elsewhere.
+    if (this.inFlight.has(record.matchId)) return false;
+    this.inFlight.add(record.matchId);
     try {
-      resolved = await this.resolve(record);
-    } catch (err) {
-      this.notifier.notifyError('Resolve failed', String(err));
-      return false;
-    }
+      let resolved: ResolvedMatch;
+      try {
+        resolved = await this.resolve(record);
+      } catch (err) {
+        this.notifier.notifyError('Resolve failed', String(err));
+        return false;
+      }
 
-    if (notifyWarnings) this.warnOnGaps(resolved);
+      if (notifyWarnings) this.warnOnGaps(resolved);
 
-    try {
-      await this.writer!.createMatchPage(resolved);
-      this.notifier.notify('Match logged', this.successText(resolved));
-      return true;
-    } catch (err) {
-      this.notifier.notifyError('Notion sync failed (will retry)', String(err));
-      return false;
+      try {
+        await this.writer!.createMatchPage(resolved);
+        this.notifier.notify('Match logged', this.successText(resolved));
+        return true;
+      } catch (err) {
+        this.notifier.notifyError('Notion sync failed (will retry)', String(err));
+        return false;
+      }
+    } finally {
+      this.inFlight.delete(record.matchId);
     }
   }
 
