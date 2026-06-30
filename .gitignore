@@ -2,6 +2,7 @@
 dist/
 build/
 out/
+release/
 
 # deps
 node_modules/
@@ -14,8 +15,9 @@ config.local.json
 secrets/
 *.secret
 
-# generated tray icon (created by scripts/make-tray-icon.js)
+# generated icons (created by scripts/make-tray-icon.js)
 assets/tray.png
+assets/appicon.png
 
 # logs
 *.log

@@ -1,7 +1,7 @@
 {
   "name": "overwatch-gametracker-sync",
   "version": "0.1.0",
-  "description": "Account-safe auto-sync of Overwatch 2 matches into a Notion Gametracker database via Overwolf GEP.",
+  "description": "Account-safe auto-sync of Overwatch 2 matches into a Notion Gametracker database by reading Counterwatch's local data.",
   "author": "Timo Seikel",
   "license": "MIT",
   "main": "dist/main/index.js",
@@ -17,7 +17,45 @@
     "start": "npm run make-icon && npm run build && ow-electron .",
     "dev": "npm run make-icon && npm run build && ow-electron .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "npm run make-icon && npm run build && ow-electron-builder --win --x64 --publish=never"
+  },
+  "build": {
+    "appId": "com.timoseikel.owgametrackersync",
+    "productName": "Overwatch Gametracker Sync",
+    "asar": true,
+    "nodeGypRebuild": false,
+    "overwolf": {
+      "disableAdOptimization": true
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "appsettings.json",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/appicon.png",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Overwatch Gametracker Sync"
+    }
   },
   "dependencies": {
     "@notionhq/client": "^2.2.15"
