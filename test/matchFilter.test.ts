@@ -15,6 +15,12 @@ describe('classifyGameType', () => {
     expect(classifyGameType('Stadium')).toBe('stadium');
     expect(classifyGameType('custom game')).toBe('custom');
   });
+
+  it('treats Counterwatch Ranked/Unranked correctly', () => {
+    // "Unranked" contains "ranked" — must not be misread as competitive.
+    expect(classifyGameType('Unranked')).toBe('quickplay');
+    expect(classifyGameType('Ranked')).toBe('competitive');
+  });
 });
 
 describe('gameTypeLabel', () => {

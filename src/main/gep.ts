@@ -116,6 +116,28 @@ export class GepService extends EventEmitter {
     });
 
     this.emit('status', this.getStatus());
+    this.logSupportedGames();
+  }
+
+  /** Diagnostic: ask GEP which games it currently supports and whether Overwatch is one. */
+  private logSupportedGames(): void {
+    const fn = this.gep?.getSupportedGames;
+    if (!fn) {
+      this.emit('log', 'gep: getSupportedGames not available in this build');
+      return;
+    }
+    fn.call(this.gep)
+      .then((games) => {
+        this.emit('log', `gep: ${games.length} supported games`);
+        const ow = games.find((g) => g.id === this.overwatchGameId);
+        this.emit(
+          'log',
+          ow
+            ? `gep: Overwatch (${this.overwatchGameId}) IS supported right now — waiting for game-detected`
+            : `gep: Overwatch (${this.overwatchGameId}) is NOT in the supported list right now (GEP may be in maintenance for OW)`,
+        );
+      })
+      .catch((err) => this.emit('log', 'gep: getSupportedGames failed', String(err)));
   }
 
   private dispatch(kind: 'info' | 'event', data: RawGepData): void {

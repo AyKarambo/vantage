@@ -15,8 +15,11 @@ import { OutboxStore } from '../store/outbox';
 import { SyncService } from './sync';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
+import type { GepMessage } from '../core/model';
+import { CounterwatchReader } from './counterwatch';
 import { TrayController, type TrayHandlers } from './tray';
 import { isAutoLaunchEnabled, setAutoLaunch } from './autolaunch';
+import { runSimulation } from './simulate';
 
 // Single instance: a second launch just exits.
 if (!app.requestSingleInstanceLock()) {
@@ -30,6 +33,7 @@ if (!app.requestSingleInstanceLock()) {
 
 function main(): void {
   let config = loadConfig();
+  let liveStatus = 'Starting…';
 
   const outbox = new OutboxStore(path.join(app.getPath('userData'), 'data'));
   const aggregator = new MatchAggregator();
@@ -38,7 +42,7 @@ function main(): void {
   const handlers: TrayHandlers = {
     onTogglePause: (paused) => {
       sync.paused = paused;
-      tray.setState({ paused, status: paused ? 'Paused' : statusText(gep.getStatus()) });
+      tray.setState({ paused, status: paused ? 'Paused' : liveStatus });
     },
     onToggleAutoLaunch: (enabled) => {
       setAutoLaunch(enabled);
@@ -85,16 +89,34 @@ function main(): void {
     maps.load().catch((err) => tray.notifyError('Maps load failed', String(err)));
   }
 
-  const gep = new GepService(config.overwatchGameId);
-  gep.on('message', (msg) => {
+  // Single entry point for a normalized GEP message — shared by the live feed
+  // and dev simulation so both exercise the exact same pipeline.
+  const feed = (msg: GepMessage): void => {
     const record = aggregator.handle(msg);
     if (record) void sync.handleRecord(record);
-  });
-  gep.on('status', (status: GepStatus) => tray.setState({ status: statusText(status) }));
-  gep.on('log', (...args: unknown[]) => console.log('[gep]', ...args));
+  };
+
+  // Sensor: Counterwatch (read its local DB) by default, or GEP if explicitly chosen.
+  // Sensor: Counterwatch (read its local DB) by default, or GEP if explicitly chosen.
+  if (config.sensor === 'gep') {
+    const gep = new GepService(config.overwatchGameId);
+    gep.on('message', feed);
+    gep.on('status', (status: GepStatus) => {
+      liveStatus = statusText(status);
+      tray.setState({ status: liveStatus });
+    });
+    gep.on('log', (...args: unknown[]) => console.log('[gep]', ...args));
+    liveStatus = 'Waiting for Overwatch…';
+  } else {
+    const cw = new CounterwatchReader();
+    cw.on('match', (record) => void sync.handleRecord(record));
+    cw.on('log', (...args: unknown[]) => console.log('[cw]', ...args));
+    cw.start();
+    liveStatus = 'Watching Counterwatch matches';
+  }
 
   tray.init({
-    status: 'Waiting for Overwatch…',
+    status: liveStatus,
     paused: false,
     autoLaunch: isAutoLaunchEnabled(),
     tokenSet: Boolean(getNotionToken()),
@@ -102,6 +124,14 @@ function main(): void {
 
   rebuildNotion();
   sync.startRetryLoop();
+
+  if (process.argv.includes('--simulate') || process.env.OW_SYNC_SIMULATE === '1') {
+    const battleTag = Object.keys(config.accounts)[0] ?? 'Karambo#0000';
+    tray.setState({ status: 'DEV simulation running…' });
+    setTimeout(() => {
+      void runSimulation(feed, (m) => console.log('[sim]', m), { battleTag, map: "King's Row" });
+    }, 2000);
+  }
 }
 
 function statusText(s: GepStatus): string {

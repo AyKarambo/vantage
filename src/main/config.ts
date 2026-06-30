@@ -9,10 +9,14 @@ export interface NotionConfig {
   gametrackerUrl: string;
 }
 
+export type Sensor = 'counterwatch' | 'gep';
+
 export interface AppConfig {
   overwatchGameId: number;
   logFilter: LogFilter;
   runAtLogin: boolean;
+  /** Where match data comes from. 'counterwatch' reads Counterwatch's local DB. */
+  sensor: Sensor;
   notion: NotionConfig;
   /** BattleTag → Notion Account select value. */
   accounts: Record<string, string>;
@@ -24,6 +28,7 @@ const DEFAULTS: AppConfig = {
   overwatchGameId: 10844, // kGepSupportedGameIds.Overwatch (Overwatch 2)
   logFilter: 'Competitive',
   runAtLogin: false,
+  sensor: 'counterwatch',
   notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
   accounts: {},
   mapAliases: {},
@@ -58,7 +63,7 @@ function readJson<T>(file: string): Partial<T> {
 export function loadConfig(): AppConfig {
   const bundled = readJson<AppConfig>(appSettingsPath());
   const local = readJson<AppConfig>(userConfigPath());
-  return {
+  const merged: AppConfig = {
     ...DEFAULTS,
     ...stripHelp(bundled),
     ...stripHelp(local),
@@ -66,6 +71,10 @@ export function loadConfig(): AppConfig {
     accounts: { ...(bundled.accounts ?? {}), ...(local.accounts ?? {}) },
     mapAliases: { ...(bundled.mapAliases ?? {}), ...(local.mapAliases ?? {}) },
   };
+  // Env overrides (handy for one-off testing without editing files).
+  if (process.env.OW_SYNC_FILTER) merged.logFilter = process.env.OW_SYNC_FILTER as LogFilter;
+  if (process.env.OW_SYNC_SENSOR) merged.sensor = process.env.OW_SYNC_SENSOR as Sensor;
+  return merged;
 }
 
 /** Persist a partial override into the user's local config file. */

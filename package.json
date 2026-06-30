@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "make-icon": "node scripts/make-tray-icon.js",
     "start": "npm run make-icon && npm run build && ow-electron .",
-    "dev": "npm run make-icon && npm run build && ow-electron . --dev",
+    "dev": "npm run make-icon && npm run build && ow-electron .",
     "test": "vitest run",
     "test:watch": "vitest"
   },
