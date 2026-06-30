@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <title>Overwatch Stats</title>
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo"></span>
+      <h1>Overwatch&nbsp;Stats</h1>
+      <span id="sampleBadge" class="badge hidden">Demo data</span>
+    </div>
+    <div class="filters">
+      <label>Account <select id="fAccount"></select></label>
+      <label>Role <select id="fRole"></select></label>
+      <label>Range
+        <select id="fDays">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="all">All time</option>
+        </select>
+      </label>
+      <button id="exportBtn" title="Send the filtered games to your Notion Gametracker">Export → Notion</button>
+    </div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi"><div class="kpi-val" id="kGames">–</div><div class="kpi-lbl">Games</div></div>
+    <div class="kpi"><div class="kpi-val" id="kWinrate">–</div><div class="kpi-lbl">Winrate</div></div>
+    <div class="kpi"><div class="kpi-val" id="kRecord">–</div><div class="kpi-lbl">W &middot; L &middot; D</div></div>
+    <div class="kpi"><div class="kpi-val" id="kStreak">–</div><div class="kpi-lbl">Current streak</div></div>
+  </section>
+
+  <main class="grid">
+    <div class="card span2">
+      <h2>Winrate over time</h2>
+      <div id="cTrend" class="chart"></div>
+    </div>
+
+    <div class="card focus span2">
+      <h2>Focus — work on these</h2>
+      <p class="hint">Maps where you lose more than you win (net losses). Biggest gaps first.</p>
+      <div id="cFocus" class="focus-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>By role</h2>
+      <div id="cRole" class="chart"></div>
+    </div>
+    <div class="card">
+      <h2>By account</h2>
+      <div id="cAccount" class="chart"></div>
+    </div>
+
+    <div class="card span2">
+      <h2>Winrate by map</h2>
+      <div id="cMap" class="chart"></div>
+    </div>
+
+    <div class="card span2">
+      <h2>Heroes</h2>
+      <p class="hint">Exact per-hero stats (per 10 min). Click a column header to sort.</p>
+      <div id="cHeroes" class="table-wrap"></div>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status">Loading…</span>
+  </footer>
+
+  <script src="charts.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

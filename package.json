@@ -33,6 +33,7 @@
     },
     "files": [
       "dist/**/*",
+      "renderer/**/*",
       "assets/**/*",
       "appsettings.json",
       "package.json"

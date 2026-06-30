@@ -10,7 +10,7 @@ import {
 import * as fs from 'fs';
 
 export interface TrayHandlers {
-  onTogglePause(paused: boolean): void;
+  onOpenDashboard(): void;
   onToggleAutoLaunch(enabled: boolean): void;
   onImportToken(token: string): void;
   onReloadConfig(): void;
@@ -21,7 +21,6 @@ export interface TrayHandlers {
 
 export interface TrayState {
   status: string;
-  paused: boolean;
   autoLaunch: boolean;
   tokenSet: boolean;
 }
@@ -32,7 +31,7 @@ export interface TrayState {
  */
 export class TrayController {
   private tray!: Tray;
-  private state: TrayState = { status: 'Starting…', paused: false, autoLaunch: false, tokenSet: false };
+  private state: TrayState = { status: 'Starting…', autoLaunch: false, tokenSet: false };
 
   constructor(
     private readonly iconPath: string,
@@ -42,7 +41,8 @@ export class TrayController {
   init(initial: Partial<TrayState>): void {
     this.state = { ...this.state, ...initial };
     this.tray = new Tray(this.icon());
-    this.tray.setToolTip('Overwatch Gametracker Sync');
+    this.tray.setToolTip('Overwatch Stats');
+    this.tray.on('double-click', () => this.handlers.onOpenDashboard());
     this.rebuild();
   }
 
@@ -78,6 +78,8 @@ export class TrayController {
 
   private rebuild(): void {
     const menu = Menu.buildFromTemplate([
+      { label: 'Open Dashboard', click: () => this.handlers.onOpenDashboard() },
+      { type: 'separator' },
       { label: this.state.status, enabled: false },
       { type: 'separator' },
       {
@@ -86,12 +88,6 @@ export class TrayController {
       },
       { label: 'Open Gametracker in Notion', click: () => this.handlers.onOpenGametracker() },
       { type: 'separator' },
-      {
-        label: 'Pause logging',
-        type: 'checkbox',
-        checked: this.state.paused,
-        click: (item: Electron.MenuItem) => this.handlers.onTogglePause(item.checked),
-      },
       {
         label: 'Run at login',
         type: 'checkbox',
