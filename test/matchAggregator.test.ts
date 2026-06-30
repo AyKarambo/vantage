@@ -93,6 +93,28 @@ describe('MatchAggregator', () => {
   });
 });
 
+describe('MatchAggregator per-hero stats', () => {
+  it('splits cumulative roster stats per hero across a swap', () => {
+    const agg = new MatchAggregator(() => 1000);
+    const seq: GepMessage[] = [
+      event('match_start'),
+      info('game_info', 'battle_tag', 'Player#1'),
+      info('match_info', 'pseudo_match_id', 'mh1'),
+      info('roster', 'roster_0', { name: 'Player#1', hero: 'Tracer', role: 'damage', kills: 10, deaths: 2, assists: 3, damage: 4000 }),
+      info('roster', 'roster_0', { name: 'Player#1', hero: 'Genji', role: 'damage', kills: 18, deaths: 4, assists: 5, damage: 9000 }),
+      info('roster', 'roster_0', { name: 'Player#1', hero: 'Genji', kills: 25, deaths: 6, assists: 7, damage: 14000 }),
+      info('match_info', 'match_outcome', 'Victory'),
+    ];
+    let rec = null;
+    for (const m of seq) rec = agg.handle(m) ?? rec;
+    rec = agg.handle(event('match_end'));
+    expect(rec?.perHero).toBeDefined();
+    const ph = Object.fromEntries((rec!.perHero ?? []).map((h) => [h.hero, h]));
+    expect(ph.Tracer).toMatchObject({ eliminations: 10, deaths: 2, assists: 3, damage: 4000, role: 'damage' });
+    expect(ph.Genji).toMatchObject({ eliminations: 15, deaths: 4, assists: 4, damage: 10000 });
+  });
+});
+
 describe('parseRoster', () => {
   it('parses JSON strings and object values with field aliases', () => {
     const a = parseRoster('{"battletag":"A#1","hero_name":"Ana","hero_role":"support","healing_done":12000}');

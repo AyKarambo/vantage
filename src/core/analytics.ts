@@ -1,4 +1,4 @@
-import type { Result, Role } from './model';
+import type { Result, Role, HeroStat } from './model';
 
 /**
  * Analytics layer: turns a list of completed games into the aggregates the
@@ -7,17 +7,7 @@ import type { Result, Role } from './model';
  * Pure and I/O-free so it is fully unit-testable and reusable in the renderer.
  */
 
-/** Per-hero totals for the local player. */
-export interface HeroStat {
-  hero: string;
-  role?: Role;
-  eliminations: number;
-  deaths: number;
-  assists: number;
-  damage: number;
-  healing: number;
-  mitigation: number;
-}
+export type { HeroStat };
 
 /** One finished game, already resolved to display values. */
 export interface GameRecord {
@@ -183,6 +173,65 @@ export function heroStats(games: GameRecord[]): HeroSummary[] {
       } as HeroSummary;
     })
     .sort((a, b) => b.games - a.games);
+}
+
+export const byMode = (g: GameRecord[]): Group[] => groupBy(g, (x) => x.gameType);
+
+/** Current win/loss streak from the most recent decided games. */
+export function streak(games: GameRecord[]): { type: 'W' | 'L' | 'none'; count: number } {
+  const decided = [...games].filter((g) => g.result !== 'Draw').sort((a, b) => b.timestamp - a.timestamp);
+  if (!decided.length) return { type: 'none', count: 0 };
+  const type = decided[0].result === 'Win' ? 'W' : 'L';
+  let count = 0;
+  for (const g of decided) {
+    if ((g.result === 'Win' ? 'W' : 'L') === type) count++;
+    else break;
+  }
+  return { type, count };
+}
+
+/** Recap for the most recent day that has games. */
+export function latestSession(games: GameRecord[]) {
+  if (!games.length) return null;
+  const latest = games.reduce((m, g) => Math.max(m, g.timestamp), 0);
+  const day = dayKey(latest);
+  const dayGames = games.filter((g) => dayKey(g.timestamp) === day);
+  return { date: day, ...winLoss(dayGames), streak: streak(dayGames), topMaps: byMap(dayGames).slice(0, 3) };
+}
+
+/** Per-day games + winrate for the last `days` calendar days (heatmap). */
+export function calendar(games: GameRecord[], days = 35): Array<{ date: string; games: number; winrate: number | null }> {
+  const map = new Map<string, GameRecord[]>();
+  for (const g of games) {
+    const k = dayKey(g.timestamp);
+    (map.get(k) ?? map.set(k, []).get(k)!).push(g);
+  }
+  const out: Array<{ date: string; games: number; winrate: number | null }> = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const k = dayKey(d.getTime());
+    const gs = map.get(k) ?? [];
+    out.push({ date: k, games: gs.length, winrate: gs.length ? winLoss(gs).winrate : null });
+  }
+  return out;
+}
+
+/** Drill-down for one hero: overall, per-map, recent games, exact stats. */
+export function heroDetail(games: GameRecord[], hero: string) {
+  const gs = games.filter((g) => g.heroes.includes(hero)).sort((a, b) => b.timestamp - a.timestamp);
+  return {
+    hero,
+    overall: winLoss(gs),
+    byMap: byMap(gs).slice(0, 12),
+    recent: gs.slice(0, 10).map((g) => ({ map: g.map, role: g.role, result: g.result, account: g.account, timestamp: g.timestamp })),
+    stats: heroStats(gs).find((h) => h.hero === hero) ?? null,
+  };
+}
+
+export function dayKey(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
 }
 
 // --- helpers ----------------------------------------------------------------

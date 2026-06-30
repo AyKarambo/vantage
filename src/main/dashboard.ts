@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import * as path from 'path';
 import {
-  byAccount, byHero, byMap, byRole, focusBy, heroStats, trend, winLoss,
-  type GameRecord,
+  byAccount, byHero, byMap, byMode, byRole, calendar, focusBy, heroDetail, heroStats,
+  latestSession, streak, trend, winLoss, type GameRecord,
 } from '../core/analytics';
 
 export interface DashboardFilters {
@@ -34,6 +34,9 @@ export class DashboardWindow {
       if (!this.provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
       return this.provider.exportToNotion(applyFilters(this.provider.games(), filters ?? {}));
     });
+    ipcMain.handle('dashboard:hero-detail', (_e, hero: string, filters: DashboardFilters) =>
+      heroDetail(applyFilters(this.provider.games(), filters ?? {}), hero),
+    );
   }
 
   open(): void {
@@ -82,12 +85,15 @@ export function computeDashboard(all: GameRecord[], filters: DashboardFilters, i
       roles: distinct(all.map((g) => g.role)),
     },
     overall,
-    streak: currentStreak(games),
+    streak: streak(games),
+    session: latestSession(games),
     byRole: byRole(games),
     byAccount: byAccount(games),
+    byMode: byMode(games),
     byMap: byMap(games),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     trend: trend(games, weekly ? 'week' : 'day'),
+    calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 6),
     focusRoles: focusBy(games, (g) => g.role, 1),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 16),
@@ -103,19 +109,6 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
     out = out.filter((g) => g.timestamp >= cutoff);
   }
   return out;
-}
-
-/** Current win/loss streak from the most recent decided games. */
-function currentStreak(games: GameRecord[]): { type: 'W' | 'L' | 'none'; count: number } {
-  const decided = [...games].filter((g) => g.result !== 'Draw').sort((a, b) => b.timestamp - a.timestamp);
-  if (!decided.length) return { type: 'none', count: 0 };
-  const type = decided[0].result === 'Win' ? 'W' : 'L';
-  let count = 0;
-  for (const g of decided) {
-    if ((g.result === 'Win' ? 'W' : 'L') === type) count++;
-    else break;
-  }
-  return { type, count };
 }
 
 const distinct = <T>(arr: T[]): T[] => [...new Set(arr)];

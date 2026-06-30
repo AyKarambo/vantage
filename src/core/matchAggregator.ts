@@ -1,4 +1,4 @@
-import { emptyMatch, type GepMessage, type MatchRecord, type RosterPlayer } from './model';
+import { emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from './model';
 
 /**
  * Accumulates the GEP message stream into one {@link MatchRecord} per match.
@@ -121,6 +121,34 @@ export class MatchAggregator {
       healing: player.healing ?? r.healing,
       mitigation: player.mitigation ?? r.mitigation,
     };
+
+    this.trackHero(player);
+  }
+
+  /**
+   * Build per-hero stats by delta-tracking the roster. GEP roster stats are
+   * match-cumulative (across hero swaps), so a hero's stats = cumulative when it
+   * was swapped out − cumulative when it was swapped in. This cumulative model is
+   * the one assumption to verify against a real capture; deltas are floored at 0.
+   */
+  private trackHero(player: RosterPlayer): void {
+    const c = this.current;
+    if (player.heroName && player.heroName !== c.currentHero) {
+      if (c.currentHero) c.perHero.push(closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum));
+      c.currentHero = player.heroName;
+      c.currentRole = player.heroRole ?? c.currentRole;
+      c.heroStart = { ...c.lastCum }; // new hero starts at the swap-point cumulative
+    } else if (player.heroRole) {
+      c.currentRole = player.heroRole;
+    }
+    c.lastCum = {
+      eliminations: player.kills ?? c.lastCum.eliminations,
+      deaths: player.deaths ?? c.lastCum.deaths,
+      assists: player.assists ?? c.lastCum.assists,
+      damage: player.damage ?? c.lastCum.damage,
+      healing: player.healing ?? c.lastCum.healing,
+      mitigation: player.mitigation ?? c.lastCum.mitigation,
+    };
   }
 
   private tallyRound(outcome: string | undefined): void {
@@ -165,6 +193,13 @@ export class MatchAggregator {
       rec.finalScore = `${this.current.roundWins}–${this.current.roundLosses}`;
     }
 
+    if (this.current.currentHero) {
+      this.current.perHero.push(
+        closeHero(this.current.currentHero, this.current.currentRole, this.current.heroStart, this.current.lastCum),
+      );
+    }
+    if (this.current.perHero.length) rec.perHero = this.current.perHero;
+
     if (!rec.matchId) {
       // No pseudo_match_id seen — synthesize so dedupe still has a key this session.
       rec.matchId = `synthetic-${rec.startedAt ?? rec.endedAt}-${++this.synthetic}`;
@@ -189,10 +224,52 @@ interface MutableMatch {
   matchAssists?: number;
   roundWins: number;
   roundLosses: number;
+  // per-hero tracking
+  perHero: HeroStat[];
+  currentHero?: string;
+  currentRole?: string;
+  heroStart: Snap;
+  lastCum: Snap;
+}
+
+interface Snap {
+  eliminations: number;
+  deaths: number;
+  assists: number;
+  damage: number;
+  healing: number;
+  mitigation: number;
+}
+
+function zeroSnap(): Snap {
+  return { eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 };
 }
 
 function newMutable(): MutableMatch {
-  return { record: emptyMatch(''), rosterLocal: {}, roundWins: 0, roundLosses: 0 };
+  return { record: emptyMatch(''), rosterLocal: {}, roundWins: 0, roundLosses: 0, perHero: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+}
+
+/** A hero's stats = cumulative-out − cumulative-in, floored at 0. */
+function closeHero(hero: string, role: string | undefined, start: Snap, end: Snap): HeroStat {
+  return {
+    hero,
+    role: toRole(role),
+    eliminations: Math.max(0, end.eliminations - start.eliminations),
+    deaths: Math.max(0, end.deaths - start.deaths),
+    assists: Math.max(0, end.assists - start.assists),
+    damage: Math.max(0, end.damage - start.damage),
+    healing: Math.max(0, end.healing - start.healing),
+    mitigation: Math.max(0, end.mitigation - start.mitigation),
+  };
+}
+
+function toRole(raw: string | undefined): Role | undefined {
+  switch ((raw ?? '').toLowerCase()) {
+    case 'tank': return 'tank';
+    case 'damage': case 'dps': case 'offense': return 'damage';
+    case 'support': case 'healer': return 'support';
+    default: return undefined;
+  }
 }
 
 // --- helpers ------------------------------------------------------------------

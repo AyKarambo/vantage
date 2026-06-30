@@ -36,6 +36,11 @@
   </section>
 
   <main class="grid">
+    <div class="card span2 session">
+      <h2 id="sessionTitle">Latest session</h2>
+      <div id="cSession" class="session-body"></div>
+    </div>
+
     <div class="card span2">
       <h2>Winrate over time</h2>
       <div id="cTrend" class="chart"></div>
@@ -56,6 +61,16 @@
       <div id="cAccount" class="chart"></div>
     </div>
 
+    <div class="card">
+      <h2>By game mode</h2>
+      <div id="cMode" class="chart"></div>
+    </div>
+    <div class="card">
+      <h2>Activity</h2>
+      <p class="hint">Games per day — colour = winrate, size = volume.</p>
+      <div id="cCalendar" class="cal"></div>
+    </div>
+
     <div class="card span2">
       <h2>Winrate by map</h2>
       <div id="cMap" class="chart"></div>
@@ -63,10 +78,17 @@
 
     <div class="card span2">
       <h2>Heroes</h2>
-      <p class="hint">Exact per-hero stats (per 10 min). Click a column header to sort.</p>
+      <p class="hint">Exact per-hero stats (per 10 min). Click a header to sort, a row for details.</p>
       <div id="cHeroes" class="table-wrap"></div>
     </div>
   </main>
+
+  <div id="drawer" class="drawer hidden">
+    <div class="drawer-panel">
+      <button id="drawerClose" class="drawer-close" title="Close">×</button>
+      <div id="drawerBody"></div>
+    </div>
+  </div>
 
   <footer class="statusbar">
     <span id="status">Loading…</span>

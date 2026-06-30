@@ -140,8 +140,9 @@ function matchToGame(record: MatchRecord, config: AppConfig): GameRecord | null 
   const result = resolveResult(record.outcome);
   if (!result) return null; // no win/loss → not useful for stats
   const role = resolveRole(record.queueType, record.heroRole) ?? 'openQ';
-  const perHero =
-    record.heroes.length === 1 && record.eliminations != null
+  const perHero = record.perHero?.length
+    ? record.perHero
+    : record.heroes.length === 1 && record.eliminations != null
       ? [{
           hero: record.heroes[0], role,
           eliminations: record.eliminations ?? 0, deaths: record.deaths ?? 0, assists: record.assists ?? 0,

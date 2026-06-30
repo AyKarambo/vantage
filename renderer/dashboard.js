@@ -37,9 +37,12 @@
     stEl.textContent = st.type === 'none' ? '–' : `${st.type}${st.count}`;
     stEl.className = 'kpi-val ' + (st.type === 'W' ? 'wr-good' : st.type === 'L' ? 'wr-bad' : '');
 
+    renderSession(d.session);
     Charts.line($('cTrend'), d.trend.map((t) => ({ label: t.key, winrate: t.winrate, games: t.games })));
     Charts.vbars($('cRole'), d.byRole.map((r) => ({ label: ROLE_LABEL[r.key] || r.key, winrate: r.winrate, games: r.games })));
     Charts.vbars($('cAccount'), d.byAccount.map((a) => ({ label: a.key, winrate: a.winrate, games: a.games })));
+    Charts.vbars($('cMode'), d.byMode.map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })));
+    renderCalendar(d.calendar);
     Charts.hbars($('cMap'), d.byMap.map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })));
 
     renderFocus(d.focusMaps);
@@ -86,6 +89,64 @@
     }
   }
 
+  function statBox(v, l, cls) {
+    return `<div class="session-stat"><div class="v ${cls || ''}">${v}</div><div class="l">${l}</div></div>`;
+  }
+  function renderSession(s) {
+    $('sessionTitle').textContent = s && s.games ? `Session — ${s.date}` : 'Latest session';
+    const c = $('cSession');
+    if (!s || !s.games) { c.innerHTML = '<div class="hint">No games yet.</div>'; return; }
+    const st = s.streak;
+    const maps = (s.topMaps || []).map((m) => `${m.key} (${m.games})`).join(' · ');
+    c.innerHTML =
+      statBox(s.games, 'Games') +
+      statBox(Charts.pct(s.winrate), 'Winrate', s.winrate >= 0.5 ? 'wr-good' : 'wr-bad') +
+      statBox(`${s.wins} · ${s.losses} · ${s.draws}`, 'W · L · D') +
+      statBox(st.type === 'none' ? '–' : st.type + st.count, 'Streak', st.type === 'W' ? 'wr-good' : st.type === 'L' ? 'wr-bad' : '') +
+      (maps ? `<div class="session-maps">Maps: ${maps}</div>` : '');
+  }
+
+  function renderCalendar(days) {
+    const c = $('cCalendar');
+    c.innerHTML = '';
+    for (const d of days) {
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell';
+      if (d.games) {
+        cell.style.background = Charts.wrColor(d.winrate);
+        cell.style.opacity = (0.35 + Math.min(d.games, 6) / 6 * 0.65).toFixed(2);
+        cell.title = `${d.date}: ${d.games}g · ${Charts.pct(d.winrate)}`;
+      } else {
+        cell.title = `${d.date}: no games`;
+      }
+      c.appendChild(cell);
+    }
+  }
+
+  async function openHeroDrawer(hero) {
+    const d = await window.owstats.heroDetail(hero, readFilters());
+    renderHeroDetail(d);
+    $('drawer').classList.remove('hidden');
+  }
+  function sb(v, l) { return `<div class="b"><div class="v">${v}</div><div class="l">${l}</div></div>`; }
+  function renderHeroDetail(d) {
+    const o = d.overall, s = d.stats, p = s && s.per10;
+    let html = `<h3>${d.hero}</h3><p class="sub">${o.games} games · ${Charts.pct(o.winrate)} winrate · ${o.wins}W ${o.losses}L</p>`;
+    if (s) {
+      html += '<div class="statline">' +
+        sb(s.kda.toFixed(1), 'KDA') + sb(p ? p.eliminations : '–', 'Elims/10') + sb(p ? p.deaths : '–', 'Deaths/10') +
+        sb(p ? fmt(p.damage) : '–', 'Dmg/10') + sb(p ? fmt(p.healing) : '–', 'Heal/10') + sb(p ? fmt(p.mitigation) : '–', 'Mit/10') +
+        '</div>';
+    }
+    html += '<h4>By map</h4>' + (d.byMap.map((m) =>
+      `<div class="recent-row"><span style="flex:1">${m.key}</span><span class="${m.winrate >= 0.5 ? 'wr-good' : 'wr-bad'}">${Charts.pct(m.winrate)}</span><span style="color:#8b97a4">${m.games}g</span></div>`).join('') || '<div class="hint">—</div>');
+    html += '<h4>Recent</h4>' + (d.recent.map((r) => {
+      const t = r.result === 'Win' ? 'W' : r.result === 'Loss' ? 'L' : 'D';
+      return `<div class="recent-row"><span class="pill ${t}">${t}</span><span style="flex:1">${r.map}</span><span style="color:#8b97a4">${r.account} · ${new Date(r.timestamp).toLocaleDateString()}</span></div>`;
+    }).join('') || '<div class="hint">—</div>');
+    $('drawerBody').innerHTML = html;
+  }
+
   const HERO_COLS = [
     { key: 'hero', label: 'Hero', get: (h) => h.hero, txt: true },
     { key: 'role', label: 'Role', get: (h) => h.role, role: true },
@@ -113,7 +174,7 @@
       if (va < vb) return heroSort.dir; if (va > vb) return -heroSort.dir; return 0;
     });
     const thead = '<tr>' + HERO_COLS.map((c) => `<th data-k="${c.key}" class="${c.key === heroSort.key ? 'sorted' : ''}">${c.label}</th>`).join('') + '</tr>';
-    const body = rows.map((h) => '<tr>' + HERO_COLS.map((c) => {
+    const body = rows.map((h) => `<tr class="clickable" data-hero="${h.hero}">` + HERO_COLS.map((c) => {
       const v = c.get(h);
       if (c.role) return `<td><span class="role-tag">${ROLE_LABEL[v] || '–'}</span></td>`;
       if (c.txt) return `<td>${v}</td>`;
@@ -128,6 +189,8 @@
       heroSort = { key: k, dir: heroSort.key === k ? -heroSort.dir : -1 };
       renderHeroes();
     }));
+    wrap.querySelectorAll('tbody tr').forEach((tr) =>
+      tr.addEventListener('click', () => openHeroDrawer(tr.dataset.hero)));
   }
 
   async function exportNotion() {
@@ -146,6 +209,9 @@
 
   ['fAccount', 'fRole', 'fDays'].forEach((id) => $(id).addEventListener('change', refresh));
   $('exportBtn').addEventListener('click', exportNotion);
+  $('drawerClose').addEventListener('click', () => $('drawer').classList.add('hidden'));
+  $('drawer').addEventListener('click', (e) => { if (e.target.id === 'drawer') $('drawer').classList.add('hidden'); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('drawer').classList.add('hidden'); });
   window.addEventListener('focus', refresh); // pick up newly tracked games
   refresh();
 })();

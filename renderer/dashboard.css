@@ -88,5 +88,38 @@ svg .bar-label { fill: var(--text); }
 .wr-good { color: var(--win); }
 .wr-bad { color: var(--loss); }
 
+/* Session recap */
+.session-body { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.session-stat { display: flex; flex-direction: column; }
+.session-stat .v { font-size: 22px; font-weight: 800; }
+.session-stat .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.session-maps { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+/* Calendar heatmap */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-cell { aspect-ratio: 1; border-radius: 4px; background: #1a2128; border: 1px solid #222a32; }
+.cal-cell[title] { cursor: default; }
+
+/* Clickable hero rows */
+tbody tr.clickable { cursor: pointer; }
+
+/* Hero drill-down drawer */
+.drawer { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; justify-content: flex-end; z-index: 20; }
+.drawer-panel { width: 460px; max-width: 92vw; height: 100%; background: var(--panel); border-left: 1px solid var(--line); padding: 18px 20px; overflow-y: auto; position: relative; }
+.drawer-close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.drawer-close:hover { color: var(--text); }
+.drawer h3 { margin: 0 0 2px; font-size: 18px; }
+.drawer .sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.drawer h4 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 16px 0 8px; }
+.recent-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.pill { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 5px; }
+.pill.W { background: rgba(63,185,80,.16); color: var(--win); }
+.pill.L { background: rgba(240,83,63,.16); color: var(--loss); }
+.pill.D { background: rgba(139,151,164,.16); color: var(--draw); }
+.statline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
+.statline .b { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.statline .b .v { font-weight: 700; }
+.statline .b .l { color: var(--muted); font-size: 11px; }
+
 /* Status bar */
 .statusbar { margin-top: auto; padding: 8px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }

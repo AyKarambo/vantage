@@ -73,11 +73,25 @@ export interface MatchRecord {
   damage?: number;
   healing?: number;
   mitigation?: number;
+  /** Per-hero breakdown for the local player (one entry per hero used). */
+  perHero?: HeroStat[];
   groupSize?: number;
   finalScore?: string;
   startedAt?: number;
   endedAt?: number;
   durationMinutes?: number;
+}
+
+/** Per-hero totals for the local player (one entry per hero used in a match). */
+export interface HeroStat {
+  hero: string;
+  role?: Role;
+  eliminations: number;
+  deaths: number;
+  assists: number;
+  damage: number;
+  healing: number;
+  mitigation: number;
 }
 
 /** Create an empty, mutable record with a given match id. */
