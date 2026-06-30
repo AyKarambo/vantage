@@ -1,0 +1,29 @@
+# build output
+dist/
+build/
+out/
+
+# deps
+node_modules/
+
+# local runtime config & secrets (never commit)
+config.local.json
+*.local
+.env
+.env.*
+secrets/
+*.secret
+
+# generated tray icon (created by scripts/make-tray-icon.js)
+assets/tray.png
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

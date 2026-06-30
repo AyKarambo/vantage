@@ -1,0 +1,33 @@
+{
+  "name": "overwatch-gametracker-sync",
+  "version": "0.1.0",
+  "description": "Account-safe auto-sync of Overwatch 2 matches into a Notion Gametracker database via Overwolf GEP.",
+  "author": "Timo Seikel",
+  "license": "MIT",
+  "main": "dist/main/index.js",
+  "overwolf": {
+    "packages": [
+      "gep"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "make-icon": "node scripts/make-tray-icon.js",
+    "start": "npm run make-icon && npm run build && ow-electron .",
+    "dev": "npm run make-icon && npm run build && ow-electron . --dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15"
+  },
+  "devDependencies": {
+    "@overwolf/ow-electron": "latest",
+    "@overwolf/ow-electron-builder": "latest",
+    "@overwolf/ow-electron-packages-types": "^0.0.5",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
