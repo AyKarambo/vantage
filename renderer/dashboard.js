@@ -2,6 +2,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const ROLE_LABEL = { tank: 'Tank', damage: 'Damage', support: 'Support', openQ: 'Open Q' };
+  const MIN_MAP_GAMES = 3; // hide tiny-sample maps from the best→worst chart
   let optionsReady = false;
   let heroRows = [];
   let heroSort = { key: 'games', dir: -1 };
@@ -66,10 +67,10 @@
     Charts.vbars($('cAccount'), d.byAccount.map((a) => ({ label: a.key, winrate: a.winrate, games: a.games })));
     Charts.vbars($('cMode'), d.byMode.map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })));
     renderCalendar(d.calendar);
-    Charts.hbars(
-      $('cMap'),
-      [...d.byMap].sort((a, b) => b.winrate - a.winrate).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })),
-    );
+    let mapData = d.byMap.filter((m) => m.games >= MIN_MAP_GAMES);
+    if (!mapData.length) mapData = [...d.byMap]; // fall back when few games played
+    mapData = mapData.sort((a, b) => b.winrate - a.winrate);
+    Charts.hbars($('cMap'), mapData.map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })));
 
     renderFocus(d.focusMaps);
     heroRows = d.heroStats;

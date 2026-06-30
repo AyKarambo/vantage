@@ -42,6 +42,7 @@ export class DashboardWindow {
 
   open(): void {
     if (this.win && !this.win.isDestroyed()) {
+      if (this.win.isMinimized()) this.win.restore();
       this.win.show();
       this.win.focus();
       return;

@@ -79,6 +79,10 @@ function main(): void {
   const tray = new TrayController(iconPath, handlers);
   const dashboard = new DashboardWindow(dataProvider, iconPath);
 
+  // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
+  // icon while it's already running) must bring the window to the front.
+  app.on('second-instance', () => dashboard.open());
+
   function rebuildNotion(): void {
     const token = getNotionToken();
     if (!token) {
@@ -125,7 +129,9 @@ function main(): void {
     tokenSet: Boolean(getNotionToken()),
   });
   rebuildNotion();
-  dashboard.open();
+  // Open the dashboard on a manual launch; when auto-launched at login (--hidden),
+  // stay in the tray so we never steal focus from a running game.
+  if (!process.argv.includes('--hidden')) dashboard.open();
 
   if (process.argv.includes('--simulate') || process.env.OW_SYNC_SIMULATE === '1') {
     const battleTag = Object.keys(config.accounts)[0] ?? 'Karambo#0000';
