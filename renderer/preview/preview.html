@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vantage — preview</title>
+    <link rel="stylesheet" href="/styles/tokens.css" />
+    <link rel="stylesheet" href="/styles/base.css" />
+    <link rel="stylesheet" href="/styles/components.css" />
+    <link rel="stylesheet" href="/styles/app.css" />
+    <style>
+      /* Frame the app at its Overwolf spec size, centered on a dim backdrop. */
+      body {
+        overflow: auto;
+        display: flex;
+        justify-content: center;
+        padding: 24px;
+        background: #050506;
+      }
+      #frame {
+        width: 1300px;
+        height: 840px;
+        border: 1px solid var(--line-2);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--shadow-window);
+        flex: 0 0 auto;
+      }
+      #app {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame"><div id="app"></div></div>
+    <script src="/preview/preview.js"></script>
+  </body>
+</html>

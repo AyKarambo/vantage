@@ -104,6 +104,14 @@ export function setNotionToken(token: string): void {
   fs.writeFileSync(tokenPath(), data);
 }
 
+export function clearNotionToken(): void {
+  try {
+    fs.rmSync(tokenPath(), { force: true });
+  } catch {
+    /* already gone */
+  }
+}
+
 /** Drop the `_*Help` annotation keys used in appsettings.json. */
 function stripHelp<T extends Record<string, unknown>>(obj: T): T {
   const clone: Record<string, unknown> = {};

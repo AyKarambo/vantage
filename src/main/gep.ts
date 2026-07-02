@@ -126,18 +126,24 @@ export class GepService extends EventEmitter {
       this.emit('log', 'gep: getSupportedGames not available in this build');
       return;
     }
-    fn.call(this.gep)
+    // getSupportedGames can hang indefinitely when the app isn't provisioned, so
+    // race it against a timeout to get a definitive signal either way.
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timed out after 6s (app not provisioned / not elevated?)')), 6000),
+    );
+    Promise.race([fn.call(this.gep), timeout])
       .then((games) => {
-        this.emit('log', `gep: ${games.length} supported games`);
-        const ow = games.find((g) => g.id === this.overwatchGameId);
+        const list = games as { name: string; id: number }[];
+        this.emit('log', `gep: ${list.length} supported games`);
+        const ow = list.find((g) => g.id === this.overwatchGameId);
         this.emit(
           'log',
           ow
-            ? `gep: Overwatch (${this.overwatchGameId}) IS supported right now — waiting for game-detected`
-            : `gep: Overwatch (${this.overwatchGameId}) is NOT in the supported list right now (GEP may be in maintenance for OW)`,
+            ? `gep: ✅ Overwatch (${this.overwatchGameId}) IS supported — waiting for game-detected`
+            : `gep: ⚠ Overwatch (${this.overwatchGameId}) is NOT in the supported list (enable OW2 for the app in the Overwolf console)`,
         );
       })
-      .catch((err) => this.emit('log', 'gep: getSupportedGames failed', String(err)));
+      .catch((err) => this.emit('log', 'gep: getSupportedGames failed/hung —', String(err)));
   }
 
   private dispatch(kind: 'info' | 'event', data: RawGepData): void {

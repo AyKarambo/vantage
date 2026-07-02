@@ -9,6 +9,17 @@ import type { Result, Role, HeroStat } from './model';
 
 export type { HeroStat };
 
+/**
+ * Manual (◎) after-game self-report — the "mental" signals the game never
+ * reports. All optional; absent means the player didn't flag anything.
+ */
+export interface MatchMental {
+  tilt?: boolean;
+  toxicMates?: boolean;
+  leaver?: boolean;
+  positiveComms?: boolean;
+}
+
 /** One finished game, already resolved to display values. */
 export interface GameRecord {
   matchId: string;
@@ -22,6 +33,8 @@ export interface GameRecord {
   heroes: string[];
   /** Per-hero breakdown for the local player (from GEP roster), if available. */
   perHero?: HeroStat[];
+  /** Manual self-report captured in the Log Match card, if the player added one. */
+  mental?: MatchMental;
 }
 
 export interface WinLoss {

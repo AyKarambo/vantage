@@ -1,0 +1,106 @@
+/* Reset + document-level defaults. */
+* {
+  box-sizing: border-box;
+}
+*::selection {
+  background: var(--accent-soft-2);
+  color: var(--text-hi);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-hi);
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Scrollbars ---------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Utilities ----------------------------------------------------------------- */
+.hidden {
+  display: none !important;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+.u-muted {
+  color: var(--muted);
+}
+.u-dim {
+  color: var(--dim);
+}
+.is-win {
+  color: var(--win-text);
+}
+.is-loss {
+  color: var(--loss-text);
+}
+.is-mid {
+  color: var(--mid-text);
+}
+.is-accent {
+  color: var(--accent-text);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

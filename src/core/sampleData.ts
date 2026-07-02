@@ -1,5 +1,6 @@
 import type { GameRecord, HeroStat } from './analytics';
 import type { Result, Role } from './model';
+import { MAP_MODES } from './maps';
 
 /**
  * Generates a realistic season of games (deterministic, seeded) so the dashboard
@@ -7,13 +8,7 @@ import type { Result, Role } from './model';
  * `GameRecord` shape is produced from GEP at runtime.
  */
 
-const MAPS: Record<string, string> = {
-  'New Queen Street': 'Push', Colosseo: 'Push', 'Esperança': 'Push', Runasapi: 'Push',
-  "King's Row": 'Hybrid', Midtown: 'Hybrid', Eichenwalde: 'Hybrid', Hollywood: 'Hybrid', Numbani: 'Hybrid', 'Blizzard World': 'Hybrid',
-  'Circuit Royal': 'Escort', Dorado: 'Escort', Havana: 'Escort', Junkertown: 'Escort', Rialto: 'Escort', 'Route 66': 'Escort', 'Shambali Monastery': 'Escort',
-  'Antarctic Peninsula': 'Control', Busan: 'Control', Ilios: 'Control', 'Lijiang Tower': 'Control', Nepal: 'Control', Oasis: 'Control', Samoa: 'Control',
-  'New Junk City': 'Flashpoint', Suravasa: 'Flashpoint',
-};
+const MAPS = MAP_MODES;
 
 const HEROES: Record<Role, string[]> = {
   tank: ['Reinhardt', 'Orisa', 'Sigma', 'Winston', 'Zarya', 'D.Va', 'Junker Queen', 'Ramattra', 'Mauga', 'Hazard'],
@@ -73,6 +68,15 @@ export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
     }
     const perHero = heroes.map((hero) => statLine(hero, role, duration / heroes.length, between));
 
+    // Manual (◎) after-game self-report — tilt clusters on losses, positive
+    // comms is common. Deterministic via the same seeded stream.
+    const mental = {
+      tilt: result === 'Loss' ? rnd() < 0.42 : rnd() < 0.12,
+      toxicMates: rnd() < 0.16,
+      leaver: rnd() < 0.05,
+      positiveComms: rnd() < 0.46,
+    };
+
     games.push({
       matchId: `sample-${i}`,
       timestamp,
@@ -84,6 +88,7 @@ export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
       durationMinutes: duration,
       heroes,
       perHero,
+      mental,
     });
   }
   return games.sort((a, b) => a.timestamp - b.timestamp);

@@ -1,0 +1,721 @@
+/* ============================================================================
+   Reusable, composable components. Each maps to a factory in
+   renderer/src/components/*. Dynamic values (bar widths, colours) are set
+   inline by the components; everything structural lives here.
+   ========================================================================== */
+
+/* Card ---------------------------------------------------------------------- */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 15px 17px;
+  min-width: 0;
+}
+.card--raised {
+  background: var(--card);
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-lg);
+}
+.card--glow {
+  background: linear-gradient(160deg, var(--accent-soft), rgba(124, 108, 245, 0.03));
+  border-color: var(--accent-border);
+}
+.card--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.card-sub,
+.hint {
+  color: var(--muted-2);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+/* KPI card ------------------------------------------------------------------ */
+.kpi {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  border: 1px solid var(--border);
+}
+.kpi--accent {
+  background: linear-gradient(160deg, var(--accent-soft), rgba(124, 108, 245, 0.03));
+  border-color: var(--accent-border);
+}
+.kpi-label {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.kpi--accent .kpi-label {
+  color: var(--accent-text-2);
+}
+.kpi--accent .kpi-value {
+  color: var(--accent-text);
+}
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 5px;
+  line-height: 1.1;
+}
+.kpi-delta {
+  font-size: 11px;
+  margin-top: 3px;
+  color: var(--muted-2);
+}
+.kpi-delta.is-up {
+  color: var(--win-text);
+}
+.kpi-delta.is-down {
+  color: var(--loss-text);
+}
+
+/* Buttons ------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-radius: var(--r-md);
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.btn--primary {
+  background: var(--grad-accent);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow-btn);
+}
+.btn--primary:hover {
+  filter: brightness(1.06);
+}
+.btn--soft {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-text);
+}
+.btn--ghost {
+  background: transparent;
+}
+.btn--block {
+  display: flex;
+  width: 100%;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Pills & chips ------------------------------------------------------------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+}
+.pill.is-win {
+  background: var(--win-soft);
+  color: var(--win-text);
+}
+.pill.is-loss {
+  background: var(--loss-soft);
+  color: var(--loss-text);
+}
+.pill.is-draw {
+  background: rgba(141, 141, 138, 0.16);
+  color: var(--muted);
+}
+.pill.is-accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-text-2);
+}
+.pill.is-mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.chip {
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--muted);
+  transition: all var(--dur) var(--ease);
+}
+.chip.is-on {
+  background: var(--accent-soft-2);
+  border-color: rgba(124, 108, 245, 0.45);
+  color: var(--accent-text);
+}
+
+/* Badge --------------------------------------------------------------------- */
+.badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.02em;
+}
+.badge--demo {
+  background: var(--accent-soft);
+  color: var(--accent-text-2);
+}
+.badge--auto {
+  background: var(--win-soft);
+  color: var(--win-text);
+}
+.badge--manual {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-text-2);
+}
+
+/* Segmented control --------------------------------------------------------- */
+.segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 3px;
+  font-size: 12px;
+  gap: 2px;
+}
+.segmented-opt {
+  padding: 6px 11px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  border: none;
+  background: transparent;
+  transition: all var(--dur) var(--ease);
+  white-space: nowrap;
+}
+.segmented-opt.is-active {
+  background: var(--accent-soft-2);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.segmented--fill {
+  display: flex;
+  width: 100%;
+}
+.segmented--fill .segmented-opt {
+  flex: 1;
+  text-align: center;
+}
+
+/* Stat bar (label · track · value) ------------------------------------------ */
+.statbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.statbar-label {
+  font-size: 11px;
+  color: var(--muted);
+  width: 58px;
+  flex: 0 0 auto;
+}
+.track {
+  flex: 1;
+  height: 8px;
+  background: var(--track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.track--slim {
+  height: 6px;
+}
+.track-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+.statbar-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  width: 34px;
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+/* Generic list row ---------------------------------------------------------- */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child {
+  border-bottom: none;
+}
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+.row-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-meta {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  margin-top: 2px;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 9px;
+  display: inline-block;
+}
+
+/* Data table ---------------------------------------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+}
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.data th,
+table.data td {
+  text-align: right;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.data th:first-child,
+table.data td:first-child {
+  text-align: left;
+}
+table.data th {
+  color: var(--muted-2);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  font-size: 11px;
+}
+table.data th.is-sorted {
+  color: var(--accent-text);
+}
+table.data th.is-sorted::after {
+  content: ' ↓';
+}
+table.data th.is-sorted.is-asc::after {
+  content: ' ↑';
+}
+table.data tbody tr {
+  transition: background var(--dur) var(--ease);
+}
+table.data tbody tr.is-clickable {
+  cursor: pointer;
+}
+table.data tbody tr:hover {
+  background: var(--surface-2);
+}
+.tag {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* Empty state --------------------------------------------------------------- */
+.empty {
+  color: var(--muted-2);
+  font-size: 12.5px;
+  padding: 14px 2px;
+}
+.empty--good {
+  color: var(--win-text);
+}
+
+/* Sparkline ----------------------------------------------------------------- */
+.sparkline {
+  display: block;
+  flex: 0 0 auto;
+}
+
+/* Horizontal bar list (responsive; fixed row height) ------------------------ */
+.hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hbar-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 78px;
+  align-items: center;
+  gap: 12px;
+}
+.hbar-label {
+  font-size: 12.5px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+.hbar-track {
+  height: 22px;
+  background: var(--track);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.hbar-fill {
+  height: 100%;
+  border-radius: 7px;
+}
+.hbar-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+  color: var(--muted);
+}
+/* Compact variant for narrow cards with short labels (Trends breakdowns): a
+   left-aligned label column instead of the wide right-aligned one for map names. */
+.hbars--compact {
+  gap: 9px;
+}
+.hbars--compact .hbar-row {
+  grid-template-columns: 76px 1fr auto;
+  gap: 10px;
+}
+.hbars--compact .hbar-label {
+  text-align: left;
+}
+
+/* Chart legend + hover tooltip ---------------------------------------------- */
+.scatter-wrap {
+  position: relative;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding-left: 40px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.chart-tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  transform: translate(-50%, -145%);
+  background: rgba(11, 11, 15, 0.96);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 11.5px;
+  color: var(--text);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 100ms var(--ease);
+  z-index: 6;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.chart-tooltip.is-visible {
+  opacity: 1;
+}
+
+/* Donut ---------------------------------------------------------------------- */
+.donut-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+.donut-box {
+  position: relative;
+  flex: 0 0 auto;
+}
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.donut-center-val {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+}
+.donut-center-lbl {
+  font-size: 10px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.donut-legend {
+  flex: 1;
+  min-width: 220px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 20px;
+}
+.donut-legend .legend-item {
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+/* Activity heatmap (GitHub-style) ------------------------------------------- */
+.heatmap-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.heatmap {
+  display: grid;
+  grid-template-rows: repeat(7, 13px);
+  grid-auto-flow: column;
+  grid-auto-columns: 13px;
+  gap: 3px;
+}
+.heatmap-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.heatmap-legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Filter bar ----------------------------------------------------------------- */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-label {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.filter-field .vt-select {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+/* Overlays: modal + drawer -------------------------------------------------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(4, 4, 7, 0.55);
+  backdrop-filter: blur(3px);
+  animation: fade-in var(--dur) var(--ease);
+}
+.overlay--center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.overlay--right {
+  display: flex;
+  justify-content: flex-end;
+}
+.modal-card {
+  width: 520px;
+  max-width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: rise-in 180ms var(--ease);
+}
+.drawer-panel {
+  width: 440px;
+  max-width: 92vw;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--card);
+  border-left: 1px solid var(--border-2);
+  padding: 20px 22px;
+  position: relative;
+  animation: rise-in 180ms var(--ease);
+}
+.overlay-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+}
+.overlay-close:hover {
+  color: var(--text);
+}
+
+/* Large colour-coded choices (Result, target grade) ------------------------- */
+.choice {
+  flex: 1;
+  text-align: center;
+  padding: 12px;
+  border-radius: var(--r-md);
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  transition: all var(--dur) var(--ease);
+}
+.choice--win {
+  color: var(--win-text);
+}
+.choice--loss {
+  color: var(--loss-text);
+}
+.choice--mid {
+  color: var(--mid);
+}
+.choice--draw {
+  color: var(--muted);
+}
+.choice.is-active.choice--win {
+  background: var(--win-soft);
+  border-color: var(--win-border);
+}
+.choice.is-active.choice--loss {
+  background: var(--loss-soft);
+  border-color: rgba(209, 104, 95, 0.5);
+}
+.choice.is-active.choice--mid {
+  background: rgba(214, 162, 79, 0.16);
+  border-color: rgba(214, 162, 79, 0.5);
+}
+.choice.is-active.choice--draw {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+/* Selects & number inputs (measured target builder) ------------------------- */
+.vt-select,
+.vt-num {
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--dur) var(--ease);
+}
+.vt-select:focus,
+.vt-num:focus {
+  border-color: var(--accent);
+}
+.vt-num {
+  width: 64px;
+}
+.vt-select option {
+  background: #17171d;
+  color: var(--text);
+}
+
+/* Text input ---------------------------------------------------------------- */
+.target-name-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--dur) var(--ease);
+}
+.target-name-input:focus {
+  border-color: var(--accent);
+}
+.target-name-input::placeholder {
+  color: var(--dim);
+}
+
+/* Field label --------------------------------------------------------------- */
+.field-label {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

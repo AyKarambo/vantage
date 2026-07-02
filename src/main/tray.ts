@@ -16,6 +16,7 @@ export interface TrayHandlers {
   onReloadConfig(): void;
   onOpenGametracker(): void;
   onOpenConfig(): void;
+  onOpenSupport(): void;
   onQuit(): void;
 }
 
@@ -41,7 +42,7 @@ export class TrayController {
   init(initial: Partial<TrayState>): void {
     this.state = { ...this.state, ...initial };
     this.tray = new Tray(this.icon());
-    this.tray.setToolTip('Overwatch Stats');
+    this.tray.setToolTip('Vantage');
     this.tray.on('double-click', () => this.handlers.onOpenDashboard());
     this.rebuild();
   }
@@ -97,6 +98,7 @@ export class TrayController {
       { label: 'Edit config (accounts, map aliases)…', click: () => this.handlers.onOpenConfig() },
       { label: 'Reload config', click: () => this.handlers.onReloadConfig() },
       { type: 'separator' },
+      { label: 'Help & Support', click: () => this.handlers.onOpenSupport() },
       { label: 'Quit', click: () => this.handlers.onQuit() },
     ]);
     this.tray.setContextMenu(menu);

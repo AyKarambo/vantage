@@ -2,13 +2,15 @@ import { app, shell } from 'electron';
 import * as path from 'path';
 import { Client } from '@notionhq/client';
 import {
-  loadConfig, saveLocalConfig, getNotionToken, setNotionToken, userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, getNotionToken, setNotionToken, clearNotionToken,
+  userConfigPath, type AppConfig,
 } from './config';
 import { NotionWriter } from '../notion/notionWriter';
 import { MapsCache } from '../notion/mapsCache';
 import { NotionExporter } from '../notion/notionExporter';
 import { OutboxStore } from '../store/outbox';
 import { HistoryStore } from '../store/history';
+import { ManualStore } from '../store/manualLog';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage, MatchRecord } from '../core/model';
@@ -16,18 +18,20 @@ import { resolveAccount } from '../core/resolvers/account';
 import { resolveRole } from '../core/resolvers/role';
 import { resolveResult } from '../core/resolvers/result';
 import type { GameRecord } from '../core/analytics';
+import type { NotionStatus } from '../shared/contract';
 import { generateSampleGames } from '../core/sampleData';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow, type DataProvider } from './dashboard';
 import { TrayController, type TrayHandlers } from './tray';
 import { isAutoLaunchEnabled, setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
+import { GepRecorder, readRecording, replayRecording } from './recorder';
 
 // Single instance: a second launch just focuses the existing one.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.setAppUserModelId('com.timoseikel.owgametrackersync');
+  app.setAppUserModelId('com.timoseikel.vantage');
   app.on('window-all-closed', () => {}); // tray app — keep running with no windows
   app.whenReady().then(main).catch((err: unknown) => console.error('startup failed', err));
 }
@@ -38,16 +42,60 @@ function main(): void {
   const dataDir = path.join(app.getPath('userData'), 'data');
   const outbox = new OutboxStore(dataDir);
   const history = new HistoryStore(dataDir);
+  const manual = new ManualStore(dataDir);
   const aggregator = new MatchAggregator();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
   let exporter: NotionExporter | undefined;
+
+  const notionStatus = (): NotionStatus => {
+    const tokenSet = Boolean(getNotionToken());
+    const databaseConfigured = Boolean(config.notion.gametrackerDatabaseId);
+    return {
+      tokenSet,
+      databaseConfigured,
+      connected: tokenSet && databaseConfigured && Boolean(exporter),
+      gametrackerUrl: config.notion.gametrackerUrl || undefined,
+      trackedGames: history.count(),
+    };
+  };
 
   const dataProvider: DataProvider = {
     games: () => (history.count() ? history.all() : generateSampleGames()),
     isSample: () => history.count() === 0,
     exportToNotion: async (games) =>
       exporter ? exporter.export(games) : { ok: 0, failed: 0, unavailable: true },
+    notionStatus,
+    setNotionToken: (token) => {
+      setNotionToken(token);
+      rebuildNotion();
+      return notionStatus();
+    },
+    clearNotionToken: () => {
+      clearNotionToken();
+      rebuildNotion();
+      return notionStatus();
+    },
+    manualTargets: () => manual.targets(),
+    saveTarget: (input) => {
+      manual.addTarget({ id: `t-${Date.now()}`, createdAt: Date.now(), ...input });
+    },
+    logMatch: (input) => {
+      const matchId = `manual-${Date.now()}`;
+      history.add({
+        matchId,
+        timestamp: Date.now(),
+        account: Object.values(config.accounts)[0] ?? 'You',
+        role: input.role,
+        map: input.map,
+        result: input.result,
+        gameType: input.gameType,
+        heroes: input.hero ? [input.hero] : [],
+        mental: input.mental,
+      });
+      tray.notify('Match logged', `${input.result} · ${input.map}`);
+      return { matchId };
+    },
   };
 
   const handlers: TrayHandlers = {
@@ -70,6 +118,9 @@ function main(): void {
       if (config.notion.gametrackerUrl) void shell.openExternal(config.notion.gametrackerUrl);
     },
     onOpenConfig: () => tray.openConfigFile(userConfigPath(), configTemplate(config)),
+    onOpenSupport: () => {
+      void shell.openExternal('mailto:timo.seikel@gmail.com');
+    },
     onQuit: () => {
       tray.destroy();
       app.quit();
@@ -116,6 +167,15 @@ function main(): void {
     gep.on('message', feed);
     gep.on('status', (s: GepStatus) => tray.setState({ status: statusText(s, history.count()) }));
     gep.on('log', (...args: unknown[]) => console.log('[gep]', ...args));
+
+    // Testing only: capture the live GEP stream to userData/recordings/*.jsonl so
+    // a real session can be replayed later (OW_SYNC_REPLAY) without the game.
+    if (process.env.OW_SYNC_RECORD === '1') {
+      const recorder = new GepRecorder(path.join(app.getPath('userData'), 'recordings'));
+      gep.on('message', (msg: GepMessage) => recorder.message(msg));
+      gep.on('status', (s: GepStatus) => recorder.lifecycle(s.gameRunning ? 'game-running' : 'game-idle'));
+      console.log('[recorder] recording GEP session →', recorder.path);
+    }
   } else {
     const cw = new CounterwatchReader();
     cw.on('match', (record) => addMatch(record));
@@ -137,6 +197,19 @@ function main(): void {
     const battleTag = Object.keys(config.accounts)[0] ?? 'Karambo#0000';
     setTimeout(() => {
       void runSimulation(feed, (m) => console.log('[sim]', m), { battleTag, map: "King's Row" });
+    }, 1500);
+  }
+
+  // Testing only: replay a captured recording through the live pipeline.
+  const replayFile = process.env.OW_SYNC_REPLAY;
+  if (replayFile) {
+    setTimeout(() => {
+      try {
+        const entries = readRecording(replayFile);
+        void replayRecording(entries, feed, { realtime: true, log: (m) => console.log('[replay]', m) });
+      } catch (err) {
+        console.error('[replay] failed to read recording', replayFile, err);
+      }
     }, 1500);
   }
 }

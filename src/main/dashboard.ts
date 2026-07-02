@@ -1,16 +1,14 @@
 import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import * as path from 'path';
-import {
-  byAccount, byHero, byMap, byMode, byRole, calendar, focusBy, heroDetail, heroStats,
-  latestSession, streak, trend, winLoss, type GameRecord,
-} from '../core/analytics';
+import { heroDetail, type GameRecord } from '../core/analytics';
+import { computeDashboard, applyFilters } from '../core/dashboardData';
+import type { AuthoredTarget } from '../core/targets';
+import type {
+  AuthoredTargetInput, DashboardFilters, HeroDetail, ManualMatchInput, NotionStatus,
+} from '../shared/contract';
 
-export interface DashboardFilters {
-  account?: string; // 'all' or account name
-  role?: string; // 'all' | tank | damage | support | openQ
-  mode?: string; // 'all' or game type (Competitive, Quick Play, …)
-  days?: number | 'all';
-}
+export type { DashboardFilters } from '../shared/contract';
+export { computeDashboard, applyFilters } from '../core/dashboardData';
 
 export interface DataProvider {
   games(): GameRecord[];
@@ -18,9 +16,23 @@ export interface DataProvider {
   exportToNotion?(
     games: GameRecord[],
   ): Promise<{ ok: number; failed: number; skipped?: number; unavailable?: boolean }>;
+  /** Current Notion connection state (for the Notion sync screen). */
+  notionStatus(): NotionStatus;
+  /** Save an integration token, (re)build the client, return the new state. */
+  setNotionToken(token: string): NotionStatus;
+  /** Remove the saved token and return the new state. */
+  clearNotionToken(): NotionStatus;
+  /** The player's authored improvement targets (◎ manual). */
+  manualTargets(): AuthoredTarget[];
+  /** Persist a new authored target. */
+  saveTarget(input: AuthoredTargetInput): void;
+  /** Persist a manually-logged match; returns its new id. */
+  logMatch(input: ManualMatchInput): { matchId: string };
 }
 
-/** Owns the dashboard BrowserWindow and answers its data requests. */
+const WINDOW = { width: 1300, height: 840, minWidth: 1040, minHeight: 640 };
+
+/** Owns the dashboard BrowserWindow and answers its data + window requests. */
 export class DashboardWindow {
   private win?: BrowserWindow;
 
@@ -29,7 +41,9 @@ export class DashboardWindow {
     private readonly iconPath: string,
   ) {
     ipcMain.handle('dashboard:data', (_e, filters: DashboardFilters) =>
-      computeDashboard(this.provider.games(), filters ?? {}, this.provider.isSample()),
+      computeDashboard(this.provider.games(), filters ?? {}, this.provider.isSample(), {
+        targets: this.provider.manualTargets(),
+      }),
     );
     ipcMain.handle('dashboard:export-notion', async (_e, filters: DashboardFilters) => {
       if (!this.provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
@@ -38,6 +52,25 @@ export class DashboardWindow {
     ipcMain.handle('dashboard:hero-detail', (_e, hero: string, filters: DashboardFilters) =>
       heroDetail(applyFilters(this.provider.games(), filters ?? {}), hero),
     );
+
+    // Notion sync screen.
+    ipcMain.handle('notion:status', () => this.provider.notionStatus());
+    ipcMain.handle('notion:set-token', (_e, token: string) => this.provider.setNotionToken(token));
+    ipcMain.handle('notion:clear-token', () => this.provider.clearNotionToken());
+
+    // Manual (◎) writes.
+    ipcMain.handle('manual:log-match', (_e, input: ManualMatchInput) => this.provider.logMatch(input));
+    ipcMain.handle('manual:save-target', (_e, input: AuthoredTargetInput) => {
+      this.provider.saveTarget(input);
+    });
+
+    // Frameless window controls, driven by the custom title bar.
+    ipcMain.on('window:minimize', () => this.win?.minimize());
+    ipcMain.on('window:toggle-maximize', () => {
+      if (!this.win) return;
+      this.win.isMaximized() ? this.win.unmaximize() : this.win.maximize();
+    });
+    ipcMain.on('window:close', () => this.win?.close());
   }
 
   open(): void {
@@ -48,12 +81,11 @@ export class DashboardWindow {
       return;
     }
     this.win = new BrowserWindow({
-      width: 1240,
-      height: 840,
-      minWidth: 940,
-      minHeight: 640,
-      title: 'Overwatch Stats',
-      backgroundColor: '#0f1216',
+      ...WINDOW,
+      title: 'Vantage',
+      // Overwolf-compliant frameless desktop app with its own title bar.
+      frame: false,
+      backgroundColor: '#0b0b0f',
       autoHideMenuBar: true,
       icon: nativeImage.createFromPath(this.iconPath),
       webPreferences: {
@@ -62,58 +94,10 @@ export class DashboardWindow {
         nodeIntegration: false,
       },
     });
-    void this.win.loadFile(path.join(app.getAppPath(), 'renderer', 'dashboard.html'));
+    void this.win.loadFile(path.join(app.getAppPath(), 'renderer', 'index.html'));
     this.win.on('closed', () => (this.win = undefined));
   }
 }
 
-// --- data computation -------------------------------------------------------
-
-export function computeDashboard(all: GameRecord[], filters: DashboardFilters, isSample: boolean) {
-  const games = applyFilters(all, filters);
-  const overall = winLoss(games);
-  const weekly = (filters.days ?? 30) === 'all' || (filters.days as number) > 90;
-
-  return {
-    isSample,
-    generatedAt: Date.now(),
-    filters: {
-      account: filters.account ?? 'all',
-      role: filters.role ?? 'all',
-      mode: filters.mode ?? 'all',
-      days: filters.days ?? 30,
-    },
-    options: {
-      accounts: distinct(all.map((g) => g.account)).sort(),
-      roles: distinct(all.map((g) => g.role)),
-      modes: distinct(all.map((g) => g.gameType)).sort(),
-    },
-    overall,
-    streak: streak(games),
-    session: latestSession(games),
-    byRole: byRole(games),
-    byAccount: byAccount(games),
-    byMode: byMode(games),
-    byMap: byMap(games),
-    byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
-    trend: trend(games, weekly ? 'week' : 'day'),
-    calendar: calendar(games, 35),
-    focusMaps: focusBy(games, (g) => g.map).slice(0, 6),
-    focusRoles: focusBy(games, (g) => g.role, 1),
-    heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 16),
-  };
-}
-
-export function applyFilters(games: GameRecord[], f: DashboardFilters): GameRecord[] {
-  let out = games;
-  if (f.account && f.account !== 'all') out = out.filter((g) => g.account === f.account);
-  if (f.role && f.role !== 'all') out = out.filter((g) => g.role === f.role);
-  if (f.mode && f.mode !== 'all') out = out.filter((g) => g.gameType === f.mode);
-  if (f.days && f.days !== 'all') {
-    const cutoff = Date.now() - (f.days as number) * 86400000;
-    out = out.filter((g) => g.timestamp >= cutoff);
-  }
-  return out;
-}
-
-const distinct = <T>(arr: T[]): T[] => [...new Set(arr)];
+// Re-export for the drill-down handler's return type.
+export type { HeroDetail };

@@ -4,6 +4,10 @@ build/
 out/
 release/
 
+# renderer bundles (esbuild output; renderer/dist is covered by dist/ above)
+renderer/preview/preview.js
+renderer/preview/preview.js.map
+
 # deps
 node_modules/
 
@@ -15,9 +19,12 @@ config.local.json
 secrets/
 *.secret
 
-# generated icons (created by scripts/make-tray-icon.js)
+# generated icons (created by scripts/make-tray-icon.mjs)
 assets/tray.png
 assets/appicon.png
+
+# generated Overwolf store assets (npm run assets:store / assets:screens)
+assets/store/
 
 # logs
 *.log
