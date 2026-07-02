@@ -208,9 +208,11 @@ flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that'
 7. **QA cycle** — address feedback and re-upload (bump version each time) until it passes.
 8. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
 
-**Code signing (required for a public release).** ow-electron-builder is electron-builder under the
-hood, so **no `package.json` change is needed** — provide a cert from a trusted CA (DigiCert/Sectigo)
-via the standard env vars at release time:
+**Code signing (required BEFORE Overwolf will review — the submission form gates on it).** The exe
+must carry a **trusted-CA** signature (self-signed is rejected). Free route: **SignPath Foundation**
+(Sectigo-issued) — see [docs/signing.md](signing.md). For a local `.pfx` from any CA, ow-electron-builder
+is electron-builder under the hood, so **no `package.json` change is needed** — set the standard env
+vars at release time:
 
 ```bash
 # .pfx path (or base64) + its password — electron-builder signs automatically
@@ -219,8 +221,8 @@ export CSC_KEY_PASSWORD="…"
 npm run release
 ```
 
-Without these the installer is unsigned (fine for QA; Windows SmartScreen shows *More info → Run
-anyway*). Alternatively sign the OPK with `npx @overwolf/ow-cli opk sign`.
+Without a trusted-CA signature the app **cannot be submitted for review**. (A self-signed build only
+suppresses local warnings via *More info → Run anyway* and does not satisfy Overwolf.)
 
 **Overwolf Installer.** Switching from the plain NSIS installer to the **Overwolf Installer** gives
 the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the Developer Console
