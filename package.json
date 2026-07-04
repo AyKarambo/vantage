@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run build:renderer",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && npm run build:renderer",
     "build:renderer": "node scripts/build-renderer.mjs",
     "watch:renderer": "node scripts/build-renderer.mjs --watch",
     "build:preview": "node scripts/build-preview.mjs",
