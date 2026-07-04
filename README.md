@@ -38,7 +38,15 @@ comms · toxicity · leavers · your improvement target).
   target database, and push your tracked games to it with one click (deduped by
   Match ID).
 
-Filter everything by account, role, game mode and time range.
+Filter everything by account, role, game mode and time range — with a one-click **Reset** chip and
+savable presets. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run
+actions, find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet,
+`←/→` between match details, `H/P/M/S` grading on Review), toasts with **Undo** for reversible
+actions, day-grouped match log with hero/map cross-links, hero typeahead + remembered role/mode in
+the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
+colorblind-safe palette option, window-position memory, and a **Settings** screen (break reminder,
+close-to-tray, run-at-login, diagnostics). The app restores your last view on launch and refreshes
+without flicker.
 
 ## Account safety
 
@@ -174,6 +182,26 @@ Unsigned installer (fine for personal use — Windows SmartScreen → *More info
 Questions or feedback: <timo.seikel@gmail.com> (also reachable from the tray's **Help & Support**
 item). The [Privacy Policy](docs/legal/privacy.html) and [Terms of Use](docs/legal/terms.html) live
 under `docs/legal/` and are published as the app's public legal URLs.
+
+## Live connection status
+
+The status bar (and the tray icon) shows a four-state feed indicator that never conflates
+*attached* with *alive*: **No game** · **Connected — waiting for events** (GEP attached, nothing
+flowing — e.g. in menus) · **Receiving data** (events demonstrably arriving) · **⚠ Stale** (a match
+is running but the feed has been silent for 60s — the "says connected but nothing updates" failure,
+surfaced instead of hidden). Click the indicator for details: last event time, events this session,
+match state, attach time. In demo mode it always reads "No live feed". State transitions are
+written to the debug log.
+
+## Debug log
+
+Every build — including releases — writes a structured log to `%APPDATA%/Vantage/logs/`
+(`vantage.log`, rotating at 2 MB × 5 files): app lifecycle, GEP attach/detach, match-pipeline
+milestones, Notion sync results, and uncaught errors from both processes. Notion tokens are
+redacted before anything is written. The **Logs** screen (sidebar → Data) live-tails the last
+1000 entries with level filtering, and its **Debug detail** toggle raises verbosity to the full
+GEP event stream for the current session (resets to `info` on restart). Logs never leave the
+device.
 
 ## Testing the live pipeline
 

@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byMode, byRole, calendar, focusBy, heroStats,
-  latestSession, streak, trend, winLoss, groupBy, type GameRecord,
+  latestSession, sessionRecap, streak, trend, winLoss, groupBy, type GameRecord,
 } from './analytics';
 import { mapMode } from './maps';
 import { mentalSummary } from './mental';
@@ -69,7 +69,15 @@ export function computeDashboard(
     reviewInbox: ungraded.slice(0, ROW_CAP).map(toMatchRow),
     pendingReviews: ungraded.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
+    totalGamesAllTime: all.length,
+    ...(recapOf(all) ?? {}),
   };
+}
+
+/** Yesterday's recap over the unfiltered history, as a spreadable fragment. */
+function recapOf(all: GameRecord[]): { recap: NonNullable<DashboardData['recap']> } | null {
+  const recap = sessionRecap(all);
+  return recap ? { recap } : null;
 }
 
 export function applyFilters(games: GameRecord[], f: DashboardFilters): GameRecord[] {

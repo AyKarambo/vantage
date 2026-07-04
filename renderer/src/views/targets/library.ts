@@ -10,6 +10,7 @@ import { PALETTE } from '../../theme';
 import { sparkline } from '../../charts/plots';
 import { badge, button, card, chip } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
+import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
@@ -53,7 +54,19 @@ function rowActions(t: TargetSummary, ctx: ViewContext, onEdit: (t: TargetSummar
       () => refreshAfter(bridge.setTargetActive(t.id, !t.isActive))),
     h('span', { style: { flex: '1' } }),
     button('Edit', { variant: 'ghost', onClick: () => onEdit(t) }),
-    button('Archive', { variant: 'ghost', onClick: () => refreshAfter(bridge.setTargetArchived(t.id, true)) }),
+    // Archive is reversible → no confirmation, immediate with Undo (delete keeps its modal).
+    button('Archive', {
+      variant: 'ghost',
+      onClick: () => void bridge.setTargetArchived(t.id, true).then(() => {
+        ctx.refresh();
+        toast(`Archived "${t.name}"`, {
+          action: {
+            label: 'Undo',
+            run: () => void bridge.setTargetArchived(t.id, false).then(() => ctx.refresh()),
+          },
+        });
+      }),
+    }),
     button('Delete', { variant: 'ghost', onClick: () => confirmDelete(t, ctx) }),
   );
 }

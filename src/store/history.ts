@@ -59,6 +59,15 @@ export class HistoryStore {
     return true;
   }
 
+  /** Remove a game's review (the undo of a first-time save); false if there was none. */
+  clearReview(matchId: string): boolean {
+    const game = this.games.find((g) => g.matchId === matchId);
+    if (!game?.review) return false;
+    delete game.review;
+    this.save();
+    return true;
+  }
+
   /**
    * Bulk review import (one atomic save) for the legacy-localStorage migration.
    * Never overwrites an existing review; unknown match ids are skipped.

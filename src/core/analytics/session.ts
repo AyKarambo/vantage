@@ -48,6 +48,96 @@ export function calendar(games: GameRecord[], days = 35): Array<{ date: string; 
   return out;
 }
 
+/** One day header + its games (the Matches screen's grouped list). */
+export interface DayGroup<T> {
+  /** dayKey of the group, newest group first. */
+  key: string;
+  /** 'Today' / 'Yesterday' for the two most recent days, else the raw key. */
+  label: string;
+  wins: number;
+  losses: number;
+  items: T[];
+}
+
+/** Group timestamped result rows under day headers (newest day first). */
+export function groupByDay<T extends { timestamp: number; result: string }>(
+  rows: T[],
+  now: number = Date.now(),
+): Array<DayGroup<T>> {
+  const groups = new Map<string, T[]>();
+  for (const r of [...rows].sort((a, b) => b.timestamp - a.timestamp)) {
+    const k = dayKey(r.timestamp);
+    (groups.get(k) ?? groups.set(k, []).get(k)!).push(r);
+  }
+  const today = dayKey(now);
+  const yesterday = dayKey(now - 86_400_000);
+  return [...groups.entries()].map(([key, items]) => ({
+    key,
+    label: key === today ? 'Today' : key === yesterday ? 'Yesterday' : key,
+    wins: items.filter((r) => r.result === 'Win').length,
+    losses: items.filter((r) => r.result === 'Loss').length,
+    items,
+  }));
+}
+
+/** The previous day's coach-style recap (the Overview card). */
+export interface SessionRecap {
+  date: string;
+  wins: number;
+  losses: number;
+  net: number;
+  winrate: number;
+  games: number;
+  bestMap?: string;
+  worstMap?: string;
+  flags: { tilt: number; toxicMates: number; leaver: number; positiveComms: number };
+  /** Hit-rate over that day's graded targets; absent when nothing was graded. */
+  targetHitRate?: number;
+}
+
+/**
+ * Recap of the previous calendar day (shown once on the next day's first
+ * open). Null when yesterday had no games. Works over the UNFILTERED history —
+ * the recap is about the player's day, not the current filter scope.
+ */
+export function sessionRecap(games: GameRecord[], now: number = Date.now()): SessionRecap | null {
+  const date = dayKey(now - 86_400_000);
+  const day = games.filter((g) => dayKey(g.timestamp) === date);
+  if (!day.length) return null;
+
+  const wl = winLoss(day);
+  const maps = byMap(day).filter((m) => m.games > 0);
+  const byWr = [...maps].sort((a, b) => b.winrate - a.winrate);
+
+  const flags = { tilt: 0, toxicMates: 0, leaver: 0, positiveComms: 0 };
+  for (const g of day) {
+    for (const key of Object.keys(flags) as Array<keyof typeof flags>) {
+      if (g.mental?.[key] || g.review?.flags?.[key]) flags[key]++;
+    }
+  }
+
+  let hits = 0;
+  let attempts = 0;
+  for (const g of day) {
+    for (const grade of Object.values(g.review?.grades ?? {})) {
+      attempts++;
+      if (grade === 'hit') hits++;
+    }
+  }
+
+  return {
+    date,
+    wins: wl.wins,
+    losses: wl.losses,
+    net: wl.wins - wl.losses,
+    winrate: wl.winrate,
+    games: day.length,
+    ...(byWr.length >= 2 ? { bestMap: byWr[0].key, worstMap: byWr[byWr.length - 1].key } : {}),
+    flags,
+    ...(attempts ? { targetHitRate: hits / attempts } : {}),
+  };
+}
+
 /** Drill-down for one hero: overall, per-map, recent games, exact stats. */
 export function heroDetail(games: GameRecord[], hero: string) {
   const gs = games.filter((g) => g.heroes.includes(hero)).sort((a, b) => b.timestamp - a.timestamp);

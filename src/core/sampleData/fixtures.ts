@@ -10,7 +10,12 @@ import { MAP_MODES } from '../maps';
 /** Maps available to the sample generator, reusing the real map→mode table. */
 export const MAPS = MAP_MODES;
 
-/** Hero pool per role, used to pick plausible per-match heroes. */
+/**
+ * Hero pool per role, used to pick plausible per-match heroes. Deliberately a
+ * frozen subset (not derived from core/heroes ALL_HEROES): the pick order
+ * feeds the seeded generator, so reordering would silently change the whole
+ * demo dataset.
+ */
 export const HEROES: Record<Role, string[]> = {
   tank: ['Reinhardt', 'Orisa', 'Sigma', 'Winston', 'Zarya', 'D.Va', 'Junker Queen', 'Ramattra', 'Mauga', 'Hazard'],
   damage: ['Tracer', 'Genji', 'Cassidy', 'Soldier: 76', 'Ashe', 'Sojourn', 'Sombra', 'Mei', 'Reaper', 'Echo'],

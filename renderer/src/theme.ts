@@ -1,13 +1,16 @@
+import { prefs } from './prefs';
+
 /**
  * Chart palette. SVG fills need literal colours, so the values that also live
  * as CSS custom properties are mirrored here in one place. Keep this in sync
- * with styles/tokens.css.
+ * with styles/tokens.css (the colorblind variants live under `html[data-cvd]`).
  */
+const DEFAULT_WIN_LOSS = { win: '#57a684', winText: '#8fe0b8', loss: '#d1685f', lossText: '#d18a84' };
+/** Colorblind-safe alternative: blue (win) / orange (loss) instead of green/red. */
+const CVD_WIN_LOSS = { win: '#4f8fd6', winText: '#9cc3ec', loss: '#d68a3a', lossText: '#e0ac72' };
+
 export const PALETTE = {
-  win: '#57a684',
-  winText: '#8fe0b8',
-  loss: '#d1685f',
-  lossText: '#d18a84',
+  ...DEFAULT_WIN_LOSS,
   mid: '#d6a24f',
   accent: '#7c6cf5',
   accentBright: '#8878ff',
@@ -17,7 +20,26 @@ export const PALETTE = {
   muted: '#8a8a98',
   dim: '#6a6a78',
   text: '#e7e7ee',
-} as const;
+};
+
+let cvd = false;
+
+/** Whether the colorblind-safe palette is active. */
+export const isColorblind = (): boolean => cvd;
+
+/**
+ * Swap win/loss colours everywhere: the JS chart palette here plus the CSS
+ * custom properties via `html[data-cvd]`. Callers re-render afterwards.
+ */
+export function setColorblind(on: boolean): void {
+  cvd = on;
+  Object.assign(PALETTE, on ? CVD_WIN_LOSS : DEFAULT_WIN_LOSS);
+  document.documentElement.toggleAttribute('data-cvd', on);
+  prefs.set('colorblind', on);
+}
+
+// Apply the persisted preference at bundle load, before the first render.
+if (prefs.get('colorblind')) setColorblind(true);
 
 /**
  * Per-game-mode dot colours for the scatter — distinct hues, deliberately kept
@@ -54,11 +76,13 @@ export function wrColor(winrate: number): string {
 
 /**
  * Continuous winrate → hue, red (losing) → green (winning). Mirrors the Vantage
- * scatter: anchored so ~39% is red and ~60% is green.
+ * scatter: anchored so ~39% is red and ~60% is green. In colorblind mode the
+ * ramp becomes orange → blue with a deliberate break at 50% for readability.
  */
 export function wrHue(winrate: number): number {
   const p = winrate * 100;
   const t = Math.max(0, Math.min(1, (p - 38) / 22));
+  if (cvd) return t < 0.5 ? Math.round(28 + t * 24) : Math.round(200 + (t - 0.5) * 30);
   return Math.round(6 + t * (148 - 6));
 }
 

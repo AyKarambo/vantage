@@ -313,7 +313,9 @@
 
 /* Data table ---------------------------------------------------------------- */
 .table-wrap {
-  overflow-x: auto;
+  /* Own scroll container so the sticky header row actually engages. */
+  overflow: auto;
+  max-height: calc(100vh - 250px);
 }
 table.data {
   width: 100%;
@@ -820,4 +822,274 @@ table.data tbody tr:hover {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Log viewer (Logs screen) --------------------------------------------------- */
+.log-lines {
+  height: calc(100vh - 265px);
+  min-height: 220px;
+  overflow: auto;
+  padding: 10px 14px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-line {
+  color: var(--text-2);
+}
+.log-line.is-debug {
+  color: var(--dim);
+}
+.log-line.is-warn {
+  color: var(--mid);
+}
+.log-line.is-error {
+  color: var(--loss);
+}
+
+/* Anchored popover (connection details) -------------------------------------- */
+.popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: transparent;
+}
+.popover-panel {
+  position: fixed;
+  min-width: 260px;
+  max-width: 340px;
+  background: var(--card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  padding: 12px 14px;
+  animation: rise-in 140ms var(--ease);
+}
+.gep-popover-title {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 8px;
+}
+.gep-popover-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 12px;
+  padding: 3px 0;
+}
+
+/* Toasts ---------------------------------------------------------------------- */
+.toast-host {
+  position: fixed;
+  right: 18px;
+  bottom: 42px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  animation: rise-in 160ms var(--ease);
+}
+.toast.is-leaving {
+  opacity: 0;
+  transition: opacity 150ms var(--ease);
+}
+.toast-action {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+}
+
+/* Skeletons (cold start only) -------------------------------------------------- */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.skeleton-block {
+  border-radius: var(--r-lg);
+  background: linear-gradient(100deg, var(--surface-1) 40%, var(--surface-3) 50%, var(--surface-1) 60%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -80% 0; }
+}
+
+/* Command palette --------------------------------------------------------------- */
+.palette {
+  margin: -6px -4px;
+}
+.palette-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 10px 12px;
+  outline: none;
+}
+.palette-input:focus {
+  border-color: var(--accent);
+}
+.palette-list {
+  margin-top: 8px;
+  max-height: 46vh;
+  overflow: auto;
+}
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.palette-item.is-selected {
+  background: var(--surface-3);
+}
+.palette-group {
+  flex: 0 0 52px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted-2);
+}
+.palette-label {
+  color: var(--text);
+}
+.palette-hint {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+/* Shortcut cheatsheet ------------------------------------------------------------ */
+.cheatsheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 0;
+}
+.cheatsheet-row .kbd {
+  min-width: 64px;
+  text-align: center;
+}
+
+/* Typeahead ------------------------------------------------------------------- */
+.typeahead {
+  position: relative;
+}
+.typeahead-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 46;
+  background: var(--card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+  max-height: 208px;
+  overflow: auto;
+  padding: 4px;
+}
+.typeahead-item {
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.typeahead-item.is-selected,
+.typeahead-item:hover {
+  background: var(--surface-3);
+}
+
+/* Review keyboard focus ------------------------------------------------------- */
+.review-target.is-focused {
+  outline: 1px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--r-sm);
+}
+
+/* Day headers (Matches) + inline cross-links ---------------------------------- */
+.day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 12px 6px;
+}
+.day-header:first-child {
+  padding-top: 6px;
+}
+.day-header-label {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.inline-link:hover {
+  color: var(--accent-text, var(--accent));
+  text-decoration: underline;
+}
+.inline-link--strong {
+  font-weight: inherit;
+}
+
+/* Cross-link highlight flash ---------------------------------------------------- */
+.is-highlighted {
+  animation: highlight-flash 2.4s var(--ease);
+  border-radius: var(--r-sm);
+}
+@keyframes highlight-flash {
+  0%, 60% { box-shadow: 0 0 0 3px var(--accent); background: rgba(124, 108, 245, 0.14); }
+  100% { box-shadow: none; background: transparent; }
+}
+
+/* Tooltip-hosting chart wrappers need a positioning context. */
+.chart-wrap,
+.hbars,
+.heatmap-wrap {
+  position: relative;
 }

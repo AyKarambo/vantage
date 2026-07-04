@@ -1,29 +1,87 @@
-/** Matches — the recent game log (my interpretation of the Matches screen). */
+/** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
 import type { MatchRow } from '../../../src/shared/contract';
-import { relTime, roleLabel } from '../format';
-import { card, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
+import { groupByDay } from '../../../src/core/analytics';
+import { relTime, roleLabel, signed } from '../format';
+import { button, card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
+import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 
 export function matches(ctx: ViewContext): HTMLElement {
   const rows = ctx.data.matches;
+  const groups = groupByDay(rows);
   return h('div', { class: 'view' },
     viewHead('Matches', `${rows.length} games in range · newest first · click a match for details`),
     card({ class: 'card--flush', style: { padding: '8px' } },
       rows.length
-        ? h('div', null, ...rows.map((m) => matchRow(m, () => ctx.navigate('matchDetail', { matchId: m.matchId }))))
-        : h('div', { class: 'empty', style: { padding: '20px' } }, 'No matches in this range yet.'),
+        ? h('div', null, ...groups.flatMap((g) => [
+            dayHeader(g.label, g.wins, g.losses),
+            ...g.items.map((m) => matchRow(m, ctx)),
+          ]))
+        : emptyActions(ctx),
     ),
   );
 }
 
-function matchRow(m: MatchRow, open: () => void): HTMLElement {
+/** Empty in range — offer the next step instead of a dead end. */
+function emptyActions(ctx: ViewContext): HTMLElement {
+  const hasOlderGames = ctx.data.totalGamesAllTime > 0 && ctx.data.filters.days !== 'all';
+  return h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-start' } },
+    emptyState('No matches in this range yet.'),
+    h('div', { style: { display: 'flex', gap: '10px' } },
+      hasOlderGames
+        ? button(`Show all time (${ctx.data.totalGamesAllTime} games)`, {
+            variant: 'soft',
+            onClick: () => ctx.setFilter({ days: 'all' }),
+          })
+        : null,
+      button('Log a match', { variant: 'soft', onClick: () => ctx.openLogMatch() }),
+    ),
+  );
+}
+
+function dayHeader(label: string, wins: number, losses: number): HTMLElement {
+  return h('div', { class: 'day-header' },
+    h('span', { class: 'day-header-label' }, prettyDay(label)),
+    h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${wins}–${losses}`),
+    h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${signed(wins - losses)} net`),
+  );
+}
+
+/** 'Today'/'Yesterday' pass through; raw day keys render as a friendly date. */
+function prettyDay(label: string): string {
+  if (label === 'Today' || label === 'Yesterday') return label;
+  const d = new Date(`${label}T12:00:00`);
+  return Number.isNaN(d.getTime())
+    ? label
+    : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function matchRow(m: MatchRow, ctx: ViewContext): HTMLElement {
+  const open = (): void => ctx.navigate('matchDetail', { matchId: m.matchId });
   const state = RESULT_STATE[m.result];
+  // Hero/map are inline cross-links: stopPropagation keeps the row click intact.
+  const heroLinks = m.heroes.length
+    ? m.heroes.flatMap((hero, i) => [
+        i ? ', ' : '',
+        h('button', {
+          class: 'inline-link',
+          title: `Open ${hero}'s drill-down`,
+          on: { click: (e) => { e.stopPropagation(); openHeroDrawer(ctx, hero); } },
+        }, hero),
+      ])
+    : ['—'];
   return h('div', { class: 'match-row is-clickable', on: { click: open } },
     h('div', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
     h('div', { class: 'row-main' },
-      h('div', { class: 'row-name' }, m.map),
-      h('div', { class: 'row-meta' }, `${roleLabel(m.role)} · ${m.heroes.join(', ') || '—'} · ${m.account}`),
+      h('div', { class: 'row-name' },
+        h('button', {
+          class: 'inline-link inline-link--strong',
+          title: `Find ${m.map} on the Maps screen`,
+          on: { click: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); } },
+        }, m.map),
+      ),
+      h('div', { class: 'row-meta' }, `${roleLabel(m.role)} · `, ...heroLinks, ` · ${m.account}`),
     ),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
       pill(m.mapType, 'accent'),

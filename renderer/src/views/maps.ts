@@ -5,6 +5,7 @@ import { pct, signed } from '../format';
 import { wrColor, CATEGORICAL, OTHER_COLOR } from '../theme';
 import { donutChart, horizontalBars, type DonutSlice } from '../charts/plots';
 import { card, statBar } from '../components/primitives';
+import { chartCard } from '../components/chartCard';
 import { viewHead, type ViewContext } from './view';
 
 const MIN_MAP_GAMES = 3;
@@ -12,16 +13,42 @@ const TOP_SLICES = 10;
 
 export function maps(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
-  return h('div', { class: 'view' },
+  const view = h('div', { class: 'view' },
     viewHead('Maps', 'Where the games actually go — by mode, then map by map'),
     h('div', { class: 'grid-3' }, ...d.byMapType.map(modeCard)),
     card({ title: 'Maps played', sub: 'share of games in range' },
       donutChart(mapsPlayed(d)),
     ),
-    card({ title: 'Winrate by map', sub: 'best to worst · 3+ games' },
-      horizontalBars(rankedMaps(d).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games }))),
-    ),
+    chartCard({
+      title: 'Winrate by map',
+      sub: 'best to worst · 3+ games',
+      columns: [
+        { key: 'map', label: 'Map' },
+        { key: 'winrate', label: 'WR' },
+        { key: 'net', label: 'Net' },
+        { key: 'games', label: 'Games' },
+      ],
+      rows: rankedMaps(d).map((m) => ({
+        map: m.key, winrate: pct(m.winrate), net: signed(m.wins - m.losses), games: m.games,
+      })),
+    }, horizontalBars(rankedMaps(d).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })))),
   );
+  // Palette / cross-link entry: scroll to and flash the requested map's bar.
+  const highlight = ctx.params.highlight;
+  if (highlight) {
+    setTimeout(() => {
+      const target = [...view.querySelectorAll('.hbar-label, .hbar-row [class*=label]')]
+        .find((el) => el.textContent?.trim() === highlight)
+        ?? [...view.querySelectorAll('*')].find((el) =>
+          el.childElementCount === 0 && el.textContent?.trim() === highlight);
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ block: 'center' });
+        target.classList.add('is-highlighted');
+        setTimeout(() => target.classList.remove('is-highlighted'), 2400);
+      }
+    }, 0);
+  }
+  return view;
 }
 
 function modeCard(g: Group): HTMLElement {

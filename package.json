@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run build:renderer",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && npm run build:renderer",
     "build:renderer": "node scripts/build-renderer.mjs",
     "watch:renderer": "node scripts/build-renderer.mjs --watch",
     "build:preview": "node scripts/build-preview.mjs",
@@ -77,13 +77,14 @@
     "@overwolf/ow-electron-builder": "26.8.5",
     "@overwolf/ow-electron-packages-types": "^0.0.5",
     "@types/node": "^20.11.0",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.25.0",
     "typescript": "^5.4.5",
-    "vitest": "^1.6.0"
+    "vitest": "^3.2.4"
   },
   "allowScripts": {
     "electron-winstaller@5.4.0": true,
-    "esbuild@0.21.5": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
     "@overwolf/ow-electron@39.6.1": true
   }
 }
