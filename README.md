@@ -147,6 +147,9 @@ CSP-friendly script by **esbuild**. Composition-first, framework-free:
 
 ## Development
 
+New to the codebase? Start with the **[onboarding guide](docs/onboarding/README.md)** —
+setup, architecture, a folder-by-folder tour, and recipes for common changes.
+
 ```bash
 npm test           # vitest — analytics, aggregator, resolvers, store, and the Vantage models
 npm run typecheck  # tsc for the main process and the renderer
