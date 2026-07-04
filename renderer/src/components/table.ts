@@ -1,5 +1,6 @@
 /** A self-contained sortable table. Owns its sort state and re-renders in place. */
 import { h, render } from '../dom';
+import { prefs, type HeroSortPref } from '../prefs';
 
 export interface Column<T> {
   key: string;
@@ -16,10 +17,12 @@ export interface TableOpts<T> {
   rows: T[];
   initialSort?: { key: string; dir: 1 | -1 };
   onRowClick?: (row: T) => void;
+  /** Persist the sort choice under this prefs key (survives re-renders + restarts). */
+  persistSortAs?: 'heroSort';
 }
 
 export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
-  let sort = opts.initialSort ?? { key: opts.columns[0].key, dir: -1 as 1 | -1 };
+  let sort: HeroSortPref = restoreSort(opts) ?? opts.initialSort ?? { key: opts.columns[0].key, dir: -1 };
   const wrap = h('div', { class: 'table-wrap' });
 
   const colOf = (key: string) => opts.columns.find((c) => c.key === key)!;
@@ -45,6 +48,7 @@ export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
         if (c.sortable !== false) {
           th.addEventListener('click', () => {
             sort = { key: c.key, dir: sort.key === c.key ? (-sort.dir as 1 | -1) : -1 };
+            if (opts.persistSortAs) prefs.set(opts.persistSortAs, sort);
             draw();
           });
         } else {
@@ -72,4 +76,11 @@ export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
 function cellText(v: string | number | null | undefined): string {
   if (v == null) return '–';
   return typeof v === 'number' ? String(Math.round(v)) : v;
+}
+
+/** A persisted sort is only used if its column still exists. */
+function restoreSort<T>(opts: TableOpts<T>): HeroSortPref | undefined {
+  if (!opts.persistSortAs) return undefined;
+  const saved = prefs.get(opts.persistSortAs);
+  return saved && opts.columns.some((c) => c.key === saved.key) ? saved : undefined;
 }

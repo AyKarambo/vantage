@@ -96,6 +96,8 @@ export class App {
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
   private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; epoch: number } | null = null;
+  /** Per-route scroll positions, restored when navigating back (session only). */
+  private readonly scrollMemory = new Map<string, number>();
 
   constructor(mount: HTMLElement) {
     render(mount, this.build());
@@ -213,8 +215,15 @@ export class App {
     const last = this.lastRendered;
     if (last && last.data === key.data && last.view === key.view
       && last.matchId === key.matchId && last.highlight === key.highlight && last.epoch === key.epoch) return;
+    // Remember where the outgoing route was scrolled; restore it when a
+    // navigation (not a data refresh on the same route) returns here.
+    if (last) this.scrollMemory.set(routeKey(last.view, last.matchId), this.contentHost.scrollTop);
+    const navigated = !last || last.view !== key.view || last.matchId !== key.matchId;
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
+    if (navigated) {
+      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId)) ?? 0;
+    }
   }
 
   /** Cold-start failure: nothing to show — offer an explicit retry. */
@@ -389,6 +398,10 @@ export class App {
     // Window focus re-pulls newly tracked games (stale-while-revalidate).
     window.addEventListener('focus', () => void store.refresh());
   }
+}
+
+function routeKey(view: ViewId, matchId?: string): string {
+  return matchId ? `${view}:${matchId}` : view;
 }
 
 function comboLabel(combo: string): string {

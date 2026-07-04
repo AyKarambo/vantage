@@ -34,8 +34,25 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
   return host;
 }
 
+/** Back link + prev/next steppers through the filtered match list (also ←/→). */
 function backRow(ctx: ViewContext): HTMLElement {
-  return h('div', null, button('← Matches', { variant: 'ghost', onClick: () => ctx.navigate('matches') }));
+  const matches = ctx.data.matches;
+  const idx = matches.findIndex((m) => m.matchId === ctx.params.matchId);
+  const older = idx >= 0 ? matches[idx + 1] : undefined;
+  const newer = idx >= 0 ? matches[idx - 1] : undefined;
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+    button('← Matches', { variant: 'ghost', onClick: () => ctx.navigate('matches') }),
+    h('span', { style: { flex: '1' } }),
+    button('‹ Older', {
+      variant: 'ghost', disabled: !older, title: 'Previous match (←)',
+      onClick: () => older && ctx.navigate('matchDetail', { matchId: older.matchId }),
+    }),
+    idx >= 0 ? h('span', { class: 'mono u-dim', style: { fontSize: '11px' } }, `${idx + 1} / ${matches.length}`) : null,
+    button('Newer ›', {
+      variant: 'ghost', disabled: !newer, title: 'Next match (→)',
+      onClick: () => newer && ctx.navigate('matchDetail', { matchId: newer.matchId }),
+    }),
+  );
 }
 
 function sections(d: MatchDetail): Node[] {

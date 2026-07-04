@@ -10,7 +10,8 @@
 import type {
   AppUiSettings, AuthoredTargetInput, BreakReminderSettings, DashboardFilters, GepHealthState,
   GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionDatabaseSummary,
-  NotionPageSummary, NotionStatus, OwStatsApi, RendererErrorInput, ReviewInput, TargetEditInput,
+  NotionPageSummary, NotionStatus, OwStatsApi, RendererErrorInput, ReviewInput, SyncProgress,
+  TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -139,6 +140,8 @@ if (gepParam === 'cycle') {
   }, 5000);
 }
 
+const syncListeners = new Set<(p: SyncProgress) => void>();
+
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
   return {
@@ -152,6 +155,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
     databaseTitle: db?.title,
     shapeValid: db ? true : undefined,
     shapeIssues: undefined,
+    lastSyncedAt: db ? Date.now() - 3_600_000 : undefined,
   };
 }
 
@@ -162,7 +166,16 @@ const mock: OwStatsApi = {
     const games = dataset();
     return matchDetail(games, matchId, applyFilters(games, f));
   },
-  exportNotion: async () => (selectedNotionDatabaseId ? { ok: dataset().length, failed: 0, skipped: 0 } : { ok: 0, failed: 0, unavailable: true }),
+  exportNotion: async () => {
+    if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
+    // Simulate per-game progress so the sync card's live counter is testable.
+    const total = Math.min(dataset().length, 40);
+    for (let done = 1; done <= total; done += 8) {
+      for (const cb of syncListeners) cb({ done: Math.min(done, total), total });
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return { ok: dataset().length, failed: 0, skipped: 0 };
+  },
   // The preview has no Notion runtime; token state is tracked locally, and the
   // database picker operates against a small canned list (see CANNED_DATABASES).
   notionStatus: async () => notionStatusFor(selectedNotionDatabaseId),
@@ -287,6 +300,10 @@ const mock: OwStatsApi = {
   onGepStatus: (cb: (s: GepStatusPayload) => void) => {
     gepListeners.add(cb);
     return () => gepListeners.delete(cb);
+  },
+  onSyncProgress: (cb: (p: SyncProgress) => void) => {
+    syncListeners.add(cb);
+    return () => syncListeners.delete(cb);
   },
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {

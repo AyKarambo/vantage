@@ -50,4 +50,12 @@ export interface NotionStatus {
   shapeValid?: boolean;
   /** Missing/mismatched property names, when `shapeValid` is false. */
   shapeIssues?: string[];
+  /** When the last successful sync finished (epoch ms). */
+  lastSyncedAt?: number;
+}
+
+/** Live per-game progress while a sync runs (pushed over the bridge). */
+export interface SyncProgress {
+  done: number;
+  total: number;
 }

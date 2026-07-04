@@ -13,6 +13,7 @@
 export type { Role, Result, HeroStat } from '../../core/model';
 export type {
   WinLoss, Group, FocusItem, HeroSummary, MatchMental, MatchReview, TargetGrade, Streak,
+  DayGroup, SessionRecap,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
@@ -28,7 +29,7 @@ export type {
 export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';
 
 // Notion export payloads
-export type { ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus } from './notion';
+export type { ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress } from './notion';
 
 // Manual-entry inputs
 export type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';

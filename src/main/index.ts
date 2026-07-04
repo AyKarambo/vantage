@@ -73,6 +73,7 @@ function main(): void {
   screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
+  let pushSyncProgress: (done: number, total: number) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
@@ -83,6 +84,7 @@ function main(): void {
       log.error('notion', `${title}: ${body}`);
       tray.notifyError(title, body);
     },
+    onSyncProgress: (done, total) => pushSyncProgress(done, total),
   });
 
   const pipeline = createMatchPipeline({
@@ -174,6 +176,7 @@ function main(): void {
     dashboard.push(EVENT_CHANNELS.onGepStatus, p);
     tray.setHealth(p.state);
   };
+  pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock

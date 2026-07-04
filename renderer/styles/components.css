@@ -313,7 +313,9 @@
 
 /* Data table ---------------------------------------------------------------- */
 .table-wrap {
-  overflow-x: auto;
+  /* Own scroll container so the sticky header row actually engages. */
+  overflow: auto;
+  max-height: calc(100vh - 250px);
 }
 table.data {
   width: 100%;
@@ -1041,4 +1043,53 @@ table.data tbody tr:hover {
   outline: 1px solid var(--accent);
   outline-offset: 4px;
   border-radius: var(--r-sm);
+}
+
+/* Day headers (Matches) + inline cross-links ---------------------------------- */
+.day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 12px 6px;
+}
+.day-header:first-child {
+  padding-top: 6px;
+}
+.day-header-label {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.inline-link:hover {
+  color: var(--accent-text, var(--accent));
+  text-decoration: underline;
+}
+.inline-link--strong {
+  font-weight: inherit;
+}
+
+/* Cross-link highlight flash ---------------------------------------------------- */
+.is-highlighted {
+  animation: highlight-flash 2.4s var(--ease);
+  border-radius: var(--r-sm);
+}
+@keyframes highlight-flash {
+  0%, 60% { box-shadow: 0 0 0 3px var(--accent); background: rgba(124, 108, 245, 0.14); }
+  100% { box-shadow: none; background: transparent; }
+}
+
+/* Tooltip-hosting chart wrappers need a positioning context. */
+.chart-wrap,
+.hbars,
+.heatmap-wrap {
+  position: relative;
 }

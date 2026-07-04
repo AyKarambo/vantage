@@ -7,7 +7,7 @@
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
-import type { ExportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary } from './notion';
+import type { ExportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress } from './notion';
 import type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
@@ -73,6 +73,8 @@ export interface OwStatsApi {
   onLogEntry(cb: (e: LogEntry) => void): () => void;
   /** Subscribe to connection/data-flow state changes; returns an unsubscribe function. */
   onGepStatus(cb: (s: GepStatusPayload) => void): () => void;
+  /** Subscribe to live sync progress (fires per exported game); returns an unsubscribe function. */
+  onSyncProgress(cb: (p: SyncProgress) => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -89,6 +91,7 @@ export interface OwStatsApi {
 export const EVENT_CHANNELS = {
   onLogEntry: 'push:log-entry',
   onGepStatus: 'push:gep-status',
+  onSyncProgress: 'push:sync-progress',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**

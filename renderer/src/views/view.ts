@@ -2,8 +2,10 @@
 import { h } from '../dom';
 import type { DashboardData, DashboardFilters } from '../../../src/shared/contract';
 import type { ViewId, ViewParams } from '../store';
+import { FILTER_DEFAULTS } from '../store';
+import { prefs, type FilterPresetPref } from '../prefs';
 import { roleLabel } from '../format';
-import { select, type SelectOption } from '../components/primitives';
+import { chip, select, type SelectOption } from '../components/primitives';
 
 export interface ViewContext {
   data: DashboardData;
@@ -25,6 +27,9 @@ export function filterBar(
   d: DashboardData,
   setFilter: (patch: Partial<DashboardFilters>) => void,
 ): HTMLElement {
+  const changed = activeFilterCount(d.filters);
+  const presets = prefs.get('filterPresets') ?? [];
+
   return h('div', { class: 'filter-bar' },
     filterField('Account', d.filters.account,
       [{ value: 'all', label: 'All accounts' }, ...d.options.accounts.map((a) => ({ value: a, label: a }))],
@@ -43,7 +48,63 @@ export function filterBar(
         { value: 'all', label: 'All time' },
       ],
       (v) => setFilter({ days: v === 'all' ? 'all' : Number(v) })),
+    changed
+      ? h('button', {
+          class: 'filter-reset',
+          title: 'Back to the default filters',
+          on: { click: () => setFilter({ ...FILTER_DEFAULTS }) },
+        }, `Reset (${changed})`)
+      : null,
+    h('span', { class: 'filter-presets' },
+      ...presets.map((p) => presetChip(p, d.filters, setFilter)),
+      changed && presets.length < 2 && !presets.some((p) => sameFilters(p.filters, d.filters))
+        ? h('button', {
+            class: 'filter-preset-save',
+            title: 'Save the current filter combination as a one-click preset',
+            on: {
+              click: (e) => {
+                const next = [...presets, { name: summarizeFilters(d.filters), filters: { ...d.filters } }];
+                prefs.set('filterPresets', next);
+                (e.currentTarget as HTMLElement).closest('.filter-bar')?.replaceWith(filterBar(d, setFilter));
+              },
+            },
+          }, '+ save preset')
+        : null,
+    ),
   );
+}
+
+function presetChip(
+  p: FilterPresetPref,
+  current: Required<DashboardFilters>,
+  setFilter: (patch: Partial<DashboardFilters>) => void,
+): HTMLElement {
+  const el = chip(p.name, sameFilters(p.filters, current), () => setFilter({ ...p.filters }));
+  el.title = 'Apply this preset · right-click to remove';
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    prefs.set('filterPresets', (prefs.get('filterPresets') ?? []).filter((x) => x.name !== p.name));
+    el.remove();
+  });
+  return el;
+}
+
+function activeFilterCount(f: Required<DashboardFilters>): number {
+  return (['account', 'role', 'mode', 'days'] as const)
+    .filter((k) => String(f[k]) !== String(FILTER_DEFAULTS[k])).length;
+}
+
+function sameFilters(a: Required<DashboardFilters>, b: Required<DashboardFilters>): boolean {
+  return a.account === b.account && a.role === b.role && a.mode === b.mode && String(a.days) === String(b.days);
+}
+
+function summarizeFilters(f: Required<DashboardFilters>): string {
+  const parts: string[] = [];
+  if (f.mode !== 'all') parts.push(f.mode);
+  if (f.role !== 'all') parts.push(roleLabel(f.role));
+  if (f.account !== 'all') parts.push(f.account);
+  parts.push(f.days === 'all' ? 'all time' : `${f.days}d`);
+  return parts.join(' · ');
 }
 
 function filterField(label: string, value: string, options: SelectOption[], onChange: (v: string) => void): HTMLElement {

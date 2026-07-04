@@ -1,11 +1,12 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h } from '../dom';
-import type { DashboardData, Group } from '../../../src/shared/contract';
+import type { DashboardData, Group, SessionRecap } from '../../../src/shared/contract';
 import { mapMode } from '../../../src/core/maps';
 import { dateLong, greeting, int, pct, signed, streakText } from '../format';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
-import { button, card, kpiCard, statBar } from '../components/primitives';
+import { button, card, kpiCard, statBar, statBox } from '../components/primitives';
+import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
 
 export function overview(ctx: ViewContext): HTMLElement {
@@ -20,10 +21,44 @@ export function overview(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view' },
     head,
+    recapCard(d),
     kpiRow(d),
     scatterCard(ctx),
     bottomRow(ctx),
   );
+}
+
+/** Yesterday's coach recap — shown once per day, dismissible. */
+function recapCard(d: DashboardData): HTMLElement | null {
+  const r = d.recap;
+  if (!r || prefs.get('recapShown') === r.date) return null;
+
+  const host = h('div');
+  const dismiss = (): void => {
+    prefs.set('recapShown', r.date);
+    host.remove();
+  };
+  host.append(card({
+    variant: 'glow',
+    title: 'Yesterday’s session',
+    sub: recapLine(r),
+    actions: button('✕', { variant: 'ghost', title: 'Dismiss (shows once per day)', onClick: dismiss }),
+  },
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '4px' } },
+      statBox(h('span', { class: r.net >= 0 ? 'is-win' : 'is-loss' }, `${r.wins}–${r.losses}`), `${signed(r.net)} net`),
+      statBox(pct(r.winrate), 'winrate'),
+      r.bestMap ? statBox(shorten(r.bestMap), 'best map') : statBox('—', 'best map'),
+      r.targetHitRate !== undefined ? statBox(pct(r.targetHitRate), 'targets hit') : statBox('—', 'targets hit'),
+    ),
+  ));
+  return host;
+}
+
+function recapLine(r: SessionRecap): string {
+  const bits = [`${r.games} game${r.games === 1 ? '' : 's'}`];
+  if (r.worstMap) bits.push(`toughest: ${r.worstMap}`);
+  if (r.flags.tilt) bits.push(`tilt flagged ×${r.flags.tilt}`);
+  return bits.join(' · ');
 }
 
 function kpiRow(d: DashboardData): HTMLElement {

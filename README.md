@@ -38,7 +38,15 @@ comms · toxicity · leavers · your improvement target).
   target database, and push your tracked games to it with one click (deduped by
   Match ID).
 
-Filter everything by account, role, game mode and time range.
+Filter everything by account, role, game mode and time range — with a one-click **Reset** chip and
+savable presets. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run
+actions, find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet,
+`←/→` between match details, `H/P/M/S` grading on Review), toasts with **Undo** for reversible
+actions, day-grouped match log with hero/map cross-links, hero typeahead + remembered role/mode in
+the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
+colorblind-safe palette option, window-position memory, and a **Settings** screen (break reminder,
+close-to-tray, run-at-login, diagnostics). The app restores your last view on launch and refreshes
+without flicker.
 
 ## Account safety
 

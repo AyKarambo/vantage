@@ -4,7 +4,7 @@
  * renderer bundle can all share it.
  */
 import type { Role, Result } from '../../core/model';
-import type { WinLoss, Group, FocusItem, HeroSummary, Streak } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, HeroSummary, SessionRecap, Streak } from '../../core/analytics';
 import type { MentalSummary } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
@@ -80,6 +80,10 @@ export interface DashboardData {
   pendingReviews: number;
   /** The effective break-reminder settings, so views render synchronously. */
   breakReminder: BreakReminderSettings;
+  /** Unfiltered history size — lets empty states offer "Show all time". */
+  totalGamesAllTime: number;
+  /** Yesterday's recap (unfiltered); absent when yesterday had no games. */
+  recap?: SessionRecap;
 }
 
 /** Hero drill-down payload. */

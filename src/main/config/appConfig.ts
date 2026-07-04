@@ -15,6 +15,8 @@ export interface NotionConfig {
   gametrackerDatabaseId: string;
   mapsDatabaseId: string;
   gametrackerUrl: string;
+  /** When the last successful sync finished (epoch ms). */
+  lastSyncedAt?: number;
 }
 
 export type Sensor = 'counterwatch' | 'gep';

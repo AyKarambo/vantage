@@ -24,6 +24,8 @@ export interface NotionRuntimeDeps {
   /** Mirror the token presence into the tray. */
   onTokenState: (tokenSet: boolean) => void;
   onError: (title: string, body: string) => void;
+  /** Live per-game export progress (pushed to the sync card). */
+  onSyncProgress?: (done: number, total: number) => void;
 }
 
 /**
@@ -75,12 +77,18 @@ export class NotionRuntime {
       databaseTitle: this.shapeCheck?.title,
       shapeValid: this.shapeCheck?.valid,
       shapeIssues: this.shapeCheck?.issues,
+      lastSyncedAt: notion.lastSyncedAt,
     };
   }
 
-  export(games: GameRecord[]): Promise<ExportResult> {
-    if (!this.exporter) return Promise.resolve({ ok: 0, failed: 0, unavailable: true });
-    return this.exporter.export(games);
+  async export(games: GameRecord[]): Promise<ExportResult> {
+    if (!this.exporter) return { ok: 0, failed: 0, unavailable: true };
+    const result = await this.exporter.export(games, this.deps.onSyncProgress);
+    if (!result.error) {
+      saveLocalNotionConfig({ lastSyncedAt: Date.now() });
+      this.deps.reloadConfig();
+    }
+    return result;
   }
 
   setToken(token: string): NotionStatus {
