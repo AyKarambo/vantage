@@ -3,7 +3,9 @@ import type { HistoryStore } from '../store/history';
 import type { ManualStore } from '../store/manualLog';
 import type { NotionRuntime } from './notionRuntime';
 import type { AppConfig } from './config';
+import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
+import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import type { GameRecord } from '../core/analytics';
 
 /**
@@ -34,6 +36,8 @@ export interface DataProviderDeps {
   notify(title: string, body: string): void;
   /** Demo dataset shown until the first real game is tracked. */
   sampleGames(): GameRecord[];
+  /** The release log: viewer ring, session level, renderer error sink. */
+  logger: Pick<Logger, 'entries' | 'getLevel' | 'setLevel' | 'error'>;
 }
 
 /** Assemble the dashboard's DataProvider over the injected deps. */
@@ -92,5 +96,18 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     listNotionPages: () => deps.notion.listPages(),
     selectNotionDatabase: (databaseId) => deps.notion.selectDatabase(databaseId),
     createNotionDatabase: (parentPageId) => deps.notion.createDatabase(parentPageId),
+    getLogEntries: () => deps.logger.entries(),
+    getLogLevel: () => deps.logger.getLevel(),
+    setLogLevel: (level) => {
+      // Untrusted over IPC — an unknown level would silence the log entirely.
+      if (LOG_LEVELS.includes(level as LogLevel)) deps.logger.setLevel(level);
+      return deps.logger.getLevel();
+    },
+    logRendererError: (input) => {
+      deps.logger.error('renderer', input.message, {
+        ...(input.source ? { source: input.source } : {}),
+        ...(input.stack ? { stack: input.stack } : {}),
+      });
+    },
   };
 }

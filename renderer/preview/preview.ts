@@ -8,9 +8,9 @@
  * real app persists them to disk.
  */
 import type {
-  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, ManualMatchInput,
-  NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
-  ReviewInput, TargetEditInput,
+  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, LogEntry, LogLevel,
+  ManualMatchInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
+  RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -85,6 +85,29 @@ const CANNED_PAGES: NotionPageSummary[] = [
 ];
 let selectedNotionDatabaseId: string | undefined = localStorage.getItem(NOTION_DB_KEY) ?? undefined;
 let notionTokenSet = localStorage.getItem(NOTION_TOKEN_KEY) === '1';
+
+// Fake log feed: a canned backlog plus a slow trickle of new entries, so the
+// Logs screen's tail/filter/pause behaviors are all exercisable in a browser.
+let previewLogLevel: LogLevel = 'info';
+const logListeners = new Set<(e: LogEntry) => void>();
+const previewLog: LogEntry[] = [
+  { ts: Date.now() - 90_000, level: 'info', scope: 'main', message: 'Vantage started', fields: { version: 'preview', sensor: 'gep' } },
+  { ts: Date.now() - 80_000, level: 'info', scope: 'gep', message: 'game detected', fields: { game: 10844 } },
+  { ts: Date.now() - 75_000, level: 'debug', scope: 'gep', message: 'info update kill_feed' },
+  { ts: Date.now() - 60_000, level: 'warn', scope: 'notion', message: 'shape validation skipped — no database selected' },
+  { ts: Date.now() - 30_000, level: 'error', scope: 'renderer', message: 'example forwarded error', fields: { source: 'preview' } },
+];
+let previewLogTick = 0;
+setInterval(() => {
+  const e: LogEntry = {
+    ts: Date.now(),
+    level: previewLogLevel === 'debug' && previewLogTick % 2 === 0 ? 'debug' : 'info',
+    scope: previewLogTick % 3 === 0 ? 'pipeline' : 'gep',
+    message: `preview heartbeat #${++previewLogTick}`,
+  };
+  previewLog.push(e);
+  for (const cb of logListeners) cb(e);
+}, 4000);
 
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
@@ -211,6 +234,24 @@ const mock: OwStatsApi = {
     breakReminder = normalizeBreakReminder(input);
     save(BREAK_REMINDER_KEY, breakReminder);
     return breakReminder;
+  },
+  getLogEntries: async () => [...previewLog],
+  getLogLevel: async () => previewLogLevel,
+  setLogLevel: async (level: LogLevel) => {
+    previewLogLevel = level;
+    return previewLogLevel;
+  },
+  logRendererError: async (input: RendererErrorInput) => {
+    const e: LogEntry = {
+      ts: Date.now(), level: 'error', scope: 'renderer', message: input.message,
+      fields: { ...(input.source ? { source: input.source } : {}) },
+    };
+    previewLog.push(e);
+    for (const cb of logListeners) cb(e);
+  },
+  onLogEntry: (cb: (e: LogEntry) => void) => {
+    logListeners.add(cb);
+    return () => logListeners.delete(cb);
   },
   window: {
     minimize: () => console.info('[preview] minimize'),

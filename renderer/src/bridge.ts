@@ -8,7 +8,7 @@
  * its mock after this module initialises). The member list is derived from the
  * contract's channel map, so a new API method is available here without edits.
  */
-import { IPC_CHANNELS, type OwStatsApi } from '../../src/shared/contract';
+import { EVENT_CHANNELS, IPC_CHANNELS, type OwStatsApi } from '../../src/shared/contract';
 
 declare global {
   interface Window {
@@ -16,7 +16,9 @@ declare global {
   }
 }
 
-const MEMBERS = [...Object.keys(IPC_CHANNELS), 'window'] as Array<keyof OwStatsApi>;
+const MEMBERS = [
+  ...Object.keys(IPC_CHANNELS), ...Object.keys(EVENT_CHANNELS), 'window',
+] as Array<keyof OwStatsApi>;
 
 /**
  * Decision record: deliberately a module singleton today. `ViewContext` is the

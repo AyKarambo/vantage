@@ -31,6 +31,11 @@ export class DashboardWindow {
     });
   }
 
+  /** Push an event payload to the renderer; silently dropped when no window is open. */
+  push(channel: string, payload: unknown): void {
+    if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload);
+  }
+
   open(): void {
     if (this.win && !this.win.isDestroyed()) {
       if (this.win.isMinimized()) this.win.restore();

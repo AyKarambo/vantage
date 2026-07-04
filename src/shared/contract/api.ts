@@ -9,6 +9,7 @@ import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
 import type { ExportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary } from './notion';
 import type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
+import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -48,12 +49,32 @@ export interface OwStatsApi {
   selectNotionDatabase(databaseId: string): Promise<NotionStatus>;
   /** Create a correctly-shaped Maps + Gametracker database pair under a parent page, then select it. */
   createNotionDatabase(parentPageId: string): Promise<NotionStatus>;
+  /** Snapshot of the main process's recent log entries (the viewer's source). */
+  getLogEntries(): Promise<LogEntry[]>;
+  /** The current minimum log level. */
+  getLogLevel(): Promise<LogLevel>;
+  /** Set the minimum log level for this session; returns the applied value. */
+  setLogLevel(level: LogLevel): Promise<LogLevel>;
+  /** Forward an uncaught renderer error into the main-process log. */
+  logRendererError(input: RendererErrorInput): Promise<void>;
+  /** Subscribe to new log entries; returns an unsubscribe function. */
+  onLogEntry(cb: (e: LogEntry) => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
     close(): void;
   };
 }
+
+/**
+ * Main→renderer push events. Each key is an `OwStatsApi` subscription method
+ * (`onX(cb) => unsubscribe`); preload and the renderer bridge generate the
+ * subscription forwarders from this map exactly like `IPC_CHANNELS` generates
+ * the invokers.
+ */
+export const EVENT_CHANNELS = {
+  onLogEntry: 'push:log-entry',
+} as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**
  * The IPC channel behind each `OwStatsApi` method. Preload and the renderer
@@ -83,7 +104,11 @@ export const IPC_CHANNELS = {
   listNotionPages: 'notion:list-pages',
   selectNotionDatabase: 'notion:select-database',
   createNotionDatabase: 'notion:create-database',
-} as const satisfies Record<Exclude<keyof OwStatsApi, 'window'>, string>;
+  getLogEntries: 'log:entries',
+  getLogLevel: 'log:get-level',
+  setLogLevel: 'log:set-level',
+  logRendererError: 'log:renderer-error',
+} as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 
 /** The fire-and-forget channels behind the frameless window controls. */
 export const WINDOW_CHANNELS = {

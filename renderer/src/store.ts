@@ -19,7 +19,8 @@ export type ViewId =
   | 'mental'
   | 'trends'
   | 'targets'
-  | 'notion';
+  | 'notion'
+  | 'logs';
 
 /** Parameters for parameterized views (the match detail drill-down). */
 export interface ViewParams {

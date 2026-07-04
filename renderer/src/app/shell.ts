@@ -20,6 +20,7 @@ import { trends } from '../views/trends';
 import { targets } from '../views/targets';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
+import { logViewer } from '../views/logViewer';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { openLogMatch } from './log-match';
@@ -27,7 +28,7 @@ import { openOnboarding, shouldOnboard } from './onboarding';
 
 // matchDetail is a parameterized view: registered here (routable) but not in
 // NAV — the sidebar keeps Matches highlighted while it is active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, targets, notion };
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, targets, notion, logs: logViewer };
 
 interface NavItem {
   id: ViewId;
@@ -58,6 +59,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: 'Data',
     items: [
       { id: 'notion', label: 'Notion sync', icon: '⟳' },
+      { id: 'logs', label: 'Logs', icon: '≡' },
     ],
   },
 ];

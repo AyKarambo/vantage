@@ -33,6 +33,9 @@ export type { ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStat
 // Manual-entry inputs
 export type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 
+// Logging payloads (release debug log + in-app viewer)
+export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
+
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';
-export { IPC_CHANNELS, WINDOW_CHANNELS } from './api';
+export { IPC_CHANNELS, WINDOW_CHANNELS, EVENT_CHANNELS } from './api';

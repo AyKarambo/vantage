@@ -172,6 +172,16 @@ Questions or feedback: <timo.seikel@gmail.com> (also reachable from the tray's *
 item). The [Privacy Policy](docs/legal/privacy.html) and [Terms of Use](docs/legal/terms.html) live
 under `docs/legal/` and are published as the app's public legal URLs.
 
+## Debug log
+
+Every build — including releases — writes a structured log to `%APPDATA%/Vantage/logs/`
+(`vantage.log`, rotating at 2 MB × 5 files): app lifecycle, GEP attach/detach, match-pipeline
+milestones, Notion sync results, and uncaught errors from both processes. Notion tokens are
+redacted before anything is written. The **Logs** screen (sidebar → Data) live-tails the last
+1000 entries with level filtering, and its **Debug detail** toggle raises verbosity to the full
+GEP event stream for the current session (resets to `info` on restart). Logs never leave the
+device.
+
 ## Testing the live pipeline
 
 `OW_SYNC_RECORD=1` captures a real GEP session to `userData/recordings/*.jsonl`; replay it with
