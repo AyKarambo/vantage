@@ -1,7 +1,7 @@
 # Screen spec: Trends (`trends`)
 
-**Source:** `renderer/src/views/trends.ts` · reverse-engineered 2026-07-04
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior
+**Source:** `renderer/src/views/trends.ts`, `renderer/src/components/chartCard.ts`, `renderer/src/charts/tooltip.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after the ui-qol batch (PR #8)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes everything shown.
 
@@ -11,9 +11,10 @@
 
 ## In-Scope
 
-- **Winrate over time** line chart from the trend buckets.
+- **Winrate over time** line chart from the trend buckets. [qol 2026-07-04] The card is a `chartCard` with a Chart/Table toggle — the table shows the same buckets as text (columns Week-or-Day · WR · Games).
 - Three breakdown cards — **By role**, **By game mode**, **By account** — rendered as compact horizontal winrate bars, ranked best → worst, with game counts.
 - **Activity** calendar heatmap: games per day, cell colour = winrate.
+- [qol 2026-07-04] **Chart tooltips everywhere:** the line chart's points, the breakdown bars, and the heatmap cells all use the shared cursor-following tooltip layer (native `<title>` fallback) — the hover detail the scatter already had. A heatmap cell reads "`<date>` · Ng · WR%" (or "no games").
 
 ## Out-of-Scope
 
@@ -30,10 +31,12 @@
 - Given a 30-day range, when Trends renders, then the line chart buckets by day and is subtitled "by day"; given "All time" (or >90 days), it buckets by week and is subtitled "by week".
 - Given any breakdown split, then rows rank best → worst winrate with their game counts, and a single-category split renders at normal row height.
 - Given games in range, then the activity heatmap shows one cell per day sized by games and coloured by that day's winrate.
+- Given the "Winrate over time" card, when I click the Table toggle, then the buckets render as a text table with the period column matching the bucketing ("Week" / "Day"); Chart restores the line.
+- Given a hover over a line-chart point, a breakdown bar, or a heatmap cell, then a tooltip with that entry's label, winrate, and games appears.
 
 ## Known gaps (intent ≠ code)
 
-None identified — behavior matches intent.
+None identified — behavior matches intent. [qol 2026-07-04] `ui-qol.spec.md` #27 scoped the chart-as-table toggle "per chart card"; as shipped it covers the two primary data charts (this screen's line chart and Maps' winrate bars). The breakdown bars and heatmap have tooltips but no table toggle — their data is already compact text-adjacent rows.
 
 ## Open Questions
 

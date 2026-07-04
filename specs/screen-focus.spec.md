@@ -1,9 +1,9 @@
 # Screen spec: Focus (`focus`)
 
-**Source:** `renderer/src/views/focus.ts` · reverse-engineered 2026-07-04
+**Source:** `renderer/src/views/focus.ts` · reverse-engineered 2026-07-04 · re-verified 2026-07-04 after the ui-qol / live-status / debug-log batch (PR #8): no screen-level changes
 **Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review)
 
-**Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes the list.
+**Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes the list. The ui-qol batch touched this screen only through shell-level behaviors (palette Screen entry, Ctrl+1…9 hotkeys, flicker-free refresh, filter reset chip/presets) — all specified in `screen-shell.spec.md`.
 
 ## Intent (WHAT & WHY)
 

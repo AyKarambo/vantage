@@ -1,7 +1,7 @@
 # Screen spec: Notion sync (`notion`)
 
-**Source:** `renderer/src/views/notion.ts`, `src/notion/notionAdmin.ts`, `src/notion/gametrackerSchema.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass
+**Source:** `renderer/src/views/notion.ts`, `renderer/src/views/notion/syncCard.ts`, `src/notion/notionAdmin.ts`, `src/notion/gametrackerSchema.ts`, `src/main/notionRuntime.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
 **Shared context:** Status is fetched async from the bridge; the three cards (state · setup · sync) re-render whenever it changes. Not affected by the global filter bar.
 
@@ -19,6 +19,8 @@
   - An empty result in either list (nothing shared with the integration yet) renders as guidance — "Share a page with your integration in Notion, then retry — ••• → Connections → add your integration." — never as an error.
   - A search/list failure renders the raw error inline instead of guidance.
 - **Sync now** card: button enabled only when connected **and** tracked games > 0, labeled with the count; result chips (N synced / N skipped / N failed); contextual note for every state (checking · not connected · nothing to sync · ready). [implemented 2026-07-04] A shape-mismatch short-circuits the sync with an inline error instead of attempting (and failing) every row.
+  - [qol 2026-07-04] **Live progress:** while an export runs, the card shows "Syncing `n` / `total`…" fed by per-game `onSyncProgress` pushes from the main process (channel `push:sync-progress`); the subscription is released when the run ends.
+  - [qol 2026-07-04] **Last synced:** a persistent "Last synced `<relative time>`" line renders whenever `NotionStatus.lastSyncedAt` is set — stamped after each successful sync run and persisted in `config.local.json` (under the `notion` key), so it survives restarts.
 
 ## Out-of-Scope
 
@@ -45,6 +47,8 @@
 - Given the configured database's shape doesn't match the Gametracker schema, then the status card shows "Database shape mismatch" with the specific missing/mismatched property names, and a sync attempt short-circuits with an inline "Database is missing: …" error instead of running.
 - Given connected status with N > 0 tracked games, then the sync button reads "Sync N games to Notion" and is enabled; otherwise it is disabled with a contextual note.
 - Given a sync run with a valid database shape, then already-synced matches are skipped and the result chips report synced/skipped/failed counts; given no Maps database configured, games still sync but without a Map relation.
+- Given a sync run over multiple games, then the card's status line counts up "Syncing 1 / N…", "Syncing 2 / N…" while the export runs, replaced by the result chips when it finishes.
+- Given at least one successful sync has ever completed, then the Sync card shows "Last synced `<X>` ago", including after an app restart.
 - Given Disconnect, then the token is cleared and the status returns to "Not connected".
 
 ## Known gaps (intent ≠ code)
