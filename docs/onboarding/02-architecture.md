@@ -139,6 +139,28 @@ scratch inside the [`App` shell](../../renderer/src/app/shell.ts). esbuild bundl
 all to one CSP-friendly IIFE (`renderer/dist/dashboard.js`) — no inline scripts, no CDN
 (guardrail 4).
 
+## Renderer security (the contained sandbox)
+
+The renderer is treated as an untrusted surface even though it ships as our own bundle —
+defense-in-depth behind guardrail 1 (account safety). Four layers keep it contained:
+
+1. **Isolated & sandboxed.** The dashboard `BrowserWindow`
+   ([`dashboardWindow.ts`](../../src/main/dashboard/dashboardWindow.ts)) runs with
+   `contextIsolation: true`, `sandbox: true`, and `nodeIntegration: false` — the renderer
+   has no Node, and preload code lives in a separate world.
+2. **Strict CSP.** [`renderer/index.html`](../../renderer/index.html) sets
+   `default-src 'none'; script-src 'self'` — no inline scripts, no `eval`, no remote code
+   (also guardrail 4, and a store-review requirement).
+3. **One curated bridge.** The renderer reaches main *only* through `window.owstats`
+   (the typed contract), never raw `ipcRenderer`.
+4. **Navigation-locked.**
+   [`webContentsSecurity.ts`](../../src/main/dashboard/webContentsSecurity.ts) denies
+   popups and blocks any navigation away from the loaded bundle. External links are
+   opened deliberately, from the main process, via `shell.openExternal`.
+
+Net effect: nothing the renderer does can escape the page or step outside the typed
+contract. When you add a window or load anything, keep all four layers intact.
+
 ## The Notion edge (optional by design)
 
 [`NotionRuntime`](../../src/main/notionRuntime.ts) owns the lifecycle: no token → the
