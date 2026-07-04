@@ -63,7 +63,7 @@ The only code imported by **both** processes, barreled through
 | [`index.ts`](../../src/main/index.ts) | **The composition root.** Single-instance lock, constructs and wires everything, starts the chosen sensor / dev modes. Start reading here. |
 | [`gep.ts`](../../src/main/gep.ts) | `GepService` — subscribes to Overwolf GEP, normalizes events to `GepMessage`, emits `message`/`status`/`log`. |
 | [`matchPipeline.ts`](../../src/main/matchPipeline.ts) | `createMatchPipeline()` — `feed` (GEP msg → aggregator), `addMatch`, `recordGame` (dedupe, break reminder, screenshots, persist). |
-| [`dashboard/`](../../src/main/dashboard) | `dashboardWindow.ts` (frameless BrowserWindow), `ipcHandlers.ts` (channel registration), `provider.ts` (`createDataProvider()` — implements the read/write API over stores + core). |
+| [`dashboard/`](../../src/main/dashboard) | `dashboardWindow.ts` (frameless BrowserWindow — context-isolated, sandboxed, navigation-locked), `webContentsSecurity.ts` (`hardenWebContents()` — denies popups + navigation), `ipcHandlers.ts` (channel registration), `provider.ts` (`createDataProvider()` — implements the read/write API over stores + core). |
 | [`preload.ts`](../../src/main/preload.ts) | Generates `window.owstats` from `IPC_CHANNELS` via contextBridge. Mechanical — you rarely touch it. |
 | [`config/`](../../src/main/config) | `appConfig.ts` (defaults ← appsettings.json ← config.local.json ← env), `notionToken.ts` (safeStorage-encrypted token). |
 | [`counterwatch.ts`](../../src/main/counterwatch.ts) | `CounterwatchReader` — alternative sensor; watches Counterwatch's IndexedDB. |
