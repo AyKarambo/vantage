@@ -22,3 +22,14 @@ Small change, single bottom-up pass. Checkboxes track the autonomous implementat
 - [x] `npm test` green (new test included) — 26 files, 202 tests.
 - [x] `npm run build` clean (preload bundle intact — 2.5 kb).
 - Proves: H6 (external links unaffected — no code path changed), X1–X6.
+
+## T4 — IPC sender validation (post-research addendum)
+- [x] `src/main/dashboard/webContentsSecurity.ts`: add `isTrustedSenderUrl` + `isTrustedIpcEvent`
+      (pure, structural event type).
+- [x] `src/main/dashboard/ipcHandlers.ts`: local `handle`/`on` wrappers over bound
+      `rawHandle`/`rawOn`; swap all ~30 `ipcMain.handle` + 3 `ipcMain.on` call sites.
+- [x] `test/webContentsSecurity.test.ts`: sender-URL allowlist (dev/asar/case/remote/wrong-page/
+      unrelated/malformed) + event (trusted/foreign/null).
+- [x] Docs: architecture security section + README note updated.
+- [x] `npm run typecheck` clean · `npm test` green (26 files, 212 tests) · `npm run build` clean.
+- Proves: H7, H8, H9, H10. Scope held: sender-frame only, no runtime arg schemas (refuted 0-3).
