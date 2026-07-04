@@ -17,6 +17,11 @@ export class MapsCache {
   ) {}
 
   async load(): Promise<void> {
+    if (!this.mapsDatabaseId) {
+      this.index = new Map();
+      this.loadedAt = Date.now();
+      return;
+    }
     const rows: Array<{ pageId: string; name: string }> = [];
     let cursor: string | undefined;
     do {

@@ -1,4 +1,4 @@
-import { emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from './model';
+import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from './model';
 
 /**
  * Accumulates the GEP message stream into one {@link MatchRecord} per match.
@@ -98,14 +98,19 @@ export class MatchAggregator {
       else if (key === K.eliminations) this.current.matchElims = asNumber(msg.value);
       else if (key === K.deaths) this.current.matchDeaths = asNumber(msg.value);
       else if (key === K.assists) this.current.matchAssists = asNumber(msg.value);
-      else if (key.startsWith(K.roster)) this.applyRoster(msg.value);
+      else if (key.startsWith(K.roster)) this.applyRoster(key, msg.value);
       return;
     }
   }
 
-  private applyRoster(value: unknown): void {
+  private applyRoster(key: string, value: unknown): void {
     const player = parseRoster(value);
     if (!player) return;
+
+    // Keep the latest snapshot per roster slot so the finished record carries
+    // the full scoreboard GEP chose to report (local team only on some patches).
+    this.current.rosterAll.set(key, player);
+
     if (!isLocal(player.battleTag, this.current.record.battleTag)) return;
 
     const rec = this.current.record;
@@ -200,6 +205,14 @@ export class MatchAggregator {
     }
     if (this.current.perHero.length) rec.perHero = this.current.perHero;
 
+    if (this.current.rosterAll.size) {
+      rec.roster = [...this.current.rosterAll.entries()]
+        .sort(([a], [b]) => slotOf(a) - slotOf(b))
+        .map(([, player]) =>
+          isLocal(player.battleTag, rec.battleTag) ? { ...player, isLocal: true } : player,
+        );
+    }
+
     if (!rec.matchId) {
       // No pseudo_match_id seen — synthesize so dedupe still has a key this session.
       rec.matchId = `synthetic-${rec.startedAt ?? rec.endedAt}-${++this.synthetic}`;
@@ -219,6 +232,8 @@ interface MutableMatch {
     RosterPlayer,
     'kills' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'
   >;
+  /** Latest roster snapshot per `roster_N` key — the whole reported scoreboard. */
+  rosterAll: Map<string, RosterPlayer>;
   matchElims?: number;
   matchDeaths?: number;
   matchAssists?: number;
@@ -246,7 +261,13 @@ function zeroSnap(): Snap {
 }
 
 function newMutable(): MutableMatch {
-  return { record: emptyMatch(''), rosterLocal: {}, roundWins: 0, roundLosses: 0, perHero: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+  return { record: emptyMatch(''), rosterLocal: {}, rosterAll: new Map(), roundWins: 0, roundLosses: 0, perHero: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+}
+
+/** Numeric slot of a `roster_N` key, for stable scoreboard ordering. */
+function slotOf(key: string): number {
+  const n = Number(key.slice(key.lastIndexOf('_') + 1));
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
 }
 
 /** A hero's stats = cumulative-out − cumulative-in, floored at 0. */
@@ -280,14 +301,8 @@ function nameMatches(msg: GepMessage, name: string): boolean {
 
 function isLocal(playerTag: string | undefined, localTag: string | undefined): boolean {
   if (!playerTag || !localTag) return false;
-  const a = nameOf(playerTag);
-  const b = nameOf(localTag);
-  return a === b && a.length > 0;
-}
-
-function nameOf(tag: string): string {
-  const hash = tag.indexOf('#');
-  return (hash >= 0 ? tag.slice(0, hash) : tag).trim().toLowerCase();
+  const a = battleTagName(playerTag);
+  return a === battleTagName(localTag) && a.length > 0;
 }
 
 /** Parse a roster value (object or JSON string) into a RosterPlayer, tolerating field aliases. */
@@ -305,6 +320,7 @@ export function parseRoster(value: unknown): RosterPlayer | undefined {
     battleTag: asString(pick('battleTag', 'battletag', 'name', 'player', 'playerName')),
     heroName: asString(pick('heroName', 'hero_name', 'hero', 'character')),
     heroRole: asString(pick('heroRole', 'hero_role', 'role')),
+    team: asNumber(pick('team', 'team_id', 'teamId')),
     kills: asNumber(pick('kills', 'eliminations', 'elims')),
     deaths: asNumber(pick('deaths')),
     assists: asNumber(pick('assists')),

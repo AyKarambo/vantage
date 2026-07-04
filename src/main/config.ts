@@ -2,6 +2,7 @@ import { app, safeStorage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { LogFilter } from '../core/model';
+import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../core/breakReminder';
 
 export interface NotionConfig {
   gametrackerDatabaseId: string;
@@ -22,6 +23,8 @@ export interface AppConfig {
   accounts: Record<string, string>;
   /** GEP map name → Notion Maps page Name. */
   mapAliases: Record<string, string>;
+  /** "Time for a break?" tray notification after N consecutive losses. */
+  breakReminder: BreakReminderSettings;
 }
 
 const DEFAULTS: AppConfig = {
@@ -32,6 +35,7 @@ const DEFAULTS: AppConfig = {
   notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
   accounts: {},
   mapAliases: {},
+  breakReminder: { ...DEFAULT_BREAK_REMINDER },
 };
 
 /** Per-user, machine-local files (survive app updates, never committed). */
@@ -70,6 +74,7 @@ export function loadConfig(): AppConfig {
     notion: { ...DEFAULTS.notion, ...(bundled.notion ?? {}), ...(local.notion ?? {}) },
     accounts: { ...(bundled.accounts ?? {}), ...(local.accounts ?? {}) },
     mapAliases: { ...(bundled.mapAliases ?? {}), ...(local.mapAliases ?? {}) },
+    breakReminder: { ...DEFAULTS.breakReminder, ...(bundled.breakReminder ?? {}), ...(local.breakReminder ?? {}) },
   };
   // Env overrides (handy for one-off testing without editing files).
   if (process.env.OW_SYNC_FILTER) merged.logFilter = process.env.OW_SYNC_FILTER as LogFilter;
@@ -82,6 +87,34 @@ export function saveLocalConfig(patch: Partial<AppConfig>): void {
   const current = readJson<AppConfig>(userConfigPath());
   const merged = { ...current, ...patch };
   fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
+}
+
+/**
+ * Deep-merge a partial `notion` patch into the local config file. Plain
+ * `saveLocalConfig` shallow-merges top-level keys, which would clobber
+ * sibling `notion` fields (e.g. saving `gametrackerDatabaseId` would wipe out
+ * an already-stored `mapsDatabaseId`) — this merges one level deeper instead.
+ */
+export function saveLocalNotionConfig(patch: Partial<NotionConfig>): void {
+  const current = readJson<AppConfig>(userConfigPath());
+  const merged: Partial<AppConfig> = {
+    ...current,
+    notion: { ...DEFAULTS.notion, ...(current.notion ?? {}), ...patch },
+  };
+  fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
+}
+
+/**
+ * Where the effective `gametrackerDatabaseId` came from: explicitly selected
+ * by the user (stored in the local override file), falling back to a
+ * hand-edited `appsettings.json` value, or configured nowhere at all.
+ */
+export function notionDatabaseSource(): 'selected' | 'appsettings' | 'none' {
+  const local = readJson<AppConfig>(userConfigPath());
+  if (local.notion?.gametrackerDatabaseId) return 'selected';
+  const merged = loadConfig();
+  if (merged.notion.gametrackerDatabaseId) return 'appsettings';
+  return 'none';
 }
 
 // --- Notion token (encrypted at rest) ----------------------------------------

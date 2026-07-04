@@ -1,23 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type {
-  AuthoredTargetInput, DashboardFilters, ManualMatchInput, OwStatsApi,
-} from '../shared/contract';
+import { IPC_CHANNELS, WINDOW_CHANNELS, type OwStatsApi } from '../shared/contract';
 
-// Minimal, safe bridge exposed to the dashboard renderer.
+/**
+ * Minimal, safe bridge exposed to the dashboard renderer. Every contract
+ * method forwards its arguments verbatim to its channel from `IPC_CHANNELS`,
+ * so this file never needs to change when the API grows.
+ */
+const invokers = Object.fromEntries(
+  Object.entries(IPC_CHANNELS).map(([method, channel]) => [
+    method,
+    (...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
+  ]),
+) as Omit<OwStatsApi, 'window'>;
+
 const api: OwStatsApi = {
-  getDashboard: (filters: DashboardFilters) => ipcRenderer.invoke('dashboard:data', filters),
-  heroDetail: (hero: string, filters: DashboardFilters) =>
-    ipcRenderer.invoke('dashboard:hero-detail', hero, filters),
-  exportNotion: (filters: DashboardFilters) => ipcRenderer.invoke('dashboard:export-notion', filters),
-  notionStatus: () => ipcRenderer.invoke('notion:status'),
-  setNotionToken: (token: string) => ipcRenderer.invoke('notion:set-token', token),
-  clearNotionToken: () => ipcRenderer.invoke('notion:clear-token'),
-  logMatch: (input: ManualMatchInput) => ipcRenderer.invoke('manual:log-match', input),
-  saveTarget: (input: AuthoredTargetInput) => ipcRenderer.invoke('manual:save-target', input),
+  ...invokers,
   window: {
-    minimize: () => ipcRenderer.send('window:minimize'),
-    toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
-    close: () => ipcRenderer.send('window:close'),
+    minimize: () => ipcRenderer.send(WINDOW_CHANNELS.minimize),
+    toggleMaximize: () => ipcRenderer.send(WINDOW_CHANNELS.toggleMaximize),
+    close: () => ipcRenderer.send(WINDOW_CHANNELS.close),
   },
 };
 

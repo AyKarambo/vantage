@@ -1,13 +1,15 @@
 /** Shared contract for views. The shell renders a view for the current data. */
 import { h } from '../dom';
 import type { DashboardData, DashboardFilters } from '../../../src/shared/contract';
-import type { ViewId } from '../store';
+import type { ViewId, ViewParams } from '../store';
 import { roleLabel } from '../format';
 import { select, type SelectOption } from '../components/primitives';
 
 export interface ViewContext {
   data: DashboardData;
-  navigate: (view: ViewId) => void;
+  /** Params of the active view (e.g. the match detail's matchId). */
+  params: ViewParams;
+  navigate: (view: ViewId, params?: ViewParams) => void;
   openLogMatch: () => void;
   setFilter: (patch: Partial<DashboardFilters>) => void;
   refresh: () => void;

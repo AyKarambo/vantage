@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AuthoredTarget } from '../core/targets';
+import type { AuthoredTarget, TargetMode } from '../core/targets';
 
 interface ManualState {
   /** Improvement targets the player authored in the builder. */
@@ -47,10 +47,40 @@ export class ManualStore {
     if (this.state.targets.length !== before) this.save();
   }
 
+  /** Edit name/mode/rule in place — createdAt and lifecycle state are preserved
+   *  so accrued grades keep counting across edits. */
+  updateTarget(id: string, patch: { name: string; mode: TargetMode; rule: string }): void {
+    const t = this.state.targets.find((x) => x.id === id);
+    if (!t) return;
+    t.name = patch.name;
+    t.mode = patch.mode;
+    t.rule = patch.rule;
+    this.save();
+  }
+
+  /** Toggle whether the target is graded on the Review screen. */
+  setActive(id: string, active: boolean): void {
+    const t = this.state.targets.find((x) => x.id === id);
+    if (!t || t.isActive === active) return;
+    t.isActive = active;
+    this.save();
+  }
+
+  /** Archive (soft-remove, restorable) or restore a target. */
+  setArchived(id: string, archived: boolean): void {
+    const t = this.state.targets.find((x) => x.id === id);
+    if (!t) return;
+    if (archived) t.archivedAt = Date.now();
+    else delete t.archivedAt;
+    this.save();
+  }
+
   private load(): ManualState {
     try {
       const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<ManualState>;
-      return { targets: Array.isArray(parsed.targets) ? parsed.targets : [] };
+      const targets = Array.isArray(parsed.targets) ? parsed.targets : [];
+      // Legacy records predate the active flag — they all become active.
+      return { targets: targets.map((t) => ({ ...t, isActive: t.isActive ?? true })) };
     } catch {
       return { targets: [] };
     }

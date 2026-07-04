@@ -112,13 +112,16 @@ function bottomRow(ctx: ViewContext): HTMLElement {
   );
 
   const m = d.mental;
+  const r = d.breakReminder;
   const mental = card({ title: 'Mental', style: { flex: '1' } },
     h('div', { class: 'stack', style: { gap: '9px' } },
       statBar({ label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: String(m.calm) }),
       statBar({ label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss, valueText: String(m.tilted) }),
     ),
     h('div', { class: 'hint', style: { marginTop: '11px', lineHeight: '1.45' } },
-      'Break reminder is ', h('span', { class: 'is-win' }, 'on'), ` after ${m.breakReminderAfterLosses} losses.`),
+      r.enabled
+        ? h('span', null, 'Break reminder is ', h('span', { class: 'is-win' }, 'on'), ` after ${r.afterLosses} losses.`)
+        : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Mental.')),
   );
 
   return h('div', { class: 'overview-bottom' }, focusQueue, mental);

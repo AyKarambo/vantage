@@ -11,11 +11,14 @@ import { mapMode } from './maps';
 import { mentalSummary } from './mental';
 import { progression } from './progression';
 import { buildTargets, type AuthoredTarget } from './targets';
+import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
 
 /** Manual (◎) data the player authored, threaded in from the main-process store. */
 export interface ManualData {
   targets?: AuthoredTarget[];
+  /** Effective break-reminder settings; defaults when absent. */
+  breakReminder?: BreakReminderSettings;
 }
 
 export function computeDashboard(
@@ -27,6 +30,9 @@ export function computeDashboard(
   const games = applyFilters(all, filters);
   const overall = winLoss(games);
   const weekly = (filters.days ?? 30) === 'all' || (filters.days as number) > 90;
+  // The review inbox is deliberately unfiltered: an ungraded game must stay
+  // visible (and counted in the badge) no matter how the range is narrowed.
+  const ungraded = all.filter((g) => !g.review).sort((a, b) => b.timestamp - a.timestamp);
 
   return {
     isSample,
@@ -60,6 +66,9 @@ export function computeDashboard(
     matches: recentMatches(games),
     mental: mentalSummary(games),
     targets: buildTargets(games, manual?.targets),
+    reviewInbox: ungraded.slice(0, ROW_CAP).map(toMatchRow),
+    pendingReviews: ungraded.length,
+    breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
   };
 }
 
@@ -75,22 +84,29 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
   return out;
 }
 
+/** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
+const ROW_CAP = 150;
+
 function recentMatches(games: GameRecord[]): MatchRow[] {
   return [...games]
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 150)
-    .map((g) => ({
-      matchId: g.matchId,
-      timestamp: g.timestamp,
-      account: g.account,
-      role: g.role,
-      map: g.map,
-      mapType: mapMode(g.map),
-      result: g.result,
-      gameType: g.gameType,
-      heroes: g.heroes,
-      durationMinutes: g.durationMinutes,
-    }));
+    .slice(0, ROW_CAP)
+    .map(toMatchRow);
+}
+
+function toMatchRow(g: GameRecord): MatchRow {
+  return {
+    matchId: g.matchId,
+    timestamp: g.timestamp,
+    account: g.account,
+    role: g.role,
+    map: g.map,
+    mapType: mapMode(g.map),
+    result: g.result,
+    gameType: g.gameType,
+    heroes: g.heroes,
+    durationMinutes: g.durationMinutes,
+  };
 }
 
 /** Most-played account name — used for the Overview greeting. */

@@ -1,7 +1,7 @@
 # Screen spec: Overview (`overview`)
 
-**Source:** `renderer/src/views/overview.ts` · reverse-engineered 2026-07-04
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review)
+**Source:** `renderer/src/views/overview.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext` (`renderer/src/views/view.ts`); the global filter bar (Account · Role · Mode · Season) re-scopes it; demo dataset shows a "Demo data" badge; Ctrl+K opens the quick-log modal from anywhere.
 
@@ -15,7 +15,7 @@
 - KPI row: **Winrate** (+ recent-form delta chip), **Games** (W·L split), **Rank** (SR + tier/division with direction arrow), **Streak** (accented, with "ride it" / "reset it" nudge).
 - Scatter card: winrate × volume for every map in range; dot colour is a stable categorical per map; legend uses shortened map names with the full name on hover.
 - **Top priority** callouts: top 3 net-losing maps (net = losses − wins > 0) with games, signed net, winrate; CTA "Build a focus routine →" navigates to Focus.
-- Bottom row: **Focus queue** (top 4 net-losing maps; "▶ queue" navigates to Focus) and **Mental** snapshot (Calm/Tilted bars + break-reminder line).
+- Bottom row: **Focus queue** (top 4 net-losing maps; "▶ queue" navigates to Focus) and **Mental** snapshot (Calm/Tilted bars + break-reminder line — [implemented 2026-07-04] now truthful, reflecting the real per-user setting owned by `screen-mental.spec.md`).
 
 ## Out-of-Scope
 
@@ -39,7 +39,7 @@
 
 ## Known gaps (intent ≠ code)
 
-- [confirmed] The Mental card repeats "Break reminder is **on** after N losses" — no reminder exists anywhere. Intended end state: a real break-reminder with a user-configurable setting (see `screen-mental.spec.md`).
+None identified — behavior matches intent. [implemented 2026-07-04] The Mental card's break-reminder line now reads the real setting from `DashboardData.breakReminder` and renders truthfully: "Break reminder is **on** after N losses." when enabled, or the muted "Break reminder is off — turn it on in Mental." when disabled. The reminder mechanism itself (state machine, tray toast, on/off + threshold editor) is owned and specified by `screen-mental.spec.md`.
 
 ## Open Questions
 

@@ -3,21 +3,24 @@
  * logging this game" moment, so finished games land here needing your read: grade
  * your active targets (Hit / Partial / Missed) and flag how it felt. The auto (⚡)
  * facts are read-only; you only add what the app can't see.
+ *
+ * The inbox renders from `d.reviewInbox` — always unfiltered, so narrowing the
+ * global range never hides an ungraded game. Saves go through the bridge and only
+ * re-render locally (no refetch); `gradedThisSession` keeps the list honest.
  */
 import { h, render } from '../dom';
-import type { MatchRow, Result, TargetSummary } from '../../../src/shared/contract';
+import type { MatchMental, MatchRow, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { relTime, roleLabel } from '../format';
-import { badge, button, card, emptyState, pill, type PillState } from '../components/primitives';
+import { badge, button, card, emptyState, resultPill } from '../components/primitives';
 import { store } from '../store';
-import { reviews, type Flags, type Grade } from '../reviews';
+import { bridge } from '../bridge';
+import { gradedThisSession } from '../reviews';
 import { viewHead, type ViewContext } from './view';
-
-const ACTIVE_LIMIT = 3;
 
 export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
-  const active = d.targets.slice(0, ACTIVE_LIMIT);
-  const pending = d.matches.filter((m) => !reviews.has(m.matchId));
+  const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
+  const pending = d.reviewInbox.filter((m) => !gradedThisSession.has(m.matchId));
 
   const head = viewHead(
     'Review',
@@ -78,8 +81,8 @@ function collapsed(m: MatchRow, onGrade: () => void): HTMLElement {
 }
 
 function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onSkip: () => void): HTMLElement {
-  const grades: Record<string, Grade> = {};
-  const flags: Flags = {};
+  const grades: Record<string, TargetGrade> = {};
+  const flags: MatchMental = {};
 
   const targetRows = active.length
     ? active.map((t) => gradeRow(t, (g) => { grades[t.id] = g; }))
@@ -95,17 +98,19 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
     ),
     section('◎ Your active targets', h('div', { class: 'stack', style: { gap: '11px' } }, ...targetRows)),
     section('◎ How it felt', h('div', { class: 'review-flags' },
-      flagChip('Tilted', flags, 'tilted'),
-      flagChip('Good comms', flags, 'comms'),
-      flagChip('Toxic mate', flags, 'toxic'),
+      flagChip('Tilted', flags, 'tilt'),
+      flagChip('Good comms', flags, 'positiveComms'),
+      flagChip('Toxic mate', flags, 'toxicMates'),
       flagChip('Leaver', flags, 'leaver'),
     )),
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', {
         variant: 'primary',
         onClick: () => {
-          reviews.set({ matchId: m.matchId, at: Date.now(), targets: grades, flags });
-          onSaved();
+          void bridge.saveReview({ matchId: m.matchId, grades, flags }).then(() => {
+            gradedThisSession.add(m.matchId);
+            onSaved();
+          });
         },
       }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),
@@ -120,7 +125,7 @@ function section(label: string, body: Node): HTMLElement {
   );
 }
 
-function gradeRow(t: TargetSummary, onChange: (g: Grade) => void): HTMLElement {
+function gradeRow(t: TargetSummary, onChange: (g: TargetGrade) => void): HTMLElement {
   return h('div', { class: 'review-target' },
     h('div', { class: 'row-main', style: { minWidth: '0' } },
       h('div', { style: { fontSize: '13px' } }, t.name),
@@ -130,7 +135,7 @@ function gradeRow(t: TargetSummary, onChange: (g: Grade) => void): HTMLElement {
   );
 }
 
-const GRADES: Array<{ v: Grade; label: string; bg: string; fg: string }> = [
+const GRADES: Array<{ v: TargetGrade; label: string; bg: string; fg: string }> = [
   { v: 'hit', label: 'Hit', bg: 'rgba(87,166,132,0.18)', fg: 'var(--win-text)' },
   { v: 'partial', label: 'Partial', bg: 'rgba(214,162,79,0.18)', fg: 'var(--mid-text)' },
   { v: 'missed', label: 'Missed', bg: 'rgba(209,104,95,0.16)', fg: 'var(--loss-text)' },
@@ -138,7 +143,7 @@ const GRADES: Array<{ v: Grade; label: string; bg: string; fg: string }> = [
 
 /** A 3-way grade control that starts unselected (so it reads as "needs grading"),
  *  using the shared segmented look with a semantic tint on the chosen grade. */
-function gradeControl(onChange: (g: Grade) => void): HTMLElement {
+function gradeControl(onChange: (g: TargetGrade) => void): HTMLElement {
   const btns = GRADES.map((o) => h('button', { class: 'segmented-opt' }, o.label));
   GRADES.forEach((o, i) => btns[i].addEventListener('click', () => {
     btns.forEach((b, j) => {
@@ -152,17 +157,10 @@ function gradeControl(onChange: (g: Grade) => void): HTMLElement {
   return h('div', { class: 'segmented' }, ...btns);
 }
 
-function flagChip(label: string, flags: Flags, key: keyof Flags): HTMLElement {
+function flagChip(label: string, flags: MatchMental, key: keyof MatchMental): HTMLElement {
   const btn = h('button', {
     class: 'chip',
     on: { click: () => { flags[key] = !flags[key]; btn.classList.toggle('is-on', Boolean(flags[key])); } },
   }, label);
   return btn;
-}
-
-const RESULT_PILL: Record<Result, PillState> = { Win: 'win', Loss: 'loss', Draw: 'draw' };
-const RESULT_SHORT: Record<Result, string> = { Win: 'W', Loss: 'L', Draw: 'D' };
-
-function resultPill(r: Result): HTMLElement {
-  return pill(RESULT_SHORT[r] ?? r, RESULT_PILL[r], { mono: true });
 }

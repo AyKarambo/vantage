@@ -7,6 +7,7 @@ import { progression, winrateToSr, tierOf } from '../src/core/progression';
 import { sampleTargets } from '../src/core/targets';
 import { computeDashboard, applyFilters } from '../src/core/dashboardData';
 import { generateSampleGames } from '../src/core/sampleData';
+import { DEFAULT_BREAK_REMINDER } from '../src/core/breakReminder';
 
 function game(p: Partial<GameRecord> & { result: Result; map: string; role: Role }): GameRecord {
   return {
@@ -107,6 +108,17 @@ describe('computeDashboard', () => {
     expect(d.targets).toHaveLength(4);
     expect(d.progression.tier).toBeTypeOf('string');
     expect(d.greetingName).toBeTypeOf('string');
+  });
+
+  it('defaults breakReminder when ManualData omits it', () => {
+    const d = computeDashboard(all, { days: 'all' }, true);
+    expect(d.breakReminder).toEqual(DEFAULT_BREAK_REMINDER);
+  });
+
+  it('threads a provided breakReminder through unchanged', () => {
+    const custom = { enabled: false, afterLosses: 5 };
+    const d = computeDashboard(all, { days: 'all' }, true, { breakReminder: custom });
+    expect(d.breakReminder).toEqual(custom);
   });
 
   it('applyFilters narrows by account, role and mode', () => {

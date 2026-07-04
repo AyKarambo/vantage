@@ -12,6 +12,7 @@ export type ViewId =
   | 'overview'
   | 'review'
   | 'matches'
+  | 'matchDetail'
   | 'maps'
   | 'heroes'
   | 'focus'
@@ -20,9 +21,16 @@ export type ViewId =
   | 'targets'
   | 'notion';
 
+/** Parameters for parameterized views (the match detail drill-down). */
+export interface ViewParams {
+  matchId?: string;
+}
+
 export interface AppState {
   filters: Required<DashboardFilters>;
   view: ViewId;
+  /** Params of the active view; reset on every navigation. */
+  params: ViewParams;
   data: DashboardData | null;
   loading: boolean;
   status: string;
@@ -38,6 +46,7 @@ class Store {
   private state: AppState = {
     filters: { ...DEFAULTS, ...loadFilters() },
     view: 'overview',
+    params: {},
     data: null,
     loading: true,
     status: 'Loading…',
@@ -54,9 +63,9 @@ class Store {
     return () => this.listeners.delete(fn);
   }
 
-  setView(view: ViewId): void {
-    if (view === this.state.view) return;
-    this.patch({ view });
+  setView(view: ViewId, params: ViewParams = {}): void {
+    if (view === this.state.view && params.matchId === this.state.params.matchId) return;
+    this.patch({ view, params });
   }
 
   /** Re-notify subscribers without refetching — for local (client-side) state

@@ -333,6 +333,28 @@
   align-items: center;
   justify-content: center;
 }
+.notion-db-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notion-db-row-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.notion-db-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.notion-db-row.is-current {
+  border-color: var(--win);
+}
 
 /* Review -------------------------------------------------------------------- */
 .review-active {
@@ -424,6 +446,113 @@
 .match-result.is-draw {
   background: rgba(141, 141, 138, 0.16);
   color: var(--muted);
+}
+
+.match-row.is-clickable {
+  cursor: pointer;
+}
+
+/* Match detail ---------------------------------------------------------------- */
+.detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 18px 20px;
+}
+.detail-head-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-result {
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.detail-result.is-win {
+  color: var(--win-text);
+}
+.detail-result.is-loss {
+  color: var(--loss-text);
+}
+.detail-result.is-draw {
+  color: var(--muted);
+}
+.detail-map {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.detail-flags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.detail-head-side {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.detail-heroes {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 240px;
+}
+.detail-hero-pills {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.detail-scoreboard {
+  overflow-x: auto;
+}
+.stat-grid.stat-grid--wide {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+.detail-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.detail-progress .statbar {
+  flex: 1;
+  min-width: 220px;
+}
+.detail-rank {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+}
+.shot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.shot {
+  width: 100%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  display: block;
 }
 
 /* Focus / Targets ----------------------------------------------------------- */

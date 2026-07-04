@@ -4,7 +4,7 @@ import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, pct, roleLabel } from '../format';
 import { wrColor } from '../theme';
-import { card, pill, statBox } from '../components/primitives';
+import { card, resultPill, statBox } from '../components/primitives';
 import { dataTable, type Column } from '../components/table';
 import { openDrawer } from '../components/overlay';
 import { viewHead, type ViewContext } from './view';
@@ -71,7 +71,7 @@ function heroDetail(d: HeroDetail): HTMLElement {
       : [h('div', { class: 'hint' }, '—')]),
     section('Recent', d.recent.length
       ? d.recent.map((r) => h('div', { class: 'row', style: { padding: '6px 0' } },
-          pill(r.result[0], r.result === 'Win' ? 'win' : r.result === 'Loss' ? 'loss' : 'draw'),
+          resultPill(r.result),
           h('span', { class: 'row-main', style: { fontSize: '12.5px' } }, r.map),
           h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${r.account} · ${new Date(r.timestamp).toLocaleDateString()}`),
         ))

@@ -9,7 +9,6 @@ import { winLoss, type GameRecord } from './analytics';
 export interface MentalSummary {
   calm: number; // 0..100
   tilted: number; // 0..100
-  breakReminderAfterLosses: number;
   flags: { tilt: number; toxicMates: number; leaver: number; positiveComms: number };
   winWhenCalm: number; // 0..1
   winWhenTilted: number; // 0..1
@@ -18,7 +17,6 @@ export interface MentalSummary {
 const EMPTY: MentalSummary = {
   calm: 0,
   tilted: 0,
-  breakReminderAfterLosses: 2,
   flags: { tilt: 0, toxicMates: 0, leaver: 0, positiveComms: 0 },
   winWhenCalm: 0,
   winWhenTilted: 0,
@@ -31,12 +29,16 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
   const tiltedGames: GameRecord[] = [];
   const calmGames: GameRecord[] = [];
   for (const g of games) {
+    // A flag can come from the quick-log self-report or the Review-screen read;
+    // OR-merge per flag so a game flagged in both sources still counts once.
     const m = g.mental ?? {};
-    if (m.tilt) flags.tilt++;
-    if (m.toxicMates) flags.toxicMates++;
-    if (m.leaver) flags.leaver++;
-    if (m.positiveComms) flags.positiveComms++;
-    (m.tilt ? tiltedGames : calmGames).push(g);
+    const r = g.review?.flags ?? {};
+    const tilt = Boolean(m.tilt || r.tilt);
+    if (tilt) flags.tilt++;
+    if (m.toxicMates || r.toxicMates) flags.toxicMates++;
+    if (m.leaver || r.leaver) flags.leaver++;
+    if (m.positiveComms || r.positiveComms) flags.positiveComms++;
+    (tilt ? tiltedGames : calmGames).push(g);
   }
 
   const n = games.length;
@@ -48,7 +50,6 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
     // "not tilted" with positive-comms games.
     tilted: pct(tiltShare),
     calm: pct(0.5 * (1 - tiltShare) + 0.5 * posShare),
-    breakReminderAfterLosses: 2,
     flags,
     winWhenCalm: winLoss(calmGames).winrate,
     winWhenTilted: winLoss(tiltedGames).winrate,

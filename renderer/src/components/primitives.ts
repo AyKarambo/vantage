@@ -5,7 +5,7 @@
  * together, rather than bespoke markup per screen.
  */
 import { h, applyStyle, type Props } from '../dom';
-import type { CalendarDay } from '../../../src/shared/contract';
+import type { CalendarDay, Result } from '../../../src/shared/contract';
 import { pct } from '../format';
 import { PALETTE, wrColor } from '../theme';
 
@@ -75,6 +75,15 @@ export type PillState = 'win' | 'loss' | 'draw' | 'accent';
 
 export function pill(text: Child, state?: PillState, opts: { mono?: boolean } = {}): HTMLElement {
   return h('span', { class: `pill${state ? ' is-' + state : ''}${opts.mono ? ' is-mono' : ''}` }, text);
+}
+
+/** Canonical match-result mappings, shared by every screen that colours a result. */
+export const RESULT_STATE: Record<Result, PillState> = { Win: 'win', Loss: 'loss', Draw: 'draw' };
+export const RESULT_LETTER: Record<Result, string> = { Win: 'W', Loss: 'L', Draw: 'D' };
+
+/** Compact W/L/D result pill. */
+export function resultPill(result: Result): HTMLElement {
+  return pill(RESULT_LETTER[result] ?? result, RESULT_STATE[result], { mono: true });
 }
 
 export function badge(text: Child, kind: 'demo' | 'auto' | 'manual' = 'demo'): HTMLElement {
