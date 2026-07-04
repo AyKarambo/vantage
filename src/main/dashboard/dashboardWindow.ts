@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { WindowBounds } from '../config';
 import type { DataProvider } from './provider';
 import { registerDashboardIpc, registerWindowControls } from './ipcHandlers';
+import { hardenWebContents } from './webContentsSecurity';
 
 /**
  * The dashboard BrowserWindow lifecycle: a frameless, CSP-friendly window
@@ -71,8 +72,13 @@ export class DashboardWindow {
         preload: path.join(app.getAppPath(), 'dist', 'main', 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
+        sandbox: true,
       },
     });
+    // Lock the renderer to its own bundle: deny popups and any navigation away
+    // from the loaded page (defense-in-depth behind Guardrail 1). Registered
+    // before loadFile — programmatic loads don't trip these guards.
+    hardenWebContents(this.win.webContents);
     if (saved?.maximized) this.win.maximize();
     void this.win.loadFile(path.join(app.getAppPath(), 'renderer', 'index.html'));
     const debouncedSave = (): void => {

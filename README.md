@@ -55,6 +55,11 @@ feed Overwolf apps use. Nothing here reads game memory, injects, or exposes hidd
 info, so there is **no Blizzard ban risk**. (Going live with GEP requires publishing
 the app through Overwolf's approval flow — see *Status*.)
 
+The desktop shell is hardened to match: the renderer runs with **context isolation**
+and **sandbox** on, `nodeIntegration` off, behind a strict **CSP** (`default-src 'none'`),
+and the window **denies in-page navigation and popups** — so the renderer stays a
+contained surface. External links open only through the main process.
+
 ## Status
 
 - The app, dashboard, analytics, and per-hero GEP plumbing are **built and working**.
