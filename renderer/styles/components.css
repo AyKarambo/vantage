@@ -845,3 +845,36 @@ table.data tbody tr:hover {
 .log-line.is-error {
   color: var(--loss);
 }
+
+/* Anchored popover (connection details) -------------------------------------- */
+.popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: transparent;
+}
+.popover-panel {
+  position: fixed;
+  min-width: 260px;
+  max-width: 340px;
+  background: var(--card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  padding: 12px 14px;
+  animation: rise-in 140ms var(--ease);
+}
+.gep-popover-title {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 8px;
+}
+.gep-popover-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 12px;
+  padding: 3px 0;
+}

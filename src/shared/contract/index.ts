@@ -36,6 +36,9 @@ export type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInpu
 // Logging payloads (release debug log + in-app viewer)
 export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 
+// Live connection/data-flow status
+export type { GepHealthState, GepStatusPayload } from './gepStatus';
+
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';
 export { IPC_CHANNELS, WINDOW_CHANNELS, EVENT_CHANNELS } from './api';

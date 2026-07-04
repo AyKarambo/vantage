@@ -6,9 +6,12 @@
  */
 import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
+import type { GepStatusPayload } from '../../../src/shared/contract';
 import { store } from '../store';
 import { bridge } from '../bridge';
-import { pct, rankLabel, signed } from '../format';
+import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
+import { openPopover } from '../components/popover';
+import { pct, rankLabel, relTime, signed } from '../format';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
@@ -70,11 +73,16 @@ export class App {
   private readonly contentHost = h('main', { class: 'content' });
   private readonly statusText = h('span', null, 'Loading…');
   private readonly demoBadge = h('span', { class: 'badge badge--demo hidden' }, 'Demo data');
+  private readonly gepDot = h('span', { class: 'status-dot' });
+  private readonly gepLabel = h('span', { class: 'gep-label' }, '');
 
   constructor(mount: HTMLElement) {
     render(mount, this.build());
     store.subscribe((state) => this.onState(state));
     this.bindGlobals();
+    initGepStatus();
+    subscribeGepStatus(() => this.renderGepIndicator());
+    this.renderGepIndicator();
     void store.refresh();
     if (shouldOnboard()) openOnboarding();
   }
@@ -87,7 +95,12 @@ export class App {
         h('div', { class: 'content-col' }, this.filterHost, this.contentHost),
       ),
       h('footer', { class: 'statusbar' },
-        h('span', { class: 'status-dot' }), this.statusText, this.demoBadge,
+        h('button', {
+          class: 'gep-indicator',
+          title: 'Connection status — click for details',
+          on: { click: (e) => this.openGepPopover(e.currentTarget as HTMLElement) },
+        }, this.gepDot, this.gepLabel),
+        this.statusText, this.demoBadge,
         h('button', {
           class: 'statusbar-link',
           style: { marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer', font: 'inherit', fontSize: '11.5px' },
@@ -206,6 +219,50 @@ export class App {
     return h('div', { class: 'sidebar-session' }, h('div', { class: 'nav-group' }, "Today's session"), body);
   }
 
+  /** The status-bar connection indicator: dot color + short truthful label. */
+  private renderGepIndicator(): void {
+    const s = getGepStatus();
+    const state = s && s.sensor === 'gep' ? s.state : 'no-game';
+    this.gepDot.className = `status-dot is-${state}`;
+    this.gepLabel.textContent = gepLabelText(s);
+  }
+
+  /** Click-for-details: live-updating popover with the feed's vitals. */
+  private openGepPopover(anchor: HTMLElement): void {
+    const body = h('div', { class: 'gep-popover' });
+    const paint = (): void => {
+      const s = getGepStatus();
+      const rows: Array<[string, string]> = s
+        ? [
+            ['State', gepLabelText(s)],
+            ['Last event', s.lastEventAt ? relTime(s.lastEventAt) : '—'],
+            ['Events this session', String(s.eventsThisSession)],
+            ['Match in progress', s.matchInProgress ? 'Yes' : 'No'],
+            ['Feed attached', s.attachedAt ? relTime(s.attachedAt) : 'Not attached'],
+            ...(s.lastError ? [['Last error', s.lastError] as [string, string]] : []),
+          ]
+        : [['State', 'Unknown — no status received yet']];
+      render(body,
+        h('div', { class: 'gep-popover-title' }, 'Game feed'),
+        ...rows.map(([k, v]) =>
+          h('div', { class: 'gep-popover-row' },
+            h('span', { class: 'u-muted' }, k),
+            h('span', { class: 'mono' }, v),
+          ),
+        ),
+      );
+    };
+    paint();
+    const unsub = subscribeGepStatus(paint);
+    const tick = setInterval(paint, 10_000); // keep relative times honest
+    openPopover(anchor, () => body, {
+      onClose: () => {
+        unsub();
+        clearInterval(tick);
+      },
+    });
+  }
+
   private bindGlobals(): void {
     // Ctrl+K opens quick log (Windows-only app). Window focus re-pulls newly tracked games.
     window.addEventListener('keydown', (e) => {
@@ -215,5 +272,20 @@ export class App {
       }
     });
     window.addEventListener('focus', () => void store.refresh());
+  }
+}
+
+/** The short, never-lying label next to the status dot. */
+function gepLabelText(s: GepStatusPayload | null): string {
+  if (!s) return 'Feed status unknown';
+  if (s.sensor !== 'gep') return 'No live feed';
+  switch (s.state) {
+    case 'no-game': return 'No game';
+    case 'connected': return 'Connected — waiting for events';
+    case 'live': return 'Receiving data';
+    case 'stale': {
+      const secs = s.lastEventAt ? Math.round((Date.now() - s.lastEventAt) / 1000) : 0;
+      return `⚠ No data for ${secs}s`;
+    }
   }
 }

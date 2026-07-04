@@ -8,9 +8,9 @@
  * real app persists them to disk.
  */
 import type {
-  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, LogEntry, LogLevel,
-  ManualMatchInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
-  RendererErrorInput, ReviewInput, TargetEditInput,
+  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, GepHealthState,
+  GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionDatabaseSummary,
+  NotionPageSummary, NotionStatus, OwStatsApi, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -108,6 +108,30 @@ setInterval(() => {
   previewLog.push(e);
   for (const cb of logListeners) cb(e);
 }, 4000);
+
+// Simulated connection status: pick a state with ?gep=live|stale|connected|
+// no-game, or ?gep=cycle to rotate through all four (default: connected).
+const gepListeners = new Set<(s: GepStatusPayload) => void>();
+const GEP_STATES: GepHealthState[] = ['no-game', 'connected', 'live', 'stale'];
+const gepParam = new URLSearchParams(location.search).get('gep') ?? 'connected';
+let gepState: GepHealthState = (GEP_STATES as string[]).includes(gepParam)
+  ? (gepParam as GepHealthState)
+  : 'connected';
+const gepPayload = (): GepStatusPayload => ({
+  state: gepState,
+  sensor: 'gep',
+  attachedAt: gepState === 'no-game' ? null : Date.now() - 300_000,
+  lastEventAt: gepState === 'no-game' ? null : Date.now() - (gepState === 'stale' ? 90_000 : 4_000),
+  eventsThisSession: gepState === 'no-game' ? 0 : 128,
+  matchInProgress: gepState === 'live' || gepState === 'stale',
+});
+if (gepParam === 'cycle') {
+  let i = 1;
+  setInterval(() => {
+    gepState = GEP_STATES[i++ % GEP_STATES.length];
+    for (const cb of gepListeners) cb(gepPayload());
+  }, 5000);
+}
 
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
@@ -252,6 +276,11 @@ const mock: OwStatsApi = {
   onLogEntry: (cb: (e: LogEntry) => void) => {
     logListeners.add(cb);
     return () => logListeners.delete(cb);
+  },
+  getGepStatus: async () => gepPayload(),
+  onGepStatus: (cb: (s: GepStatusPayload) => void) => {
+    gepListeners.add(cb);
+    return () => gepListeners.delete(cb);
   },
   window: {
     minimize: () => console.info('[preview] minimize'),

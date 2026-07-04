@@ -172,6 +172,16 @@ Questions or feedback: <timo.seikel@gmail.com> (also reachable from the tray's *
 item). The [Privacy Policy](docs/legal/privacy.html) and [Terms of Use](docs/legal/terms.html) live
 under `docs/legal/` and are published as the app's public legal URLs.
 
+## Live connection status
+
+The status bar (and the tray icon) shows a four-state feed indicator that never conflates
+*attached* with *alive*: **No game** · **Connected — waiting for events** (GEP attached, nothing
+flowing — e.g. in menus) · **Receiving data** (events demonstrably arriving) · **⚠ Stale** (a match
+is running but the feed has been silent for 60s — the "says connected but nothing updates" failure,
+surfaced instead of hidden). Click the indicator for details: last event time, events this session,
+match state, attach time. In demo mode it always reads "No live feed". State transitions are
+written to the debug log.
+
 ## Debug log
 
 Every build — including releases — writes a structured log to `%APPDATA%/Vantage/logs/`

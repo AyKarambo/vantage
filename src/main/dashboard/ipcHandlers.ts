@@ -90,6 +90,9 @@ export function registerDashboardIpc(provider: DataProvider): void {
   ipcMain.handle(ch.logRendererError, (_e, input: RendererErrorInput) => {
     provider.logRendererError(input);
   });
+
+  // Live connection/data-flow status (snapshot; changes arrive via push).
+  ipcMain.handle(ch.getGepStatus, () => provider.getGepStatus());
 }
 
 /** Window actions the title-bar channels drive, provided as closures over the owning window. */

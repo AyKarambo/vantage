@@ -2,7 +2,7 @@ import type { GameRecord } from '../../core/analytics';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type {
-  AuthoredTargetInput, LogEntry, LogLevel, ManualMatchInput, NotionStatus,
+  AuthoredTargetInput, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionStatus,
   NotionDatabaseSummary, NotionPageSummary, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 
@@ -61,4 +61,6 @@ export interface DataProvider {
   setLogLevel(level: LogLevel): LogLevel;
   /** Record an uncaught renderer error in the main-process log. */
   logRendererError(input: RendererErrorInput): void;
+  /** Current connection/data-flow status snapshot. */
+  getGepStatus(): GepStatusPayload;
 }

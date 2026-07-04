@@ -8,6 +8,8 @@ import {
   shell,
 } from 'electron';
 import * as fs from 'fs';
+import * as path from 'path';
+import type { GepHealthState } from '../core/gepHealth';
 
 export interface TrayHandlers {
   onOpenDashboard(): void;
@@ -33,6 +35,8 @@ export interface TrayState {
 export class TrayController {
   private tray!: Tray;
   private state: TrayState = { status: 'Starting…', autoLaunch: false, tokenSet: false };
+  private health: GepHealthState = 'no-game';
+  private readonly healthIcons = new Map<GepHealthState, Electron.NativeImage>();
 
   constructor(
     private readonly iconPath: string,
@@ -42,7 +46,7 @@ export class TrayController {
   init(initial: Partial<TrayState>): void {
     this.state = { ...this.state, ...initial };
     this.tray = new Tray(this.icon());
-    this.tray.setToolTip('Vantage');
+    this.tray.setToolTip(healthTooltip(this.health));
     this.tray.on('double-click', () => this.handlers.onOpenDashboard());
     this.rebuild();
   }
@@ -50,6 +54,31 @@ export class TrayController {
   setState(patch: Partial<TrayState>): void {
     this.state = { ...this.state, ...patch };
     this.rebuild();
+  }
+
+  /** Mirror the live connection state: swap the icon variant + tooltip. */
+  setHealth(state: GepHealthState): void {
+    if (!this.tray || state === this.health) return;
+    this.health = state;
+    const img = this.healthIcon(state);
+    if (!img.isEmpty()) this.tray.setImage(img);
+    this.tray.setToolTip(healthTooltip(state));
+  }
+
+  private healthIcon(state: GepHealthState): Electron.NativeImage {
+    const cached = this.healthIcons.get(state);
+    if (cached) return cached;
+    const file = state === 'no-game'
+      ? this.iconPath
+      : path.join(path.dirname(this.iconPath), `tray-${state}.png`);
+    let img = nativeImage.createEmpty();
+    try {
+      if (fs.existsSync(file)) img = nativeImage.createFromPath(file);
+    } catch {
+      /* keep empty — setHealth skips empty images */
+    }
+    this.healthIcons.set(state, img);
+    return img;
   }
 
   notify(title: string, body: string): void {
@@ -132,5 +161,14 @@ export class TrayController {
 
   destroy(): void {
     this.tray?.destroy();
+  }
+}
+
+function healthTooltip(state: GepHealthState): string {
+  switch (state) {
+    case 'no-game': return 'Vantage — no game detected';
+    case 'connected': return 'Vantage — connected, waiting for events';
+    case 'live': return 'Vantage — receiving data';
+    case 'stale': return 'Vantage — ⚠ match running but no data arriving';
   }
 }

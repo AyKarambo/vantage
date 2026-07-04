@@ -17,8 +17,9 @@ import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
 import { createDataProvider } from './dataProvider';
 import { createLogger } from './logger';
+import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS } from '../shared/contract';
+import { EVENT_CHANNELS, type GepStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { isAutoLaunchEnabled, setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -93,6 +94,15 @@ function main(): void {
     log: log.adapter('pipeline'),
   });
 
+  // Truthful connection indicator: folds GEP signals into the four-state
+  // health model and fans changes out to the window, tray, and log.
+  let publishStatus: (p: GepStatusPayload) => void = () => {};
+  const statusMonitor = createGepStatusMonitor({
+    sensor: config.sensor === 'gep' ? 'gep' : 'counterwatch',
+    log: (scope, message, fields) => log.info(scope, message, fields),
+    publish: (p) => publishStatus(p),
+  });
+
   const dataProvider = createDataProvider({
     history,
     manual,
@@ -103,6 +113,7 @@ function main(): void {
     notify: (title, body) => tray.notify(title, body),
     sampleGames: generateSampleGames,
     logger: log,
+    gepStatus: () => statusMonitor.current(),
   });
 
   const handlers: TrayHandlers = {
@@ -136,6 +147,11 @@ function main(): void {
   const tray = new TrayController(iconPath, handlers);
   const dashboard = new DashboardWindow(dataProvider, iconPath);
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
+  publishStatus = (p) => {
+    dashboard.push(EVENT_CHANNELS.onGepStatus, p);
+    tray.setHealth(p.state);
+  };
+  statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
   // icon while it's already running) must bring the window to the front.
@@ -144,7 +160,12 @@ function main(): void {
   if (config.sensor === 'gep') {
     const gep = new GepService(config.overwatchGameId);
     gep.on('message', pipeline.feed);
-    gep.on('status', (s: GepStatus) => tray.setState({ status: statusText(s, history.count()) }));
+    gep.on('message', (msg: GepMessage) => statusMonitor.message(msg));
+    gep.on('status', (s: GepStatus) => {
+      tray.setState({ status: statusText(s, history.count()) });
+      statusMonitor.setLastError(s.lastError);
+      statusMonitor.setAttached(s.gameRunning && s.enabled);
+    });
     gep.on('log', log.adapter('gep'));
 
     // Testing only: capture the live GEP stream to userData/recordings/*.jsonl so

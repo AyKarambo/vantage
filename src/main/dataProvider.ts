@@ -6,6 +6,7 @@ import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
+import type { GepStatusPayload } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
 /**
@@ -38,6 +39,8 @@ export interface DataProviderDeps {
   sampleGames(): GameRecord[];
   /** The release log: viewer ring, session level, renderer error sink. */
   logger: Pick<Logger, 'entries' | 'getLevel' | 'setLevel' | 'error'>;
+  /** Live connection/data-flow status snapshot (from the GEP status monitor). */
+  gepStatus(): GepStatusPayload;
 }
 
 /** Assemble the dashboard's DataProvider over the injected deps. */
@@ -109,5 +112,6 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         ...(input.stack ? { stack: input.stack } : {}),
       });
     },
+    getGepStatus: () => deps.gepStatus(),
   };
 }

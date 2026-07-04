@@ -10,6 +10,7 @@ import type { MatchDetail } from './matchDetail';
 import type { ExportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary } from './notion';
 import type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
+import type { GepStatusPayload } from './gepStatus';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -57,8 +58,12 @@ export interface OwStatsApi {
   setLogLevel(level: LogLevel): Promise<LogLevel>;
   /** Forward an uncaught renderer error into the main-process log. */
   logRendererError(input: RendererErrorInput): Promise<void>;
+  /** Current connection/data-flow status snapshot (see also onGepStatus). */
+  getGepStatus(): Promise<GepStatusPayload>;
   /** Subscribe to new log entries; returns an unsubscribe function. */
   onLogEntry(cb: (e: LogEntry) => void): () => void;
+  /** Subscribe to connection/data-flow state changes; returns an unsubscribe function. */
+  onGepStatus(cb: (s: GepStatusPayload) => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -74,6 +79,7 @@ export interface OwStatsApi {
  */
 export const EVENT_CHANNELS = {
   onLogEntry: 'push:log-entry',
+  onGepStatus: 'push:gep-status',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**
@@ -108,6 +114,7 @@ export const IPC_CHANNELS = {
   getLogLevel: 'log:get-level',
   setLogLevel: 'log:set-level',
   logRendererError: 'log:renderer-error',
+  getGepStatus: 'status:gep',
 } as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 
 /** The fire-and-forget channels behind the frameless window controls. */
