@@ -9,6 +9,7 @@ import type { MentalSummary } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { DemoPreference } from '../../core/demoPreference';
 
 /** The filters every view is scoped by, chosen in the app shell. */
 export interface DashboardFilters {
@@ -48,7 +49,12 @@ export interface MatchRow {
 
 /** Everything the dashboard needs for the current filter set. */
 export interface DashboardData {
+  /** Effective demo display: the sample season is shown (demo opted-in AND no real history). */
   isSample: boolean;
+  /** The user's first-run demo choice; 'unset' drives the first-run prompt. */
+  demoPreference: DemoPreference;
+  /** Whether the user has any real tracked matches (independent of the demo season). */
+  hasRealHistory: boolean;
   generatedAt: number;
   filters: Required<DashboardFilters>;
   options: {

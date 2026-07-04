@@ -6,11 +6,15 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { h, render } from '../dom';
-import type { HeroStat, MatchDetail, PlayerEncounter } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
+import { openModal } from '../components/overlay';
+import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
+import { gradedThisSession } from '../reviews';
 import { PALETTE } from '../theme';
 import type { ViewContext } from './view';
 
@@ -29,7 +33,7 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
       render(host, backRow(ctx), card({}, h('div', { class: 'empty' }, 'This match is no longer in your history.')));
       return;
     }
-    render(host, backRow(ctx), ...sections(d));
+    render(host, backRow(ctx), ...sections(d, ctx));
   });
   return host;
 }
@@ -55,9 +59,9 @@ function backRow(ctx: ViewContext): HTMLElement {
   );
 }
 
-function sections(d: MatchDetail): Node[] {
+function sections(d: MatchDetail, ctx: ViewContext): Node[] {
   return [
-    header(d),
+    header(d, ctx),
     scoreboardSection(d),
     perHeroSection(d.perHero),
     competitiveSection(d.competitive),
@@ -68,7 +72,7 @@ function sections(d: MatchDetail): Node[] {
 
 // --- header (always renders — derives from fields every record has) ----------
 
-function header(d: MatchDetail): HTMLElement {
+function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
   const state = RESULT_STATE[d.result];
   const meta = h('div', { class: 'detail-meta' },
     pill(d.mapType, 'accent'),
@@ -85,6 +89,13 @@ function header(d: MatchDetail): HTMLElement {
       h('h1', { class: 'detail-map' }, d.map),
       meta,
       flags,
+      h('div', { style: { marginTop: '10px' } },
+        button(d.review ? '✎ Edit tracking' : '✎ Add tracking', {
+          variant: 'soft',
+          title: 'Grade your targets and flag how it felt for this match',
+          onClick: () => openTrackingEditor(ctx, d),
+        }),
+      ),
     ),
     h('div', { class: 'detail-head-side' },
       d.finalScore ? statBox(h('span', { class: 'mono' }, d.finalScore), 'Round score') : null,
@@ -159,7 +170,7 @@ function perHeroSection(perHero: HeroStat[]): HTMLElement | null {
 function competitiveSection(c: MatchDetail['competitive']): HTMLElement | null {
   if (!c) return null;
   const estimate = c.note === 'estimate';
-  const withinDivision = c.sr != null ? (c.sr % 100) / 100 : null;
+  const withinDivision = c.progressPct != null ? c.progressPct / 100 : null;
   return card(
     {
       title: 'Competitive progress',
@@ -171,16 +182,75 @@ function competitiveSection(c: MatchDetail['competitive']): HTMLElement | null {
         ? h('span', { class: 'detail-rank' }, rankLabel(c.tier, c.division))
         : null,
       withinDivision != null
-        ? statBar({ label: 'Division', frac: withinDivision, valueText: String(c.sr), color: PALETTE.accent })
+        ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
         : null,
       c.delta != null
         ? h('span', {
             class: 'mono',
             style: { fontSize: '12px', color: c.delta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
-          }, `${signed(c.delta)} over the range`)
+          }, `${signed(Math.round(c.delta))}% over the range`)
         : null,
     ),
   );
+}
+
+// --- edit tracking (re-open the manual read for any match, graded or not) -----
+
+/** Local section wrapper reusing the Review screen's label styling. */
+function editorSection(label: string, body: Node): HTMLElement {
+  return h('div', { class: 'review-section' },
+    h('div', { class: 'review-section-label' }, label),
+    body,
+  );
+}
+
+/**
+ * Modal to (re-)grade a match's active targets and edit its mental flags,
+ * pre-filled from the saved review. Saves overwrite the review through the same
+ * bridge call the Review screen uses; `ctx.refresh()` re-pulls the detail so the
+ * page and the dependent views reflect the change.
+ */
+function openTrackingEditor(ctx: ViewContext, d: MatchDetail): void {
+  const active = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
+  const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
+  const flags: MatchMental = { ...(d.review?.flags ?? {}) };
+
+  openModal((close) => {
+    const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
+    const save = (): void => {
+      void bridge.saveReview({ matchId: d.matchId, grades, flags }).then(() => {
+        gradedThisSession.add(d.matchId);
+        close();
+        ctx.refresh();
+        toast(`Tracking saved — ${d.map}`);
+      });
+    };
+    const clear = (): void => {
+      void bridge.clearReview(d.matchId).then(() => {
+        gradedThisSession.delete(d.matchId);
+        close();
+        ctx.refresh();
+        toast(`Tracking cleared — ${d.map}`);
+      });
+    };
+    return h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw' } },
+      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match tracking'),
+      h('div', { class: 'u-muted', style: { fontSize: '12px' } },
+        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)}`),
+      editorSection('◎ Target grades', h('div', { class: 'stack', style: { gap: '11px' } },
+        ...(rows.length
+          ? rows.map((r) => r.el)
+          : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+      )),
+      editorSection('◎ How it felt', mentalFlagsRow(flags)),
+      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
+        button('Save', { variant: 'primary', onClick: save }),
+        button('Cancel', { variant: 'ghost', onClick: close }),
+        h('span', { style: { flex: '1' } }),
+        d.review ? button('Clear', { variant: 'ghost', onClick: clear }) : null,
+      ),
+    );
+  });
 }
 
 // --- player history -------------------------------------------------------------

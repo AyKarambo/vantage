@@ -74,8 +74,11 @@ function kpiRow(d: DashboardData): HTMLElement {
     kpiCard({ label: 'Games', value: int(d.overall.games), delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` } }),
     kpiCard({
       label: 'Rank',
-      value: int(d.progression.sr),
-      delta: { text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${d.progression.tier} ${d.progression.division}`, dir: d.progression.delta >= 0 ? 'up' : 'down' },
+      value: `${d.progression.tier} ${d.progression.division}`,
+      delta: {
+        text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
+        dir: d.progression.delta >= 0 ? 'up' : 'down',
+      },
     }),
     kpiCard({
       label: 'Streak',

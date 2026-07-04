@@ -12,6 +12,7 @@ import { mentalSummary } from './mental';
 import { progression } from './progression';
 import { buildTargets, type AuthoredTarget } from './targets';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
+import type { DemoContext } from './demoPreference';
 import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
 
 /** Manual (◎) data the player authored, threaded in from the main-process store. */
@@ -24,7 +25,7 @@ export interface ManualData {
 export function computeDashboard(
   all: GameRecord[],
   filters: DashboardFilters,
-  isSample: boolean,
+  demo: DemoContext,
   manual?: ManualData,
 ): DashboardData {
   const games = applyFilters(all, filters);
@@ -35,7 +36,9 @@ export function computeDashboard(
   const ungraded = all.filter((g) => !g.review).sort((a, b) => b.timestamp - a.timestamp);
 
   return {
-    isSample,
+    isSample: demo.active,
+    demoPreference: demo.preference,
+    hasRealHistory: demo.hasRealHistory,
     generatedAt: Date.now(),
     filters: {
       account: filters.account ?? 'all',
@@ -65,7 +68,7 @@ export function computeDashboard(
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
     matches: recentMatches(games),
     mental: mentalSummary(games),
-    targets: buildTargets(games, manual?.targets),
+    targets: buildTargets(games, demo.active, manual?.targets),
     reviewInbox: ungraded.slice(0, ROW_CAP).map(toMatchRow),
     pendingReviews: ungraded.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,

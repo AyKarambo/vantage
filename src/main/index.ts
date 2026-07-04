@@ -117,7 +117,11 @@ function main(): void {
     logger: log,
     gepStatus: () => statusMonitor.current(),
     appSettings: {
-      get: () => ({ closeToTray: config.ui.closeToTray, runAtLogin: isAutoLaunchEnabled() }),
+      get: () => ({
+        closeToTray: config.ui.closeToTray,
+        runAtLogin: isAutoLaunchEnabled(),
+        demoPreference: config.ui.demoPreference,
+      }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
           saveLocalUiConfig({ closeToTray: patch.closeToTray });
@@ -128,7 +132,15 @@ function main(): void {
           saveLocalConfig({ runAtLogin: patch.runAtLogin });
           tray.setState({ autoLaunch: patch.runAtLogin });
         }
-        return { closeToTray: config.ui.closeToTray, runAtLogin: isAutoLaunchEnabled() };
+        if (patch.demoPreference !== undefined) {
+          saveLocalUiConfig({ demoPreference: patch.demoPreference });
+          config = loadConfig();
+        }
+        return {
+          closeToTray: config.ui.closeToTray,
+          runAtLogin: isAutoLaunchEnabled(),
+          demoPreference: config.ui.demoPreference,
+        };
       },
     },
     appInfo: () => ({ version: app.getVersion(), supportEmail: 'timo.seikel@gmail.com' }),
@@ -188,7 +200,7 @@ function main(): void {
     gep.on('message', pipeline.feed);
     gep.on('message', (msg: GepMessage) => statusMonitor.message(msg));
     gep.on('status', (s: GepStatus) => {
-      tray.setState({ status: statusText(s, history.count()) });
+      tray.setState({ status: statusText(s, history.count(), config.ui.demoPreference === 'on') });
       statusMonitor.setLastError(s.lastError);
       statusMonitor.setAttached(s.gameRunning && s.enabled);
     });
@@ -210,7 +222,7 @@ function main(): void {
   }
 
   tray.init({
-    status: tray0Status(history.count()),
+    status: tray0Status(history.count(), config.ui.demoPreference === 'on'),
     autoLaunch: isAutoLaunchEnabled(),
     tokenSet: Boolean(getNotionToken()),
   });
@@ -240,14 +252,15 @@ function main(): void {
   }
 }
 
-function statusText(s: GepStatus, count: number): string {
+function statusText(s: GepStatus, count: number, demoOn: boolean): string {
   if (s.lastError) return `Issue: ${s.lastError.slice(0, 60)}`;
   if (s.gameRunning && s.enabled) return 'Overwatch detected — tracking';
-  return tray0Status(count);
+  return tray0Status(count, demoOn);
 }
 
-function tray0Status(count: number): string {
-  return count ? `${count} games tracked` : 'No games yet — showing demo data';
+function tray0Status(count: number, demoOn: boolean): string {
+  if (count) return `${count} games tracked`;
+  return demoOn ? 'No games yet — showing demo data' : 'No games yet — track a match to begin';
 }
 
 function configTemplate(config: AppConfig): string {

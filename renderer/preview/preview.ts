@@ -15,6 +15,7 @@ import type {
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
+import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters } from '../../src/core/dashboardData';
 import { heroDetail } from '../../src/core/analytics';
@@ -68,8 +69,11 @@ let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).lengt
 
 // Saved reviews are overlaid onto the dataset so the pure core exercises the
 // full pipeline (inbox, mental merge, target scoring) exactly as in the app.
+// Mirrors src/main/dataProvider.ts's games(): real (logged) games win; the demo
+// season shows only while opted in with no real games — so ?demo=off/unset
+// previews the honest empty states end-to-end.
 const dataset = (): GameRecord[] =>
-  [...season, ...logged].map((g) =>
+  (logged.length ? logged : appSettings.demoPreference === 'on' ? season : []).map((g) =>
     previewReviews[g.matchId] ? { ...g, review: previewReviews[g.matchId] } : g,
   );
 
@@ -90,8 +94,20 @@ let notionTokenSet = localStorage.getItem(NOTION_TOKEN_KEY) === '1';
 let appSettings: AppUiSettings = {
   closeToTray: true,
   runAtLogin: false,
+  demoPreference: 'on',
   ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
 };
+// ?demo=on|off|unset overrides the persisted choice — lets design QA preview the
+// first-run prompt (unset) and the honest empty states (off) without Electron.
+const demoParam = new URLSearchParams(location.search).get('demo');
+if (demoParam === 'on' || demoParam === 'off' || demoParam === 'unset') {
+  appSettings.demoPreference = demoParam as DemoPreference;
+}
+const previewDemo = () => ({
+  active: effectiveDemo(appSettings.demoPreference, logged.length),
+  preference: appSettings.demoPreference,
+  hasRealHistory: logged.length > 0,
+});
 
 // Fake log feed: a canned backlog plus a slow trickle of new entries, so the
 // Logs screen's tail/filter/pause behaviors are all exercisable in a browser.
@@ -160,7 +176,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, true, { targets, breakReminder }),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder }),
   heroDetail: async (hero: string, f: DashboardFilters) => heroDetail(applyFilters(dataset(), f), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
     const games = dataset();

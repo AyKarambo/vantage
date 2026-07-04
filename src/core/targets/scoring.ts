@@ -10,15 +10,17 @@ import type { AuthoredTarget, TargetSummary } from './types';
 /**
  * The Targets library shown on the dashboard: the player's own authored targets
  * when they have any (archived included — flagged via `archivedAt` so the
- * renderer can hide them behind a Restore affordance), otherwise the sample
- * library (demo mode). Archiving every target must not resurrect the demo data.
+ * renderer can hide them behind a Restore affordance). With no authored targets
+ * the sample library is shown ONLY in demo mode; a real user who has authored
+ * none sees an honestly empty list (the renderer shows a create-your-first
+ * empty state). Archiving every target must not resurrect the demo data.
  */
-export function buildTargets(games: GameRecord[], authored?: AuthoredTarget[]): TargetSummary[] {
+export function buildTargets(games: GameRecord[], demo: boolean, authored?: AuthoredTarget[]): TargetSummary[] {
   if (authored && authored.length) {
     const base = winLoss(games).winrate || 0.5;
     return [...authored].sort((a, b) => b.createdAt - a.createdAt).map((t) => authoredSummary(t, games, base));
   }
-  return sampleTargets(games);
+  return demo ? sampleTargets(games) : [];
 }
 
 /**

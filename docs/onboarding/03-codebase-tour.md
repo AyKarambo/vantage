@@ -33,10 +33,10 @@ unit-testable and shared with the browser preview.
 | [`resolvers/`](../../src/core/resolvers) | Raw GEP value → display value: account (BattleTag matching), result (victory/defeat/…), role (queue-aware), map (alias + normalized-name lookup). |
 | [`analytics/`](../../src/core/analytics) | The stats engine: `grouping.ts` (winrate buckets — byMap/byRole/byHero/focusBy/trend), `heroStats.ts` (per-10-min hero table), `session.ts` (streaks, day recaps, calendar heatmap, hero drill-down), `types.ts` (`GameRecord`, `MatchMental`, `MatchReview`). |
 | [`dashboardData.ts`](../../src/core/dashboardData.ts) | `computeDashboard()` — applies filters and assembles *everything* into the single `DashboardData` payload the renderer receives. |
-| [`matchDetail.ts`](../../src/core/matchDetail.ts) | The per-match drill-down (scoreboard, SR estimate, player history); degrades section-by-section when GEP data is missing. |
+| [`matchDetail.ts`](../../src/core/matchDetail.ts) | The per-match drill-down (scoreboard, rank estimate, player history, saved review); degrades section-by-section when GEP data is missing. |
 | [`matchFilter.ts`](../../src/core/matchFilter.ts) | Game-type classification + `shouldLog()` (which matches get tracked). |
 | [`mental.ts`](../../src/core/mental.ts) | Calm/tilt summary and the tilt tax on winrate. |
-| [`progression.ts`](../../src/core/progression.ts) | Winrate → SR estimate → tier/division. |
+| [`progression.ts`](../../src/core/progression.ts) | Winrate → rank heuristic → 8-tier (Bronze→Champion) / 5-division / 0–100% progress. |
 | [`targets/`](../../src/core/targets) | Improvement targets: types, `buildTargets()` scoring against review grades, demo `sampleTargets`. |
 | [`playerIndex.ts`](../../src/core/playerIndex.ts) | "Seen this player before" — encounters across stored rosters. |
 | [`breakReminder.ts`](../../src/core/breakReminder.ts) | Loss-streak break-reminder state machine. |
