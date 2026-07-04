@@ -10,6 +10,7 @@ import { openDrawer } from '../components/overlay';
 import { viewHead, type ViewContext } from './view';
 
 export function heroes(ctx: ViewContext): HTMLElement {
+  // Column order is the display order; `get` drives sort, `render` is optional display formatting.
   const columns: Array<Column<HeroSummary>> = [
     { key: 'hero', label: 'Hero', get: (r) => r.hero },
     { key: 'role', label: 'Role', get: (r) => r.role ?? '', render: (r) => h('span', { class: 'tag' }, roleLabel(r.role ?? '–')) },

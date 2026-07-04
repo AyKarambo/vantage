@@ -14,6 +14,7 @@ export class NotionExporter {
     private readonly shapeIssues?: string[],
   ) {}
 
+  /** Export each game not already in the outbox; per-game failures are counted, not thrown. */
   async export(games: GameRecord[]): Promise<{ ok: number; failed: number; skipped: number; error?: string }> {
     if (this.shapeIssues && this.shapeIssues.length) {
       return { ok: 0, failed: 0, skipped: 0, error: `Database is missing: ${this.shapeIssues.join(', ')}` };

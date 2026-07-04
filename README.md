@@ -106,11 +106,11 @@ Overwatch 2 ─▶ GEP ─▶ aggregator ─▶ GameRecord ─▶ HistoryStore �
 **Main process (`src/`)** — pure, Electron-free domain logic under `core/`, with the
 Electron/Overwolf/Notion plumbing kept at the edges:
 
-- `core/analytics.ts` — the stats engine (win/loss, groupings, trend, focus, per-hero,
+- `core/analytics/` — the stats engine (win/loss, groupings, trend, focus, per-hero,
   session, calendar, hero drill-down). Pure and fully unit-tested.
 - `core/dashboardData.ts` — the **view-model**: raw games + filters → the exact payload
   the renderer consumes. Pure, so it powers both the app and the browser preview.
-- `core/mental.ts` · `core/progression.ts` · `core/targets.ts` · `core/maps.ts` — the
+- `core/mental.ts` · `core/progression.ts` · `core/targets/` · `core/maps.ts` — the
   additional Vantage models (mental composite, rank heuristic, target library, map modes).
 - `core/matchDetail.ts` · `core/playerIndex.ts` — the match detail page's payload
   (scoreboard, per-hero tabs, competitive estimate, screenshots) and the local
@@ -118,9 +118,13 @@ Electron/Overwolf/Notion plumbing kept at the edges:
 - `core/breakReminder.ts` — the pure break-reminder state machine (consecutive-loss
   threshold, re-fire cadence, re-arm on a win), driven by the main process after every
   recorded game.
-- `shared/contract.ts` — the single typed IPC contract shared by main **and** renderer,
-  including the channel map that preload and the renderer bridge are generated from.
-- `main/dashboard.ts` — owns the frameless BrowserWindow and wires the contract to IPC.
+- `shared/contract/` — the single typed IPC contract shared by main **and** renderer
+  (import path stays `shared/contract`), including the channel map that preload and the
+  renderer bridge are generated from.
+- `main/dashboard/` — owns the frameless BrowserWindow and wires the contract to IPC.
+- `main/matchPipeline.ts` · `main/dataProvider.ts` — factories the composition root
+  (`main/index.ts`) feeds with injected stores/services: the GEP-message→history pipeline
+  and the renderer-facing DataProvider, both unit-testable without Electron.
 - `main/notionRuntime.ts` — the Notion client/exporter/admin lifecycle in one place:
   token state, database selection, cached shape validation, export short-circuiting.
 - `main/screenshots.ts` — best-effort end-of-match screenshot capture, served to the

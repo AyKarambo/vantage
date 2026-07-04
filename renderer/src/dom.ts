@@ -7,6 +7,7 @@
 type StyleInput = Partial<CSSStyleDeclaration> | string;
 type Child = Node | string | number | null | undefined | false;
 
+/** Attribute bag accepted by {@link h}; unrecognised keys pass through as plain DOM attributes. */
 export interface Props {
   class?: string;
   style?: StyleInput;
@@ -21,6 +22,7 @@ export interface Props {
 
 const KNOWN = new Set(['class', 'style', 'dataset', 'html', 'on', 'title']);
 
+/** The hyperscript primitive: h('div', { class: 'card' }, 'hi') → a <div class="card"> containing the text "hi". */
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props?: Props | null,
@@ -53,6 +55,7 @@ function applyProps(el: HTMLElement, props: Props): void {
   }
 }
 
+/** Applies a style object or raw CSS text to `el`; shared by {@link h} and any component that styles post-creation. */
 export function applyStyle(el: HTMLElement, style: StyleInput): void {
   if (typeof style === 'string') el.style.cssText = style;
   else Object.assign(el.style, style);
@@ -71,6 +74,7 @@ export function render(el: HTMLElement, ...content: Array<Child | Child[]>): voi
   append(el, content);
 }
 
+/** Removes all children of `el` without replacing them. */
 export const clear = (el: HTMLElement): void => el.replaceChildren();
 
 /** Query a required element, throwing a clear error if the markup drifts. */

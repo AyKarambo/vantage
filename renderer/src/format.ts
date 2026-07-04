@@ -1,6 +1,7 @@
 /** Presentation helpers — pure formatting, shared across every view. */
 import type { Role, Streak } from '../../src/shared/contract';
 
+/** Display copy for each queue role; the canonical role → label mapping. */
 export const ROLE_LABEL: Record<string, string> = {
   tank: 'Tank',
   damage: 'Damage',
@@ -8,6 +9,7 @@ export const ROLE_LABEL: Record<string, string> = {
   openQ: 'Open Q',
 };
 
+/** roleLabel('openQ') → "Open Q"; falls back to the raw value for unmapped roles. */
 export const roleLabel = (role: Role | string): string => ROLE_LABEL[role] ?? role;
 
 /** 0..1 → "54%". */
@@ -23,6 +25,7 @@ export function fmt(n: number | null | undefined): string {
 /** Thousands-separated integer: 1511 → "1,511". */
 export const int = (n: number): string => Math.round(n).toLocaleString('en-US');
 
+/** signed(3) → "+3"; signed(-3) → "-3" (positive values get an explicit plus, negatives keep JS's native hyphen-minus). */
 export const signed = (n: number): string => (n > 0 ? `+${n}` : String(n));
 
 /** Winrate → semantic state class used across components. */
@@ -32,10 +35,12 @@ export function wrState(winrate: number): 'win' | 'loss' | 'mid' {
   return 'mid';
 }
 
+/** streakText({ type: 'W', count: 3 }) → "W3"; no active streak → "–". */
 export function streakText(s: Streak): string {
   return s.type === 'none' ? '–' : `${s.type}${s.count}`;
 }
 
+/** rankLabel('Gold', 3) → "Gold 3". */
 export function rankLabel(tier: string, division: number): string {
   return `${tier} ${division}`;
 }
@@ -52,10 +57,12 @@ export function relTime(ts: number, now = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** time(ts) → "2:45 PM" (local clock time, ms epoch in). */
 export function time(ts: number): string {
   return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+/** dateLong(ts) → "Saturday, July 4" (local long date, ms epoch in; defaults to now). */
 export function dateLong(ts = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }

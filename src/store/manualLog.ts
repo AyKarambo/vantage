@@ -28,6 +28,7 @@ export class ManualStore {
     this.state = this.load();
   }
 
+  /** Snapshot of every authored target. */
   targets(): AuthoredTarget[] {
     return [...this.state.targets];
   }
@@ -41,6 +42,7 @@ export class ManualStore {
     return target;
   }
 
+  /** Permanently delete a target by id (no-op if unknown). */
   removeTarget(id: string): void {
     const before = this.state.targets.length;
     this.state.targets = this.state.targets.filter((t) => t.id !== id);

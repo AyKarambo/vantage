@@ -1,4 +1,5 @@
-import type { Streak } from '../shared/contract';
+// Streak lives in core/analytics — core types flow core → shared, never back.
+import type { Streak } from './analytics';
 
 /**
  * "Time for a break?" reminder — a pure state machine over the current win/loss

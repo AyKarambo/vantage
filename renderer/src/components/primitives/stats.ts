@@ -1,0 +1,85 @@
+/**
+ * Numeric/statistical display primitives — KPI tiles, progress bars, plain
+ * stat boxes, and the activity heatmap. All pure functions of their data.
+ */
+import { h, applyStyle } from '../../dom';
+import type { CalendarDay } from '../../../../src/shared/contract';
+import { pct } from '../../format';
+import { PALETTE, wrColor } from '../../theme';
+
+type Child = Node | string | number | null | undefined | false;
+
+/** Options for {@link kpiCard}; `accent` highlights a headline metric. */
+export interface KpiOpts {
+  label: string;
+  value: string;
+  delta?: { text: string; dir?: 'up' | 'down' };
+  accent?: boolean;
+}
+
+/** Headline metric tile with an optional up/down delta. */
+export function kpiCard(o: KpiOpts): HTMLElement {
+  return h('div', { class: `kpi${o.accent ? ' kpi--accent' : ''}` },
+    h('div', { class: 'kpi-label' }, o.label),
+    h('div', { class: 'kpi-value' }, o.value),
+    o.delta && h('div', { class: `kpi-delta${o.delta.dir ? ' is-' + o.delta.dir : ''}` }, o.delta.text),
+  );
+}
+
+/** Labelled horizontal progress bar; `frac` is 0..1, clamped, `color` overrides the fill/value colour. */
+export function statBar(o: {
+  label: string;
+  frac: number;
+  color?: string;
+  valueText: string;
+  slim?: boolean;
+}): HTMLElement {
+  const fill = h('div', { class: 'track-fill' });
+  applyStyle(fill, { width: `${Math.round(Math.max(0, Math.min(1, o.frac)) * 100)}%`, background: o.color ?? PALETTE.accent });
+  return h('div', { class: 'statbar' },
+    h('span', { class: 'statbar-label' }, o.label),
+    h('div', { class: `track${o.slim ? ' track--slim' : ''}` }, fill),
+    h('span', { class: 'statbar-value', style: o.color ? { color: o.color } : undefined }, o.valueText),
+  );
+}
+
+/** Plain value/label stack for a single stat, no chrome. */
+export function statBox(value: Child, label: string): HTMLElement {
+  return h('div', { class: 'stat-box' },
+    h('div', { class: 'stat-box-value' }, value),
+    h('div', { class: 'stat-box-label' }, label),
+  );
+}
+
+/**
+ * GitHub-style activity heatmap: small fixed-size cells laid out as columns of
+ * weeks × rows of weekdays. Colour encodes winrate, opacity the game count.
+ */
+export function calendarHeatmap(days: CalendarDay[]): HTMLElement {
+  const grid = h('div', { class: 'heatmap' });
+  days.forEach((d, i) => {
+    const cell = h('div', {
+      class: 'heatmap-cell',
+      title: d.games ? `${d.date}: ${d.games}g · ${pct(d.winrate ?? 0)}` : `${d.date}: no games`,
+      style: {
+        background: d.games ? wrColor(d.winrate ?? 0) : 'var(--surface-3)',
+        opacity: d.games ? String(0.4 + Math.min(d.games, 6) / 6 * 0.6) : '1',
+      },
+    });
+    // Align the first cell to its weekday row; the rest flow down each column.
+    if (i === 0) cell.style.gridRowStart = String(new Date(d.date).getDay() + 1);
+    grid.append(cell);
+  });
+
+  const legend = h('div', { class: 'heatmap-legend' },
+    heatSwatch(PALETTE.loss, 'Losing'),
+    heatSwatch(PALETTE.mid, 'Even'),
+    heatSwatch(PALETTE.win, 'Winning'),
+  );
+  return h('div', { class: 'heatmap-wrap' }, grid, legend);
+}
+
+function heatSwatch(color: string, label: string): HTMLElement {
+  return h('span', { class: 'legend-item' },
+    h('span', { class: 'legend-dot', style: { background: color, borderRadius: '2px' } }), label);
+}

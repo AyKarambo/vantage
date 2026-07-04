@@ -33,6 +33,7 @@ export const MODE_COLORS: Record<string, string> = {
   Unknown: '#8a8a98', // grey
 };
 
+/** modeColor('Hybrid') → '#6fa8ff'; unknown modes fall back to the grey swatch. */
 export const modeColor = (mode: string): string => MODE_COLORS[mode] ?? MODE_COLORS.Unknown;
 
 /** Distinct categorical colours for per-map series (donut slices, etc.). */
@@ -61,6 +62,7 @@ export function wrHue(winrate: number): number {
   return Math.round(6 + t * (148 - 6));
 }
 
+/** wrHsl(0.6) → "hsl(94 56% 58%)"; renders {@link wrHue} as a CSS colour, optionally with alpha. */
 export function wrHsl(winrate: number, sat = 56, light = 58, alpha = 1): string {
   const h = wrHue(winrate);
   return alpha >= 1 ? `hsl(${h} ${sat}% ${light}%)` : `hsl(${h} ${sat}% ${light}% / ${alpha})`;
