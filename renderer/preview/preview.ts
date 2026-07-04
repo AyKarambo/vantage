@@ -8,9 +8,10 @@
  * real app persists them to disk.
  */
 import type {
-  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, ManualMatchInput,
-  NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
-  ReviewInput, TargetEditInput,
+  AppUiSettings, AuthoredTargetInput, BreakReminderSettings, DashboardFilters, GepHealthState,
+  GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionDatabaseSummary,
+  NotionPageSummary, NotionStatus, OwStatsApi, RendererErrorInput, ReviewInput, SyncProgress,
+  TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -28,6 +29,7 @@ const REVIEWS_KEY = 'vantagePreviewReviews';
 const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
+const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
 
 const load = <T>(key: string): T[] => {
   try {
@@ -85,6 +87,60 @@ const CANNED_PAGES: NotionPageSummary[] = [
 ];
 let selectedNotionDatabaseId: string | undefined = localStorage.getItem(NOTION_DB_KEY) ?? undefined;
 let notionTokenSet = localStorage.getItem(NOTION_TOKEN_KEY) === '1';
+let appSettings: AppUiSettings = {
+  closeToTray: true,
+  runAtLogin: false,
+  ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
+};
+
+// Fake log feed: a canned backlog plus a slow trickle of new entries, so the
+// Logs screen's tail/filter/pause behaviors are all exercisable in a browser.
+let previewLogLevel: LogLevel = 'info';
+const logListeners = new Set<(e: LogEntry) => void>();
+const previewLog: LogEntry[] = [
+  { ts: Date.now() - 90_000, level: 'info', scope: 'main', message: 'Vantage started', fields: { version: 'preview', sensor: 'gep' } },
+  { ts: Date.now() - 80_000, level: 'info', scope: 'gep', message: 'game detected', fields: { game: 10844 } },
+  { ts: Date.now() - 75_000, level: 'debug', scope: 'gep', message: 'info update kill_feed' },
+  { ts: Date.now() - 60_000, level: 'warn', scope: 'notion', message: 'shape validation skipped — no database selected' },
+  { ts: Date.now() - 30_000, level: 'error', scope: 'renderer', message: 'example forwarded error', fields: { source: 'preview' } },
+];
+let previewLogTick = 0;
+setInterval(() => {
+  const e: LogEntry = {
+    ts: Date.now(),
+    level: previewLogLevel === 'debug' && previewLogTick % 2 === 0 ? 'debug' : 'info',
+    scope: previewLogTick % 3 === 0 ? 'pipeline' : 'gep',
+    message: `preview heartbeat #${++previewLogTick}`,
+  };
+  previewLog.push(e);
+  for (const cb of logListeners) cb(e);
+}, 4000);
+
+// Simulated connection status: pick a state with ?gep=live|stale|connected|
+// no-game, or ?gep=cycle to rotate through all four (default: connected).
+const gepListeners = new Set<(s: GepStatusPayload) => void>();
+const GEP_STATES: GepHealthState[] = ['no-game', 'connected', 'live', 'stale'];
+const gepParam = new URLSearchParams(location.search).get('gep') ?? 'connected';
+let gepState: GepHealthState = (GEP_STATES as string[]).includes(gepParam)
+  ? (gepParam as GepHealthState)
+  : 'connected';
+const gepPayload = (): GepStatusPayload => ({
+  state: gepState,
+  sensor: 'gep',
+  attachedAt: gepState === 'no-game' ? null : Date.now() - 300_000,
+  lastEventAt: gepState === 'no-game' ? null : Date.now() - (gepState === 'stale' ? 90_000 : 4_000),
+  eventsThisSession: gepState === 'no-game' ? 0 : 128,
+  matchInProgress: gepState === 'live' || gepState === 'stale',
+});
+if (gepParam === 'cycle') {
+  let i = 1;
+  setInterval(() => {
+    gepState = GEP_STATES[i++ % GEP_STATES.length];
+    for (const cb of gepListeners) cb(gepPayload());
+  }, 5000);
+}
+
+const syncListeners = new Set<(p: SyncProgress) => void>();
 
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
@@ -99,6 +155,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
     databaseTitle: db?.title,
     shapeValid: db ? true : undefined,
     shapeIssues: undefined,
+    lastSyncedAt: db ? Date.now() - 3_600_000 : undefined,
   };
 }
 
@@ -109,7 +166,16 @@ const mock: OwStatsApi = {
     const games = dataset();
     return matchDetail(games, matchId, applyFilters(games, f));
   },
-  exportNotion: async () => (selectedNotionDatabaseId ? { ok: dataset().length, failed: 0, skipped: 0 } : { ok: 0, failed: 0, unavailable: true }),
+  exportNotion: async () => {
+    if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
+    // Simulate per-game progress so the sync card's live counter is testable.
+    const total = Math.min(dataset().length, 40);
+    for (let done = 1; done <= total; done += 8) {
+      for (const cb of syncListeners) cb({ done: Math.min(done, total), total });
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return { ok: dataset().length, failed: 0, skipped: 0 };
+  },
   // The preview has no Notion runtime; token state is tracked locally, and the
   // database picker operates against a small canned list (see CANNED_DATABASES).
   notionStatus: async () => notionStatusFor(selectedNotionDatabaseId),
@@ -211,6 +277,44 @@ const mock: OwStatsApi = {
     breakReminder = normalizeBreakReminder(input);
     save(BREAK_REMINDER_KEY, breakReminder);
     return breakReminder;
+  },
+  getLogEntries: async () => [...previewLog],
+  getLogLevel: async () => previewLogLevel,
+  setLogLevel: async (level: LogLevel) => {
+    previewLogLevel = level;
+    return previewLogLevel;
+  },
+  logRendererError: async (input: RendererErrorInput) => {
+    const e: LogEntry = {
+      ts: Date.now(), level: 'error', scope: 'renderer', message: input.message,
+      fields: { ...(input.source ? { source: input.source } : {}) },
+    };
+    previewLog.push(e);
+    for (const cb of logListeners) cb(e);
+  },
+  onLogEntry: (cb: (e: LogEntry) => void) => {
+    logListeners.add(cb);
+    return () => logListeners.delete(cb);
+  },
+  getGepStatus: async () => gepPayload(),
+  onGepStatus: (cb: (s: GepStatusPayload) => void) => {
+    gepListeners.add(cb);
+    return () => gepListeners.delete(cb);
+  },
+  onSyncProgress: (cb: (p: SyncProgress) => void) => {
+    syncListeners.add(cb);
+    return () => syncListeners.delete(cb);
+  },
+  getAppSettings: async () => appSettings,
+  setAppSettings: async (patch: Partial<AppUiSettings>) => {
+    appSettings = { ...appSettings, ...patch };
+    save(APP_SETTINGS_KEY, appSettings);
+    return appSettings;
+  },
+  getAppInfo: async () => ({ version: 'preview', supportEmail: 'timo.seikel@gmail.com' }),
+  clearReview: async (matchId: string) => {
+    delete previewReviews[matchId];
+    save(REVIEWS_KEY, previewReviews);
   },
   window: {
     minimize: () => console.info('[preview] minimize'),

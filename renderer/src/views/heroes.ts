@@ -4,10 +4,14 @@ import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, pct, roleLabel } from '../format';
 import { wrColor } from '../theme';
-import { card, resultPill, statBox } from '../components/primitives';
+import { prefs } from '../prefs';
+import { store } from '../store';
+import { card, chip, resultPill, statBox } from '../components/primitives';
 import { dataTable, type Column } from '../components/table';
 import { openDrawer } from '../components/overlay';
 import { viewHead, type ViewContext } from './view';
+
+const MIN_GAMES_STEPS = [1, 5, 10] as const;
 
 export function heroes(ctx: ViewContext): HTMLElement {
   // Column order is the display order; `get` drives sort, `render` is optional display formatting.
@@ -25,20 +29,38 @@ export function heroes(ctx: ViewContext): HTMLElement {
     { key: 'mitigation', label: 'MIT/10', get: (r) => r.per10?.mitigation ?? null, render: (r) => fmt(r.per10?.mitigation) },
   ];
 
+  const minGames = prefs.get('minGames') ?? 1;
+  const rows = ctx.data.heroStats.filter((r) => r.games >= minGames);
+  const hidden = ctx.data.heroStats.length - rows.length;
+
+  const minGamesChips = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
+    h('span', { class: 'u-dim', style: { fontSize: '11px' } }, 'min. games'),
+    ...MIN_GAMES_STEPS.map((n) =>
+      chip(`${n}+`, minGames === n, () => {
+        prefs.set('minGames', n);
+        store.rerender();
+      }),
+    ),
+  );
+
   return h('div', { class: 'view' },
-    viewHead('Heroes', 'Exact stats, per 10 minutes · click a hero to drill down'),
+    viewHead('Heroes',
+      `Exact stats, per 10 minutes · click a hero to drill down${hidden > 0 ? ` · ${hidden} low-sample hidden` : ''}`,
+      minGamesChips),
     card({ class: 'card--flush', style: { padding: '4px 10px 10px' } },
       dataTable({
         columns,
-        rows: ctx.data.heroStats,
+        rows,
         initialSort: { key: 'games', dir: -1 },
+        persistSortAs: 'heroSort',
         onRowClick: (row) => openHeroDrawer(ctx, row.hero),
       }),
     ),
   );
 }
 
-function openHeroDrawer(ctx: ViewContext, hero: string): void {
+/** Open the hero drill-down drawer (also reachable from the command palette / cross-links). */
+export function openHeroDrawer(ctx: ViewContext, hero: string): void {
   openDrawer(() => {
     const body = h('div', null, h('div', { class: 'hint' }, 'Loading…'));
     bridge.heroDetail(hero, ctx.data.filters).then((d) => render(body, heroDetail(d)));

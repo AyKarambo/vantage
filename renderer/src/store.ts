@@ -6,7 +6,8 @@
  */
 import type { DashboardData, DashboardFilters } from '../../src/shared/contract';
 import { bridge } from './bridge';
-import { time } from './format';
+import { relTime } from './format';
+import { prefs } from './prefs';
 
 export type ViewId =
   | 'overview'
@@ -19,11 +20,15 @@ export type ViewId =
   | 'mental'
   | 'trends'
   | 'targets'
-  | 'notion';
+  | 'notion'
+  | 'logs'
+  | 'settings';
 
 /** Parameters for parameterized views (the match detail drill-down). */
 export interface ViewParams {
   matchId?: string;
+  /** Entry to scroll to and flash after navigating (e.g. a map on Maps). */
+  highlight?: string;
 }
 
 export interface AppState {
@@ -32,25 +37,43 @@ export interface AppState {
   /** Params of the active view; reset on every navigation. */
   params: ViewParams;
   data: DashboardData | null;
+  /** Cold start only — no snapshot yet. Background refetches set `refreshing`. */
   loading: boolean;
+  /** A refetch is in flight while the previous snapshot stays on screen. */
+  refreshing: boolean;
+  /** The last refetch failed — the visible snapshot is older than it looks. */
+  stale: boolean;
   status: string;
   error: string | null;
+  /** Bumped by rerender() so the shell re-renders content without a new snapshot. */
+  renderEpoch: number;
 }
 
 type Listener = (state: AppState) => void;
 
-const DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', mode: 'all', days: 30 };
+/** The neutral filter set — exported so the filter bar can offer "Reset". */
+export const FILTER_DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', mode: 'all', days: 30 };
 const STORAGE_KEY = 'vantageFilters';
+
+/** The last visited top-level view, restored on launch (never a detail page). */
+function initialView(): ViewId {
+  const saved = prefs.get('view');
+  const valid: ViewId[] = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'targets', 'notion', 'logs', 'settings'];
+  return valid.includes(saved as ViewId) ? (saved as ViewId) : 'overview';
+}
 
 class Store {
   private state: AppState = {
-    filters: { ...DEFAULTS, ...loadFilters() },
-    view: 'overview',
+    filters: { ...FILTER_DEFAULTS, ...loadFilters() },
+    view: initialView(),
     params: {},
     data: null,
     loading: true,
+    refreshing: false,
+    stale: false,
     status: 'Loading…',
     error: null,
+    renderEpoch: 0,
   };
   private readonly listeners = new Set<Listener>();
 
@@ -64,14 +87,17 @@ class Store {
   }
 
   setView(view: ViewId, params: ViewParams = {}): void {
-    if (view === this.state.view && params.matchId === this.state.params.matchId) return;
+    if (view === this.state.view && params.matchId === this.state.params.matchId
+      && params.highlight === this.state.params.highlight) return;
+    // Detail pages restore to their parent list on relaunch.
+    prefs.set('view', view === 'matchDetail' ? 'matches' : view);
     this.patch({ view, params });
   }
 
   /** Re-notify subscribers without refetching — for local (client-side) state
    *  changes like saving a review, so the current data snapshot stays stable. */
   rerender(): void {
-    this.patch({});
+    this.patch({ renderEpoch: this.state.renderEpoch + 1 });
   }
 
   setFilters(next: Partial<DashboardFilters>): void {
@@ -80,13 +106,23 @@ class Store {
     void this.refresh();
   }
 
+  /**
+   * Fetch a fresh snapshot. Cold start (no data yet) shows the loading state;
+   * afterwards the previous snapshot stays rendered while `refreshing` — a
+   * failed background refresh keeps it and only marks it `stale`.
+   */
   async refresh(): Promise<void> {
-    this.patch({ loading: true });
+    const cold = !this.state.data;
+    this.patch(cold ? { loading: true } : { refreshing: true });
     try {
       const data = await bridge.getDashboard(this.state.filters);
-      this.patch({ data, loading: false, error: null, status: statusText(data) });
+      this.patch({ data, loading: false, refreshing: false, stale: false, error: null, status: statusText(data) });
     } catch (err) {
-      this.patch({ loading: false, error: String(err), status: `Failed to load — ${err}` });
+      if (this.state.data) {
+        this.patch({ refreshing: false, stale: true, status: 'Refresh failed — showing last data' });
+      } else {
+        this.patch({ loading: false, refreshing: false, error: String(err), status: `Failed to load — ${err}` });
+      }
     }
   }
 
@@ -96,9 +132,10 @@ class Store {
   }
 }
 
-function statusText(d: DashboardData): string {
+/** The status-bar line — exported so the shell can re-derive it as time passes. */
+export function statusText(d: DashboardData): string {
   const demo = d.isSample ? ' · demo data (play games to populate)' : '';
-  return `${d.overall.games} games${demo} · updated ${time(d.generatedAt)}`;
+  return `${d.overall.games} games${demo} · updated ${relTime(d.generatedAt)}`;
 }
 
 function loadFilters(): Partial<DashboardFilters> {

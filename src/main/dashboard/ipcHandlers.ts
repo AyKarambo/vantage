@@ -5,7 +5,8 @@ import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
-  AuthoredTargetInput, DashboardFilters, ManualMatchInput, ReviewInput, TargetEditInput,
+  AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
+  RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 
@@ -81,6 +82,27 @@ export function registerDashboardIpc(provider: DataProvider): void {
   ipcMain.handle(ch.setBreakReminder, (_e, input: BreakReminderSettings) =>
     provider.setBreakReminder(input),
   );
+
+  // Release debug log (viewer ring, session level, renderer error forwarding).
+  ipcMain.handle(ch.getLogEntries, () => provider.getLogEntries());
+  ipcMain.handle(ch.getLogLevel, () => provider.getLogLevel());
+  ipcMain.handle(ch.setLogLevel, (_e, level: LogLevel) => provider.setLogLevel(level));
+  ipcMain.handle(ch.logRendererError, (_e, input: RendererErrorInput) => {
+    provider.logRendererError(input);
+  });
+
+  // Live connection/data-flow status (snapshot; changes arrive via push).
+  ipcMain.handle(ch.getGepStatus, () => provider.getGepStatus());
+
+  // App-behavior settings + metadata (Settings screen).
+  ipcMain.handle(ch.getAppSettings, () => provider.getAppSettings());
+  ipcMain.handle(ch.setAppSettings, (_e, patch: Partial<AppUiSettings>) =>
+    provider.setAppSettings(patch),
+  );
+  ipcMain.handle(ch.getAppInfo, () => provider.getAppInfo());
+  ipcMain.handle(ch.clearReview, (_e, matchId: string) => {
+    provider.clearReview(matchId);
+  });
 }
 
 /** Window actions the title-bar channels drive, provided as closures over the owning window. */

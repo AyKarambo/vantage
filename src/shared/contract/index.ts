@@ -13,6 +13,7 @@
 export type { Role, Result, HeroStat } from '../../core/model';
 export type {
   WinLoss, Group, FocusItem, HeroSummary, MatchMental, MatchReview, TargetGrade, Streak,
+  DayGroup, SessionRecap,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
@@ -28,11 +29,20 @@ export type {
 export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';
 
 // Notion export payloads
-export type { ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus } from './notion';
+export type { ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress } from './notion';
 
 // Manual-entry inputs
 export type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 
+// Logging payloads (release debug log + in-app viewer)
+export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
+
+// Live connection/data-flow status
+export type { GepHealthState, GepStatusPayload } from './gepStatus';
+
+// App-behavior settings + metadata (Settings screen)
+export type { AppInfo, AppUiSettings } from './appSettings';
+
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';
-export { IPC_CHANNELS, WINDOW_CHANNELS } from './api';
+export { IPC_CHANNELS, WINDOW_CHANNELS, EVENT_CHANNELS } from './api';

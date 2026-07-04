@@ -1,7 +1,7 @@
 import { app, shell } from 'electron';
 import * as path from 'path';
 import {
-  loadConfig, saveLocalConfig, getNotionToken, userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, saveLocalUiConfig, getNotionToken, userConfigPath, type AppConfig,
 } from './config';
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
@@ -16,6 +16,10 @@ import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
 import { createDataProvider } from './dataProvider';
+import { createLogger } from './logger';
+import { createGepStatusMonitor } from './gepStatusMonitor';
+import type { LogEntry } from '../core/logging';
+import { EVENT_CHANNELS, type GepStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { isAutoLaunchEnabled, setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -40,25 +44,47 @@ if (!app.requestSingleInstanceLock()) {
 function main(): void {
   let config = loadConfig();
 
+  // The release log exists before everything else so every subsystem can be
+  // wired to it. The dashboard push hook is filled in once the window exists.
+  let pushEntry: (e: LogEntry) => void = () => {};
+  const log = createLogger({
+    dir: path.join(app.getPath('userData'), 'logs'),
+    getSecrets: () => [getNotionToken() ?? ''].filter(Boolean),
+    onEntry: (e) => pushEntry(e),
+    mirrorToConsole: !app.isPackaged,
+  });
+  log.info('main', 'Vantage started', { version: app.getVersion(), sensor: config.sensor });
+  // Monitor (not handler): logs fatal errors without changing crash semantics.
+  process.on('uncaughtExceptionMonitor', (err) => {
+    log.error('main', 'uncaughtException', { error: String(err?.stack ?? err) });
+  });
+  process.on('unhandledRejection', (reason) => {
+    log.error('main', 'unhandledRejection', {
+      error: String(reason instanceof Error ? reason.stack ?? reason.message : reason),
+    });
+  });
+
   const dataDir = path.join(app.getPath('userData'), 'data');
   const outbox = new OutboxStore(dataDir);
   const history = new HistoryStore(dataDir);
   const manual = new ManualStore(dataDir);
   const aggregator = new MatchAggregator();
-  const screenshots = new ScreenshotService(
-    path.join(dataDir, 'screenshots'),
-    (...args: unknown[]) => console.log('[shots]', ...args),
-  );
+  const screenshots = new ScreenshotService(path.join(dataDir, 'screenshots'), log.adapter('shots'));
   screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
+  let pushSyncProgress: (done: number, total: number) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
     reloadConfig: () => (config = loadConfig()),
     trackedGames: () => history.count(),
     onTokenState: (tokenSet) => tray.setState({ tokenSet }),
-    onError: (title, body) => tray.notifyError(title, body),
+    onError: (title, body) => {
+      log.error('notion', `${title}: ${body}`);
+      tray.notifyError(title, body);
+    },
+    onSyncProgress: (done, total) => pushSyncProgress(done, total),
   });
 
   const pipeline = createMatchPipeline({
@@ -67,7 +93,16 @@ function main(): void {
     screenshots,
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
-    log: (...args: unknown[]) => console.log(...args),
+    log: log.adapter('pipeline'),
+  });
+
+  // Truthful connection indicator: folds GEP signals into the four-state
+  // health model and fans changes out to the window, tray, and log.
+  let publishStatus: (p: GepStatusPayload) => void = () => {};
+  const statusMonitor = createGepStatusMonitor({
+    sensor: config.sensor === 'gep' ? 'gep' : 'counterwatch',
+    log: (scope, message, fields) => log.info(scope, message, fields),
+    publish: (p) => publishStatus(p),
   });
 
   const dataProvider = createDataProvider({
@@ -79,6 +114,24 @@ function main(): void {
     recordGame: (game) => pipeline.recordGame(game),
     notify: (title, body) => tray.notify(title, body),
     sampleGames: generateSampleGames,
+    logger: log,
+    gepStatus: () => statusMonitor.current(),
+    appSettings: {
+      get: () => ({ closeToTray: config.ui.closeToTray, runAtLogin: isAutoLaunchEnabled() }),
+      apply: (patch) => {
+        if (patch.closeToTray !== undefined) {
+          saveLocalUiConfig({ closeToTray: patch.closeToTray });
+          config = loadConfig();
+        }
+        if (patch.runAtLogin !== undefined) {
+          setAutoLaunch(patch.runAtLogin);
+          saveLocalConfig({ runAtLogin: patch.runAtLogin });
+          tray.setState({ autoLaunch: patch.runAtLogin });
+        }
+        return { closeToTray: config.ui.closeToTray, runAtLogin: isAutoLaunchEnabled() };
+      },
+    },
+    appInfo: () => ({ version: app.getVersion(), supportEmail: 'timo.seikel@gmail.com' }),
   });
 
   const handlers: TrayHandlers = {
@@ -110,7 +163,21 @@ function main(): void {
   };
 
   const tray = new TrayController(iconPath, handlers);
-  const dashboard = new DashboardWindow(dataProvider, iconPath);
+  const dashboard = new DashboardWindow(dataProvider, iconPath, {
+    closeToTray: () => config.ui.closeToTray,
+    savedBounds: () => config.ui.windowBounds,
+    saveBounds: (windowBounds) => {
+      saveLocalUiConfig({ windowBounds });
+      config = loadConfig();
+    },
+  });
+  pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
+  publishStatus = (p) => {
+    dashboard.push(EVENT_CHANNELS.onGepStatus, p);
+    tray.setHealth(p.state);
+  };
+  pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
+  statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
   // icon while it's already running) must bring the window to the front.
@@ -119,8 +186,13 @@ function main(): void {
   if (config.sensor === 'gep') {
     const gep = new GepService(config.overwatchGameId);
     gep.on('message', pipeline.feed);
-    gep.on('status', (s: GepStatus) => tray.setState({ status: statusText(s, history.count()) }));
-    gep.on('log', (...args: unknown[]) => console.log('[gep]', ...args));
+    gep.on('message', (msg: GepMessage) => statusMonitor.message(msg));
+    gep.on('status', (s: GepStatus) => {
+      tray.setState({ status: statusText(s, history.count()) });
+      statusMonitor.setLastError(s.lastError);
+      statusMonitor.setAttached(s.gameRunning && s.enabled);
+    });
+    gep.on('log', log.adapter('gep'));
 
     // Testing only: capture the live GEP stream to userData/recordings/*.jsonl so
     // a real session can be replayed later (OW_SYNC_REPLAY) without the game.
@@ -128,12 +200,12 @@ function main(): void {
       const recorder = new GepRecorder(path.join(app.getPath('userData'), 'recordings'));
       gep.on('message', (msg: GepMessage) => recorder.message(msg));
       gep.on('status', (s: GepStatus) => recorder.lifecycle(s.gameRunning ? 'game-running' : 'game-idle'));
-      console.log('[recorder] recording GEP session →', recorder.path);
+      log.info('recorder', 'recording GEP session', { path: recorder.path });
     }
   } else {
     const cw = new CounterwatchReader();
     cw.on('match', (record) => pipeline.addMatch(record));
-    cw.on('log', (...args: unknown[]) => console.log('[cw]', ...args));
+    cw.on('log', log.adapter('cw'));
     cw.start();
   }
 
@@ -150,7 +222,7 @@ function main(): void {
   if (process.argv.includes('--simulate') || process.env.OW_SYNC_SIMULATE === '1') {
     const battleTag = Object.keys(config.accounts)[0] ?? 'Karambo#0000';
     setTimeout(() => {
-      void runSimulation(pipeline.feed, (m) => console.log('[sim]', m), { battleTag, map: "King's Row" });
+      void runSimulation(pipeline.feed, (m) => log.info('sim', m), { battleTag, map: "King's Row" });
     }, 1500);
   }
 
@@ -160,9 +232,9 @@ function main(): void {
     setTimeout(() => {
       try {
         const entries = readRecording(replayFile);
-        void replayRecording(entries, pipeline.feed, { realtime: true, log: (m) => console.log('[replay]', m) });
+        void replayRecording(entries, pipeline.feed, { realtime: true, log: (m) => log.info('replay', m) });
       } catch (err) {
-        console.error('[replay] failed to read recording', replayFile, err);
+        log.error('replay', 'failed to read recording', { file: replayFile, error: String(err) });
       }
     }, 1500);
   }

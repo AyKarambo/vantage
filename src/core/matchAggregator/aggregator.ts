@@ -28,7 +28,7 @@ export class MatchAggregator {
 
   /** Feed one normalized GEP message. Returns a finished record on match end. */
   handle(msg: GepMessage): MatchRecord | null {
-    if (this.isMatchStart(msg)) {
+    if (isMatchStartMessage(msg)) {
       this.current = newMutable();
       this.current.record.startedAt = this.now();
       return null;
@@ -36,7 +36,7 @@ export class MatchAggregator {
 
     this.apply(msg);
 
-    if (this.isMatchEnd(msg)) {
+    if (isMatchEndMessage(msg)) {
       return this.finalize();
     }
     return null;
@@ -143,20 +143,6 @@ export class MatchAggregator {
 
   // --- start/end detection ---------------------------------------------------
 
-  private isMatchStart(msg: GepMessage): boolean {
-    return msg.kind === 'event' && nameMatches(msg, 'match_start');
-  }
-
-  private isMatchEnd(msg: GepMessage): boolean {
-    if (msg.kind === 'event' && nameMatches(msg, 'match_end')) return true;
-    // Fallback: game_info.game_state transitioning to an "ended" value.
-    return (
-      msg.feature?.toLowerCase() === K.gameInfo &&
-      msg.key?.toLowerCase() === K.gameState &&
-      /ended|finished|complete/i.test(asString(msg.value) ?? '')
-    );
-  }
-
   private finalize(): MatchRecord | null {
     const rec = this.current.record;
     rec.endedAt = this.now();
@@ -201,6 +187,25 @@ export class MatchAggregator {
     this.current = newMutable();
     return finished;
   }
+}
+
+// --- start/end detection (exported: the GEP status monitor shares these so
+// "a match is in progress" can never drift between pipeline and indicator) ----
+
+/** True when the message marks a match beginning. */
+export function isMatchStartMessage(msg: GepMessage): boolean {
+  return msg.kind === 'event' && nameMatches(msg, 'match_start');
+}
+
+/** True when the message marks a match ending (event or game_state fallback). */
+export function isMatchEndMessage(msg: GepMessage): boolean {
+  if (msg.kind === 'event' && nameMatches(msg, 'match_end')) return true;
+  // Fallback: game_info.game_state transitioning to an "ended" value.
+  return (
+    msg.feature?.toLowerCase() === K.gameInfo &&
+    msg.key?.toLowerCase() === K.gameState &&
+    /ended|finished|complete/i.test(asString(msg.value) ?? '')
+  );
 }
 
 // --- internal mutable state ---------------------------------------------------

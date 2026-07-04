@@ -6,6 +6,7 @@ import { h, applyStyle } from '../../dom';
 import type { CalendarDay } from '../../../../src/shared/contract';
 import { pct } from '../../format';
 import { PALETTE, wrColor } from '../../theme';
+import { tooltipLayer } from '../../charts/tooltip';
 
 type Child = Node | string | number | null | undefined | false;
 
@@ -56,16 +57,18 @@ export function statBox(value: Child, label: string): HTMLElement {
  * weeks × rows of weekdays. Colour encodes winrate, opacity the game count.
  */
 export function calendarHeatmap(days: CalendarDay[]): HTMLElement {
+  const wrap = h('div', { class: 'heatmap-wrap' });
+  const tips = tooltipLayer(wrap);
   const grid = h('div', { class: 'heatmap' });
   days.forEach((d, i) => {
     const cell = h('div', {
       class: 'heatmap-cell',
-      title: d.games ? `${d.date}: ${d.games}g · ${pct(d.winrate ?? 0)}` : `${d.date}: no games`,
       style: {
         background: d.games ? wrColor(d.winrate ?? 0) : 'var(--surface-3)',
         opacity: d.games ? String(0.4 + Math.min(d.games, 6) / 6 * 0.6) : '1',
       },
     });
+    tips.attach(cell, d.games ? `${d.date} · ${d.games}g · ${pct(d.winrate ?? 0)}` : `${d.date} · no games`);
     // Align the first cell to its weekday row; the rest flow down each column.
     if (i === 0) cell.style.gridRowStart = String(new Date(d.date).getDay() + 1);
     grid.append(cell);
@@ -76,7 +79,8 @@ export function calendarHeatmap(days: CalendarDay[]): HTMLElement {
     heatSwatch(PALETTE.mid, 'Even'),
     heatSwatch(PALETTE.win, 'Winning'),
   );
-  return h('div', { class: 'heatmap-wrap' }, grid, legend);
+  wrap.append(grid, legend, tips.tip);
+  return wrap;
 }
 
 function heatSwatch(color: string, label: string): HTMLElement {

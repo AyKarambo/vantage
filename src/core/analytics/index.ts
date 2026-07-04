@@ -15,4 +15,5 @@ export {
 export { heroStats } from './heroStats';
 
 // Session, streak & drill-down reads
-export { streak, latestSession, calendar, heroDetail } from './session';
+export { streak, latestSession, calendar, heroDetail, groupByDay, sessionRecap } from './session';
+export type { DayGroup, SessionRecap } from './session';

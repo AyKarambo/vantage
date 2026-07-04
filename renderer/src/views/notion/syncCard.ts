@@ -4,6 +4,7 @@
  */
 import { h, render } from '../../dom';
 import type { ExportResult, NotionStatus } from '../../../../src/shared/contract';
+import { relTime } from '../../format';
 import { bridge } from '../../bridge';
 import { button, card } from '../../components/primitives';
 
@@ -18,6 +19,10 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
     onClick: async () => {
       btn.disabled = true;
       render(out, h('span', { class: 'u-muted' }, 'Syncing…'));
+      // Live per-game progress while the export runs.
+      const unsub = bridge.onSyncProgress((p) => {
+        render(out, h('span', { class: 'mono u-muted' }, `Syncing ${p.done} / ${p.total}…`));
+      });
       try {
         const res = await bridge.exportNotion({});
         render(
@@ -31,6 +36,7 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
       } catch (err) {
         render(out, h('span', { class: 'is-loss' }, `Sync failed — ${String(err)}`));
       }
+      unsub();
       btn.disabled = false;
     },
   });
@@ -45,6 +51,9 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
 
   return card({ variant: 'raised', title: 'Sync now', sub: 'push tracked games' },
     h('div', { class: 'hint', style: { lineHeight: '1.5' } }, note),
+    s?.lastSyncedAt
+      ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } }, `Last synced ${relTime(s.lastSyncedAt)}`)
+      : null,
     h('div', { style: { marginTop: '12px' } }, btn),
     out,
   );

@@ -604,3 +604,98 @@
   border-radius: 50%;
   background: var(--win);
 }
+
+/* Live connection indicator (status bar) ------------------------------------ */
+.gep-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  margin: -2px 0;
+  border-radius: var(--r-sm);
+  color: var(--muted-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.gep-indicator:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.status-dot.is-no-game {
+  background: var(--dim);
+}
+.status-dot.is-connected {
+  background: var(--accent);
+}
+.status-dot.is-live {
+  background: var(--win);
+}
+.status-dot.is-stale {
+  background: var(--loss);
+  animation: gep-pulse 1.2s ease-in-out infinite;
+}
+@keyframes gep-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(209, 104, 95, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(209, 104, 95, 0); }
+}
+
+/* Refresh feedback (status bar) ---------------------------------------------- */
+.busy-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-3);
+  border-top-color: var(--accent);
+  animation: busy-spin 0.8s linear infinite;
+}
+@keyframes busy-spin {
+  to { transform: rotate(360deg); }
+}
+.stale-link {
+  background: none;
+  border: none;
+  color: var(--mid);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Filter reset + presets ------------------------------------------------------ */
+.filter-reset {
+  background: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  align-self: end;
+}
+.filter-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.filter-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: end;
+  margin-left: 4px;
+}
+.filter-preset-save {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.filter-preset-save:hover {
+  color: var(--text-2);
+}
