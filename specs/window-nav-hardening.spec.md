@@ -146,3 +146,40 @@ Proceeding on the stated default; flag on review if it should change.
 
 - **O1 — README depth.** Default: a single sentence in *Account safety* noting the shell is
   hardened (context isolation, sandbox, CSP, no in-window navigation/popups). Not blocking.
+
+## Addendum (post-research): IPC sender validation
+
+Added after the deep-research pass completed. Its top confirmed finding (3-0 vote, Electron
+security checklist item #17) was that main-process IPC handlers should **validate the sender**
+of incoming messages — the one baseline the code omitted. Any web frame (subframe, child window)
+can address `ipcMain`, so main must re-check rather than assume only our narrow preload can call.
+Same boundary-hardening theme as this spec, so it ships in the same change.
+
+**Scope discipline (from the research):** the stronger claim that *every handler must also
+validate its arguments against a runtime schema* was **refuted 0-3** as over-strong. So this adds
+**sender-frame validation only** — not per-call payload schemas (that would be the
+over-engineering the review warns against). Compile-time contract typing already covers argument
+shape for the trusted renderer.
+
+- **H7 — Untrusted invoke rejected.**
+  Given an `ipcMain.handle` channel,
+  When a message arrives from a frame that is not the app's own renderer bundle
+  (`file:…/renderer/index.html`),
+  Then the handler is not run and the invoke rejects. *(Pure predicate, unit-tested.)*
+
+- **H8 — Untrusted send dropped.**
+  Given an `ipcMain.on` channel (window controls),
+  When the sender frame is untrusted,
+  Then the action is silently ignored. *(Unit-tested via the predicate.)*
+
+- **H9 — Trusted renderer unaffected.**
+  Given the app's own renderer frame,
+  When it invokes any channel,
+  Then the handler runs exactly as before — the guard is transparent to normal use.
+
+- **H10 — Robust allowlist.**
+  Given dev (`file:///…/renderer/index.html`) and packed (`…/app.asar/renderer/index.html`)
+  loads, and a null / remote / wrong-page sender,
+  When the sender URL is checked,
+  Then only the app's own bundle page (`file:` + path ending `/renderer/index.html`,
+  case-insensitive) is accepted. *(Unit-tested.)*

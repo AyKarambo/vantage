@@ -57,8 +57,9 @@ the app through Overwolf's approval flow — see *Status*.)
 
 The desktop shell is hardened to match: the renderer runs with **context isolation**
 and **sandbox** on, `nodeIntegration` off, behind a strict **CSP** (`default-src 'none'`),
-and the window **denies in-page navigation and popups** — so the renderer stays a
-contained surface. External links open only through the main process.
+and the window **denies in-page navigation and popups**. The main process **validates the
+sender** of every IPC message (dropping anything not from the app's own renderer) — so the
+renderer stays a contained surface. External links open only through the main process.
 
 ## Status
 

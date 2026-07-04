@@ -20,3 +20,30 @@ export function hardenWebContents(contents: WebContents): void {
   contents.on('will-navigate', (event) => event.preventDefault());
   contents.on('will-redirect', (event) => event.preventDefault());
 }
+
+/**
+ * True only for the app's own renderer bundle page — a local `file:` URL whose
+ * path is the dashboard's `renderer/index.html` (works in dev and packed/asar).
+ * Anything else (a remote origin, another local file, a stray subframe) is
+ * rejected.
+ */
+export function isTrustedSenderUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'file:' && /\/renderer\/index\.html$/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates the *sender* of an incoming IPC message: it must originate from the
+ * app's own renderer frame (Electron security checklist #17 — defense-in-depth
+ * behind the narrow preload). Any web frame — including subframes or child
+ * windows — can address `ipcMain`, so main re-checks rather than trusting that
+ * only our bridge can call. Structural event type → no Electron import at
+ * runtime, unit-testable with a plain object.
+ */
+export function isTrustedIpcEvent(event: { senderFrame: { url: string } | null }): boolean {
+  return event.senderFrame != null && isTrustedSenderUrl(event.senderFrame.url);
+}

@@ -96,8 +96,59 @@ strict CSP, and no in-window navigation or popups — so the renderer stays a co
 6. **Test lives in `test/` (excluded from `tsconfig.json`).** vitest transpiles via esbuild and
    strips the type-only import + `as unknown as WebContents` cast, so no Electron load at test time.
 
+## Addendum (post-research): IPC sender validation
+
+### 5. `src/main/dashboard/webContentsSecurity.ts` (extend)
+
+Two pure predicates (structural event type → no runtime Electron import, unit-testable):
+
+```ts
+export function isTrustedSenderUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'file:' && /\/renderer\/index\.html$/i.test(u.pathname);
+  } catch { return false; }
+}
+export function isTrustedIpcEvent(event: { senderFrame: { url: string } | null }): boolean {
+  return event.senderFrame != null && isTrustedSenderUrl(event.senderFrame.url);
+}
+```
+
+### 6. `src/main/dashboard/ipcHandlers.ts` (wrap once, not 30 edits)
+
+Add local `handle`/`on` wrappers that validate the sender, then swap the ~30 `ipcMain.handle` /
+3 `ipcMain.on` call sites to them. The wrappers call **bound** `rawHandle`/`rawOn`
+(`ipcMain.handle.bind(ipcMain)`) so the mechanical `ipcMain.handle(` → `handle(` replace can't
+recurse into the wrapper bodies. `handle` throws on an untrusted sender (the renderer's invoke
+rejects); `on` silently drops. Signatures mirror Electron's own (`...args: any[]`) so every typed
+call site is unchanged.
+
+### 7. `test/webContentsSecurity.test.ts` (extend) + docs
+
+Cover `isTrustedSenderUrl` (dev path, asar path, case-insensitive, remote origin, wrong page,
+unrelated file, malformed) and `isTrustedIpcEvent` (trusted, foreign, null frame). Add sender
+validation to the architecture doc's security section and the README note.
+
+### Gotchas (sender validation)
+
+7. **Bind before replace.** The wrappers must reference `rawHandle`/`rawOn`, never
+   `ipcMain.handle(`/`ipcMain.on(`, or the global find-replace of call sites recurses into them.
+8. **`any[]` in the wrapper signature is deliberate** — it mirrors Electron's own `ipcMain.handle`
+   type so the existing per-channel typed listeners stay assignable (contravariance would reject
+   `unknown[]`). It does not weaken the contract: argument types remain enforced at each call site.
+9. **Allowlist must survive packing.** `pathname` ends with `/renderer/index.html` in both dev and
+   asar builds; validated in tests for both.
+10. **Do NOT add runtime argument schemas** — the research refuted (0-3) the "validate every
+    argument against a schema" claim as over-strong for a trusted local renderer. Sender-frame
+    validation only.
+11. **ow-electron / Overwolf** may create its own webContents (GEP, overlays); those are not the
+    dashboard renderer and never call `owstats` handlers, so the allowlist neither blocks nor
+    depends on them. (Open question flagged in the research; low practical risk since no remote
+    content is loaded into the dashboard.)
+
 ## Definition of Done (from the spec)
 
 `npm test` green · `npm run typecheck` clean (main + renderer) · `npm run build` clean (preload
-bundle intact) · `hardenWebContents` unit-tested (H1–H3) · README Account-safety note added · no
-guardrail weakened · **no other module refactored** (the review's explicit constraint).
+bundle intact) · `hardenWebContents` + `isTrustedSenderUrl`/`isTrustedIpcEvent` unit-tested
+(H1–H3, H7–H10) · README + architecture-doc security notes added · no guardrail weakened ·
+**no other module refactored** (the review's explicit constraint).

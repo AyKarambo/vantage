@@ -151,15 +151,21 @@ defense-in-depth behind guardrail 1 (account safety). Four layers keep it contai
 2. **Strict CSP.** [`renderer/index.html`](../../renderer/index.html) sets
    `default-src 'none'; script-src 'self'` — no inline scripts, no `eval`, no remote code
    (also guardrail 4, and a store-review requirement).
-3. **One curated bridge.** The renderer reaches main *only* through `window.owstats`
-   (the typed contract), never raw `ipcRenderer`.
+3. **One curated bridge, sender-checked.** The renderer reaches main *only* through
+   `window.owstats` (the typed contract), never raw `ipcRenderer`. And main doesn't just
+   trust the preload: the `handle`/`on` wrappers in
+   [`ipcHandlers.ts`](../../src/main/dashboard/ipcHandlers.ts) run
+   [`isTrustedIpcEvent`](../../src/main/dashboard/webContentsSecurity.ts) on every message
+   and drop anything whose sender frame isn't our own `renderer/index.html` (Electron
+   security checklist #17 — any frame can address `ipcMain`, so main re-validates).
 4. **Navigation-locked.**
    [`webContentsSecurity.ts`](../../src/main/dashboard/webContentsSecurity.ts) denies
    popups and blocks any navigation away from the loaded bundle. External links are
    opened deliberately, from the main process, via `shell.openExternal`.
 
 Net effect: nothing the renderer does can escape the page or step outside the typed
-contract. When you add a window or load anything, keep all four layers intact.
+contract. When you add a window, an IPC channel, or load anything, keep all four layers
+intact — new channels go through the `handle`/`on` wrappers, not raw `ipcMain`.
 
 ## The Notion edge (optional by design)
 
