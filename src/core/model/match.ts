@@ -1,36 +1,10 @@
-/**
- * Domain types for the Overwatch → Notion Gametracker sync.
- *
- * These are intentionally free of any Electron / Overwolf / Notion imports so the
- * whole `core/` layer stays pure and unit-testable.
- */
-
-/** Notion `Role` select options. */
-export type Role = 'damage' | 'tank' | 'support' | 'openQ';
-
-/** Notion `Result` select options. */
-export type Result = 'Win' | 'Loss' | 'Draw';
-
-/** Which matches we persist. Mirrors the user's decision (Competitive only by default). */
-export type LogFilter = 'Competitive' | 'CompetitiveAndQuickPlay' | 'Everything';
+import type { Role } from './enums';
 
 /**
- * A single normalized GEP message. Both `new-info-update` and `new-game-event`
- * arrive from Overwolf as `{ gameId, feature, category?, key, value }`
- * (see @overwolf/ow-electron-packages-types modules/gep.d.ts).
+ * The mutually referential match-record trio: a match holds a roster of
+ * players and a per-hero breakdown, so they're defined together with the
+ * record's constructor to avoid a circular split.
  */
-export interface GepMessage {
-  /** 'info' = persistent state update, 'event' = discrete occurrence. */
-  kind: 'info' | 'event';
-  /** The GEP feature, e.g. 'game_info', 'match_info', 'roster', 'kill'. */
-  feature: string;
-  /** Info-update category (events have none). */
-  category?: string;
-  /** The info/event key, e.g. 'map', 'match_outcome', 'match_start'. */
-  key: string;
-  /** Raw value — may be a primitive or an already-parsed object. */
-  value: unknown;
-}
 
 /**
  * A roster entry for one player as reported by GEP. The feed may deliver the
@@ -51,6 +25,18 @@ export interface RosterPlayer {
   mitigation?: number;
   /** Set by the aggregator on the tracked player's entry (BattleTag match). */
   isLocal?: boolean;
+}
+
+/** Per-hero totals for the local player (one entry per hero used in a match). */
+export interface HeroStat {
+  hero: string;
+  role?: Role;
+  eliminations: number;
+  deaths: number;
+  assists: number;
+  damage: number;
+  healing: number;
+  mitigation: number;
 }
 
 /**
@@ -91,29 +77,7 @@ export interface MatchRecord {
   durationMinutes?: number;
 }
 
-/** Per-hero totals for the local player (one entry per hero used in a match). */
-export interface HeroStat {
-  hero: string;
-  role?: Role;
-  eliminations: number;
-  deaths: number;
-  assists: number;
-  damage: number;
-  healing: number;
-  mitigation: number;
-}
-
 /** Create an empty, mutable record with a given match id. */
 export function emptyMatch(matchId: string): MatchRecord {
   return { matchId, heroes: [] };
-}
-
-/**
- * A BattleTag's normalized identity: the name before `#`, trimmed and
- * lowercased. GEP sometimes drops the discriminator, so identity comparisons
- * (local-player detection, the player-encounter index) all use this one form.
- */
-export function battleTagName(tag: string): string {
-  const hash = tag.indexOf('#');
-  return (hash >= 0 ? tag.slice(0, hash) : tag).trim().toLowerCase();
 }

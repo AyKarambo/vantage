@@ -33,6 +33,8 @@ interface RawGepData {
  * when detected, requests all features, and re-emits normalized {@link GepMessage}s.
  *
  * Emits: 'message' (GepMessage), 'status' (GepStatus), 'log' (string, ...args).
+ *
+ * Extends EventEmitter deliberately — an idiomatic Node push-source; the injectable, testable seam is `pipeline.feed` one level up.
  */
 export class GepService extends EventEmitter {
   private gep?: GepApi;

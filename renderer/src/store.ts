@@ -117,4 +117,9 @@ function persistFilters(filters: DashboardFilters): void {
   }
 }
 
+/**
+ * Decision record: deliberately a module singleton today. `ViewContext` is the
+ * seam where constructor injection would go if renderer unit tests arrive —
+ * don't re-litigate this without that payoff.
+ */
 export const store = new Store();

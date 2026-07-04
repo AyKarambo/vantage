@@ -1,6 +1,6 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
-import type { BreakReminderSettings, MentalSummary } from '../../../src/shared/contract';
+import type { BreakReminderSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
@@ -68,6 +68,3 @@ function breakReminderEditor(ctx: ViewContext): HTMLElement {
     ),
   );
 }
-
-// Keep the type import meaningful for readers of the module surface.
-export type { MentalSummary };

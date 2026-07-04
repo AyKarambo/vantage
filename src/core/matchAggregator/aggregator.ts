@@ -1,5 +1,3 @@
-import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from './model';
-
 /**
  * Accumulates the GEP message stream into one {@link MatchRecord} per match.
  *
@@ -7,33 +5,14 @@ import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRe
  * value per (feature,key), resolve the local player out of the roster by BattleTag,
  * and emit a finished record when the match ends.
  *
- * NOTE: GEP feature/key spellings for Overwatch 2 can shift between game patches.
- * All names we depend on are centralized in the `K` table below so they are easy to
- * adjust after inspecting a real capture (every raw message is logged by the app).
+ * Pure and Electron-free — the GEP edge in `src/main` owns the I/O and feeds
+ * normalized messages in (guardrail #1: GEP is the only live data source).
  */
-const K = {
-  gameInfo: 'game_info',
-  matchInfo: 'match_info',
-  roster: 'roster',
-  battleTag: 'battle_tag',
-  gameType: 'game_type',
-  queueType: 'game_queue_type',
-  gameState: 'game_state',
-  partySize: 'party_player_count',
-  map: 'map',
-  pseudoMatchId: 'pseudo_match_id',
-  matchId: 'match_id',
-  outcome: 'match_outcome',
-  roundOutcome: 'round_outcome',
-  eliminations: 'eliminations',
-  deaths: 'deaths',
-  assists: 'assists',
-  damage: 'damage',
-  healing: 'healing',
-  mitigation: 'mitigation',
-  score: 'score',
-} as const;
+import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from '../model';
+import { K } from './keys';
+import { asNumber, asString, parseRoster } from './gepValues';
 
+/** The stateful accumulator: feed messages to `handle`, receive a finished record on match end. */
 export class MatchAggregator {
   private now: () => number;
   private synthetic = 0;
@@ -303,69 +282,4 @@ function isLocal(playerTag: string | undefined, localTag: string | undefined): b
   if (!playerTag || !localTag) return false;
   const a = battleTagName(playerTag);
   return a === battleTagName(localTag) && a.length > 0;
-}
-
-/** Parse a roster value (object or JSON string) into a RosterPlayer, tolerating field aliases. */
-export function parseRoster(value: unknown): RosterPlayer | undefined {
-  const obj = asObject(value);
-  if (!obj) return undefined;
-  const pick = (...keys: string[]): unknown => {
-    for (const k of keys) {
-      const found = caseInsensitiveGet(obj, k);
-      if (found !== undefined) return found;
-    }
-    return undefined;
-  };
-  const player: RosterPlayer = {
-    battleTag: asString(pick('battleTag', 'battletag', 'name', 'player', 'playerName')),
-    heroName: asString(pick('heroName', 'hero_name', 'hero', 'character')),
-    heroRole: asString(pick('heroRole', 'hero_role', 'role')),
-    team: asNumber(pick('team', 'team_id', 'teamId')),
-    kills: asNumber(pick('kills', 'eliminations', 'elims')),
-    deaths: asNumber(pick('deaths')),
-    assists: asNumber(pick('assists')),
-    damage: asNumber(pick('damage', 'hero_damage', 'heroDamage', 'damage_dealt')),
-    healing: asNumber(pick('healing', 'healing_done', 'healingDone')),
-    mitigation: asNumber(pick('mitigation', 'damage_mitigated', 'damageMitigated')),
-  };
-  return player;
-}
-
-function caseInsensitiveGet(obj: Record<string, unknown>, key: string): unknown {
-  if (key in obj) return obj[key];
-  const lower = key.toLowerCase();
-  for (const k of Object.keys(obj)) if (k.toLowerCase() === lower) return obj[k];
-  return undefined;
-}
-
-export function asObject(value: unknown): Record<string, unknown> | undefined {
-  if (value && typeof value === 'object') return value as Record<string, unknown>;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
-      } catch {
-        return undefined;
-      }
-    }
-  }
-  return undefined;
-}
-
-export function asString(value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return undefined;
-}
-
-export function asNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const n = Number(value.replace(/[, ]/g, ''));
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
 }

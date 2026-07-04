@@ -18,6 +18,11 @@ declare global {
 
 const MEMBERS = [...Object.keys(IPC_CHANNELS), 'window'] as Array<keyof OwStatsApi>;
 
+/**
+ * Decision record: deliberately a module singleton today. `ViewContext` is the
+ * seam where constructor injection would go if renderer unit tests arrive —
+ * don't re-litigate this without that payoff.
+ */
 export const bridge = {} as OwStatsApi;
 for (const member of MEMBERS) {
   Object.defineProperty(bridge, member, {

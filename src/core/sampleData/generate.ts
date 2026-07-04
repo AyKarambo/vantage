@@ -1,6 +1,6 @@
-import type { GameRecord, HeroStat } from './analytics';
-import type { Result, Role, RosterPlayer } from './model';
-import { MAP_MODES } from './maps';
+import type { GameRecord, HeroStat } from '../analytics';
+import type { Result, Role, RosterPlayer } from '../model';
+import { ACCOUNT_WR, ACCOUNTS, HEROES, MAPS, PLAYER_POOL, ROLE_WR, ROLES, ROSTER_ROLES } from './fixtures';
 
 /**
  * Generates a realistic season of games (deterministic, seeded) so the dashboard
@@ -8,36 +8,7 @@ import { MAP_MODES } from './maps';
  * `GameRecord` shape is produced from GEP at runtime.
  */
 
-const MAPS = MAP_MODES;
-
-const HEROES: Record<Role, string[]> = {
-  tank: ['Reinhardt', 'Orisa', 'Sigma', 'Winston', 'Zarya', 'D.Va', 'Junker Queen', 'Ramattra', 'Mauga', 'Hazard'],
-  damage: ['Tracer', 'Genji', 'Cassidy', 'Soldier: 76', 'Ashe', 'Sojourn', 'Sombra', 'Mei', 'Reaper', 'Echo'],
-  support: ['Ana', 'Baptiste', 'Illari', 'Juno', 'Kiriko', 'Lúcio', 'Mercy', 'Moira', 'Zenyatta'],
-  openQ: ['Reinhardt', 'Tracer', 'Ana'],
-};
-
-const ACCOUNTS = ['Main', 'Smurf', 'Alt', 'Climb'];
-const ROLES: Role[] = ['tank', 'damage', 'support'];
-
-/** Role-queue team composition used for sample rosters. */
-const ROSTER_ROLES: Role[] = ['tank', 'damage', 'damage', 'support', 'support'];
-
-/**
- * A small recurring pool of other players so the Player History index has
- * repeat encounters to find. A few entries deliberately lack the `#`
- * discriminator to exercise name normalization.
- */
-const PLAYER_POOL = [
-  'Nova#11214', 'Vex#2321', 'Mirage#1123', 'Falcon#21500', 'Kestrel#1441',
-  'Onyx#3110', 'Drift#1998', 'Pixel', 'Rune#11841', 'Saber#2280',
-  'Willow#1373', 'Ghost#21058', 'Ember#1550', 'Frost#31240', 'Blitz',
-  'Lyric#1216', 'Quartz#1899', 'Havoc#23041', 'Zephyr#1002', 'Ash#31217',
-];
-
-const ACCOUNT_WR: Record<string, number> = { Main: 0.56, Smurf: 0.49, Alt: 0.5, Climb: 0.44 };
-const ROLE_WR: Record<string, number> = { tank: 0.52, damage: 0.49, support: 0.54, openQ: 0.5 };
-
+/** Seeded PRNG (mulberry32) so the generated season is reproducible. */
 function mulberry32(seed: number) {
   return () => {
     seed |= 0;
@@ -48,6 +19,7 @@ function mulberry32(seed: number) {
   };
 }
 
+/** Deterministically generate a season of demo games for the browser preview and first-run UI. */
 export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
   const rnd = mulberry32(seed);
   const pick = <T>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];

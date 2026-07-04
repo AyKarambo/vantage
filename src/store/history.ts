@@ -18,10 +18,12 @@ export class HistoryStore {
     this.games = this.load();
   }
 
+  /** Snapshot of every stored game. */
   all(): GameRecord[] {
     return [...this.games];
   }
 
+  /** True if a game with this match id is already stored. */
   has(matchId: string): boolean {
     return this.games.some((g) => g.matchId === matchId);
   }
@@ -34,6 +36,7 @@ export class HistoryStore {
     return true;
   }
 
+  /** Total number of stored games. */
   count(): number {
     return this.games.length;
   }

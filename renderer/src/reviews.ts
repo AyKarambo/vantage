@@ -14,7 +14,13 @@ import { bridge } from './bridge';
 
 const LEGACY_KEY = 'vantageReviews';
 
-/** Match ids graded since the last refetch — hides them from the inbox/badge. */
+/**
+ * Match ids graded since the last refetch — hides them from the inbox/badge.
+ *
+ * Decision record: deliberately module-level mutable state today. If renderer
+ * unit tests arrive, this belongs in per-session state passed through
+ * `ViewContext` — don't re-litigate this without that payoff.
+ */
 export const gradedThisSession = new Set<string>();
 
 /** The pre-pipeline localStorage shapes (renderer-local flag names). */

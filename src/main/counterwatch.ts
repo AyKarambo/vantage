@@ -13,6 +13,8 @@ import { parseUnifiedMatches } from '../core/counterwatchParse';
  * match to the same Notion pipeline GEP would have used.
  *
  * Emits: 'match' (MatchRecord), 'log' (string, ...args).
+ *
+ * Extends EventEmitter deliberately — an idiomatic Node push-source; the injectable, testable seam is `pipeline.addMatch` one level up (matches arrive pre-aggregated, so they skip the GEP aggregator).
  */
 export class CounterwatchReader extends EventEmitter {
   private dir?: string;

@@ -10,20 +10,23 @@ import { ManualStore } from '../store/manualLog';
 import { GepService, type GepStatus } from './gep';
 import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
-import type { GepMessage, MatchRecord } from '../core/model';
-import { matchToGame } from '../core/gameRecord';
-import { streak, type GameRecord } from '../core/analytics';
-import {
-  nextBreakReminder, normalizeBreakReminder, INITIAL_BREAK_REMINDER_STATE,
-  type BreakReminderState,
-} from '../core/breakReminder';
+import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
 import { CounterwatchReader } from './counterwatch';
-import { DashboardWindow, type DataProvider } from './dashboard';
+import { DashboardWindow } from './dashboard';
+import { createMatchPipeline } from './matchPipeline';
+import { createDataProvider } from './dataProvider';
 import { TrayController, type TrayHandlers } from './tray';
 import { isAutoLaunchEnabled, setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
 import { GepRecorder, readRecording, replayRecording } from './recorder';
+
+/**
+ * THE composition root of the main process: all wiring lives here; modules
+ * receive dependencies, they never construct them. Owns the single-instance
+ * lock, constructs every concrete service, feeds the factories (match pipeline,
+ * data provider), picks the sensor, and starts the dev simulate/replay paths.
+ */
 
 // Single instance: a second launch just focuses the existing one.
 if (!app.requestSingleInstanceLock()) {
@@ -49,8 +52,6 @@ function main(): void {
   screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
-  let reminderState: BreakReminderState = INITIAL_BREAK_REMINDER_STATE;
-
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
@@ -60,77 +61,25 @@ function main(): void {
     onError: (title, body) => tray.notifyError(title, body),
   });
 
-  /**
-   * Persist a finished game and, on success, evaluate the break reminder against
-   * the unfiltered history — a manually logged loss counts the same as a live one.
-   * Reminder state is in-memory only: a restart re-arms it (accepted trade-off).
-   * Returns whether the game was newly added (false = duplicate matchId).
-   */
-  function recordGame(game: GameRecord): boolean {
-    if (!history.add(game)) return false;
-    const s = streak(history.all());
-    const { fire, state } = nextBreakReminder(s, config.breakReminder, reminderState);
-    reminderState = state;
-    if (fire) {
-      tray.notify('Time for a break?', `That's ${s.count} losses in a row — step away for a few minutes.`);
-    }
-    return true;
-  }
+  const pipeline = createMatchPipeline({
+    history,
+    aggregator,
+    screenshots,
+    getConfig: () => config,
+    notify: (title, body) => tray.notify(title, body),
+    log: (...args: unknown[]) => console.log(...args),
+  });
 
-  const dataProvider: DataProvider = {
-    games: () => (history.count() ? history.all() : generateSampleGames()),
-    isSample: () => history.count() === 0,
-    exportToNotion: (games) => notion.export(games),
-    notionStatus: () => notion.status(),
-    setNotionToken: (token) => notion.setToken(token),
-    clearNotionToken: () => notion.clearToken(),
-    manualTargets: () => manual.targets(),
-    saveTarget: (input) => {
-      manual.addTarget({
-        id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input,
-      });
-    },
-    saveReview: (input) => {
-      history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
-    },
-    importReviews: (inputs) =>
-      history.setReviews(inputs.map((i) => ({
-        matchId: i.matchId,
-        review: { at: Date.now(), grades: i.grades, flags: i.flags },
-      }))),
-    updateTarget: (input) => {
-      manual.updateTarget(input.id, { name: input.name, mode: input.mode, rule: input.rule });
-    },
-    setTargetActive: (id, active) => manual.setActive(id, active),
-    setTargetArchived: (id, archived) => manual.setArchived(id, archived),
-    deleteTarget: (id) => manual.removeTarget(id),
-    logMatch: (input) => {
-      const matchId = `manual-${Date.now()}`;
-      recordGame({
-        matchId,
-        timestamp: Date.now(),
-        account: Object.values(config.accounts)[0] ?? 'You',
-        role: input.role,
-        map: input.map,
-        result: input.result,
-        gameType: input.gameType,
-        heroes: input.hero ? [input.hero] : [],
-        mental: input.mental,
-      });
-      tray.notify('Match logged', `${input.result} · ${input.map}`);
-      return { matchId };
-    },
-    getBreakReminder: () => config.breakReminder,
-    setBreakReminder: (input) => {
-      config.breakReminder = normalizeBreakReminder(input);
-      saveLocalConfig({ breakReminder: config.breakReminder });
-      return config.breakReminder;
-    },
-    listNotionDatabases: () => notion.listDatabases(),
-    listNotionPages: () => notion.listPages(),
-    selectNotionDatabase: (databaseId) => notion.selectDatabase(databaseId),
-    createNotionDatabase: (parentPageId) => notion.createDatabase(parentPageId),
-  };
+  const dataProvider = createDataProvider({
+    history,
+    manual,
+    notion,
+    getConfig: () => config,
+    persistBreakReminder: (breakReminder) => saveLocalConfig({ breakReminder }),
+    recordGame: (game) => pipeline.recordGame(game),
+    notify: (title, body) => tray.notify(title, body),
+    sampleGames: generateSampleGames,
+  });
 
   const handlers: TrayHandlers = {
     onOpenDashboard: () => dashboard.open(),
@@ -167,29 +116,9 @@ function main(): void {
   // icon while it's already running) must bring the window to the front.
   app.on('second-instance', () => dashboard.open());
 
-  /** Persist a finished match into the analyzable history. */
-  function addMatch(record: MatchRecord): void {
-    const game = matchToGame(record, config.accounts);
-    if (!game || !recordGame(game)) return;
-    // Best-effort end-of-match capture (~2s later, while the summary screen is
-    // up). Every failure inside is a logged no-op; a manual log never gets here.
-    screenshots.capture(game.matchId, (paths) => {
-      if (history.addScreenshots(game.matchId, paths)) {
-        console.log('[shots]', paths.length, 'screenshot(s) attached to', game.matchId);
-      }
-    });
-  }
-
-  // One entry point for a normalized GEP message — shared by the live feed and
-  // dev simulation so both exercise the same pipeline.
-  const feed = (msg: GepMessage): void => {
-    const record = aggregator.handle(msg);
-    if (record) addMatch(record);
-  };
-
   if (config.sensor === 'gep') {
     const gep = new GepService(config.overwatchGameId);
-    gep.on('message', feed);
+    gep.on('message', pipeline.feed);
     gep.on('status', (s: GepStatus) => tray.setState({ status: statusText(s, history.count()) }));
     gep.on('log', (...args: unknown[]) => console.log('[gep]', ...args));
 
@@ -203,7 +132,7 @@ function main(): void {
     }
   } else {
     const cw = new CounterwatchReader();
-    cw.on('match', (record) => addMatch(record));
+    cw.on('match', (record) => pipeline.addMatch(record));
     cw.on('log', (...args: unknown[]) => console.log('[cw]', ...args));
     cw.start();
   }
@@ -221,7 +150,7 @@ function main(): void {
   if (process.argv.includes('--simulate') || process.env.OW_SYNC_SIMULATE === '1') {
     const battleTag = Object.keys(config.accounts)[0] ?? 'Karambo#0000';
     setTimeout(() => {
-      void runSimulation(feed, (m) => console.log('[sim]', m), { battleTag, map: "King's Row" });
+      void runSimulation(pipeline.feed, (m) => console.log('[sim]', m), { battleTag, map: "King's Row" });
     }, 1500);
   }
 
@@ -231,7 +160,7 @@ function main(): void {
     setTimeout(() => {
       try {
         const entries = readRecording(replayFile);
-        void replayRecording(entries, feed, { realtime: true, log: (m) => console.log('[replay]', m) });
+        void replayRecording(entries, pipeline.feed, { realtime: true, log: (m) => console.log('[replay]', m) });
       } catch (err) {
         console.error('[replay] failed to read recording', replayFile, err);
       }

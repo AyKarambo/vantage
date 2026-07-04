@@ -1,8 +1,15 @@
-import { app, safeStorage } from 'electron';
+import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { LogFilter } from '../core/model';
-import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../core/breakReminder';
+import type { LogFilter } from '../../core/model';
+import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/breakReminder';
+
+/**
+ * The AppConfig shape and its layered persistence: bundled appsettings.json
+ * defaults merged under the user's machine-local overrides. Main-process only
+ * (Electron userData paths); the Notion token lives in ./notionToken, both
+ * re-exported through ./index.
+ */
 
 export interface NotionConfig {
   gametrackerDatabaseId: string;
@@ -41,9 +48,6 @@ const DEFAULTS: AppConfig = {
 /** Per-user, machine-local files (survive app updates, never committed). */
 export function userConfigPath(): string {
   return path.join(app.getPath('userData'), 'config.local.json');
-}
-function tokenPath(): string {
-  return path.join(app.getPath('userData'), 'notion-token.bin');
 }
 
 /** Bundled, version-controlled defaults shipped next to the app. */
@@ -115,34 +119,6 @@ export function notionDatabaseSource(): 'selected' | 'appsettings' | 'none' {
   const merged = loadConfig();
   if (merged.notion.gametrackerDatabaseId) return 'appsettings';
   return 'none';
-}
-
-// --- Notion token (encrypted at rest) ----------------------------------------
-
-export function getNotionToken(): string | undefined {
-  if (process.env.NOTION_TOKEN) return process.env.NOTION_TOKEN;
-  try {
-    const buf = fs.readFileSync(tokenPath());
-    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
-    return buf.toString('utf8');
-  } catch {
-    return undefined;
-  }
-}
-
-export function setNotionToken(token: string): void {
-  const data = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(token)
-    : Buffer.from(token, 'utf8');
-  fs.writeFileSync(tokenPath(), data);
-}
-
-export function clearNotionToken(): void {
-  try {
-    fs.rmSync(tokenPath(), { force: true });
-  } catch {
-    /* already gone */
-  }
 }
 
 /** Drop the `_*Help` annotation keys used in appsettings.json. */

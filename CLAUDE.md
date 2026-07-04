@@ -30,7 +30,8 @@ Notion export. Built on **ow-electron** (Overwolf's Electron) — a frameless de
 - **Folders:**
   - `src/core/` — pure, Electron-free domain logic (analytics, dashboardData, mental,
     progression, targets, maps, resolvers). Fully unit-tested.
-  - `src/shared/contract.ts` — the single typed IPC contract shared by main **and** renderer.
+  - `src/shared/contract/` — the single typed IPC contract shared by main **and** renderer,
+    barreled through an `index.ts` so consumers still import from `'shared/contract'`.
   - `src/main/` — window, tray, GEP, preload, config. `src/store/` — local persistence.
     `src/notion/` — optional export edge.
   - `renderer/src/` — `components/`, `charts/` (dependency-free SVG), `views/` (one per screen),

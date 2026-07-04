@@ -28,10 +28,12 @@ export class OutboxStore {
     this.state = this.load();
   }
 
+  /** True once `matchId` has been successfully written to Notion. */
   isProcessed(matchId: string): boolean {
     return this.state.processed.includes(matchId);
   }
 
+  /** Record a successful Notion write, trimming the dedupe list to `maxProcessed`. */
   markProcessed(matchId: string): void {
     if (this.isProcessed(matchId)) return;
     this.state.processed.push(matchId);
@@ -48,12 +50,14 @@ export class OutboxStore {
     this.save();
   }
 
+  /** Drop a match from the retry queue, e.g. once it's exported. */
   remove(matchId: string): void {
     const before = this.state.pending.length;
     this.state.pending = this.state.pending.filter((r) => r.matchId !== matchId);
     if (this.state.pending.length !== before) this.save();
   }
 
+  /** Snapshot of matches still queued for (re)try. */
   pending(): MatchRecord[] {
     return [...this.state.pending];
   }

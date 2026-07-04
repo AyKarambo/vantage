@@ -1,19 +1,10 @@
 import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
 import { buildGametrackerProperties, validateGametrackerShape, type ShapeValidation } from './gametrackerSchema';
+import type { NotionDatabaseSummary, NotionPageSummary } from '../shared/contract';
+export type { NotionDatabaseSummary, NotionPageSummary };
 
-export interface NotionDatabaseSummary {
-  id: string;
-  title: string;
-  url?: string;
-}
-
-export interface NotionPageSummary {
-  id: string;
-  title: string;
-  url?: string;
-}
-
+/** Result of `createGametracker` — ids/urls for the two databases it provisions. */
 export interface CreateGametrackerResult {
   gametrackerDatabaseId: string;
   gametrackerUrl?: string;
@@ -21,6 +12,7 @@ export interface CreateGametrackerResult {
   mapsUrl?: string;
 }
 
+/** Shape-check verdict for an existing database, plus its title for display in the picker. */
 export interface ValidateResult extends ShapeValidation {
   title?: string;
 }
@@ -104,6 +96,9 @@ export class NotionAdmin {
     return results;
   }
 }
+
+// Near-duplicate of mapsCache's extractTitle — kept separate deliberately (dedupe would
+// couple admin to the exporter for ~10 lines); this documents the duplication instead of "fixing" it.
 
 /** Database objects carry their title as rich-text directly on `.title`. */
 function titleOfDatabase(db: any): string {

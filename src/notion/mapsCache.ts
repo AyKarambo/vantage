@@ -16,6 +16,7 @@ export class MapsCache {
     private readonly aliases: Record<string, string> = {},
   ) {}
 
+  /** (Re)load the full Maps database into the in-memory index. */
   async load(): Promise<void> {
     if (!this.mapsDatabaseId) {
       this.index = new Map();
