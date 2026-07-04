@@ -209,8 +209,9 @@ flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that'
 8. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
 
 **Code signing (required BEFORE Overwolf will review — the submission form gates on it).** The exe
-must carry a **trusted-CA** signature (self-signed is rejected). Free route: **SignPath Foundation**
-(Sectigo-issued) — see [docs/signing.md](signing.md). For a local `.pfx` from any CA, ow-electron-builder
+must carry a **trusted-CA** signature (self-signed is rejected). Chosen route: **Certum OV cert +
+SimplySign**, signed locally with `npm run sign:local` before each upload (no CI automation — see
+[docs/signing.md](signing.md) for why). For a local `.pfx` from any CA, ow-electron-builder
 is electron-builder under the hood, so **no `package.json` change is needed** — set the standard env
 vars at release time:
 

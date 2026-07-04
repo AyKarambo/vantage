@@ -1,17 +1,10 @@
-# Build the Windows installer and (optionally) sign it via SignPath Foundation.
+# Build the Windows installer. CI always produces an UNSIGNED artifact.
 #
-# The build job always runs and uploads an UNSIGNED installer — that is enough for
-# Overwolf DevRel QA. The sign job is inert until SignPath is connected: it only runs
-# when the repo variable SIGNING_ENABLED == 'true' (set it after the SignPath project
-# is approved, together with the secret/vars listed under "SignPath setup" below).
-#
-# SignPath setup (Phase 2 — fill after approval at https://signpath.org/apply):
-#   Repo → Settings → Secrets and variables → Actions
-#     Secret   SIGNPATH_API_TOKEN          — CI user token from SignPath
-#     Variable SIGNPATH_ORGANIZATION_ID    — your SignPath organization id (GUID)
-#     Variable SIGNPATH_PROJECT_SLUG       — e.g. "vantage"
-#     Variable SIGNPATH_POLICY_SLUG        — e.g. "release-signing"
-#     Variable SIGNING_ENABLED             — "true" to turn the sign job on
+# Signing is a manual, local step — see docs/signing.md. Certum's SimplySign cert is
+# built around interactive OTP approval (via the SimplySign mobile app) with sessions
+# capped at ~2 hours; there's no supported unattended/CI signing path for it, so we
+# don't try to fake one here. Download this artifact (or build locally) and run
+# `npm run sign:local` before uploading to the Overwolf App Store or a GitHub release.
 name: release
 
 on:
@@ -41,33 +34,4 @@ jobs:
         with:
           name: installer-unsigned
           path: release/*.exe
-          if-no-files-found: error
-
-  sign:
-    needs: build
-    runs-on: ubuntu-latest
-    # Inert until SignPath is connected. Enable by setting repo variable SIGNING_ENABLED=true.
-    if: ${{ vars.SIGNING_ENABLED == 'true' }}
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: installer-unsigned
-          path: ./unsigned
-      - name: Submit to SignPath for signing
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
-          github-artifact-id: installer-unsigned
-          wait-for-completion: true
-          output-artifact-directory: ./signed
-      - uses: actions/upload-artifact@v4
-        with:
-          name: installer-signed
-          path: ./signed/*
           if-no-files-found: error

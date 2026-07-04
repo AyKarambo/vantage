@@ -7,60 +7,80 @@ cert must be from a **trusted public CA** (per the ow-electron FAQ: *"a trusted 
 (e.g., DigiCert, Sectigo)"*) — a **self-signed certificate is not acceptable**. So signing is a
 **prerequisite for submission**, not a parallel/production-only task.
 
-## Chosen path: SignPath Foundation (free, for open source)
+## Chosen path: Certum Open Source Code Signing (on SimplySign), signed locally
 
-[SignPath Foundation](https://signpath.org/) issues a **free** OV code-signing certificate to
-qualifying open-source projects. The private key lives on their HSM and signing happens in the cloud
-via CI — you never handle the key. Certificates are issued by **Sectigo** (a trusted CA) and build
-Windows SmartScreen reputation.
+**Certum "Open Source Code Signing" certificate, SimplySign variant** (~€49/yr,
+[shop.certum.eu/open-source-code-signing-on-simplysign.html](https://shop.certum.eu/open-source-code-signing-on-simplysign.html))
+with **SimplySign** cloud-HSM key storage. Reasoning, compared to the alternatives:
 
-**Trade-off:** the Windows publisher shown on the signed binary is **"SignPath Foundation"**, not
-your name. (This is independent of Overwolf's app identity, which is derived from `package.json`
-`name` + `author`.) Confirm with Overwolf DevRel that a SignPath-signed build is acceptable.
+- **Azure Trusted Signing** is unavailable — it's gated to organizations based in the US/Canada.
+- **SignPath Foundation** is free for OSS, but requires a track record of external
+  contributors/stars that a new solo repo likely doesn't have yet, and the signed binary shows
+  publisher **"SignPath Foundation"**, not your name.
+- **Certum's regular OV/Standard cert** works too but costs much more (~€169–209/yr) and needs
+  full OV business/individual identity validation.
+- **Certum's Open Source tier** only requires a public URL showing you maintain the project
+  (Vantage: public, MIT-licensed, on GitHub — trivially qualifies) — much lower bar than SignPath
+  Foundation's reputation requirement. The private key never leaves Certum's HSM (satisfies the
+  post-2023 CA/Browser Forum requirement that code-signing keys live on FIPS-validated hardware),
+  and the certificate shows **"Open Source Developer, Timo Seikel"** as publisher — your name, not
+  a foundation's.
+- There's also a physical-smartcard "Open Source Code Signing - set" SKU (~€69 + shipping, ~€29/yr
+  renewal) — skip it; the SimplySign variant avoids the USB reader, shipping wait, and Windows
+  driver issues (`certutil -repairstore` etc.) that the physical-token route is known for.
 
-### Eligibility (per SignPath OSS terms)
-- OSI-approved license, no commercial dual-licensing — **Vantage is MIT ✓**
-- You own the source repository (public) — `AyKarambo/vantage`
-- Defined roles: **Authors / Reviewers / Approvers**, and **MFA** on both GitHub and SignPath
-- Builds run in CI so the signed artifact is attributable
+**Important:** SimplySign has **no supported unattended/CI signing path.** It's built around an
+interactive OTP approval from the SimplySign mobile app, and the resulting signing session is
+capped at ~2 hours. Certum's own docs don't offer a REST API or headless mode for this — the only
+"automation" floating around online is a fragile TOTP+UI-automation hack against SimplySign
+Desktop, which needs a persistent, pre-paired machine and isn't a good fit for GitHub-hosted
+runners. Rather than build something brittle, **CI keeps building an unsigned installer, and
+signing happens as a manual local step before each release goes out.**
 
 ### Setup steps
-1. Apply at <https://signpath.org/apply> with the public repo.
-2. After approval, create a SignPath **project** (slug e.g. `vantage`) and a **signing policy**
-   (e.g. `release-signing`), and a CI user with an API token.
-3. In the repo → **Settings → Secrets and variables → Actions**, add:
-   - Secret `SIGNPATH_API_TOKEN`
-   - Variables `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_POLICY_SLUG`
-   - Variable `SIGNING_ENABLED = true`
-4. Push a `v*` tag (or run the **release** workflow). The `sign` job in
-   [.github/workflows/release.yml](../.github/workflows/release.yml) submits the built installer to
-   SignPath and downloads the signed artifact.
+1. Buy the **Open Source Code Signing on SimplySign** certificate from Certum's shop (the
+   `-on-simplysign` SKU, not the `-code` or `-set` SKUs — those are for people who already own, or
+   want to buy, physical cryptoCertum hardware). You'll need to submit a public URL proving you
+   maintain the project (the GitHub repo works) plus identity verification (automatic photo-ID +
+   selfie video is the fastest option).
+2. After issuance, Certum enrolls you in **SimplySign**:
+   - Install the **SimplySign mobile app** (Android/iOS) — this is your OTP source.
+   - Install **SimplySign Desktop** on the Windows machine you'll sign releases from. It exposes
+     the cloud-held key to Windows as a virtual smart card once connected.
+3. Find your certificate's thumbprint once SimplySign Desktop is connected:
+   ```
+   certutil -store My
+   ```
+   (or read it from the SimplySign Desktop UI's certificate details).
 
-### Application answers (paste into signpath.org/apply)
-- **Project name:** Vantage
-- **Repository:** https://github.com/AyKarambo/vantage
-- **License:** MIT (`LICENSE` in repo root)
-- **Description:** An account-safe Overwatch 2 stats coach (desktop app on Overwolf's ow-electron).
-  Turns your own match history into priority maps, per-hero stats, mental tracking and improvement
-  targets. Reads only Overwolf's sanctioned Game Events Provider — no game-memory reads, no injection.
-- **What needs signing / why:** the Windows installer + app `exe` (built by ow-electron-builder).
-  Overwolf requires a trusted-CA signature before they will review/publish the app.
-- **Build system:** GitHub Actions — `.github/workflows/release.yml` (build is reproducible from the
-  public repo; the workflow already includes the SignPath submit-signing-request step).
-- **Maintainer / roles:** Timo Seikel (AyKarambo) — sole maintainer acting as Author, Reviewer and
-  Approver. MFA enabled on GitHub and SignPath.
-- **Distribution:** Overwolf App Store (free, ad-free app).
+### Signing a release
+```powershell
+npm run release                     # builds release/Vantage-Setup-<ver>.exe (unsigned)
+# Open SimplySign Desktop, enter the OTP from the SimplySign mobile app to connect
+npm run sign:local -- -Thumbprint <your cert thumbprint>
+```
+[scripts/sign-local.ps1](../scripts/sign-local.ps1) wraps `signtool sign` + `signtool verify`
+against whatever `.exe` it finds in `release/`. Set `$env:CERTUM_THUMBPRINT` once (e.g. in your
+PowerShell profile) to skip passing `-Thumbprint` every time.
 
-## Fallbacks (if SignPath defers a brand-new project)
-- **Stay unsigned for QA** — allowed; revisit before production.
-- **Azure Trusted Signing** — ~$9.99/mo, Microsoft CA, cloud API signing, builds reputation.
-  US/Canada org gated. Integrates with electron-builder via the Trusted Signing tool.
-- **Certum Open Source** — low-cost, trusted, but needs a hardware token / cloud key.
+CI ([.github/workflows/release.yml](../.github/workflows/release.yml)) only ever produces the
+unsigned artifact — download it, or build locally, then run the command above before uploading to
+the Overwolf App Store or attaching to a GitHub release.
+
+**Note:** Certum states it will revoke Open Source-tier certificates if it detects commercial
+software distribution. Vantage is free and ad-free by design, so this should be fine, but it's
+worth re-reading Certum's exact clause given distribution goes through the Overwolf App Store.
+
+## Fallbacks
+- **Stay unsigned for QA** — only if Overwolf DevRel confirms this is currently accepted; the
+  submission form's own copy says otherwise, so confirm before relying on it.
+- **SignPath Foundation** — revisit if Certum turns out to be a poor fit; free, has a real CI
+  GitHub Action, but publisher shows as "SignPath Foundation" and new-project approval is uncertain.
 - **Do not** use Sigstore for this — it is not trusted by Windows SmartScreen for `.exe`/`.dll`.
 
-## Local (non-SignPath) signing
-`ow-electron-builder` is electron-builder underneath, so a `.pfx` from any CA can be used locally
-with the standard env vars (no `package.json` change):
+## Local signing without SimplySign
+`ow-electron-builder` is electron-builder underneath, so any `.pfx`-based cert can be used locally
+via the standard env vars instead (no `package.json` change):
 
 ```bash
 export CSC_LINK="/path/to/cert.pfx"
