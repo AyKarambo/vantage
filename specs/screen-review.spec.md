@@ -1,7 +1,7 @@
 # Screen spec: Review (`review`)
 
-**Source:** `renderer/src/views/review.ts`, `renderer/src/reviews.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass
+**Source:** `renderer/src/views/review.ts`, `renderer/src/reviews.ts`, `renderer/src/shortcuts.ts`, `renderer/src/components/toast.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; sidebar shows a pending-review badge (`renderer/src/app/shell.ts`).
 
@@ -14,12 +14,14 @@
 - Pending inbox: tracked games without a saved review; first pending item pre-expanded. [implemented 2026-07-04] Derived from `DashboardData.reviewInbox`, which is always **unfiltered** — see Constraints.
 - Active-targets strip (with pointer to the Targets page when empty). [implemented 2026-07-04] "Active" now means the user-selected set — targets with `isActive && !archivedAt` — set on the Targets screen, not a positional placeholder.
 - Per-game grading card: ⚡ auto facts header (result, map, hero, role, time) · 3-way grade control per active target (starts unselected so it reads as "needs grading") · feel-flag chips (Tilted, Good comms, Toxic mate, Leaver) · **Save & next** · **Skip**.
+- [qol 2026-07-04] **Keyboard grading (H/P/M/S):** while a grading card is open, `H`/`P`/`M` grade the *focused* target row (Hit / Partial / Missed) and focus auto-advances to the next target in the card; `S` saves the open review (equivalent to Save & next — the saved game leaves the inbox and the next pending game's card is pre-expanded). The first target row starts focused (`is-focused` highlight); the card footer shows the hint "keys: H / P / M grade · S saves".
+- [qol 2026-07-04] **Save is undoable:** saving shows a toast "Review saved — `<map>`" with an **Undo** action (~6s, hover pauses). Undo calls `bridge.clearReview(matchId)`, which removes the stored review; the game returns to the inbox and the badge count.
 - Sidebar pending-count badge. [implemented 2026-07-04] Backed by `DashboardData.pendingReviews` — an unfiltered, uncapped count — minus games already graded this session (see Constraints).
 - "All caught up" positive empty state.
 
 ## Out-of-Scope
 
-- Editing or deleting a saved review (no UI path exists — unchanged; still out of scope after this pass).
+- Editing or deleting a saved review beyond the undo-toast window (see Known gaps — the toast's Undo is the only removal path, and it expires).
 - Creating targets (the strip points to the Targets page).
 
 ## Constraints
@@ -31,11 +33,16 @@
 - [implemented 2026-07-04] **The inbox is always unfiltered.** `reviewInbox` and `pendingReviews` are computed from the full, unfiltered history — narrowing the global account/role/mode/range filters never hides an ungraded game or changes the badge count. `reviewInbox` is capped at 150 rows for display; `pendingReviews` is an uncapped count.
 - [implemented 2026-07-04] **Active targets feed grading rows.** The grading strip = `targets.filter(t => t.isActive && !t.archivedAt)` from the current `DashboardData.targets`, sourced from the Targets screen's lifecycle state (see `screen-targets.spec.md`).
 - [implemented 2026-07-04] **Grades and flags feed downstream stats.** Flags OR-merge with quick-log flags into the Mental screen's composites and counts (each flag counts once per game, regardless of which surface set it). Grades feed the corresponding target's hit-rate, hits/attempts, sparkline (last 8 attempts), and win-when-hit/win-when-missed splits — an attempt is any grade; `partial` counts as an attempt but not a hit.
+- [qol 2026-07-04] **Keyboard shortcuts are gated, never leaky.** H/P/M/S register through the central shortcut registry (`screen-shell.spec.md`) with a `when` gate: they only fire while Review is the active view *and* the expanded card's element is still connected; the registry's own guards additionally block them while any text input has focus or an overlay is open. A stale hook (card unmounted) is inert.
+- [qol 2026-07-04] **Undo is a first-class IPC path.** `clearReview(matchId)` (channel `manual:clear-review`) removes `GameRecord.review` in the main store; the renderer drops the id from `gradedThisSession` and re-renders, restoring the game to the inbox without a refetch. Undoing re-opens the same unfiltered-inbox slot — no data is lost besides the cleared grades/flags.
 
 ## Acceptance Criteria (current behavior)
 
 - Given a tracked game with no saved review, when Review renders, then it appears in the inbox and in the sidebar badge count, regardless of the active global filters.
-- Given the user grades targets and/or toggles flags and clicks "Save & next", then `bridge.saveReview({ matchId, grades, flags })` persists `{ at, grades, flags }` onto the match's `GameRecord.review` in the main store, the match id is added to `gradedThisSession`, and the game visually leaves the inbox without a data refetch.
+- Given the user grades targets and/or toggles flags and clicks "Save & next" (or presses `S`), then `bridge.saveReview({ matchId, grades, flags })` persists `{ at, grades, flags }` onto the match's `GameRecord.review` in the main store, the match id is added to `gradedThisSession`, the game visually leaves the inbox without a data refetch, and a "Review saved" toast with Undo appears.
+- Given the Undo action is clicked before the toast expires, then `bridge.clearReview(matchId)` removes the stored review and the game reappears in the inbox (and the badge count).
+- Given an expanded card with focused target, when I press `H` (or `P`/`M`), then that target is graded Hit (Partial/Missed) and focus moves to the next target row; grading the last target keeps it focused (keys re-grade it) until `S` saves.
+- Given focus is in a text input or an overlay is open, or Review is not the active view, then H/P/M/S do nothing.
 - Given the user clicks "Skip", then the card collapses and the game remains pending.
 - Given no active targets, when a grading card expands, then it shows "No active targets yet — add some on the Targets page to grade them here." instead of grade rows.
 - Given every tracked game has a review, then the "All caught up — every tracked game has your read. 🎯" card is shown.
@@ -45,10 +52,11 @@
 
 ## Known gaps (intent ≠ code)
 
-None identified — behavior matches intent. One out-of-scope item remains unchanged:
+None identified — behavior matches intent. Two notes:
 
-- [confirmed] **No UI path to edit or delete a saved review.** Once "Save & next" is clicked, the review is final from the Review screen's perspective — there is no way to reopen and change grades/flags for a match already reviewed. This was explicitly out-of-scope before this pass and remains so; reviews are keyed to match ids in the store, so a future edit affordance is technically straightforward but was not part of this implementation.
+- [confirmed] **No lasting UI path to edit or delete a saved review.** [qol 2026-07-04] The save-toast's Undo (via `clearReview`) is now a short reversal window (~6s); once it expires, the review is final from the Review screen's perspective — there is still no way to reopen and change grades/flags for a match already reviewed. The lasting-edit affordance was explicitly out-of-scope before this pass and remains so; reviews are keyed to match ids in the store, so a future edit affordance is technically straightforward but was not part of this implementation.
+- [qol 2026-07-04] **H/P/M advance per target, not per game.** `ui-qol.spec.md` #18 reads "auto-advance to next ungraded game"; as shipped, H/P/M advance the focus through the targets *within* the open card, and the advance to the next game happens on save (`S` or Save & next), whose re-render pre-expands the next pending card. The end-to-end keyboard flow (grade → grade → save → next game) matches the spec's intent; only the mid-card focus semantics differ.
 
 ## Open Questions
 
-None — all three 2026-07-04 gaps (unfiltered inbox, user-selected active targets, full manual-data pipeline) are now implemented.
+None — all three 2026-07-04 gaps (unfiltered inbox, user-selected active targets, full manual-data pipeline) are implemented, and the ui-qol pass added keyboard grading + undoable saves.

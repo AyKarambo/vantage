@@ -1,9 +1,9 @@
 # Screen spec: Matches (`matches`)
 
-**Source:** `renderer/src/views/matches.ts`, `renderer/src/views/matchDetail.ts`, `renderer/src/components/scoreboard.ts`, `src/core/matchDetail.ts`, `src/core/playerIndex.ts`, `src/main/screenshots.ts` · reverse-engineered 2026-07-04 · detail-page design from user screenshot (2026-07-04 spec review) · updated 2026-07-04 after gap implementation
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass
+**Source:** `renderer/src/views/matches.ts`, `renderer/src/views/matchDetail.ts`, `renderer/src/components/scoreboard.ts`, `src/core/matchDetail.ts`, `src/core/playerIndex.ts`, `src/core/analytics/session.ts` (`groupByDay`), `src/main/screenshots.ts` · reverse-engineered 2026-07-04 · detail-page design from user screenshot (2026-07-04 spec review) · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
-**Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes the list. The match detail page is a parameterized view (`matchDetail`, opened with `{ matchId }`) registered in the view router but outside the sidebar nav list — the sidebar keeps **Matches** highlighted while a detail page is open.
+**Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes the list. The match detail page is a parameterized view (`matchDetail`, opened with `{ matchId }`) registered in the view router but outside the sidebar nav list — the sidebar keeps **Matches** highlighted while a detail page is open. Shell-level behaviors that touch this screen — the palette's Match/Map/Hero entries, per-route scroll memory (Matches ↔ matchDetail), and the Esc/←/→ hotkeys — are specified in `screen-shell.spec.md`.
 
 ## Intent (WHAT & WHY)
 
@@ -13,8 +13,11 @@
 
 **List:**
 - Newest-first list of matches in the filtered range: result letter (W/L/D, colour-coded), map, role · heroes (or "—") · account, map-type pill, game type, relative time.
-- Match count in the header (`"N games in range · newest first · click a match for details"`); empty state for an empty range.
+- Match count in the header (`"N games in range · newest first · click a match for details"`).
 - [implemented 2026-07-04] Every row is clickable (`.match-row.is-clickable`) and navigates to `matchDetail` with that row's `matchId`.
+- [qol 2026-07-04] **Day grouping:** rows sit under day headers — "Today" / "Yesterday" for the two most recent calendar days, otherwise a friendly date ("Wed, Jul 2") — each header showing that day's `W–L` tally and signed net. Backed by the pure `groupByDay` helper (`src/core/analytics/session.ts`), newest day first, rows newest-first within a day.
+- [qol 2026-07-04] **Cross-links inside a row** (clicks `stopPropagation` so the row's detail click stays intact): the map name links to the Maps view with `{ highlight: map }` (scrolled to and flashed there); each hero name links to that hero's drill-down drawer (`openHeroDrawer`).
+- [qol 2026-07-04] **Actionable empty state:** an empty range shows "No matches in this range yet." plus next steps instead of a dead end — a "Show all time (N games)" button when unfiltered history has games and the range isn't already all-time (`DashboardData.totalGamesAllTime`), and a "Log a match" button opening the quick-log modal.
 
 **Match detail page** ([implemented 2026-07-04] `renderer/src/views/matchDetail.ts`, backed by `src/core/matchDetail.ts`; every section renders only when its data exists, so the page degrades tier-by-tier):
 - **Header** (always renders — the only section every record, however old, can fill): result text (Victory/Defeat/Draw, colour-coded), map name, a meta line (map-type pill · game type · role · account · relative time), mental flag pills when the game has them (Tilt, Toxic mates, Leaver, Positive comms), and a side column with round score (`finalScore`, when captured), duration in minutes (when known), and hero pills for every hero played (when any).
@@ -27,6 +30,7 @@
 - **Competitive progress:** rendered only for `Competitive` games. Explicitly labeled **"Estimate"** (sub-copy: "estimated from recent results — the game feed does not report rank") — the existing winrate-heuristic progression, not a value read from the game. Shows rank (tier/division) when known, a division-progress bar, and the SR delta over the filtered range.
 - **Player History:** always rendered (a hint replaces the list when there's nothing to show). Lists players from this match the tracked player has met in other stored matches, each with a prior-encounter count and, when available, a `W`/`L` split of games played together; derived entirely from locally stored rosters (no separate store, no export). Distinguishes "no roster was recorded for this match" from "no players from this match in your tracked history yet" depending on whether a roster exists at all.
 - **Screenshots gallery:** renders the captured images in a grid when end-of-match screenshots exist for the match; renders a collapsed hint ("No screenshots were captured for this match.") otherwise. Screenshots are a best-effort auto-capture ~2s after match end, stored under `userData/data/screenshots/<matchId>/` and served to the renderer through the read-only `vantage-media://` custom protocol (scoped strictly to that directory).
+- [qol 2026-07-04] **Prev/next stepping:** the back row carries "← Matches", a "‹ Older / n / N / Newer ›" stepper through the *filtered* match list (buttons disabled at the ends), and the shell registers ← / → (older/newer) and Esc (back to Matches) while a detail page is open.
 - No Share/publish affordance anywhere on the page ([confirmed] out of scope).
 
 ## Out-of-Scope
@@ -49,8 +53,10 @@
 
 **List:**
 - Given matches in the filtered range, when Matches renders, then each row shows result, map, role, heroes (or "—"), account, map type, game type, and relative time, newest first, and is clickable.
-- Given no matches in range, then "No matches in this range yet." is shown.
-- Given a click on a match row, then the full match detail page for that game opens and the sidebar keeps **Matches** highlighted.
+- Given matches from today and yesterday, then rows sit under "Today" / "Yesterday" headers (older days get a friendly date), each header showing that day's W–L tally and signed net.
+- Given a click on a hero name in a row, then that hero's drill-down drawer opens (no navigation to the detail page); given a click on the map name, then the Maps view opens with that map's bar scrolled into view and flashed.
+- Given no matches in range but games outside it, then "No matches in this range yet." is shown with a "Show all time (N games)" button that resets the range filter, plus a "Log a match" button; given no games at all, only "Log a match" is offered.
+- Given a click on a match row (outside a cross-link), then the full match detail page for that game opens and the sidebar keeps **Matches** highlighted.
 
 **Match detail page:**
 - Given any match, however old or minimal its record, then the header renders with at least result, map, mode, role, account, and relative time.
@@ -64,6 +70,7 @@
 - Given a Competitive match, then a "Competitive progress" card renders, explicitly labeled "Estimate", with rank/division/SR-delta when computable; given a non-Competitive match, the section is absent.
 - Given players from this match appear in other stored matches, then Player History lists them with prior-encounter counts and, when known, a W/L split; given a roster exists but no prior encounters do, a "no players … yet" hint shows; given no roster at all, a "no roster was recorded" hint shows.
 - Given screenshots were captured for this match, then the gallery renders them; given none (including every best-effort capture failure), the section shows the collapsed "No screenshots were captured for this match." hint instead of erroring.
+- Given a detail page with a newer match in the filtered list, when I press → or click "Newer ›", then that match's detail renders; ← / "‹ Older" steps the other way; the stepper shows "n / N" and disables at either end; Esc returns to Matches.
 - Given any detail page, then no Share/publish affordance is present.
 
 ## Known gaps (intent ≠ code)

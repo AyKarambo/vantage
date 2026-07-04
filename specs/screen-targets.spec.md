@@ -1,7 +1,7 @@
 # Screen spec: Targets (`targets`)
 
-**Source:** `renderer/src/views/targets.ts`, `src/core/targets.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass
+**Source:** `renderer/src/views/targets.ts`, `renderer/src/views/targets/library.ts`, `src/core/targets.ts` · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`.
 
@@ -35,6 +35,7 @@
 - [implemented 2026-07-04] **Active-target selection is explicit and user-owned**, shared with `screen-review.spec.md`: a target's `isActive` flag (default `true` on creation) determines whether it appears in the Review grading strip. The former "first 3 library rows" placeholder is gone entirely.
 - [implemented 2026-07-04] **Edit accrues, it doesn't reset.** Editing a target's name/mode/rule keeps its accrued Review grades (hits/attempts, win-splits, sparkline) — editing does not clear history. Accepted trade-off: after a rule change (e.g. Deaths ≤4 → ≤2) the historical hit-rate mixes old- and new-rule attempts, since a grade is just tagged to the target id, not to the rule text at grading time.
 - [implemented 2026-07-04] **Archive is the primary removal action**: an archived target disappears from the live library and from the Review active set (even if it was active), but its history is retained and it is restorable via Restore. **Permanent delete** is a secondary, confirmation-gated action; grades already stored inside saved match reviews are untouched but become inert (they no longer contribute to any target's stats since the target itself is gone).
+- [qol 2026-07-04] **Archive is undoable, not confirmed.** Per the ui-qol undo-vs-confirm contract (`ui-qol.spec.md` #7): archiving executes immediately — no confirmation — and shows an `Archived "<name>"` toast with an **Undo** action (~6s, hover pauses) that restores the target in place. Only permanent Delete keeps its confirmation modal.
 - [confirmed] **Lifecycle actions no-op on sample-library rows.** The Active/Edit/Archive/Delete row only appears for authored targets; the sample library (demo mode) has no lifecycle affordances — there is nothing to persist against.
 
 ## Acceptance Criteria (current behavior)
@@ -47,7 +48,7 @@
 - Given a target has been graded on Review one or more times, then its hit-rate = hits/attempts (partial counts as an attempt but not a hit), hits/attempts render as counts, the sparkline shows the last 8 attempts (hit=1, partial=0.5, missed=0, left-padded with 0 when fewer than 8), and win-when-hit / win-when-missed reflect the winrate of the games graded hit vs. not-hit for that target (falling back to baseline on a side with zero games).
 - Given a click on Edit for a library row, then the builder loads that target's name/mode/rule, retitles to "Edit target", and Save persists an update (`updateTarget`) rather than a new target; the row's accrued stats are unaffected by the edit.
 - Given a click on the Active chip, then the target's `isActive` flips and the Review grading strip immediately reflects the new active set on next refresh.
-- Given a click on Archive, then the target moves out of the live list into the Archived section, is dropped from the Review active set, and its history remains intact; Restore moves it back to the live list.
+- Given a click on Archive, then the target moves out of the live list into the Archived section immediately (no confirmation), is dropped from the Review active set, and its history remains intact; an "Archived" toast with Undo shows for ~6s, and Undo (or the Archived section's Restore) moves it back to the live list.
 - Given a click on Delete (live or archived) and confirmation, then the target is permanently removed from the library; grades already stored on past match reviews remain in the review record but no longer count toward any displayed target.
 - Given the measured builder, then the preview badge always reads "Hit when `<stat>` `<op>` `<value>`" for the currently selected stat/operator/value.
 

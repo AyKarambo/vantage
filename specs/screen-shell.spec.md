@@ -34,6 +34,11 @@
 - [explicit] The content host re-renders only when the snapshot, route, params, or an explicit `rerender()` epoch changes — status-bar-only updates never redraw the content.
 - [explicit] Window focus triggers a background refetch (stale-while-revalidate for newly tracked games).
 
+**Global filter bar** (`views/view.ts` `filterBar` — rendered by the shell above every screen):
+- [explicit] Account · Role · Mode · Season selects, persisted across launches (`vantageFilters` localStorage).
+- [explicit] **Reset chip:** when any filter differs from the defaults (all/all/all/30d), a "Reset (N)" chip shows the active-change count and restores the defaults in one click.
+- [explicit] **Presets:** up to 2 saved filter combinations as one-click chips (auto-named from their settings, e.g. "Competitive · Support · 30d"); a "+ save preset" affordance appears while the current combination is non-default and unsaved; right-click removes a preset; the chip highlights while its combination is active. Persisted via `prefs.filterPresets`.
+
 **View restore & scroll memory:**
 - [explicit] The active top-level view persists (`prefs.view`) and is restored on launch; a match detail persists as `matches` (the app never reopens on `matchDetail`).
 - [explicit] Per-route scroll positions are remembered in-session and restored when navigating back (notably Matches ↔ matchDetail); a data refresh on the same route keeps the current scroll.
@@ -73,6 +78,7 @@
 - Given demo data / a non-GEP sensor, then the indicator reads "No live feed" and never shows Connected or Live.
 - Given a click on the indicator, then the popover shows state, last-event relative time, session event count, match-in-progress, and attach time, updating live while open.
 - Given data is loaded and the window regains focus, when the refetch runs, then the previous content stays visible (no blank/loading swap) with a busy indicator; given the refetch fails, the data stays with a "⚠ stale — retry" link; given a cold-start failure, an error card with Retry renders.
+- Given filters differ from the defaults, then the filter bar shows a "Reset (N)" chip that restores them; given a non-default, unsaved combination and fewer than 2 presets, then "+ save preset" saves it as a named one-click chip (right-click removes it).
 - Given I quit on Heroes, when I relaunch, then Heroes is active; given I quit on a match detail, then Matches is active.
 - Given I scroll the Matches list, open a match detail, and press Esc, then the list is restored at the same scroll position (same session).
 - Given my last logged match was Support/Competitive, when I open Log match, then role=Support and mode=Competitive are prefilled, no mental flag is pre-checked, and typing "zar" in the hero field suggests Zarya, selectable by keyboard.
