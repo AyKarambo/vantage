@@ -39,6 +39,7 @@ export function matchDetail(
     heroes: game.heroes,
     perHero: game.perHero ?? [],
     mental: game.mental,
+    review: game.review,
     scoreboard: scoreboardOf(game),
     competitive: competitiveOf(game, competitiveContext),
     playerHistory: playerHistory(all, game),
@@ -97,7 +98,7 @@ function competitiveOf(game: GameRecord, context: GameRecord[]): MatchDetail['co
     (g) => g.gameType === game.gameType && g.account === game.account && g.timestamp <= game.timestamp,
   );
   const p = progression(scoped.length ? scoped : [game]);
-  return { note: 'estimate', sr: p.sr, tier: p.tier, division: p.division, delta: p.delta };
+  return { note: 'estimate', tier: p.tier, division: p.division, progressPct: p.progressPct, delta: p.delta };
 }
 
 /** Renderer-facing URL served by the read-only vantage-media:// protocol. */

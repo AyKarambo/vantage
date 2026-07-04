@@ -13,7 +13,7 @@
 
 - Greeting header: time-of-day greeting + player name, date + live winrate line, primary **Log match** CTA (opens quick-log modal).
 - [qol 2026-07-04] **Session recap card** ("Yesterday's session", glow-variant, rendered above the KPI row): shown when yesterday (the previous calendar day) had games and today's recap hasn't been dismissed yet. Sub-line: game count · "toughest: `<worst map>`" (when known) · "tilt flagged ×N" (when any). Four stat boxes: `W–L` (tinted by net) with signed net, winrate, best map (or "—"), targets-hit rate (or "—"). A ✕ dismiss button persists the recap's day-key (`recapShown` pref) so the card renders once per day; it also disappears for the rest of the day once dismissed.
-- KPI row: **Winrate** (+ recent-form delta chip), **Games** (W·L split), **Rank** (SR + tier/division with direction arrow), **Streak** (accented, with "ride it" / "reset it" nudge).
+- KPI row: **Winrate** (+ recent-form delta chip), **Games** (W·L split), **Rank** (tier/division with the within-division progress percentage and a direction arrow), **Streak** (accented, with "ride it" / "reset it" nudge).
 - Scatter card: winrate × volume for every map in range; dot colour is a stable categorical per map; legend uses shortened map names with the full name on hover.
 - **Top priority** callouts: top 3 net-losing maps (net = losses − wins > 0) with games, signed net, winrate; CTA "Build a focus routine →" navigates to Focus.
 - Bottom row: **Focus queue** (top 4 net-losing maps; "▶ queue" navigates to Focus) and **Mental** snapshot (Calm/Tilted bars + break-reminder line — [implemented 2026-07-04] now truthful, reflecting the real per-user setting owned by `screen-mental.spec.md`).

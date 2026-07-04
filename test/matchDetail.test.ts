@@ -71,12 +71,28 @@ describe('matchDetail degradation contract', () => {
 
   it('competitive section: estimate for competitive games, absent otherwise', () => {
     const comp = matchDetail([minimal()], 'legacy-1');
-    expect(comp!.competitive?.note).toBe('estimate');
-    expect(comp!.competitive?.tier).toBeTruthy();
-    expect(comp!.competitive?.division).toBeGreaterThanOrEqual(1);
+    // Single 100%-winrate competitive game → top of the ladder, no range delta.
+    expect(comp!.competitive).toMatchObject({ note: 'estimate', tier: 'Champion', division: 1, delta: 0 });
+    expect(comp!.competitive?.progressPct).toBeCloseTo(99, 5);
 
     const qp = matchDetail([minimal({ gameType: 'Quick Play' })], 'legacy-1');
     expect(qp!.competitive).toBeUndefined();
+  });
+
+  it('scopes the competitive estimate to the provided context, not the full history', () => {
+    const target = minimal({ matchId: 'c-1', result: 'Win', timestamp: 100 });
+    const priorLosses = [1, 2, 3, 4].map((i) => minimal({ matchId: `L${i}`, result: 'Loss', timestamp: i }));
+    const all = [...priorLosses, target];
+    // Context = only the target → 100% winrate → top tier.
+    expect(matchDetail(all, 'c-1', [target])!.competitive?.tier).toBe('Champion');
+    // Context = the whole history (4 losses + 1 win up to the target) → far lower tier.
+    expect(matchDetail(all, 'c-1', all)!.competitive?.tier).not.toBe('Champion');
+  });
+
+  it('surfaces the saved review (grades + flags) so the editor can pre-fill, or undefined when ungraded', () => {
+    const graded = minimal({ matchId: 'g-1', review: { at: 5, grades: { t1: 'hit' }, flags: { tilt: true } } });
+    expect(matchDetail([graded], 'g-1')!.review).toEqual({ at: 5, grades: { t1: 'hit' }, flags: { tilt: true } });
+    expect(matchDetail([minimal()], 'legacy-1')!.review).toBeUndefined();
   });
 
   it('a full record yields the complete payload', () => {

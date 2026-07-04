@@ -42,7 +42,7 @@ describe('buildTargets — grade scoring', () => {
       game({ result: 'Loss', review: review({ t1: 'missed' }) }),
       game({ result: 'Win' }), // ungraded — not an attempt
     ];
-    const [t] = buildTargets(games, [authored('t1')]);
+    const [t] = buildTargets(games, false, [authored('t1')]);
     expect(t.attempts).toBe(4);
     expect(t.hits).toBe(2);
     expect(t.hitRate).toBe(0.5);
@@ -58,14 +58,14 @@ describe('buildTargets — grade scoring', () => {
       game({ result: 'Loss' }),
     ];
     const base = 0.25; // 1 win / 4 decided
-    const [t] = buildTargets(games, [authored('t1')]);
+    const [t] = buildTargets(games, false, [authored('t1')]);
     expect(t.winWhenHit).toBe(1);
     expect(t.winWhenMissed).toBe(base); // no partial/missed games yet
   });
 
   it('shows a fresh target as New: 0/0 with both splits at baseline and a zero spark', () => {
     const games = [game({ result: 'Win' }), game({ result: 'Loss' })];
-    const [t] = buildTargets(games, [authored('t1')]);
+    const [t] = buildTargets(games, false, [authored('t1')]);
     expect(t.attempts).toBe(0);
     expect(t.hits).toBe(0);
     expect(t.hitRate).toBe(0);
@@ -82,37 +82,54 @@ describe('buildTargets — grade scoring', () => {
       game({ result: 'Win', timestamp: 1000 + i, review: review({ t1: g }) }));
     // Shuffle input order to prove scoring sorts by timestamp itself.
     const shuffled = [games[4], games[9], games[0], games[7], games[2], games[5], games[8], games[1], games[6], games[3]];
-    const [t] = buildTargets(shuffled, [authored('t1')]);
+    const [t] = buildTargets(shuffled, false, [authored('t1')]);
     expect(t.spark).toEqual([1, 1, 1, 1, 1, 1, 0.5, 0]);
 
     const three = games.slice(7); // H P M → left-padded
-    const [padded] = buildTargets(three, [authored('t1')]);
+    const [padded] = buildTargets(three, false, [authored('t1')]);
     expect(padded.spark).toEqual([0, 0, 0, 0, 0, 1, 0.5, 0]);
   });
 
   it('ignores grades keyed to a deleted target id', () => {
     const games = [game({ result: 'Win', review: review({ gone: 'hit', t1: 'missed' }) })];
-    const out = buildTargets(games, [authored('t1')]);
+    const out = buildTargets(games, false, [authored('t1')]);
     expect(out).toHaveLength(1);
     expect(out[0].attempts).toBe(1);
     expect(out[0].hits).toBe(0);
   });
 
   it('keeps archived targets in the output, flagged, so the renderer can offer Restore', () => {
-    const out = buildTargets([], [authored('live'), authored('gone', { archivedAt: 123 })]);
+    const out = buildTargets([], false, [authored('live'), authored('gone', { archivedAt: 123 })]);
     expect(out).toHaveLength(2);
     expect(out.find((t) => t.id === 'live')?.archivedAt).toBeUndefined();
     expect(out.find((t) => t.id === 'gone')?.archivedAt).toBe(123);
   });
 
-  it('shows the sample library only when zero authored targets exist (archived included)', () => {
-    const sample = buildTargets([game({ result: 'Win' })]);
+  it('returns an empty list in real mode when no authored targets exist (B1)', () => {
+    expect(buildTargets([game({ result: 'Win' })], false)).toEqual([]);
+    // Both the omitted-arg and the explicit-empty-array paths (production passes `manual?.targets`, i.e. []).
+    expect(buildTargets([game({ result: 'Win' })], false, [])).toEqual([]);
+    // Archiving every target still yields the archived one, never the demo library.
+    const onlyArchived = buildTargets([], false, [authored('t1', { archivedAt: 5 })]);
+    expect(onlyArchived).toHaveLength(1);
+    expect(onlyArchived[0].id).toBe('t1');
+  });
+
+  it('shows the sample library only in demo mode with zero authored targets (B2)', () => {
+    const sample = buildTargets([game({ result: 'Win' })], true);
     expect(sample).toHaveLength(4);
     expect(sample.every((t) => t.isActive)).toBe(true);
+    // Explicit empty-array path also yields the sample library in demo mode.
+    expect(buildTargets([game({ result: 'Win' })], true, [])).toHaveLength(4);
+  });
 
-    const onlyArchived = buildTargets([], [authored('t1', { archivedAt: 5 })]);
-    expect(onlyArchived).toHaveLength(1); // archiving everything must not resurrect demo data
-    expect(onlyArchived[0].id).toBe('t1');
+  it('lets authored targets win over the sample library in either mode (B3)', () => {
+    const demo = buildTargets([game({ result: 'Win' })], true, [authored('t1')]);
+    expect(demo).toHaveLength(1);
+    expect(demo[0].id).toBe('t1');
+    const real = buildTargets([game({ result: 'Win' })], false, [authored('t1')]);
+    expect(real).toHaveLength(1);
+    expect(real[0].id).toBe('t1');
   });
 });
 
@@ -169,7 +186,7 @@ describe('computeDashboard — review inbox decoupled from filters', () => {
     const old = game({ result: 'Win', timestamp: Date.now() - 30 * 86400000 });
     const gradedRecent = game({ result: 'Win', timestamp: Date.now() - 1000, review: review({}) });
     const recent = game({ result: 'Loss', timestamp: Date.now() - 2000 });
-    const d = computeDashboard([old, gradedRecent, recent], { days: 7 }, false);
+    const d = computeDashboard([old, gradedRecent, recent], { days: 7 }, { active: false, preference: 'off', hasRealHistory: true });
 
     expect(d.matches.map((m) => m.matchId)).not.toContain(old.matchId);
     const inboxIds = d.reviewInbox.map((m) => m.matchId);
@@ -182,7 +199,7 @@ describe('computeDashboard — review inbox decoupled from filters', () => {
 
   it('counts pendingReviews past the inbox row cap', () => {
     const games = Array.from({ length: 160 }, () => game({ result: 'Win' }));
-    const d = computeDashboard(games, {}, false);
+    const d = computeDashboard(games, {}, { active: false, preference: 'off', hasRealHistory: true });
     expect(d.reviewInbox).toHaveLength(150);
     expect(d.pendingReviews).toBe(160);
   });

@@ -4,7 +4,7 @@
  * and the renderer bundle can all share it.
  */
 import type { Role, Result, HeroStat } from '../../core/model';
-import type { MatchMental } from '../../core/analytics';
+import type { MatchMental, MatchReview } from '../../core/analytics';
 
 /**
  * One scoreboard row of the match detail page. Only end-of-match-screen data
@@ -58,13 +58,19 @@ export interface MatchDetail {
   /** Local player's per-hero lines; [] when GEP gave no per-hero data. */
   perHero: HeroStat[];
   mental?: MatchMental;
+  /**
+   * The saved Review-screen data (target grades + mental flags) for this match,
+   * if it has been graded — lets the match-detail editor pre-fill and re-save.
+   */
+  review?: MatchReview;
   /** Grouped by `team` in the renderer; absent → local-row-only fallback. */
   scoreboard?: ScoreboardEntry[];
   /**
    * Competitive progress. 'estimate' = the winrate heuristic (the feed does
    * not report rank today); 'reported' is reserved for a future GEP upgrade.
+   * `progressPct` is 0–100 within the division; `delta` is signed %-points.
    */
-  competitive?: { note: 'estimate' | 'reported'; sr?: number; tier?: string; division?: number; delta?: number };
+  competitive?: { note: 'estimate' | 'reported'; tier?: string; division?: number; progressPct?: number; delta?: number };
   /** Players seen in prior matches; [] when no roster data exists. */
   playerHistory: PlayerEncounter[];
   /** vantage-media:// URLs of end-of-match captures; [] when none. */

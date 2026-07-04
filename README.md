@@ -58,9 +58,15 @@ the app through Overwolf's approval flow — see *Status*.)
 ## Status
 
 - The app, dashboard, analytics, and per-hero GEP plumbing are **built and working**.
-- Until the app is approved by Overwolf for GEP, **no live match data flows**, so the
-  dashboard shows a **realistic demo dataset** (badged "Demo data"). Once approved,
-  real games populate it automatically — the pipeline is identical.
+- Until the app is approved by Overwolf for GEP, **no live match data flows**. On first
+  launch the app **asks whether to load a realistic demo dataset or start fresh** (changeable
+  later in Settings). Demo data is badged "Demo data" and yields to real games automatically
+  once tracking starts — the pipeline is identical. With no demo and no authored targets, the
+  Targets screen stays honestly empty rather than showing sample targets.
+- Competitive **rank** follows the current Overwatch 2 model: eight tiers Bronze→**Champion**,
+  five divisions each (5 = lowest, 1 = highest), with within-division progress shown as a
+  **percentage (0–100%)**. It is a winrate-derived heuristic (GEP does not report rank), not a
+  value read from the game.
 - The manual (◎) surfaces now **persist**: Log match writes a real game to the local history
   (feeding every stat, including the mental composite), authored improvement targets are
   saved to a local store and shown in your Targets library, and grading a game on the

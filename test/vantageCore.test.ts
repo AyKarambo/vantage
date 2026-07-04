@@ -54,26 +54,63 @@ describe('mentalSummary', () => {
 });
 
 describe('progression', () => {
-  it('anchors 50% winrate near 2500 SR', () => {
-    expect(winrateToSr(0.5)).toBe(2500);
+  it('maps winrate monotonically across the ladder, top → Champion', () => {
     expect(winrateToSr(0.6)).toBeGreaterThan(winrateToSr(0.5));
     expect(winrateToSr(0.4)).toBeLessThan(winrateToSr(0.5));
+    expect(tierOf(winrateToSr(1)).tier).toBe('Champion'); // C1/C5: Champion reachable, no clamp to GM
+    expect(tierOf(winrateToSr(0)).tier).toBe('Bronze');
   });
 
-  it('maps SR to tier and division', () => {
-    expect(tierOf(2200)).toEqual({ tier: 'Diamond', division: 3 });
-    expect(tierOf(2000)).toEqual({ tier: 'Diamond', division: 5 });
-    expect(tierOf(0)).toEqual({ tier: 'Bronze', division: 5 });
-    const gm = tierOf(4900);
-    expect(gm.tier).toBe('Grandmaster');
+  it('maps a rating to tier, division (1–5, 5=lowest) and a 0–100 progress percent', () => {
+    const diamond = tierOf(2200);
+    expect(diamond.tier).toBe('Diamond');
+    expect(diamond.division).toBe(3);
+    expect(tierOf(0)).toMatchObject({ tier: 'Bronze', division: 5 });
+    const champ = tierOf(3999);
+    expect(champ.tier).toBe('Champion');
+    expect(champ.division).toBe(1);
+    // C2: exact tier-floor + division boundaries (5=lowest band, 1=highest).
+    expect(tierOf(499)).toMatchObject({ tier: 'Bronze', division: 1 });
+    expect(tierOf(500)).toMatchObject({ tier: 'Silver', division: 5 });
+    expect(tierOf(999)).toMatchObject({ tier: 'Silver', division: 1 });
+    expect(tierOf(1000)).toMatchObject({ tier: 'Gold', division: 5 });
+    expect(tierOf(2099).division).toBe(5);
+    expect(tierOf(2100).division).toBe(4);
+  });
+
+  it('keeps progressPct within [0,100) across the whole ladder (C3)', () => {
+    for (let sr = 0; sr <= 3999; sr += 37) {
+      const { division, progressPct } = tierOf(sr);
+      expect(division).toBeGreaterThanOrEqual(1);
+      expect(division).toBeLessThanOrEqual(5);
+      expect(progressPct).toBeGreaterThanOrEqual(0);
+      expect(progressPct).toBeLessThan(100); // integer within-division rating < 100 → caps at 99
+    }
+    // Pin the formula at a known point: top of a division reads ~99%.
+    expect(tierOf(2099).progressPct).toBeCloseTo(99, 5);
+    expect(tierOf(2000).progressPct).toBeCloseTo(0, 5);
   });
 
   it('derives a plausible progression from a sample season', () => {
     const p = progression(generateSampleGames(120, 3));
-    expect(p.sr).toBeGreaterThan(300);
-    expect(p.sr).toBeLessThan(4900);
+    expect(p.progressPct).toBeGreaterThanOrEqual(0);
+    expect(p.progressPct).toBeLessThanOrEqual(100);
     expect(p.division).toBeGreaterThanOrEqual(1);
     expect(p.division).toBeLessThanOrEqual(5);
+    expect(p.tier).toBeTypeOf('string');
+  });
+
+  it('reports a signed delta in percentage points when the newer half climbs or falls', () => {
+    const t = (ts: number, result: Result): GameRecord => game({ result, map: 'Ilios', role: 'damage', timestamp: ts });
+    // Older half all losses, newer half all wins → positive delta.
+    // Older half 0% (rating 0), newer half 100% (rating 3999) → +3999/DIV_SPAN*100.
+    // Pins the magnitude, so a wrong divisor or a dropped ×100 is caught, not just the sign.
+    const climbing = [t(1, 'Loss'), t(2, 'Loss'), t(3, 'Win'), t(4, 'Win')];
+    expect(progression(climbing).delta).toBeCloseTo(3999, 0);
+    const falling = [t(1, 'Win'), t(2, 'Win'), t(3, 'Loss'), t(4, 'Loss')];
+    expect(progression(falling).delta).toBeCloseTo(-3999, 0);
+    // Fewer than 4 games → no delta.
+    expect(progression([t(1, 'Win'), t(2, 'Loss')]).delta).toBe(0);
   });
 });
 
@@ -97,8 +134,10 @@ describe('computeDashboard', () => {
   const all = generateSampleGames(180, 7);
 
   it('returns the full contract shape', () => {
-    const d = computeDashboard(all, { days: 'all' }, true);
+    const d = computeDashboard(all, { days: 'all' }, { active: true, preference: 'on', hasRealHistory: false });
     expect(d.isSample).toBe(true);
+    expect(d.demoPreference).toBe('on');
+    expect(d.hasRealHistory).toBe(false);
     expect(d.overall.games).toBe(180);
     expect(d.matches.length).toBeGreaterThan(0);
     expect(d.matches.length).toBeLessThanOrEqual(150);
@@ -111,13 +150,13 @@ describe('computeDashboard', () => {
   });
 
   it('defaults breakReminder when ManualData omits it', () => {
-    const d = computeDashboard(all, { days: 'all' }, true);
+    const d = computeDashboard(all, { days: 'all' }, { active: true, preference: 'on', hasRealHistory: false });
     expect(d.breakReminder).toEqual(DEFAULT_BREAK_REMINDER);
   });
 
   it('threads a provided breakReminder through unchanged', () => {
     const custom = { enabled: false, afterLosses: 5 };
-    const d = computeDashboard(all, { days: 'all' }, true, { breakReminder: custom });
+    const d = computeDashboard(all, { days: 'all' }, { active: true, preference: 'on', hasRealHistory: false }, { breakReminder: custom });
     expect(d.breakReminder).toEqual(custom);
   });
 

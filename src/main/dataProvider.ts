@@ -5,6 +5,7 @@ import type { NotionRuntime } from './notionRuntime';
 import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
+import { effectiveDemo } from '../core/demoPreference';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import type { AppInfo, AppUiSettings, GepStatusPayload } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
@@ -52,9 +53,17 @@ export interface DataProviderDeps {
 
 /** Assemble the dashboard's DataProvider over the injected deps. */
 export function createDataProvider(deps: DataProviderDeps): DataProvider {
+  const demoPref = () => deps.getConfig().ui.demoPreference;
   return {
-    games: () => (deps.history.count() ? deps.history.all() : deps.sampleGames()),
-    isSample: () => deps.history.count() === 0,
+    // Sample games fill an empty history ONLY when the user opted into demo mode;
+    // a fresh-start user sees nothing until they track real matches.
+    games: () => (deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : []),
+    isSample: () => effectiveDemo(demoPref(), deps.history.count()),
+    demoContext: () => ({
+      active: effectiveDemo(demoPref(), deps.history.count()),
+      preference: demoPref(),
+      hasRealHistory: deps.history.count() > 0,
+    }),
     exportToNotion: (games) => deps.notion.export(games),
     notionStatus: () => deps.notion.status(),
     setNotionToken: (token) => deps.notion.setToken(token),

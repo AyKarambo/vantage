@@ -21,7 +21,7 @@ import type { DataProvider } from './provider';
 export function registerDashboardIpc(provider: DataProvider): void {
   const ch = IPC_CHANNELS;
   ipcMain.handle(ch.getDashboard, (_e, filters: DashboardFilters) =>
-    computeDashboard(provider.games(), filters ?? {}, provider.isSample(), {
+    computeDashboard(provider.games(), filters ?? {}, provider.demoContext(), {
       targets: provider.manualTargets(),
       breakReminder: provider.getBreakReminder(),
     }),

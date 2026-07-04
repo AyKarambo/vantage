@@ -12,6 +12,7 @@ import { h, render } from '../dom';
 import type { MatchMental, MatchRow, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
+import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
 import { toast } from '../components/toast';
 import { store } from '../store';
 import { bridge } from '../bridge';
@@ -100,7 +101,7 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   const grades: Record<string, TargetGrade> = {};
   const flags: MatchMental = {};
 
-  const rows = active.map((t) => gradeRow(t, (g) => { grades[t.id] = g; }));
+  const rows = active.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
   let focusIdx = 0;
   const markFocus = (): void => {
     rows.forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
@@ -138,12 +139,7 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
         ? rows.map((r) => r.el)
         : [h('div', { class: 'hint' }, 'No active targets yet — add some on the Targets page to grade them here.')]),
     )),
-    section('◎ How it felt', h('div', { class: 'review-flags' },
-      flagChip('Tilted', flags, 'tilt'),
-      flagChip('Good comms', flags, 'positiveComms'),
-      flagChip('Toxic mate', flags, 'toxicMates'),
-      flagChip('Leaver', flags, 'leaver'),
-    )),
+    section('◎ How it felt', mentalFlagsRow(flags)),
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),
@@ -170,51 +166,4 @@ function section(label: string, body: Node): HTMLElement {
     h('div', { class: 'review-section-label' }, label),
     body,
   );
-}
-
-function gradeRow(t: TargetSummary, onChange: (g: TargetGrade) => void): { el: HTMLElement; set: (g: TargetGrade) => void } {
-  const control = gradeControl(onChange);
-  const el = h('div', { class: 'review-target' },
-    h('div', { class: 'row-main', style: { minWidth: '0' } },
-      h('div', { style: { fontSize: '13px' } }, t.name),
-      h('div', { class: 'mono u-dim', style: { fontSize: '10.5px', marginTop: '2px' } }, t.rule),
-    ),
-    control.el,
-  );
-  return { el, set: control.set };
-}
-
-const GRADES: Array<{ v: TargetGrade; label: string; bg: string; fg: string }> = [
-  { v: 'hit', label: 'Hit', bg: 'rgba(87,166,132,0.18)', fg: 'var(--win-text)' },
-  { v: 'partial', label: 'Partial', bg: 'rgba(214,162,79,0.18)', fg: 'var(--mid-text)' },
-  { v: 'missed', label: 'Missed', bg: 'rgba(209,104,95,0.16)', fg: 'var(--loss-text)' },
-];
-
-/** A 3-way grade control that starts unselected (so it reads as "needs grading"),
- *  using the shared segmented look with a semantic tint on the chosen grade.
- *  `set` applies a grade programmatically (the H/P/M keyboard path). */
-function gradeControl(onChange: (g: TargetGrade) => void): { el: HTMLElement; set: (g: TargetGrade) => void } {
-  const btns = GRADES.map((o) => h('button', { class: 'segmented-opt' }, o.label));
-  const apply = (i: number): void => {
-    btns.forEach((b, j) => {
-      const on = i === j;
-      b.classList.toggle('is-active', on);
-      b.style.background = on ? GRADES[j].bg : '';
-      b.style.color = on ? GRADES[j].fg : '';
-    });
-    onChange(GRADES[i].v);
-  };
-  GRADES.forEach((_o, i) => btns[i].addEventListener('click', () => apply(i)));
-  return {
-    el: h('div', { class: 'segmented' }, ...btns),
-    set: (g) => apply(GRADES.findIndex((o) => o.v === g)),
-  };
-}
-
-function flagChip(label: string, flags: MatchMental, key: keyof MatchMental): HTMLElement {
-  const btn = h('button', {
-    class: 'chip',
-    on: { click: () => { flags[key] = !flags[key]; btn.classList.toggle('is-on', Boolean(flags[key])); } },
-  }, label);
-  return btn;
 }

@@ -72,6 +72,25 @@ const STEPS: Step[] = [
   },
 ];
 
+/** Step 2 reflects the actual data mode: demo season vs. a fresh start. */
+function demoStep(demoActive: boolean): Step {
+  return demoActive
+    ? {
+        title: 'You’re seeing demo data',
+        lead:
+          'You chose to explore with a realistic demo dataset — look for the “Demo data” badge in the ' +
+          'status bar. Your own games replace it automatically once tracking starts, and you can turn ' +
+          'demo data off anytime in Settings.',
+      }
+    : {
+        title: 'You’re starting fresh',
+        lead:
+          'No demo data and no fabricated targets — every screen starts empty and fills in with your own ' +
+          'games and targets as you track them. Prefer to explore with sample data first? Turn demo data ' +
+          'on anytime in Settings.',
+      };
+}
+
 /** True when the tour hasn’t been completed yet. */
 export function shouldOnboard(): boolean {
   try {
@@ -89,7 +108,9 @@ function markDone(): void {
   }
 }
 
-export function openOnboarding(): void {
+export function openOnboarding(demoActive = false): void {
+  // Step 2 is computed per demo/fresh mode; the rest are static.
+  const steps = STEPS.map((s, n) => (n === 1 ? demoStep(demoActive) : s));
   const panel = h('div', { class: 'modal-card', style: { width: '520px', maxWidth: '92vw' } });
   const overlay = h('div', { class: 'overlay overlay--center' }, panel);
   let i = 0;
@@ -104,7 +125,7 @@ export function openOnboarding(): void {
   };
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') finish();
-    else if (e.key === 'ArrowRight' && i < STEPS.length - 1) go(i + 1);
+    else if (e.key === 'ArrowRight' && i < steps.length - 1) go(i + 1);
     else if (e.key === 'ArrowLeft' && i > 0) go(i - 1);
   };
   const go = (n: number): void => {
@@ -117,7 +138,7 @@ export function openOnboarding(): void {
 
   const dots = (): HTMLElement =>
     h('div', { style: { display: 'flex', gap: '5px' } },
-      ...STEPS.map((_, n) =>
+      ...steps.map((_, n) =>
         h('span', {
           style: {
             width: '6px', height: '6px', borderRadius: '50%',
@@ -144,8 +165,8 @@ export function openOnboarding(): void {
     );
 
   const draw = (): void => {
-    const s = STEPS[i];
-    const last = i === STEPS.length - 1;
+    const s = steps[i];
+    const last = i === steps.length - 1;
     render(panel,
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
         h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, s.title),

@@ -1,6 +1,7 @@
 import type { GameRecord } from '../../core/analytics';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { DemoContext } from '../../core/demoPreference';
 import type {
   AppInfo, AppUiSettings, AuthoredTargetInput, GepStatusPayload, LogEntry, LogLevel,
   ManualMatchInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
@@ -15,6 +16,8 @@ import type {
 export interface DataProvider {
   games(): GameRecord[];
   isSample(): boolean;
+  /** Demo facts (effective display, raw choice, real-history presence) for the dashboard payload. */
+  demoContext(): DemoContext;
   exportToNotion?(
     games: GameRecord[],
   ): Promise<{ ok: number; failed: number; skipped?: number; unavailable?: boolean }>;

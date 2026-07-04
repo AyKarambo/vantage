@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { LogFilter } from '../../core/model';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/breakReminder';
+import type { DemoPreference } from '../../core/demoPreference';
 
 /**
  * The AppConfig shape and its layered persistence: bundled appsettings.json
@@ -34,6 +35,8 @@ export interface WindowBounds {
 export interface UiConfig {
   /** ✕ keeps the app in the tray (true, today's behavior) or quits (false). */
   closeToTray: boolean;
+  /** First-run demo-data choice. 'unset' until the user is asked on first run. */
+  demoPreference: DemoPreference;
   windowBounds?: WindowBounds;
 }
 
@@ -62,7 +65,7 @@ const DEFAULTS: AppConfig = {
   accounts: {},
   mapAliases: {},
   breakReminder: { ...DEFAULT_BREAK_REMINDER },
-  ui: { closeToTray: true },
+  ui: { closeToTray: true, demoPreference: 'unset' },
 };
 
 /** Per-user, machine-local files (survive app updates, never committed). */

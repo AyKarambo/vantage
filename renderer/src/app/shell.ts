@@ -35,6 +35,7 @@ import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { openLogMatch } from './log-match';
 import { openPalette } from './palette';
 import { openOnboarding, shouldOnboard } from './onboarding';
+import { openFirstRunPrompt } from './firstRunPrompt';
 
 // matchDetail is a parameterized view: registered here (routable) but not in
 // NAV — the sidebar keeps Matches highlighted while it is active.
@@ -113,7 +114,8 @@ export class App {
       if (s.data && !s.stale && !s.error) this.statusLabel.textContent = statusText(s.data);
     }, 60_000);
     void store.refresh();
-    if (shouldOnboard()) openOnboarding();
+    // The first-run demo prompt + tour are driven from onState once real data
+    // has loaded (so the persisted demo choice is known before we decide).
   }
 
   private build(): HTMLElement {
@@ -134,7 +136,7 @@ export class App {
           class: 'statusbar-link',
           style: { marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer', font: 'inherit', fontSize: '11.5px' },
           title: 'Replay the intro tour',
-          on: { click: () => openOnboarding() },
+          on: { click: () => openOnboarding(store.get().data?.isSample ?? false) },
         }, 'Help'),
       ),
     );
@@ -170,6 +172,7 @@ export class App {
   }
 
   private migrated = false;
+  private firstRunHandled = false;
 
   private onState(state: AppState): void {
     this.renderSidebar(state);
@@ -179,14 +182,27 @@ export class App {
     this.busySpin.classList.toggle('hidden', !state.refreshing);
     this.staleLink.classList.toggle('hidden', !state.stale);
     this.demoBadge.classList.toggle('hidden', !state.data?.isSample);
-    // One-time legacy-review migration, only against real history (demo-mode
-    // match ids don't exist in the store, so importing there would drop data).
-    if (!this.migrated && state.data && !state.data.isSample) {
+    this.maybeFirstRun(state);
+    // One-time legacy-review migration, only when real tracked history exists
+    // (importing against the demo season's ids would drop data). Gated on
+    // hasRealHistory, not isSample — a fresh-start user has neither.
+    if (!this.migrated && state.data?.hasRealHistory) {
       this.migrated = true;
       void migrateLegacyReviews().then((imported) => {
         if (imported) void store.refresh();
       });
     }
+  }
+
+  /** Once, after the first real snapshot: ask the demo question (if never asked), then the tour. */
+  private maybeFirstRun(state: AppState): void {
+    if (this.firstRunHandled || !state.data) return;
+    this.firstRunHandled = true;
+    const openTour = (): void => {
+      if (shouldOnboard()) openOnboarding(store.get().data?.isSample ?? false);
+    };
+    if (state.data.demoPreference === 'unset') openFirstRunPrompt(openTour);
+    else openTour();
   }
 
   /** The one global filter bar — persistent above every screen, unified look. */
@@ -243,7 +259,8 @@ export class App {
       h('div', { class: 'avatar' }, (d?.greetingName ?? 'V').charAt(0).toUpperCase()),
       h('div', { class: 'row-main' },
         h('div', { class: 'account-name' }, d?.greetingName ?? 'Vantage'),
-        h('div', { class: 'account-sub' }, d ? rankLabel(d.progression.tier, d.progression.division) : '—'),
+        h('div', { class: 'account-sub' },
+          d ? `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%` : '—'),
       ),
       h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '▾'),
     );
@@ -336,7 +353,7 @@ export class App {
       actions: [
         { label: 'Log match', hint: 'record a game manually', run: () => openLogMatch(ctx) },
         { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
-        { label: 'Replay the intro tour', run: () => openOnboarding() },
+        { label: 'Replay the intro tour', run: () => openOnboarding(store.get().data?.isSample ?? false) },
       ],
     });
   }
