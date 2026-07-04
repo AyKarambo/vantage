@@ -15,18 +15,28 @@ comms · toxicity · leavers · your improvement target).
 
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a focus band, a focus queue and a mental snapshot.
-- **Matches** — the recent game log.
+- **Matches** — the recent game log; click any row for a full **match detail page**
+  (scoreboard, per-hero tabs, competitive progress estimate, player history, and an
+  end-of-match screenshots gallery — each section degrades gracefully to whatever the
+  game feed actually reported for that match).
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
   drill-down drawer (per-map winrate, recent games, aggregates).
 - **Focus** — net-losing maps ranked by deficit — the "what to work on" signal.
-- **Mental** — calm/tilt state, the tilt tax on your winrate, and flag counts.
+- **Mental** — calm/tilt state, the tilt tax on your winrate, flag counts, and a
+  **break-reminder setting** (on/off + loss threshold) that fires a tray notification
+  after N consecutive losses.
 - **Trends** — winrate over time, splits by role/mode/account, and an activity heatmap.
-- **Improvement Target** — build a target (self-rated ◎ or measured ⚡) and track a
+- **Review** — grade your active improvement targets (Hit / Partial / Missed) and flag
+  how each tracked game felt; an always-visible inbox of ungraded games, independent of
+  the global filters.
+- **Improvement Target** — build a target (self-rated ◎ or measured ⚡), choose which
+  targets are active (graded on Review), edit or archive/delete them, and track a
   library that shows whether hitting it actually moves your winrate.
 - **Log match** — the quick-capture card that opens after a game (~5 taps).
-- **Notion sync** — connect a Notion integration token and push your tracked games
-  to a database with one click (deduped by Match ID).
+- **Notion sync** — connect a Notion integration token, pick (or auto-create) the
+  target database, and push your tracked games to it with one click (deduped by
+  Match ID).
 
 Filter everything by account, role, game mode and time range.
 
@@ -44,8 +54,16 @@ the app through Overwolf's approval flow — see *Status*.)
   dashboard shows a **realistic demo dataset** (badged "Demo data"). Once approved,
   real games populate it automatically — the pipeline is identical.
 - The manual (◎) surfaces now **persist**: Log match writes a real game to the local history
-  (feeding every stat, including the mental composite), and authored improvement targets are
-  saved to a local store and shown in your Targets library.
+  (feeding every stat, including the mental composite), authored improvement targets are
+  saved to a local store and shown in your Targets library, and grading a game on the
+  **Review** screen (per-target grades + how-it-felt flags) persists to that game's record
+  in the same local history — feeding Target hit-rates/win-splits and the Mental stats
+  alongside the quick-log flags.
+- The **break reminder** (Mental screen) is a real tray notification, not just a line of
+  copy: it watches every finished game — live or manually logged — and nudges you after a
+  configurable number of consecutive losses.
+- **Notion sync** now includes an in-app database picker and an auto-create option, so
+  connecting a database no longer requires hand-editing a config file.
 
 ## Run it
 
@@ -70,9 +88,12 @@ npm run preview        # bundles the harness and serves it at http://localhost:5
 
 The **Notion sync** screen connects a Notion database and pushes your tracked games to
 it. Create an internal integration at <https://www.notion.so/my-integrations>, add it to
-your *Overwatch* page's connections, then paste the token on that screen and hit **Sync**.
-Match IDs are deduped, so re-syncing never double-writes. (The tray's **Set Notion token**
-still works too.)
+your *Overwatch* page's connections, then paste the token on that screen. Once a token is
+saved, a **Database** card lets you either **choose** a database the integration can
+already see, or have Vantage **create one for you** (a Maps database plus a matching
+Gametracker database, correctly shaped, under a page you pick). Then hit **Sync**. Match
+IDs are deduped, so re-syncing never double-writes. (The tray's **Set Notion token** still
+works too; a hand-edited `appsettings.json` database id is still supported as a fallback.)
 
 ## Architecture
 
@@ -91,17 +112,31 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   the renderer consumes. Pure, so it powers both the app and the browser preview.
 - `core/mental.ts` · `core/progression.ts` · `core/targets.ts` · `core/maps.ts` — the
   additional Vantage models (mental composite, rank heuristic, target library, map modes).
-- `shared/contract.ts` — the single typed IPC contract shared by main **and** renderer.
+- `core/matchDetail.ts` · `core/playerIndex.ts` — the match detail page's payload
+  (scoreboard, per-hero tabs, competitive estimate, screenshots) and the local
+  player-encounter index it draws Player History from.
+- `core/breakReminder.ts` — the pure break-reminder state machine (consecutive-loss
+  threshold, re-fire cadence, re-arm on a win), driven by the main process after every
+  recorded game.
+- `shared/contract.ts` — the single typed IPC contract shared by main **and** renderer,
+  including the channel map that preload and the renderer bridge are generated from.
 - `main/dashboard.ts` — owns the frameless BrowserWindow and wires the contract to IPC.
+- `main/notionRuntime.ts` — the Notion client/exporter/admin lifecycle in one place:
+  token state, database selection, cached shape validation, export short-circuiting.
+- `main/screenshots.ts` — best-effort end-of-match screenshot capture, served to the
+  renderer via the read-only `vantage-media://` protocol.
+- `notion/notionAdmin.ts` — the Notion database picker/auto-create admin operations
+  (list databases/pages, create a shaped Gametracker + Maps pair, validate a shape).
 
 **Renderer (`renderer/`)** — authored as TypeScript modules and bundled to one
 CSP-friendly script by **esbuild**. Composition-first, framework-free:
 
 - `src/dom.ts` — a tiny `h()` hyperscript, the composition primitive everything nests from.
 - `src/components/` — reusable pieces (cards, KPIs, buttons, pills, segmented controls,
-  stat bars, a sortable table, overlays). Views compose these rather than hand-rolling markup.
+  stat bars, a sortable table, overlays, the match detail scoreboard). Views compose these
+  rather than hand-rolling markup.
 - `src/charts/` — dependency-free SVG charts (line, bars, the winrate×volume scatter, sparklines).
-- `src/views/` — one module per screen.
+- `src/views/` — one module per screen, including the parameterized `matchDetail` drill-down.
 - `src/app/` — the shell (frameless title bar, sidebar router, status bar) and the Log Match modal.
 - `src/store.ts` — a small reactive store: the single source of truth for filters, view and data.
 - `styles/` — design tokens, base, components and layout, driven by CSS custom properties.

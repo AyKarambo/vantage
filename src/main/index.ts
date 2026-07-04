@@ -1,24 +1,22 @@
 import { app, shell } from 'electron';
 import * as path from 'path';
-import { Client } from '@notionhq/client';
 import {
-  loadConfig, saveLocalConfig, getNotionToken, setNotionToken, clearNotionToken,
-  userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, getNotionToken, userConfigPath, type AppConfig,
 } from './config';
-import { NotionWriter } from '../notion/notionWriter';
-import { MapsCache } from '../notion/mapsCache';
-import { NotionExporter } from '../notion/notionExporter';
+import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
 import { HistoryStore } from '../store/history';
 import { ManualStore } from '../store/manualLog';
 import { GepService, type GepStatus } from './gep';
+import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage, MatchRecord } from '../core/model';
-import { resolveAccount } from '../core/resolvers/account';
-import { resolveRole } from '../core/resolvers/role';
-import { resolveResult } from '../core/resolvers/result';
-import type { GameRecord } from '../core/analytics';
-import type { NotionStatus } from '../shared/contract';
+import { matchToGame } from '../core/gameRecord';
+import { streak, type GameRecord } from '../core/analytics';
+import {
+  nextBreakReminder, normalizeBreakReminder, INITIAL_BREAK_REMINDER_STATE,
+  type BreakReminderState,
+} from '../core/breakReminder';
 import { generateSampleGames } from '../core/sampleData';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow, type DataProvider } from './dashboard';
@@ -44,45 +42,71 @@ function main(): void {
   const history = new HistoryStore(dataDir);
   const manual = new ManualStore(dataDir);
   const aggregator = new MatchAggregator();
+  const screenshots = new ScreenshotService(
+    path.join(dataDir, 'screenshots'),
+    (...args: unknown[]) => console.log('[shots]', ...args),
+  );
+  screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
-  let exporter: NotionExporter | undefined;
+  let reminderState: BreakReminderState = INITIAL_BREAK_REMINDER_STATE;
 
-  const notionStatus = (): NotionStatus => {
-    const tokenSet = Boolean(getNotionToken());
-    const databaseConfigured = Boolean(config.notion.gametrackerDatabaseId);
-    return {
-      tokenSet,
-      databaseConfigured,
-      connected: tokenSet && databaseConfigured && Boolean(exporter),
-      gametrackerUrl: config.notion.gametrackerUrl || undefined,
-      trackedGames: history.count(),
-    };
-  };
+  const notion = new NotionRuntime({
+    outbox,
+    config: () => config,
+    reloadConfig: () => (config = loadConfig()),
+    trackedGames: () => history.count(),
+    onTokenState: (tokenSet) => tray.setState({ tokenSet }),
+    onError: (title, body) => tray.notifyError(title, body),
+  });
+
+  /**
+   * Persist a finished game and, on success, evaluate the break reminder against
+   * the unfiltered history — a manually logged loss counts the same as a live one.
+   * Reminder state is in-memory only: a restart re-arms it (accepted trade-off).
+   * Returns whether the game was newly added (false = duplicate matchId).
+   */
+  function recordGame(game: GameRecord): boolean {
+    if (!history.add(game)) return false;
+    const s = streak(history.all());
+    const { fire, state } = nextBreakReminder(s, config.breakReminder, reminderState);
+    reminderState = state;
+    if (fire) {
+      tray.notify('Time for a break?', `That's ${s.count} losses in a row — step away for a few minutes.`);
+    }
+    return true;
+  }
 
   const dataProvider: DataProvider = {
     games: () => (history.count() ? history.all() : generateSampleGames()),
     isSample: () => history.count() === 0,
-    exportToNotion: async (games) =>
-      exporter ? exporter.export(games) : { ok: 0, failed: 0, unavailable: true },
-    notionStatus,
-    setNotionToken: (token) => {
-      setNotionToken(token);
-      rebuildNotion();
-      return notionStatus();
-    },
-    clearNotionToken: () => {
-      clearNotionToken();
-      rebuildNotion();
-      return notionStatus();
-    },
+    exportToNotion: (games) => notion.export(games),
+    notionStatus: () => notion.status(),
+    setNotionToken: (token) => notion.setToken(token),
+    clearNotionToken: () => notion.clearToken(),
     manualTargets: () => manual.targets(),
     saveTarget: (input) => {
-      manual.addTarget({ id: `t-${Date.now()}`, createdAt: Date.now(), ...input });
+      manual.addTarget({
+        id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input,
+      });
     },
+    saveReview: (input) => {
+      history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
+    },
+    importReviews: (inputs) =>
+      history.setReviews(inputs.map((i) => ({
+        matchId: i.matchId,
+        review: { at: Date.now(), grades: i.grades, flags: i.flags },
+      }))),
+    updateTarget: (input) => {
+      manual.updateTarget(input.id, { name: input.name, mode: input.mode, rule: input.rule });
+    },
+    setTargetActive: (id, active) => manual.setActive(id, active),
+    setTargetArchived: (id, archived) => manual.setArchived(id, archived),
+    deleteTarget: (id) => manual.removeTarget(id),
     logMatch: (input) => {
       const matchId = `manual-${Date.now()}`;
-      history.add({
+      recordGame({
         matchId,
         timestamp: Date.now(),
         account: Object.values(config.accounts)[0] ?? 'You',
@@ -96,6 +120,16 @@ function main(): void {
       tray.notify('Match logged', `${input.result} · ${input.map}`);
       return { matchId };
     },
+    getBreakReminder: () => config.breakReminder,
+    setBreakReminder: (input) => {
+      config.breakReminder = normalizeBreakReminder(input);
+      saveLocalConfig({ breakReminder: config.breakReminder });
+      return config.breakReminder;
+    },
+    listNotionDatabases: () => notion.listDatabases(),
+    listNotionPages: () => notion.listPages(),
+    selectNotionDatabase: (databaseId) => notion.selectDatabase(databaseId),
+    createNotionDatabase: (parentPageId) => notion.createDatabase(parentPageId),
   };
 
   const handlers: TrayHandlers = {
@@ -106,12 +140,11 @@ function main(): void {
       tray.setState({ autoLaunch: enabled });
     },
     onImportToken: (token) => {
-      setNotionToken(token);
-      rebuildNotion();
+      notion.setToken(token);
     },
     onReloadConfig: () => {
       config = loadConfig();
-      rebuildNotion();
+      notion.rebuild();
       tray.notify('Config reloaded', 'Accounts and map aliases were re-read.');
     },
     onOpenGametracker: () => {
@@ -134,25 +167,17 @@ function main(): void {
   // icon while it's already running) must bring the window to the front.
   app.on('second-instance', () => dashboard.open());
 
-  function rebuildNotion(): void {
-    const token = getNotionToken();
-    if (!token) {
-      exporter = undefined;
-      tray.setState({ tokenSet: false });
-      return;
-    }
-    const client = new Client({ auth: token });
-    const writer = new NotionWriter(client, config.notion.gametrackerDatabaseId);
-    const maps = new MapsCache(client, config.notion.mapsDatabaseId, config.mapAliases);
-    exporter = new NotionExporter(writer, maps, outbox);
-    tray.setState({ tokenSet: true });
-    maps.load().catch((err) => tray.notifyError('Maps load failed', String(err)));
-  }
-
   /** Persist a finished match into the analyzable history. */
   function addMatch(record: MatchRecord): void {
-    const game = matchToGame(record, config);
-    if (game) history.add(game);
+    const game = matchToGame(record, config.accounts);
+    if (!game || !recordGame(game)) return;
+    // Best-effort end-of-match capture (~2s later, while the summary screen is
+    // up). Every failure inside is a logged no-op; a manual log never gets here.
+    screenshots.capture(game.matchId, (paths) => {
+      if (history.addScreenshots(game.matchId, paths)) {
+        console.log('[shots]', paths.length, 'screenshot(s) attached to', game.matchId);
+      }
+    });
   }
 
   // One entry point for a normalized GEP message — shared by the live feed and
@@ -188,7 +213,7 @@ function main(): void {
     autoLaunch: isAutoLaunchEnabled(),
     tokenSet: Boolean(getNotionToken()),
   });
-  rebuildNotion();
+  notion.rebuild();
   // Open the dashboard on a manual launch; when auto-launched at login (--hidden),
   // stay in the tray so we never steal focus from a running game.
   if (!process.argv.includes('--hidden')) dashboard.open();
@@ -212,34 +237,6 @@ function main(): void {
       }
     }, 1500);
   }
-}
-
-/** Convert a raw capture record into an analyzable, resolved game. */
-function matchToGame(record: MatchRecord, config: AppConfig): GameRecord | null {
-  const result = resolveResult(record.outcome);
-  if (!result) return null; // no win/loss → not useful for stats
-  const role = resolveRole(record.queueType, record.heroRole) ?? 'openQ';
-  const perHero = record.perHero?.length
-    ? record.perHero
-    : record.heroes.length === 1 && record.eliminations != null
-      ? [{
-          hero: record.heroes[0], role,
-          eliminations: record.eliminations ?? 0, deaths: record.deaths ?? 0, assists: record.assists ?? 0,
-          damage: record.damage ?? 0, healing: record.healing ?? 0, mitigation: record.mitigation ?? 0,
-        }]
-      : undefined;
-  return {
-    matchId: record.matchId,
-    timestamp: record.endedAt ?? Date.now(),
-    account: resolveAccount(record.battleTag, config.accounts) ?? record.battleTag ?? 'Unknown',
-    role,
-    map: record.mapName ?? 'Unknown',
-    result,
-    gameType: record.gameType ?? 'Unknown',
-    durationMinutes: record.durationMinutes,
-    heroes: record.heroes,
-    perHero,
-  };
 }
 
 function statusText(s: GepStatus, count: number): string {

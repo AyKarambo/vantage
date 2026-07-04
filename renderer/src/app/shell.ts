@@ -11,6 +11,7 @@ import { bridge } from '../bridge';
 import { pct, rankLabel, signed } from '../format';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
+import { matchDetail } from '../views/matchDetail';
 import { maps } from '../views/maps';
 import { heroes } from '../views/heroes';
 import { focus } from '../views/focus';
@@ -20,11 +21,13 @@ import { targets } from '../views/targets';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
-import { reviews } from '../reviews';
+import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { openLogMatch } from './log-match';
 import { openOnboarding, shouldOnboard } from './onboarding';
 
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, maps, heroes, focus, mental, trends, targets, notion };
+// matchDetail is a parameterized view: registered here (routable) but not in
+// NAV — the sidebar keeps Matches highlighted while it is active.
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, targets, notion };
 
 interface NavItem {
   id: ViewId;
@@ -114,12 +117,15 @@ export class App {
     const data = store.get().data!;
     return {
       data,
-      navigate: (view) => store.setView(view),
+      params: store.get().params,
+      navigate: (view, params) => store.setView(view, params),
       openLogMatch: () => openLogMatch(this.context()),
       setFilter: (patch) => store.setFilters(patch),
       refresh: () => void store.refresh(),
     };
   }
+
+  private migrated = false;
 
   private onState(state: AppState): void {
     this.renderSidebar(state);
@@ -127,6 +133,14 @@ export class App {
     this.renderContent(state);
     this.statusText.textContent = state.status;
     this.demoBadge.classList.toggle('hidden', !state.data?.isSample);
+    // One-time legacy-review migration, only against real history (demo-mode
+    // match ids don't exist in the store, so importing there would drop data).
+    if (!this.migrated && state.data && !state.data.isSample) {
+      this.migrated = true;
+      void migrateLegacyReviews().then((imported) => {
+        if (imported) void store.refresh();
+      });
+    }
   }
 
   /** The one global filter bar — persistent above every screen, unified look. */
@@ -155,12 +169,17 @@ export class App {
       h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '▾'),
     );
 
-    const pendingReviews = state.data ? reviews.pending(state.data.matches.map((m) => m.matchId)) : 0;
+    // Saving a review doesn't refetch, so subtract the games graded since the
+    // last snapshot (only those the snapshot still counts as pending).
+    const gradedOverlap = d ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId)).length : 0;
+    const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
+    // Parameterized views highlight their parent list in the sidebar.
+    const activeNav: ViewId = state.view === 'matchDetail' ? 'matches' : state.view;
     const nav = NAV.flatMap((section) => [
       h('div', { class: 'nav-group' }, section.group),
       ...section.items.map((item) =>
         h('button', {
-          class: `nav-item${item.id === state.view ? ' is-active' : ''}`,
+          class: `nav-item${item.id === activeNav ? ' is-active' : ''}`,
           on: { click: () => store.setView(item.id) },
         },
           h('span', { class: 'nav-icon' }, item.icon),

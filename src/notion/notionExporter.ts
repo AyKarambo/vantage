@@ -10,9 +10,14 @@ export class NotionExporter {
     private readonly writer: NotionWriter,
     private readonly maps: MapsCache,
     private readonly outbox: OutboxStore,
+    /** Cached shape-validation issues (e.g. from `rebuildNotion`'s async validate); short-circuits the export when set. */
+    private readonly shapeIssues?: string[],
   ) {}
 
-  async export(games: GameRecord[]): Promise<{ ok: number; failed: number; skipped: number }> {
+  async export(games: GameRecord[]): Promise<{ ok: number; failed: number; skipped: number; error?: string }> {
+    if (this.shapeIssues && this.shapeIssues.length) {
+      return { ok: 0, failed: 0, skipped: 0, error: `Database is missing: ${this.shapeIssues.join(', ')}` };
+    }
     let ok = 0;
     let failed = 0;
     let skipped = 0;

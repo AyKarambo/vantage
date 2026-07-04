@@ -32,18 +32,25 @@ export interface GepMessage {
   value: unknown;
 }
 
-/** A roster entry for one player as reported by GEP (local team only). */
+/**
+ * A roster entry for one player as reported by GEP. The feed may deliver the
+ * local team only; only TAB-screen data is ever stored (guardrail #1).
+ */
 export interface RosterPlayer {
   battleTag?: string;
   heroName?: string;
   /** Raw role string from GEP: 'tank' | 'damage'/'offense' | 'support'. */
   heroRole?: string;
+  /** GEP-reported team index, when the feed includes one. */
+  team?: number;
   kills?: number;
   deaths?: number;
   assists?: number;
   damage?: number;
   healing?: number;
   mitigation?: number;
+  /** Set by the aggregator on the tracked player's entry (BattleTag match). */
+  isLocal?: boolean;
 }
 
 /**
@@ -75,6 +82,8 @@ export interface MatchRecord {
   mitigation?: number;
   /** Per-hero breakdown for the local player (one entry per hero used). */
   perHero?: HeroStat[];
+  /** Latest roster snapshot per slot — whatever teams the feed reported. */
+  roster?: RosterPlayer[];
   groupSize?: number;
   finalScore?: string;
   startedAt?: number;
@@ -97,4 +106,14 @@ export interface HeroStat {
 /** Create an empty, mutable record with a given match id. */
 export function emptyMatch(matchId: string): MatchRecord {
   return { matchId, heroes: [] };
+}
+
+/**
+ * A BattleTag's normalized identity: the name before `#`, trimmed and
+ * lowercased. GEP sometimes drops the discriminator, so identity comparisons
+ * (local-player detection, the player-encounter index) all use this one form.
+ */
+export function battleTagName(tag: string): string {
+  const hash = tag.indexOf('#');
+  return (hash >= 0 ? tag.slice(0, hash) : tag).trim().toLowerCase();
 }

@@ -1,4 +1,4 @@
-import type { Result, Role, HeroStat } from './model';
+import type { Result, Role, HeroStat, RosterPlayer } from './model';
 
 /**
  * Analytics layer: turns a list of completed games into the aggregates the
@@ -20,6 +20,19 @@ export interface MatchMental {
   positiveComms?: boolean;
 }
 
+/** How the player graded one improvement target for one game. */
+export type TargetGrade = 'hit' | 'partial' | 'missed';
+
+/** The manual (◎) read attached to a tracked game on the Review screen. */
+export interface MatchReview {
+  /** When the review was saved. */
+  at: number;
+  /** targetId → grade; grades for deleted targets stay inert. */
+  grades: Record<string, TargetGrade>;
+  /** Feel flags — same shape as the quick-log self-report. */
+  flags: MatchMental;
+}
+
 /** One finished game, already resolved to display values. */
 export interface GameRecord {
   matchId: string;
@@ -33,8 +46,17 @@ export interface GameRecord {
   heroes: string[];
   /** Per-hero breakdown for the local player (from GEP roster), if available. */
   perHero?: HeroStat[];
+  /** Round score, e.g. "2–1", when the feed reported one. */
+  finalScore?: string;
+  /** Latest roster snapshot per slot — whatever teams GEP reported (may be
+   *  local team only). Absent on older records and manual logs. */
+  roster?: RosterPlayer[];
+  /** End-of-match capture files, relative to the screenshots root. */
+  screenshots?: string[];
   /** Manual self-report captured in the Log Match card, if the player added one. */
   mental?: MatchMental;
+  /** The saved Review-screen read (target grades + feel flags), if graded. */
+  review?: MatchReview;
 }
 
 export interface WinLoss {

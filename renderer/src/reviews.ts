@@ -1,60 +1,71 @@
 /**
- * The manual (◎) layer attached to auto-tracked (⚡) games. Each finished game is
- * detected automatically; this stores the human read the app can't detect — target
- * grades and habit flags — keyed by match id and persisted to localStorage so it
- * survives reloads. Mirrors how the other manual surfaces work today; wiring these
- * writes through to the main-process store is the shared next step.
+ * Review-session helpers. Reviews persist to the main-process store via
+ * `bridge.saveReview` — the old renderer-only localStorage store is no longer a
+ * source of truth. What remains here:
+ *
+ * 1. `gradedThisSession` — the match ids graded since the last data refetch.
+ *    Saving a review deliberately does NOT refetch (the current snapshot stays
+ *    stable), so the inbox and sidebar badge subtract this set instead.
+ * 2. `migrateLegacyReviews` — a one-time import of the legacy `vantageReviews`
+ *    localStorage payload into the main store.
  */
-export type Grade = 'hit' | 'partial' | 'missed';
+import type { MatchMental, ReviewInput, TargetGrade } from '../../src/shared/contract';
+import { bridge } from './bridge';
 
-export interface Flags {
+const LEGACY_KEY = 'vantageReviews';
+
+/** Match ids graded since the last refetch — hides them from the inbox/badge. */
+export const gradedThisSession = new Set<string>();
+
+/** The pre-pipeline localStorage shapes (renderer-local flag names). */
+interface LegacyFlags {
   tilted?: boolean;
   comms?: boolean;
   toxic?: boolean;
   leaver?: boolean;
 }
-
-export interface Review {
+interface LegacyReview {
   matchId: string;
   at: number;
-  targets: Record<string, Grade>; // keyed by target id
-  flags: Flags;
+  targets: Record<string, TargetGrade>;
+  flags: LegacyFlags;
 }
 
-const KEY = 'vantageReviews';
+/** Old renderer flag names → the shared MatchMental keys. */
+function toMental(f: LegacyFlags): MatchMental {
+  const m: MatchMental = {};
+  if (f.tilted) m.tilt = true;
+  if (f.comms) m.positiveComms = true;
+  if (f.toxic) m.toxicMates = true;
+  if (f.leaver) m.leaver = true;
+  return m;
+}
 
-function load(): Record<string, Review> {
+/**
+ * One-time migration of legacy localStorage reviews into the main store.
+ * Idempotent: the key is cleared only after the import IPC resolves, so a
+ * failure leaves it in place for the next launch; the store side never
+ * overwrites existing reviews and skips unknown match ids. Returns whether
+ * anything was imported (so the caller can refetch once).
+ */
+export async function migrateLegacyReviews(): Promise<boolean> {
+  let legacy: Record<string, LegacyReview> | null = null;
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) ?? 'null');
   } catch {
-    return {};
+    legacy = null;
   }
-}
+  if (!legacy || typeof legacy !== 'object') return false;
 
-function persist(all: Record<string, Review>): void {
+  const inputs: ReviewInput[] = Object.values(legacy)
+    .filter((r) => r && typeof r.matchId === 'string')
+    .map((r) => ({ matchId: r.matchId, grades: r.targets ?? {}, flags: toMental(r.flags ?? {}) }));
+
+  const result = inputs.length ? await bridge.importReviews(inputs) : { imported: 0, skipped: 0 };
   try {
-    localStorage.setItem(KEY, JSON.stringify(all));
+    localStorage.removeItem(LEGACY_KEY);
   } catch {
-    /* storage unavailable — grades just won't persist this session */
+    /* storage unavailable — retried next launch, imports stay idempotent */
   }
+  return result.imported > 0;
 }
-
-export const reviews = {
-  get: (id: string): Review | undefined => load()[id],
-  has: (id: string): boolean => id in load(),
-  set(review: Review): void {
-    const all = load();
-    all[review.matchId] = review;
-    persist(all);
-  },
-  remove(id: string): void {
-    const all = load();
-    delete all[id];
-    persist(all);
-  },
-  /** How many of these match ids still need a review. */
-  pending: (matchIds: string[]): number => {
-    const all = load();
-    return matchIds.reduce((n, id) => (id in all ? n : n + 1), 0);
-  },
-};

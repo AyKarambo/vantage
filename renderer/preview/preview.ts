@@ -3,22 +3,31 @@
  * `window.owstats` with the pure core running against the sample season, so the
  * full UI can be viewed and iterated in a plain browser — no Overwolf runtime.
  *
- * Manual writes (logMatch / saveTarget) are persisted to localStorage so they
- * survive a reload here, mirroring how the real app persists them to disk.
+ * Manual writes (logMatch / saveTarget / saveReview / target lifecycle) are
+ * persisted to localStorage so they survive a reload here, mirroring how the
+ * real app persists them to disk.
  */
 import type {
-  AuthoredTargetInput, DashboardFilters, ManualMatchInput, OwStatsApi,
+  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, ManualMatchInput,
+  NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
+  ReviewInput, TargetEditInput,
 } from '../../src/shared/contract';
-import type { GameRecord } from '../../src/core/analytics';
+import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters } from '../../src/core/dashboardData';
 import { heroDetail } from '../../src/core/analytics';
+import { matchDetail } from '../../src/core/matchDetail';
+import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
 const LOGGED_KEY = 'vantagePreviewLogged';
 const TARGETS_KEY = 'vantagePreviewTargets';
+const REVIEWS_KEY = 'vantagePreviewReviews';
+const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
+const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
+const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
 
 const load = <T>(key: string): T[] => {
   try {
@@ -26,6 +35,14 @@ const load = <T>(key: string): T[] => {
     return Array.isArray(v) ? v : [];
   } catch {
     return [];
+  }
+};
+const loadMap = <T>(key: string): Record<string, T> => {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
   }
 };
 const save = (key: string, value: unknown): void => {
@@ -38,19 +55,91 @@ const save = (key: string, value: unknown): void => {
 
 const season = generateSampleGames(220, 42);
 const logged: GameRecord[] = load<GameRecord>(LOGGED_KEY);
-const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY);
+// Older preview targets predate the active flag — backfill like ManualStore does.
+const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
+  .map((t) => ({ ...t, isActive: t.isActive ?? true }));
+const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
+const savedBreakReminder = loadMap<unknown>(BREAK_REMINDER_KEY) as Partial<BreakReminderSettings>;
+let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).length
+  ? normalizeBreakReminder(savedBreakReminder)
+  : { ...DEFAULT_BREAK_REMINDER };
 
-const dataset = (): GameRecord[] => [...season, ...logged];
+// Saved reviews are overlaid onto the dataset so the pure core exercises the
+// full pipeline (inbox, mental merge, target scoring) exactly as in the app.
+const dataset = (): GameRecord[] =>
+  [...season, ...logged].map((g) =>
+    previewReviews[g.matchId] ? { ...g, review: previewReviews[g.matchId] } : g,
+  );
+
+const findTarget = (id: string): AuthoredTarget | undefined => targets.find((t) => t.id === id);
+
+// Canned Notion picker data — the preview has no real Notion runtime, but the
+// database-picker card still needs something to list and select against.
+const CANNED_DATABASES: NotionDatabaseSummary[] = [
+  { id: 'db-gametracker', title: 'Gametracker', url: 'https://notion.so/db-gametracker' },
+  { id: 'db-old-season', title: 'Gametracker (Season 1 — archived)', url: 'https://notion.so/db-old-season' },
+];
+const CANNED_PAGES: NotionPageSummary[] = [
+  { id: 'page-overwatch', title: 'Overwatch', url: 'https://notion.so/page-overwatch' },
+  { id: 'page-gaming', title: 'Gaming', url: 'https://notion.so/page-gaming' },
+];
+let selectedNotionDatabaseId: string | undefined = localStorage.getItem(NOTION_DB_KEY) ?? undefined;
+let notionTokenSet = localStorage.getItem(NOTION_TOKEN_KEY) === '1';
+
+function notionStatusFor(databaseId: string | undefined): NotionStatus {
+  const db = CANNED_DATABASES.find((d) => d.id === databaseId);
+  return {
+    tokenSet: notionTokenSet,
+    databaseConfigured: Boolean(db),
+    connected: notionTokenSet && Boolean(db),
+    gametrackerUrl: db?.url,
+    trackedGames: dataset().length,
+    databaseSource: db ? 'selected' : 'none',
+    databaseId: db?.id,
+    databaseTitle: db?.title,
+    shapeValid: db ? true : undefined,
+    shapeIssues: undefined,
+  };
+}
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, true, { targets }),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, true, { targets, breakReminder }),
   heroDetail: async (hero: string, f: DashboardFilters) => heroDetail(applyFilters(dataset(), f), hero),
-  exportNotion: async () => ({ ok: 0, failed: 0, unavailable: true }),
-  // The preview has no Notion runtime; report a disconnected state so the setup
-  // UI is what's shown, and echo token set/clear locally.
-  notionStatus: async () => ({ tokenSet: false, databaseConfigured: true, connected: false, trackedGames: dataset().length }),
-  setNotionToken: async () => ({ tokenSet: true, databaseConfigured: true, connected: true, trackedGames: dataset().length }),
-  clearNotionToken: async () => ({ tokenSet: false, databaseConfigured: true, connected: false, trackedGames: dataset().length }),
+  matchDetail: async (matchId: string, f: DashboardFilters) => {
+    const games = dataset();
+    return matchDetail(games, matchId, applyFilters(games, f));
+  },
+  exportNotion: async () => (selectedNotionDatabaseId ? { ok: dataset().length, failed: 0, skipped: 0 } : { ok: 0, failed: 0, unavailable: true }),
+  // The preview has no Notion runtime; token state is tracked locally, and the
+  // database picker operates against a small canned list (see CANNED_DATABASES).
+  notionStatus: async () => notionStatusFor(selectedNotionDatabaseId),
+  setNotionToken: async () => {
+    // A token alone doesn't select a database — the picker card is what shows next.
+    notionTokenSet = true;
+    localStorage.setItem(NOTION_TOKEN_KEY, '1');
+    return notionStatusFor(selectedNotionDatabaseId);
+  },
+  clearNotionToken: async () => {
+    notionTokenSet = false;
+    selectedNotionDatabaseId = undefined;
+    localStorage.removeItem(NOTION_TOKEN_KEY);
+    localStorage.removeItem(NOTION_DB_KEY);
+    return notionStatusFor(undefined);
+  },
+  listNotionDatabases: async () => ({ databases: CANNED_DATABASES }),
+  listNotionPages: async () => ({ pages: CANNED_PAGES }),
+  selectNotionDatabase: async (databaseId: string) => {
+    selectedNotionDatabaseId = databaseId;
+    localStorage.setItem(NOTION_DB_KEY, databaseId);
+    return notionStatusFor(databaseId);
+  },
+  createNotionDatabase: async (_parentPageId: string) => {
+    // Simulate the ~15s auto-create latency the real IPC call incurs.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    selectedNotionDatabaseId = 'db-gametracker';
+    localStorage.setItem(NOTION_DB_KEY, selectedNotionDatabaseId);
+    return notionStatusFor(selectedNotionDatabaseId);
+  },
   logMatch: async (input: ManualMatchInput) => {
     const matchId = `manual-${Date.now()}`;
     logged.push({
@@ -68,8 +157,60 @@ const mock: OwStatsApi = {
     return { matchId };
   },
   saveTarget: async (input: AuthoredTargetInput) => {
-    targets.push({ id: `t-${Date.now()}`, createdAt: Date.now(), ...input });
+    targets.push({ id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input });
     save(TARGETS_KEY, targets);
+  },
+  saveReview: async (input: ReviewInput) => {
+    previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.flags };
+    save(REVIEWS_KEY, previewReviews);
+  },
+  importReviews: async (inputs: ReviewInput[]) => {
+    const known = new Set(dataset().map((g) => g.matchId));
+    let imported = 0;
+    let skipped = 0;
+    for (const i of inputs) {
+      if (!known.has(i.matchId) || previewReviews[i.matchId]) {
+        skipped++;
+        continue;
+      }
+      previewReviews[i.matchId] = { at: Date.now(), grades: i.grades, flags: i.flags };
+      imported++;
+    }
+    if (imported) save(REVIEWS_KEY, previewReviews);
+    return { imported, skipped };
+  },
+  updateTarget: async (input: TargetEditInput) => {
+    const t = findTarget(input.id);
+    if (!t) return;
+    t.name = input.name;
+    t.mode = input.mode;
+    t.rule = input.rule;
+    save(TARGETS_KEY, targets);
+  },
+  setTargetActive: async (id: string, active: boolean) => {
+    const t = findTarget(id);
+    if (!t) return;
+    t.isActive = active;
+    save(TARGETS_KEY, targets);
+  },
+  setTargetArchived: async (id: string, archived: boolean) => {
+    const t = findTarget(id);
+    if (!t) return;
+    if (archived) t.archivedAt = Date.now();
+    else delete t.archivedAt;
+    save(TARGETS_KEY, targets);
+  },
+  deleteTarget: async (id: string) => {
+    const idx = targets.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+    targets.splice(idx, 1);
+    save(TARGETS_KEY, targets);
+  },
+  getBreakReminder: async () => breakReminder,
+  setBreakReminder: async (input: BreakReminderSettings) => {
+    breakReminder = normalizeBreakReminder(input);
+    save(BREAK_REMINDER_KEY, breakReminder);
+    return breakReminder;
   },
   window: {
     minimize: () => console.info('[preview] minimize'),

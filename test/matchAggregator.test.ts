@@ -3,6 +3,7 @@ import { MatchAggregator, parseRoster } from '../src/core/matchAggregator';
 import type { GepMessage } from '../src/core/model';
 import { resolveRole } from '../src/core/resolvers/role';
 import { resolveResult } from '../src/core/resolvers/result';
+import { buildCompetitiveMatch } from '../src/main/simulate';
 
 const info = (feature: string, key: string, value: unknown): GepMessage => ({
   kind: 'info',
@@ -112,6 +113,49 @@ describe('MatchAggregator per-hero stats', () => {
     const ph = Object.fromEntries((rec!.perHero ?? []).map((h) => [h.hero, h]));
     expect(ph.Tracer).toMatchObject({ eliminations: 10, deaths: 2, assists: 3, damage: 4000, role: 'damage' });
     expect(ph.Genji).toMatchObject({ eliminations: 15, deaths: 4, assists: 4, damage: 10000 });
+  });
+});
+
+describe('MatchAggregator roster retention', () => {
+  it('keeps the latest snapshot per roster slot and marks the local player', () => {
+    const agg = new MatchAggregator(() => 1000);
+    const messages = buildCompetitiveMatch({ battleTag: 'Karambo#21234', map: "King's Row" }, 'ret-1');
+    const matchEnd = messages[messages.length - 1];
+    for (const m of messages.slice(0, -1)) agg.handle(m);
+
+    // Late snapshots: slot 1 swaps hero and updates stats; a new slot 2 appears.
+    agg.handle(info('roster', 'roster_1', { name: 'Someone#1234', hero: 'Ana', role: 'support', kills: 5, healing: 8000, team: 0 }));
+    agg.handle(info('roster', 'roster_2', JSON.stringify({ name: 'Enemy#9', hero: 'Reinhardt', role: 'tank', kills: 12, team_id: 1 })));
+
+    const record = agg.handle(matchEnd);
+    expect(record?.roster).toBeDefined();
+    const roster = record!.roster!;
+    expect(roster).toHaveLength(3); // one entry per slot, in slot order
+
+    // Slot 0 — the tracked player, flagged and untouched by other slots.
+    expect(roster[0]).toMatchObject({ battleTag: 'Karambo#21234', heroName: 'Tracer', kills: 23, isLocal: true });
+    // Slot 1 — the LATEST snapshot wins (Mercy → Ana), team alias parsed.
+    expect(roster[1]).toMatchObject({ battleTag: 'Someone#1234', heroName: 'Ana', kills: 5, healing: 8000, team: 0 });
+    expect(roster[1].isLocal).toBeFalsy();
+    // Slot 2 — JSON string payload with a `team_id` alias.
+    expect(roster[2]).toMatchObject({ battleTag: 'Enemy#9', heroName: 'Reinhardt', team: 1 });
+
+    // The local player's own aggregation is unchanged by retention.
+    expect(record!.eliminations).toBe(23);
+    expect(record!.deaths).toBe(7);
+    expect(record!.assists).toBe(9);
+    expect(record!.damage).toBe(11000);
+    expect(record!.heroes).toEqual(['Tracer']);
+    expect(record!.finalScore).toBe('2–1');
+  });
+
+  it('emits no roster when no roster entries arrived', () => {
+    const agg = new MatchAggregator(() => 1000);
+    agg.handle(event('match_start'));
+    agg.handle(info('match_info', 'pseudo_match_id', 'no-roster'));
+    agg.handle(info('match_info', 'match_outcome', 'Victory'));
+    const record = agg.handle(event('match_end'));
+    expect(record?.roster).toBeUndefined();
   });
 });
 
