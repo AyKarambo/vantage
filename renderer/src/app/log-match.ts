@@ -8,14 +8,19 @@ import { h } from '../dom';
 import { time } from '../format';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
+import { typeahead } from '../components/typeahead';
+import { toast } from '../components/toast';
 import { bridge } from '../bridge';
+import { prefs } from '../prefs';
 import { MAP_MODES } from '../../../src/core/maps';
+import { ALL_HEROES } from '../../../src/core/heroes';
 import type { MatchMental, Result, Role } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver', 'Positive comms'];
 const MAP_OPTIONS = Object.keys(MAP_MODES).sort().map((m) => ({ value: m, label: m }));
 const MODES = ['Competitive', 'Quick Play'];
+const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support' };
 
 interface LogState {
   result: Result;
@@ -38,13 +43,17 @@ function mentalFrom(flags: Set<string>): MatchMental | undefined {
 
 export function openLogMatch(ctx: ViewContext): void {
   openModal((close) => {
+    // Role and mode carry over from the last log (a player mostly queues one
+    // role); result/map/hero always start fresh, and flags start EMPTY so the
+    // mental data reflects deliberate input, not a pre-checked default.
+    const prefill = prefs.get('logPrefill');
     const state: LogState = {
       result: 'Win',
-      role: 'damage',
+      role: (prefill?.role as Role) ?? 'damage',
       map: 'Ilios',
       hero: '',
-      mode: 'Competitive',
-      flags: new Set<string>(['Positive comms']),
+      mode: prefill?.mode ?? 'Competitive',
+      flags: new Set<string>(),
     };
 
     const persist = async (): Promise<void> => {
@@ -56,6 +65,8 @@ export function openLogMatch(ctx: ViewContext): void {
         gameType: state.mode,
         mental: mentalFrom(state.flags),
       });
+      prefs.set('logPrefill', { role: state.role, mode: state.mode });
+      toast(`Match logged — ${state.result} · ${state.map}`);
       ctx.refresh();
     };
 
@@ -75,19 +86,22 @@ export function openLogMatch(ctx: ViewContext): void {
       select(MAP_OPTIONS, state.map, (v) => (state.map = v)),
     );
 
+    const roleLabelInitial = Object.keys(ROLE_LABELS).find((k) => ROLE_LABELS[k] === state.role) ?? 'Damage';
     const roleField = field('Role',
-      choiceSegment(['Tank', 'Damage', 'Support'], 'Damage', (v) => (state.role = v.toLowerCase() as Role)),
+      choiceSegment(Object.keys(ROLE_LABELS), roleLabelInitial, (v) => (state.role = ROLE_LABELS[v])),
     );
 
     const modeField = field('Mode',
-      choiceSegment(MODES, 'Competitive', (v) => (state.mode = v)),
+      choiceSegment(MODES, MODES.includes(state.mode) ? state.mode : 'Competitive', (v) => (state.mode = v)),
     );
 
     const heroField = field(
       h('span', null, h('span', { class: 'field-label', style: { display: 'inline', margin: '0' } }, 'Hero'), h('span', { class: 'u-dim', style: { fontSize: '11px', marginLeft: '6px' } }, '— optional')),
-      h('input', {
-        class: 'target-name-input', value: state.hero, placeholder: 'e.g. Tracer',
-        on: { input: (e) => (state.hero = (e.target as HTMLInputElement).value) },
+      typeahead({
+        value: state.hero,
+        placeholder: 'e.g. Tracer',
+        suggestions: heroSuggestions(ctx),
+        onChange: (v) => (state.hero = v),
       }),
     );
 
@@ -118,6 +132,13 @@ export function openLogMatch(ctx: ViewContext): void {
 }
 
 // --- little local builders --------------------------------------------------
+
+/** Canonical hero list plus anything already seen in this player's data. */
+function heroSuggestions(ctx: ViewContext): string[] {
+  const seen = new Set<string>(ALL_HEROES);
+  for (const hs of ctx.data.heroStats) seen.add(hs.hero);
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
 
 function field(label: Node | string, control: Node): HTMLElement {
   return h('div', null, typeof label === 'string' ? h('div', { class: 'field-label' }, label) : label, control);

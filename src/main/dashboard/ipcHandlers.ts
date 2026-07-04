@@ -5,7 +5,7 @@ import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
-  AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
+  AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
   RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
@@ -93,6 +93,16 @@ export function registerDashboardIpc(provider: DataProvider): void {
 
   // Live connection/data-flow status (snapshot; changes arrive via push).
   ipcMain.handle(ch.getGepStatus, () => provider.getGepStatus());
+
+  // App-behavior settings + metadata (Settings screen).
+  ipcMain.handle(ch.getAppSettings, () => provider.getAppSettings());
+  ipcMain.handle(ch.setAppSettings, (_e, patch: Partial<AppUiSettings>) =>
+    provider.setAppSettings(patch),
+  );
+  ipcMain.handle(ch.getAppInfo, () => provider.getAppInfo());
+  ipcMain.handle(ch.clearReview, (_e, matchId: string) => {
+    provider.clearReview(matchId);
+  });
 }
 
 /** Window actions the title-bar channels drive, provided as closures over the owning window. */

@@ -19,6 +19,22 @@ export interface NotionConfig {
 
 export type Sensor = 'counterwatch' | 'gep';
 
+/** The dashboard window's last-seen placement, restored on launch. */
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+}
+
+/** App-behavior settings owned by the Settings screen. */
+export interface UiConfig {
+  /** ✕ keeps the app in the tray (true, today's behavior) or quits (false). */
+  closeToTray: boolean;
+  windowBounds?: WindowBounds;
+}
+
 export interface AppConfig {
   overwatchGameId: number;
   logFilter: LogFilter;
@@ -32,6 +48,7 @@ export interface AppConfig {
   mapAliases: Record<string, string>;
   /** "Time for a break?" tray notification after N consecutive losses. */
   breakReminder: BreakReminderSettings;
+  ui: UiConfig;
 }
 
 const DEFAULTS: AppConfig = {
@@ -43,6 +60,7 @@ const DEFAULTS: AppConfig = {
   accounts: {},
   mapAliases: {},
   breakReminder: { ...DEFAULT_BREAK_REMINDER },
+  ui: { closeToTray: true },
 };
 
 /** Per-user, machine-local files (survive app updates, never committed). */
@@ -79,6 +97,7 @@ export function loadConfig(): AppConfig {
     accounts: { ...(bundled.accounts ?? {}), ...(local.accounts ?? {}) },
     mapAliases: { ...(bundled.mapAliases ?? {}), ...(local.mapAliases ?? {}) },
     breakReminder: { ...DEFAULTS.breakReminder, ...(bundled.breakReminder ?? {}), ...(local.breakReminder ?? {}) },
+    ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };
   // Env overrides (handy for one-off testing without editing files).
   if (process.env.OW_SYNC_FILTER) merged.logFilter = process.env.OW_SYNC_FILTER as LogFilter;
@@ -104,6 +123,16 @@ export function saveLocalNotionConfig(patch: Partial<NotionConfig>): void {
   const merged: Partial<AppConfig> = {
     ...current,
     notion: { ...DEFAULTS.notion, ...(current.notion ?? {}), ...patch },
+  };
+  fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
+}
+
+/** Deep-merge a partial `ui` patch (same clobber-avoidance as the notion helper). */
+export function saveLocalUiConfig(patch: Partial<UiConfig>): void {
+  const current = readJson<AppConfig>(userConfigPath());
+  const merged: Partial<AppConfig> = {
+    ...current,
+    ui: { ...DEFAULTS.ui, ...(current.ui ?? {}), ...patch },
   };
   fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
 }

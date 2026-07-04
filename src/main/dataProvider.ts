@@ -6,7 +6,7 @@ import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
-import type { GepStatusPayload } from '../shared/contract';
+import type { AppInfo, AppUiSettings, GepStatusPayload } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
 /**
@@ -19,7 +19,7 @@ import type { GameRecord } from '../core/analytics';
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews'>;
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
   /** The Notion edge: export, status, token lifecycle, and the database picker. */
@@ -41,6 +41,13 @@ export interface DataProviderDeps {
   logger: Pick<Logger, 'entries' | 'getLevel' | 'setLevel' | 'error'>;
   /** Live connection/data-flow status snapshot (from the GEP status monitor). */
   gepStatus(): GepStatusPayload;
+  /** App-behavior settings: current values + apply/persist (owned by the composition root). */
+  appSettings: {
+    get(): AppUiSettings;
+    apply(patch: Partial<AppUiSettings>): AppUiSettings;
+  };
+  /** Version + support contact for the About card. */
+  appInfo(): AppInfo;
 }
 
 /** Assemble the dashboard's DataProvider over the injected deps. */
@@ -113,5 +120,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       });
     },
     getGepStatus: () => deps.gepStatus(),
+    getAppSettings: () => deps.appSettings.get(),
+    setAppSettings: (patch) => deps.appSettings.apply(patch),
+    getAppInfo: () => deps.appInfo(),
+    clearReview: (matchId) => {
+      deps.history.clearReview(matchId);
+    },
   };
 }

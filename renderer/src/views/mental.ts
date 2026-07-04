@@ -1,10 +1,9 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
-import type { BreakReminderSettings } from '../../../src/shared/contract';
-import { bridge } from '../bridge';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
-import { badge, card, chip, select, statBar, statBox } from '../components/primitives';
+import { badge, card, statBar, statBox } from '../components/primitives';
+import { breakReminderEditor } from '../components/breakReminderEditor';
 import { viewHead, type ViewContext } from './view';
 
 export function mental(ctx: ViewContext): HTMLElement {
@@ -39,32 +38,6 @@ export function mental(ctx: ViewContext): HTMLElement {
         statBox(String(m.flags.leaver), 'Leavers'),
         statBox(h('span', { class: 'is-accent' }, String(m.flags.positiveComms)), 'Positive comms'),
       ),
-    ),
-  );
-}
-
-/** Real on/off + threshold editor for the break reminder — replaces the old
- *  hardcoded "on after 2 losses" line, which lied whenever the setting changed. */
-function breakReminderEditor(ctx: ViewContext): HTMLElement {
-  const r = ctx.data.breakReminder;
-
-  const set = (patch: Partial<BreakReminderSettings>): void => {
-    void bridge.setBreakReminder({ ...r, ...patch }).then(() => ctx.refresh());
-  };
-
-  const thresholdSelect = select(
-    [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} loss${n === 1 ? '' : 'es'}` })),
-    String(r.afterLosses),
-    (v) => set({ afterLosses: Number(v) }),
-  );
-  thresholdSelect.disabled = !r.enabled;
-
-  return h('div', { class: 'stack', style: { gap: '10px', marginTop: '12px' } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-      chip(r.enabled ? 'Break reminder: on' : 'Break reminder: off', r.enabled,
-        () => set({ enabled: !r.enabled })),
-      h('span', { class: 'hint' }, 'after'),
-      thresholdSelect,
     ),
   );
 }

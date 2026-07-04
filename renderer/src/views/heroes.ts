@@ -38,7 +38,8 @@ export function heroes(ctx: ViewContext): HTMLElement {
   );
 }
 
-function openHeroDrawer(ctx: ViewContext, hero: string): void {
+/** Open the hero drill-down drawer (also reachable from the command palette / cross-links). */
+export function openHeroDrawer(ctx: ViewContext, hero: string): void {
   openDrawer(() => {
     const body = h('div', null, h('div', { class: 'hint' }, 'Loading…'));
     bridge.heroDetail(hero, ctx.data.filters).then((d) => render(body, heroDetail(d)));

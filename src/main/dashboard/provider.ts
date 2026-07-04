@@ -2,8 +2,9 @@ import type { GameRecord } from '../../core/analytics';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type {
-  AuthoredTargetInput, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionStatus,
-  NotionDatabaseSummary, NotionPageSummary, RendererErrorInput, ReviewInput, TargetEditInput,
+  AppInfo, AppUiSettings, AuthoredTargetInput, GepStatusPayload, LogEntry, LogLevel,
+  ManualMatchInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
+  RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 
 /**
@@ -63,4 +64,12 @@ export interface DataProvider {
   logRendererError(input: RendererErrorInput): void;
   /** Current connection/data-flow status snapshot. */
   getGepStatus(): GepStatusPayload;
+  /** App-behavior settings (Settings screen). */
+  getAppSettings(): AppUiSettings;
+  /** Apply + persist app-behavior settings; returns the applied values. */
+  setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
+  /** Version + support contact. */
+  getAppInfo(): AppInfo;
+  /** Remove a game's review (undo of a first-time save). */
+  clearReview(matchId: string): void;
 }

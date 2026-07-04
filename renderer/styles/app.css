@@ -641,3 +641,25 @@
   0%, 100% { box-shadow: 0 0 0 0 rgba(209, 104, 95, 0.55); }
   50% { box-shadow: 0 0 0 5px rgba(209, 104, 95, 0); }
 }
+
+/* Refresh feedback (status bar) ---------------------------------------------- */
+.busy-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-3);
+  border-top-color: var(--accent);
+  animation: busy-spin 0.8s linear infinite;
+}
+@keyframes busy-spin {
+  to { transform: rotate(360deg); }
+}
+.stale-link {
+  background: none;
+  border: none;
+  color: var(--mid);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}

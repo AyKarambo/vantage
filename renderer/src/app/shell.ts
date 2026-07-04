@@ -6,11 +6,16 @@
  */
 import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
-import type { GepStatusPayload } from '../../../src/shared/contract';
-import { store } from '../store';
+import type { DashboardData, GepStatusPayload } from '../../../src/shared/contract';
+import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
+import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
 import { openPopover } from '../components/popover';
+import { openModal } from '../components/overlay';
+import { mountToastHost } from '../components/toast';
+import { skeletonView } from '../components/skeleton';
+import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, signed } from '../format';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
@@ -24,14 +29,16 @@ import { targets } from '../views/targets';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
 import { logViewer } from '../views/logViewer';
+import { settings } from '../views/settings';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { openLogMatch } from './log-match';
+import { openPalette } from './palette';
 import { openOnboarding, shouldOnboard } from './onboarding';
 
 // matchDetail is a parameterized view: registered here (routable) but not in
 // NAV — the sidebar keeps Matches highlighted while it is active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, targets, notion, logs: logViewer };
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, targets, notion, logs: logViewer, settings };
 
 interface NavItem {
   id: ViewId;
@@ -65,24 +72,44 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'logs', label: 'Logs', icon: '≡' },
     ],
   },
+  {
+    group: 'App',
+    items: [
+      { id: 'settings', label: 'Settings', icon: '⚙' },
+    ],
+  },
 ];
 
 export class App {
   private readonly sidebarHost = h('aside', { class: 'sidebar' });
   private readonly filterHost = h('div', { class: 'filterbar-wrap hidden' });
   private readonly contentHost = h('main', { class: 'content' });
-  private readonly statusText = h('span', null, 'Loading…');
+  private readonly statusLabel = h('span', null, 'Loading…');
+  private readonly busySpin = h('span', { class: 'busy-indicator hidden', title: 'Refreshing…' });
+  private readonly staleLink = h('button', {
+    class: 'stale-link hidden',
+    title: 'The last refresh failed — click to retry',
+    on: { click: () => void store.refresh() },
+  }, '⚠ stale — retry');
   private readonly demoBadge = h('span', { class: 'badge badge--demo hidden' }, 'Demo data');
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
+  /** What the content host currently shows — re-render only when this changes. */
+  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; epoch: number } | null = null;
 
   constructor(mount: HTMLElement) {
     render(mount, this.build());
     store.subscribe((state) => this.onState(state));
     this.bindGlobals();
+    mountToastHost();
     initGepStatus();
     subscribeGepStatus(() => this.renderGepIndicator());
     this.renderGepIndicator();
+    // Keep "updated Xm" honest while the app idles.
+    setInterval(() => {
+      const s = store.get();
+      if (s.data && !s.stale && !s.error) this.statusLabel.textContent = statusText(s.data);
+    }, 60_000);
     void store.refresh();
     if (shouldOnboard()) openOnboarding();
   }
@@ -100,7 +127,7 @@ export class App {
           title: 'Connection status — click for details',
           on: { click: (e) => this.openGepPopover(e.currentTarget as HTMLElement) },
         }, this.gepDot, this.gepLabel),
-        this.statusText, this.demoBadge,
+        this.statusLabel, this.busySpin, this.staleLink, this.demoBadge,
         h('button', {
           class: 'statusbar-link',
           style: { marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer', font: 'inherit', fontSize: '11.5px' },
@@ -117,7 +144,7 @@ export class App {
     return h('header', { class: 'titlebar' },
       h('div', { class: 'titlebar-brand' }, h('span', { class: 'brand-mark' }), 'Vantage'),
       h('div', { class: 'titlebar-center' },
-        h('button', { class: 'titlebar-search', on: { click: () => openLogMatch(this.context()) } },
+        h('button', { class: 'titlebar-search', on: { click: () => this.openPalette() } },
           h('span', { class: 'kbd' }, 'Ctrl K'), 'Search or log a match'),
       ),
       h('div', { class: 'titlebar-controls' },
@@ -146,7 +173,9 @@ export class App {
     this.renderSidebar(state);
     this.renderFilters(state);
     this.renderContent(state);
-    this.statusText.textContent = state.status;
+    this.statusLabel.textContent = state.status;
+    this.busySpin.classList.toggle('hidden', !state.refreshing);
+    this.staleLink.classList.toggle('hidden', !state.stale);
     this.demoBadge.classList.toggle('hidden', !state.data?.isSample);
     // One-time legacy-review migration, only against real history (demo-mode
     // match ids don't exist in the store, so importing there would drop data).
@@ -167,10 +196,36 @@ export class App {
 
   private renderContent(state: AppState): void {
     if (!state.data) {
-      render(this.contentHost, h('div', { class: 'view' }, h('div', { class: 'card' }, h('div', { class: 'hint' }, 'Loading dashboard…'))));
+      this.lastRendered = null;
+      render(this.contentHost, state.error ? this.errorCard(state.error) : skeletonView());
       return;
     }
+    // Background refreshes and status-only patches keep the current DOM (and
+    // scroll position); re-render only for a new snapshot, route, or an
+    // explicit rerender() epoch bump.
+    const key = {
+      data: state.data,
+      view: state.view,
+      matchId: state.params.matchId,
+      highlight: state.params.highlight,
+      epoch: state.renderEpoch,
+    };
+    const last = this.lastRendered;
+    if (last && last.data === key.data && last.view === key.view
+      && last.matchId === key.matchId && last.highlight === key.highlight && last.epoch === key.epoch) return;
     render(this.contentHost, VIEWS[state.view](this.context()));
+    this.lastRendered = key;
+  }
+
+  /** Cold-start failure: nothing to show — offer an explicit retry. */
+  private errorCard(error: string): HTMLElement {
+    return h('div', { class: 'view' },
+      h('div', { class: 'card', style: { maxWidth: '460px', margin: '60px auto', textAlign: 'center' } },
+        h('div', { style: { fontSize: '15px', fontWeight: '600', marginBottom: '6px' } }, 'Couldn’t load the dashboard'),
+        h('div', { class: 'u-muted', style: { fontSize: '12px', marginBottom: '14px' } }, error),
+        button('Retry', { variant: 'primary', onClick: () => void store.refresh() }),
+      ),
+    );
   }
 
   private renderSidebar(state: AppState): void {
@@ -263,16 +318,83 @@ export class App {
     });
   }
 
-  private bindGlobals(): void {
-    // Ctrl+K opens quick log (Windows-only app). Window focus re-pulls newly tracked games.
-    window.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        if (store.get().data) openLogMatch(this.context());
-      }
+  /** Ctrl+K — palette (guarded against double-open via the mounted panel). */
+  private openPalette(): void {
+    if (!store.get().data || document.querySelector('.palette')) return;
+    const ctx = this.context();
+    openPalette(ctx, {
+      nav: NAV.flatMap((g) => g.items.map((i) => ({ id: i.id, label: i.label }))),
+      actions: [
+        { label: 'Log match', hint: 'record a game manually', run: () => openLogMatch(ctx) },
+        { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
+        { label: 'Replay the intro tour', run: () => openOnboarding() },
+      ],
     });
+  }
+
+  private openCheatsheet(): void {
+    openModal(() =>
+      h('div', { class: 'cheatsheet' },
+        h('h3', { style: { fontSize: '15px', marginBottom: '12px' } }, 'Keyboard shortcuts'),
+        ...shortcutGroups().map((g) =>
+          h('div', { style: { marginBottom: '12px' } },
+            h('div', { class: 'nav-group', style: { padding: '0 0 4px' } }, g.group),
+            ...g.items.map((s) =>
+              h('div', { class: 'cheatsheet-row' },
+                h('span', { class: 'kbd' }, comboLabel(s.combo)),
+                h('span', { class: 'u-muted', style: { fontSize: '12px' } }, s.description),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /** Step through the filtered match list from a detail page (←older / →newer). */
+  private stepMatch(direction: 1 | -1): void {
+    const state = store.get();
+    const matches = state.data?.matches ?? [];
+    const idx = matches.findIndex((m) => m.matchId === state.params.matchId);
+    const next = matches[idx + direction];
+    if (idx >= 0 && next) store.setView('matchDetail', { matchId: next.matchId });
+  }
+
+  private bindGlobals(): void {
+    initShortcuts();
+    registerShortcut({
+      combo: 'ctrl+k', description: 'Command palette — search, actions, log a match', group: 'Global',
+      allowInInput: true, run: () => this.openPalette(),
+    });
+    registerShortcut({ combo: '?', description: 'This cheatsheet', group: 'Global', run: () => this.openCheatsheet() });
+    NAV.flatMap((g) => g.items).forEach((item, i) => {
+      if (i >= 9) return;
+      registerShortcut({
+        combo: `ctrl+${i + 1}`, description: `Go to ${item.label}`, group: 'Navigate',
+        run: () => store.setView(item.id),
+      });
+    });
+    registerShortcut({
+      combo: 'escape', description: 'Back to Matches (from a match detail)', group: 'Navigate',
+      when: () => store.get().view === 'matchDetail', run: () => store.setView('matches'),
+    });
+    registerShortcut({
+      combo: 'arrowleft', description: 'Older match (on a match detail)', group: 'Navigate',
+      when: () => store.get().view === 'matchDetail', run: () => this.stepMatch(1),
+    });
+    registerShortcut({
+      combo: 'arrowright', description: 'Newer match (on a match detail)', group: 'Navigate',
+      when: () => store.get().view === 'matchDetail', run: () => this.stepMatch(-1),
+    });
+    // Window focus re-pulls newly tracked games (stale-while-revalidate).
     window.addEventListener('focus', () => void store.refresh());
   }
+}
+
+function comboLabel(combo: string): string {
+  return combo.split('+').map((part) =>
+    part === 'ctrl' ? 'Ctrl' : part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1),
+  ).join(' ');
 }
 
 /** The short, never-lying label next to the status dot. */

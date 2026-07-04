@@ -11,6 +11,7 @@ import type { ExportResult, NotionStatus, NotionDatabaseSummary, NotionPageSumma
 import type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
+import type { AppInfo, AppUiSettings } from './appSettings';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -60,6 +61,14 @@ export interface OwStatsApi {
   logRendererError(input: RendererErrorInput): Promise<void>;
   /** Current connection/data-flow status snapshot (see also onGepStatus). */
   getGepStatus(): Promise<GepStatusPayload>;
+  /** App-behavior settings (Settings screen). */
+  getAppSettings(): Promise<AppUiSettings>;
+  /** Persist app-behavior settings; returns the applied values. */
+  setAppSettings(patch: Partial<AppUiSettings>): Promise<AppUiSettings>;
+  /** Version + support contact (Settings screen's About card). */
+  getAppInfo(): Promise<AppInfo>;
+  /** Remove a game's review — the undo of a first-time review save. */
+  clearReview(matchId: string): Promise<void>;
   /** Subscribe to new log entries; returns an unsubscribe function. */
   onLogEntry(cb: (e: LogEntry) => void): () => void;
   /** Subscribe to connection/data-flow state changes; returns an unsubscribe function. */
@@ -115,6 +124,10 @@ export const IPC_CHANNELS = {
   setLogLevel: 'log:set-level',
   logRendererError: 'log:renderer-error',
   getGepStatus: 'status:gep',
+  getAppSettings: 'settings:get-app',
+  setAppSettings: 'settings:set-app',
+  getAppInfo: 'app:info',
+  clearReview: 'manual:clear-review',
 } as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 
 /** The fire-and-forget channels behind the frameless window controls. */

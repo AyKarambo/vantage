@@ -1,7 +1,7 @@
 import { app, shell } from 'electron';
 import * as path from 'path';
 import {
-  loadConfig, saveLocalConfig, getNotionToken, userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, saveLocalUiConfig, getNotionToken, userConfigPath, type AppConfig,
 } from './config';
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
@@ -114,6 +114,22 @@ function main(): void {
     sampleGames: generateSampleGames,
     logger: log,
     gepStatus: () => statusMonitor.current(),
+    appSettings: {
+      get: () => ({ closeToTray: config.ui.closeToTray, runAtLogin: isAutoLaunchEnabled() }),
+      apply: (patch) => {
+        if (patch.closeToTray !== undefined) {
+          saveLocalUiConfig({ closeToTray: patch.closeToTray });
+          config = loadConfig();
+        }
+        if (patch.runAtLogin !== undefined) {
+          setAutoLaunch(patch.runAtLogin);
+          saveLocalConfig({ runAtLogin: patch.runAtLogin });
+          tray.setState({ autoLaunch: patch.runAtLogin });
+        }
+        return { closeToTray: config.ui.closeToTray, runAtLogin: isAutoLaunchEnabled() };
+      },
+    },
+    appInfo: () => ({ version: app.getVersion(), supportEmail: 'timo.seikel@gmail.com' }),
   });
 
   const handlers: TrayHandlers = {
@@ -145,7 +161,14 @@ function main(): void {
   };
 
   const tray = new TrayController(iconPath, handlers);
-  const dashboard = new DashboardWindow(dataProvider, iconPath);
+  const dashboard = new DashboardWindow(dataProvider, iconPath, {
+    closeToTray: () => config.ui.closeToTray,
+    savedBounds: () => config.ui.windowBounds,
+    saveBounds: (windowBounds) => {
+      saveLocalUiConfig({ windowBounds });
+      config = loadConfig();
+    },
+  });
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
   publishStatus = (p) => {
     dashboard.push(EVENT_CHANNELS.onGepStatus, p);

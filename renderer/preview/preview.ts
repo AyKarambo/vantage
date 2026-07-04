@@ -8,7 +8,7 @@
  * real app persists them to disk.
  */
 import type {
-  AuthoredTargetInput, BreakReminderSettings, DashboardFilters, GepHealthState,
+  AppUiSettings, AuthoredTargetInput, BreakReminderSettings, DashboardFilters, GepHealthState,
   GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionDatabaseSummary,
   NotionPageSummary, NotionStatus, OwStatsApi, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../src/shared/contract';
@@ -28,6 +28,7 @@ const REVIEWS_KEY = 'vantagePreviewReviews';
 const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
+const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
 
 const load = <T>(key: string): T[] => {
   try {
@@ -85,6 +86,11 @@ const CANNED_PAGES: NotionPageSummary[] = [
 ];
 let selectedNotionDatabaseId: string | undefined = localStorage.getItem(NOTION_DB_KEY) ?? undefined;
 let notionTokenSet = localStorage.getItem(NOTION_TOKEN_KEY) === '1';
+let appSettings: AppUiSettings = {
+  closeToTray: true,
+  runAtLogin: false,
+  ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
+};
 
 // Fake log feed: a canned backlog plus a slow trickle of new entries, so the
 // Logs screen's tail/filter/pause behaviors are all exercisable in a browser.
@@ -281,6 +287,17 @@ const mock: OwStatsApi = {
   onGepStatus: (cb: (s: GepStatusPayload) => void) => {
     gepListeners.add(cb);
     return () => gepListeners.delete(cb);
+  },
+  getAppSettings: async () => appSettings,
+  setAppSettings: async (patch: Partial<AppUiSettings>) => {
+    appSettings = { ...appSettings, ...patch };
+    save(APP_SETTINGS_KEY, appSettings);
+    return appSettings;
+  },
+  getAppInfo: async () => ({ version: 'preview', supportEmail: 'timo.seikel@gmail.com' }),
+  clearReview: async (matchId: string) => {
+    delete previewReviews[matchId];
+    save(REVIEWS_KEY, previewReviews);
   },
   window: {
     minimize: () => console.info('[preview] minimize'),
