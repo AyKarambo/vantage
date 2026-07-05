@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { NotionImporter } from '../src/notion/notionImporter';
+import { NotionImporter, NOTION_IMPROVEMENT_TARGET_ID, notionImprovementTarget } from '../src/notion/notionImporter';
 
 const GT = 'gametracker-db';
 const MAPS = 'maps-db';
@@ -13,6 +13,11 @@ function row(p: {
   account?: string;
   name?: string;
   heroes?: string[];
+  leaver?: 'team' | 'enemy' | null;
+  tilt?: boolean;
+  toxicMates?: boolean;
+  comms?: string | null;
+  improvement?: string | null;
 }) {
   return {
     id: p.id ?? 'page-1',
@@ -26,6 +31,11 @@ function row(p: {
       'Game Type': { select: null },
       'Match ID': { rich_text: [] },
       Name: { title: p.name ? [{ plain_text: p.name }] : [] },
+      Leaver: { type: 'select', select: p.leaver ? { name: p.leaver } : null },
+      Tilt: { type: 'checkbox', checkbox: Boolean(p.tilt) },
+      'Toxic Mates': { type: 'checkbox', checkbox: Boolean(p.toxicMates) },
+      Comms: { type: 'select', select: p.comms ? { name: p.comms } : null },
+      'Improvement Target': { type: 'select', select: p.improvement ? { name: p.improvement } : null },
     },
   };
 }
@@ -127,5 +137,82 @@ describe('NotionImporter — role and result mapping', () => {
     const { games, failed } = await new NotionImporter(client, GT).import();
     expect(games).toHaveLength(0);
     expect(failed).toBe(1);
+  });
+});
+
+describe('NotionImporter — mental self-report', () => {
+  it('splits the Leaver select into the team-specific flags', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ id: 'mine', leaver: 'team' }), row({ id: 'theirs', leaver: 'enemy' })],
+      maps: [],
+    });
+    const [mine, theirs] = (await new NotionImporter(client, GT).import()).games;
+    expect(mine.mental).toEqual({ leaverMyTeam: true });
+    expect(theirs.mental).toEqual({ leaverEnemyTeam: true });
+  });
+
+  it('maps Tilt/Toxic Mates checkboxes and positive Comms onto mental', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ tilt: true, toxicMates: true, comms: 'positive' })],
+      maps: [],
+    });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.mental).toEqual({ tilt: true, toxicMates: true, positiveComms: true });
+  });
+
+  it('treats non-positive Comms as no positive-comms flag', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ id: 'a', comms: 'abusive' }), row({ id: 'b', comms: 'banther' }), row({ id: 'c', comms: 'none' })],
+      maps: [],
+    });
+    const games = (await new NotionImporter(client, GT).import()).games;
+    expect(games.every((g) => g.mental === undefined)).toBe(true);
+  });
+
+  it('leaves mental undefined when the row flagged nothing', async () => {
+    const { client } = mockClient({ gametracker: [row({})], maps: [] });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.mental).toBeUndefined();
+  });
+});
+
+describe('NotionImporter — improvement grade', () => {
+  it('maps the Improvement Target select onto a review grade for the imported target', async () => {
+    const { client } = mockClient({
+      gametracker: [
+        row({ id: 'h', improvement: 'hit' }),
+        row({ id: 'p', improvement: 'partially' }),
+        row({ id: 'm', improvement: 'missed' }),
+      ],
+      maps: [],
+    });
+    const games = (await new NotionImporter(client, GT).import()).games;
+    expect(games.map((g) => g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID])).toEqual(['hit', 'partial', 'missed']);
+    // The grade marks the game reviewed; its flags stay empty (mental lives on `mental`).
+    expect(games[0].review?.flags).toEqual({});
+  });
+
+  it('attaches no review for "none" or a blank Improvement Target, so the game stays gradable', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ id: 'none', improvement: 'none' }), row({ id: 'blank', improvement: null })],
+      maps: [],
+    });
+    const games = (await new NotionImporter(client, GT).import()).games;
+    expect(games.every((g) => g.review === undefined)).toBe(true);
+  });
+
+  it('carries both mental flags and a review grade on one row without conflict', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ tilt: true, leaver: 'enemy', improvement: 'hit' })],
+      maps: [],
+    });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.mental).toEqual({ tilt: true, leaverEnemyTeam: true });
+    expect(g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('hit');
+  });
+
+  it('notionImprovementTarget seeds a stable, active self-target', () => {
+    const t = notionImprovementTarget(1234);
+    expect(t).toMatchObject({ id: NOTION_IMPROVEMENT_TARGET_ID, mode: 'self', isActive: true, createdAt: 1234 });
   });
 });

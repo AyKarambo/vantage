@@ -2,6 +2,7 @@ import type { DataProvider } from './dashboard';
 import type { HistoryStore } from '../store/history';
 import type { ManualStore } from '../store/manualLog';
 import type { NotionRuntime } from './notionRuntime';
+import { NOTION_IMPROVEMENT_TARGET_ID, notionImprovementTarget } from '../notion/notionImporter';
 import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
@@ -185,7 +186,19 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const res = await deps.notion.import();
       if (res.unavailable) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
       if (res.error) return { imported: 0, skipped: 0, failed: res.failed, error: res.error };
+      // Did an earlier import already bring in improvement grades? Checked
+      // before addMany so it reflects the pre-import state.
+      const seededBefore = deps.history.all().some((g) => g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID] !== undefined);
       const { imported, skipped } = deps.history.addMany(res.games);
+      // Imported "Improvement Target" grades are keyed to one generic target;
+      // seed it on the FIRST import that carries them so they surface on the
+      // dashboard. `seededBefore` keeps a re-import from resurrecting a target
+      // the user has since deleted.
+      const importingGrades = res.games.some((g) => g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID] !== undefined);
+      const targetExists = deps.manual.targets().some((t) => t.id === NOTION_IMPROVEMENT_TARGET_ID);
+      if (importingGrades && !targetExists && !seededBefore) {
+        deps.manual.addTarget(notionImprovementTarget(Date.now()));
+      }
       return { imported, skipped, failed: res.failed };
     },
     getBreakReminder: () => deps.getConfig().breakReminder,
