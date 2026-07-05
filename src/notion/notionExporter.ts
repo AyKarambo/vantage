@@ -80,6 +80,10 @@ export function gameToMatchRecord(game: GameRecord): MatchRecord {
     gameType: game.gameType,
     heroes: game.heroes,
     durationMinutes: game.durationMinutes,
+    // Carry the round score and SR change through — both have Notion columns and
+    // importer readers, so they round-trip (finalScore was silently dropped before).
+    finalScore: game.finalScore,
+    srDelta: game.srDelta,
     eliminations: hasStats ? totals.eliminations : undefined,
     deaths: hasStats ? totals.deaths : undefined,
     assists: hasStats ? totals.assists : undefined,

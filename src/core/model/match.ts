@@ -75,6 +75,8 @@ export interface MatchRecord {
   startedAt?: number;
   endedAt?: number;
   durationMinutes?: number;
+  /** Signed competitive SR change for this match (percentage points of a division). */
+  srDelta?: number;
 }
 
 /** Create an empty, mutable record with a given match id. */

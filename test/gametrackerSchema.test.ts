@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   REQUIRED_PROPERTIES, buildGametrackerProperties, validateGametrackerShape,
-  hasPlayedAtColumn, PLAYED_AT_PROPERTY, presentSubjectiveColumns, mapRelationDatabaseId,
+  hasPlayedAtColumn, PLAYED_AT_PROPERTY, hasSrDeltaColumn, SR_DELTA_PROPERTY,
+  presentSubjectiveColumns, mapRelationDatabaseId,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
@@ -36,6 +37,26 @@ describe('buildGametrackerProperties', () => {
     const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
     delete props[PLAYED_AT_PROPERTY];
     expect(validateGametrackerShape(props, { requireMapRelation: true }).ok).toBe(true);
+  });
+
+  it('includes the optional SR Delta number column for new databases', () => {
+    expect(buildGametrackerProperties()).toHaveProperty(SR_DELTA_PROPERTY);
+    expect((buildGametrackerProperties() as any)[SR_DELTA_PROPERTY]).toHaveProperty('number');
+  });
+
+  it('does not require SR Delta (legacy databases without it still validate)', () => {
+    expect(REQUIRED_PROPERTIES).not.toHaveProperty(SR_DELTA_PROPERTY);
+    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    delete props[SR_DELTA_PROPERTY];
+    expect(validateGametrackerShape(props, { requireMapRelation: true }).ok).toBe(true);
+  });
+});
+
+describe('hasSrDeltaColumn', () => {
+  it('is true only when an SR Delta number column is present', () => {
+    expect(hasSrDeltaColumn(asRetrievedShape(buildGametrackerProperties('maps-db-id')))).toBe(true);
+    expect(hasSrDeltaColumn({ [SR_DELTA_PROPERTY]: { type: 'rich_text' } })).toBe(false); // wrong type
+    expect(hasSrDeltaColumn({})).toBe(false); // absent
   });
 });
 

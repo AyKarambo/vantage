@@ -55,6 +55,20 @@ export function hasPlayedAtColumn(properties: Record<string, { type?: string } |
 }
 
 /**
+ * The optional number column carrying the signed competitive SR change per match,
+ * so it survives the export→import round-trip. Like {@link PLAYED_AT_PROPERTY} it's
+ * Vantage-authored and optional — not in {@link REQUIRED_PROPERTIES}, so databases
+ * without it still validate and export (they just skip the value). New auto-created
+ * databases include it (see {@link buildGametrackerProperties}).
+ */
+export const SR_DELTA_PROPERTY = 'SR Delta';
+
+/** Whether a database's live properties include a usable `SR Delta` number column. */
+export function hasSrDeltaColumn(properties: Record<string, { type?: string } | undefined>): boolean {
+  return properties[SR_DELTA_PROPERTY]?.type === 'number';
+}
+
+/**
  * Optional "subjective" columns the {@link ../notion/notionImporter NotionImporter}
  * *reads* but the auto-created schema doesn't define — a user adds these to their
  * own Gametracker by hand. The exporter writes them only when the target database
@@ -123,6 +137,7 @@ export function buildGametrackerProperties(mapsDatabaseId?: string): Record<stri
     Battletag: { rich_text: {} },
     'Match ID': { rich_text: {} },
     [PLAYED_AT_PROPERTY]: { date: {} },
+    [SR_DELTA_PROPERTY]: { number: {} },
   };
   if (mapsDatabaseId) {
     props['Map'] = { relation: { database_id: mapsDatabaseId, single_property: {} } };

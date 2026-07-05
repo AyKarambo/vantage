@@ -199,4 +199,64 @@ describe('export → import round-trip', () => {
     expect(back.mental).toMatchObject({ positiveComms: true, tilt: true, leaverMyTeam: true });
     expect(back.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('partial');
   });
+
+  it('round-trips SR delta and final score, and drops local-only fields', async () => {
+    const { create, client } = captureCreate();
+    create.mockResolvedValue({ id: 'created-page' });
+    const writer = new NotionWriter(client, 'gt-db', true, SUBJECTIVE, true); // hasSrDelta = true
+    const g = {
+      ...game('gep-778', Date.parse('2026-05-02T09:00:00.000Z')),
+      srDelta: -19,
+      finalScore: '2-1',
+      // Documented local-only fields that must NOT survive the round-trip.
+      screenshots: ['shot.png'],
+      roster: [{ battleTag: 'Foe#1', heroName: 'Mercy' }],
+      importedAt: 1_700_000_000_000,
+    } as GameRecord;
+    await writer.createMatchPage({
+      record: gameToMatchRecord(g),
+      account: 'Main', role: 'damage', result: 'Win', mapPageId: 'map-ilios',
+    });
+    const properties = create.mock.calls[0][0].properties;
+
+    const page = { id: 'created-page', created_time: '2026-05-02T09:00:00.000Z', properties };
+    const mapsPage = { id: 'map-ilios', properties: { Name: { type: 'title', title: [{ plain_text: 'Ilios' }] } } };
+    const query = vi.fn(async ({ database_id }: any) => ({
+      results: database_id === 'gt-db' ? [page] : [mapsPage],
+      has_more: false, next_cursor: null,
+    }));
+    const importer = new NotionImporter({ databases: { query } } as any, 'gt-db', 'maps-db');
+    const { games } = await importer.import();
+
+    const back = games[0];
+    expect(back.srDelta).toBe(-19);
+    expect(back.finalScore).toBe('2-1');
+    expect(back.screenshots).toBeUndefined();
+    expect(back.roster).toBeUndefined();
+    expect(back.importedAt).toBeUndefined();
+  });
+});
+
+describe('NotionWriter — SR Delta', () => {
+  it('writes SR Delta when the column exists and the match has an SR change', async () => {
+    const { create, client } = captureCreate();
+    const writer = new NotionWriter(client, 'db', false, new Set(), true); // hasSrDelta = true
+    await writer.createMatchPage({ record: gameToMatchRecord({ ...game('m1'), srDelta: -19 } as GameRecord) });
+    expect(create.mock.calls[0][0].properties['SR Delta']).toEqual({ number: -19 });
+  });
+
+  it('omits SR Delta when the database lacks the column (default)', async () => {
+    const { create, client } = captureCreate();
+    const writer = new NotionWriter(client, 'db'); // hasSrDelta defaults false
+    await writer.createMatchPage({ record: gameToMatchRecord({ ...game('m1'), srDelta: -19 } as GameRecord) });
+    expect(create.mock.calls[0][0].properties).not.toHaveProperty('SR Delta');
+  });
+});
+
+describe('gameToMatchRecord — carried scalar fields', () => {
+  it('carries srDelta and finalScore (finalScore was previously dropped)', () => {
+    const rec = gameToMatchRecord({ ...game('m1'), srDelta: 22, finalScore: '2-1' } as GameRecord);
+    expect(rec.srDelta).toBe(22);
+    expect(rec.finalScore).toBe('2-1');
+  });
 });
