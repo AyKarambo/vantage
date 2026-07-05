@@ -124,40 +124,45 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   const { load, mental, outcome } = state;
   const out: ReadinessSignal[] = [];
 
-  if (load.consecutiveDays >= T.loadedDays) {
+  // Load state is evaluated as-of the last active day. Once the layoff has
+  // passed the rust threshold that load has long been rested off — surfacing
+  // "22 days in a row" under a Rusty verdict would read as its opposite.
+  const loadCurrent = state.restDays < T.rustDays;
+
+  if (loadCurrent && load.consecutiveDays >= T.loadedDays) {
     out.push({
       key: 'consecutive-days',
       label: `${load.consecutiveDays} days in a row without a rest day`,
       severity: load.consecutiveDays >= T.sustainedDays ? 'high' : 'watch',
     });
   }
-  if (load.acutePerDay >= T.absElevatedPerDay) {
+  if (loadCurrent && load.acutePerDay >= T.absElevatedPerDay) {
     out.push({
       key: 'games-per-day',
       label: `${load.acutePerDay} games/day recently`,
       severity: load.acutePerDay >= T.absHighPerDay ? 'high' : 'watch',
     });
   }
-  if (load.ratioTrusted && load.ratio >= T.ratioElevated) {
+  if (loadCurrent && load.ratioTrusted && load.ratio >= T.ratioElevated) {
     out.push({
       key: 'load-ratio',
       label: `recent load ${load.ratio.toFixed(2)}× your baseline`,
       severity: load.ratio >= T.ratioHigh ? 'high' : 'watch',
     });
   }
-  if (load.recentLongSession) {
+  if (loadCurrent && load.recentLongSession) {
     out.push({ key: 'long-session', label: 'a session over 2.5h recently', severity: 'watch' });
   }
 
   if (mental.coverage < T.mentalMinCoverage) {
     out.push({ key: 'low-coverage', label: 'log your mental state to sharpen this read', severity: 'ok' });
-  } else if (mental.fatigued) {
+  } else if (loadCurrent && mental.fatigued) {
     out.push({ key: 'tilt', label: `tilt on ${pct(mental.acuteTilt)} of your recent logged games`, severity: 'high' });
   }
 
   // Outcomes are a weak, corroborating signal — capped at 'watch' so a losing
   // streak never renders a red-tier alarm while the band is green/amber.
-  if (outcome.lossStreak >= 3) {
+  if (loadCurrent && outcome.lossStreak >= 3) {
     out.push({ key: 'loss-streak', label: `${outcome.lossStreak} losses in a row (recent results)`, severity: 'watch' });
   }
 
