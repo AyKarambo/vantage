@@ -68,10 +68,15 @@ history — closing the round-trip while staying local-first and opt-in.
   affordance instead of a blank screen, so restored history with old timestamps is never invisible.
 - **Confirmation persistence** (resolved 2026-07-05) → the import result is also shown as a toast, so it
   survives the post-import dashboard re-render (the in-card chip is torn down by the refresh).
+- **Accounts round-trip** (resolved 2026-07-05) → import now registers each distinct `Account` label it
+  sees as a **name-only** account entry (`label → label`) in the user's config, unless a matching label
+  is already mapped (compared case-insensitively). This makes imported accounts appear in the account
+  manager, the filters and the rank UI without the user re-creating each by hand. Notion stores only the
+  label (never the battleTag), so a name-only entry is the faithful seed — `resolveAccount`'s name-only
+  fallback reconnects it to live GEP play from the real battleTag later. The import summary reports how
+  many accounts were added.
 
 ## Open Questions
 - On a Match ID that already exists locally: skip (v1) vs. update-in-place (later).
 - SR%/`srDelta` still does not round-trip (the schema carries no SR column), so calculated rank over
   purely-imported history stays near its anchor — deferred to the tracking overhaul.
-- Per-account **rank** UI is still reachable only for accounts present in `config.accounts`; accounts
-  that exist only in imported history need a manual mapping to set a rank anchor — deferred.
