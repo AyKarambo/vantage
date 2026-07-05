@@ -6,17 +6,29 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, TargetGrade } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
-import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
+import { button, card, pill, RESULT_STATE, segmented, select, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
 import { gradedThisSession } from '../reviews';
+import { leaverFlags } from '../../../src/core/leaver';
+import { classifyGameType } from '../../../src/core/matchFilter';
+import { MAP_MODES } from '../../../src/core/maps';
 import { PALETTE } from '../theme';
 import type { ViewContext } from './view';
+
+const ROLE_OPTS: Array<{ value: Role; label: string }> = [
+  { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' },
+  { value: 'support', label: 'Support' }, { value: 'openQ', label: 'Open Q' },
+];
+const RESULT_OPTS: Array<{ value: Result; label: string }> = [
+  { value: 'Win', label: 'Win' }, { value: 'Loss', label: 'Loss' }, { value: 'Draw', label: 'Draw' },
+];
+const MAP_OPTS = Object.keys(MAP_MODES).sort().map((m) => ({ value: m, label: m }));
 
 const RESULT_TEXT: Record<string, string> = { Win: 'Victory', Loss: 'Defeat', Draw: 'Draw' };
 
@@ -64,7 +76,7 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
     header(d, ctx),
     scoreboardSection(d),
     perHeroSection(d.perHero),
-    competitiveSection(d.competitive),
+    competitiveSection(d.competitive, d.srDelta),
     playerHistorySection(d),
     screenshotsSection(d.screenshots),
   ].filter((n): n is HTMLElement => n != null);
@@ -90,10 +102,12 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
       meta,
       flags,
       h('div', { style: { marginTop: '10px' } },
-        button(d.review ? '✎ Edit tracking' : '✎ Add tracking', {
+        button('✎ Edit match', {
           variant: 'soft',
-          title: 'Grade your targets and flag how it felt for this match',
-          onClick: () => openTrackingEditor(ctx, d),
+          title: d.source === 'gep'
+            ? 'Edit the manual layer (flags, SR %, target grades) — game facts stay locked'
+            : 'Edit this match — result, map, flags, SR %, and target grades',
+          onClick: () => openMatchEditor(ctx, d),
         }),
       ),
     ),
@@ -113,10 +127,12 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
 function mentalFlags(d: MatchDetail): HTMLElement | null {
   const m = d.mental;
   if (!m) return null;
+  const lv = leaverFlags(m);
   const flags: Node[] = [];
   if (m.tilt) flags.push(pill('Tilt', 'loss'));
   if (m.toxicMates) flags.push(pill('Toxic mates', 'loss'));
-  if (m.leaver) flags.push(pill('Leaver', 'draw'));
+  if (lv.myTeam) flags.push(pill('Leaver — my team', 'draw'));
+  if (lv.enemyTeam) flags.push(pill('Leaver — enemy', 'draw'));
   if (m.positiveComms) flags.push(pill('Positive comms', 'win'));
   return flags.length ? h('div', { class: 'detail-flags' }, ...flags) : null;
 }
@@ -165,31 +181,49 @@ function perHeroSection(perHero: HeroStat[]): HTMLElement | null {
   return card({ title: 'Per hero', sub: 'your line on each hero this match', actions: tabs }, body);
 }
 
-// --- competitive progress (estimate — the feed does not report rank) ----------
+// --- competitive progress (calculated from your rank anchor + logged SR) ------
 
-function competitiveSection(c: MatchDetail['competitive']): HTMLElement | null {
+const NOTE_LABEL: Record<string, string> = { calculated: 'Calculated', estimate: 'Estimate', reported: 'Reported' };
+const NOTE_SUB: Record<string, string> = {
+  calculated: 'from your rank anchor + logged SR — the game feed does not report rank',
+  estimate: 'estimated from recent results — set a rank anchor to track the real number',
+  reported: 'reported by the game feed',
+};
+
+function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HTMLElement | null {
   if (!c) return null;
-  const estimate = c.note === 'estimate';
   const withinDivision = c.progressPct != null ? c.progressPct / 100 : null;
   return card(
     {
       title: 'Competitive progress',
-      sub: estimate ? 'estimated from recent results — the game feed does not report rank' : 'reported by the game feed',
-      actions: pill(estimate ? 'Estimate' : 'Reported', 'accent'),
+      sub: NOTE_SUB[c.note],
+      actions: pill(NOTE_LABEL[c.note] ?? c.note, 'accent'),
     },
     h('div', { class: 'detail-progress' },
       c.tier != null && c.division != null
-        ? h('span', { class: 'detail-rank' }, rankLabel(c.tier, c.division))
+        ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+            h('span', { class: 'detail-rank' }, rankLabel(c.tier, c.division)),
+            c.protected ? pill('🛡 Rank protected', 'draw') : null,
+          )
         : null,
-      withinDivision != null
-        ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
-        : null,
-      c.delta != null
+      c.needsReanchor
+        ? h('div', { class: 'hint', style: { color: 'var(--loss-text)' } },
+            'Demoted after a protected loss — set your new rank on the Settings › Accounts panel to resume tracking.')
+        : withinDivision != null
+          ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
+          : null,
+      // The SR change logged for this specific match (calculated path).
+      c.note === 'calculated' && srDelta != null
         ? h('span', {
             class: 'mono',
-            style: { fontSize: '12px', color: c.delta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
-          }, `${signed(Math.round(c.delta))}% over the range`)
-        : null,
+            style: { fontSize: '12px', color: srDelta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
+          }, `${signed(Math.round(srDelta))}% this match`)
+        : c.delta != null
+          ? h('span', {
+              class: 'mono',
+              style: { fontSize: '12px', color: c.delta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
+            }, `${signed(Math.round(c.delta))}% over the range`)
+          : null,
     ),
   );
 }
@@ -204,25 +238,73 @@ function editorSection(label: string, body: Node): HTMLElement {
   );
 }
 
+/** Fold a legacy `leaver` boolean into the my-team flag so its chip pre-selects. */
+function normalizeFlags(m: MatchMental): MatchMental {
+  const out: MatchMental = { ...m };
+  if (out.leaver && !out.leaverMyTeam) out.leaverMyTeam = true;
+  delete out.leaver;
+  return out;
+}
+
+/** A labelled editor field (label above the control). */
+function editField(label: string, control: Node): HTMLElement {
+  return h('div', null, h('div', { class: 'field-label' }, label), control);
+}
+
 /**
- * Modal to (re-)grade a match's active targets and edit its mental flags,
- * pre-filled from the saved review. Saves overwrite the review through the same
- * bridge call the Review screen uses; `ctx.refresh()` re-pulls the detail so the
- * page and the dependent views reflect the change.
+ * Modal to edit a match's full manual layer: for hand-logged matches the game
+ * facts (result/role/map/hero/mode) are editable; for auto-tracked matches those
+ * stay locked and only the manual layer (SR %, mental flags incl. leaver-team,
+ * target grades) can change. Saves go through `editMatch`; `ctx.refresh()`
+ * re-pulls the detail so every dependent view reflects the change.
  */
-function openTrackingEditor(ctx: ViewContext, d: MatchDetail): void {
+function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   const active = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
-  const flags: MatchMental = { ...(d.review?.flags ?? {}) };
+  const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
+  const editable = d.source === 'manual';
+  const isComp = classifyGameType(d.gameType) === 'competitive';
+  const state = { result: d.result, role: d.role, map: d.map, hero: d.heroes[0] ?? '', gameType: d.gameType };
+  let srDelta: number | undefined = d.srDelta;
 
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
+
+    const factsBlock = editable
+      ? h('div', { class: 'stack', style: { gap: '12px' } },
+          editField('Result', segmented({
+            options: RESULT_OPTS, value: state.result, fill: true, onChange: (v) => (state.result = v),
+          })),
+          editField('Role', segmented({
+            options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => (state.role = v),
+          })),
+          editField('Map', select(MAP_OPTS, state.map, (v) => (state.map = v))),
+          editField('Hero', heroInput(state.hero, (v) => (state.hero = v))),
+          editField('Mode', segmented({
+            options: [{ value: 'Competitive', label: 'Competitive' }, { value: 'Quick Play', label: 'Quick Play' }],
+            value: state.gameType === 'Quick Play' ? 'Quick Play' : 'Competitive', fill: true,
+            onChange: (v) => (state.gameType = v),
+          })),
+        )
+      : h('div', { class: 'hint' },
+          `Auto-tracked from the game feed — result, map and heroes are locked. ${d.map} · ${roleLabel(d.role)}`);
+
+    const srBlock = isComp
+      ? editField('Skill rating change (%)', srInput(srDelta, (v) => (srDelta = v)))
+      : null;
+
     const save = (): void => {
-      void bridge.saveReview({ matchId: d.matchId, grades, flags }).then(() => {
+      void bridge.editMatch({
+        matchId: d.matchId,
+        ...(editable ? { result: state.result, role: state.role, map: state.map, hero: state.hero.trim(), gameType: state.gameType } : {}),
+        mental: flags,
+        ...(isComp ? { srDelta: srDelta ?? undefined } : {}),
+        grades,
+      }).then(() => {
         gradedThisSession.add(d.matchId);
         close();
         ctx.refresh();
-        toast(`Tracking saved — ${d.map}`);
+        toast(`Match updated — ${state.map}`);
       });
     };
     const clear = (): void => {
@@ -233,10 +315,13 @@ function openTrackingEditor(ctx: ViewContext, d: MatchDetail): void {
         toast(`Tracking cleared — ${d.map}`);
       });
     };
+
     return h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw' } },
-      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match tracking'),
+      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
       h('div', { class: 'u-muted', style: { fontSize: '12px' } },
-        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)}`),
+        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}`),
+      editorSection('Match', factsBlock),
+      srBlock ? editorSection('◎ Rank', srBlock) : null,
       editorSection('◎ Target grades', h('div', { class: 'stack', style: { gap: '11px' } },
         ...(rows.length
           ? rows.map((r) => r.el)
@@ -247,10 +332,32 @@ function openTrackingEditor(ctx: ViewContext, d: MatchDetail): void {
         button('Save', { variant: 'primary', onClick: save }),
         button('Cancel', { variant: 'ghost', onClick: close }),
         h('span', { style: { flex: '1' } }),
-        d.review ? button('Clear', { variant: 'ghost', onClick: clear }) : null,
+        d.review ? button('Clear grades', { variant: 'ghost', onClick: clear }) : null,
       ),
     );
   });
+}
+
+/** A plain text input for the (optional) hero name. */
+function heroInput(value: string, onChange: (v: string) => void): HTMLInputElement {
+  const el = h('input', {
+    class: 'vt-input', type: 'text', value, placeholder: 'e.g. Tracer',
+    on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
+  }) as HTMLInputElement;
+  return el;
+}
+
+/** A signed number input for the per-match skill-rating %; blank → undefined. */
+function srInput(value: number | undefined, onChange: (v: number | undefined) => void): HTMLInputElement {
+  const el = h('input', {
+    class: 'vt-input mono', type: 'number', step: '1', placeholder: 'e.g. +22 or -19',
+    value: value != null ? String(value) : '',
+    on: { input: (e) => {
+      const raw = (e.target as HTMLInputElement).value.trim();
+      onChange(raw === '' ? undefined : Number(raw));
+    } },
+  }) as HTMLInputElement;
+  return el;
 }
 
 // --- player history -------------------------------------------------------------

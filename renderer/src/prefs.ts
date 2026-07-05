@@ -13,6 +13,8 @@ export interface HeroSortPref {
 export interface LogPrefillPref {
   role: string;
   mode: string;
+  /** Last account logged against (carries over like role/mode). */
+  account?: string;
 }
 
 export interface FilterPresetPref {
