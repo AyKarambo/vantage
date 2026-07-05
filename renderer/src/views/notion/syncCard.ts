@@ -8,6 +8,7 @@ import { relTime } from '../../format';
 import { bridge } from '../../bridge';
 import { store } from '../../store';
 import { toast } from '../../components/toast';
+import { openModal } from '../../components/overlay';
 import { button, card } from '../../components/primitives';
 
 export function syncCard(s: NotionStatus | null): HTMLElement {
@@ -102,6 +103,52 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
           'Import reads every Gametracker row into local history; matches already stored are skipped.')
       : null,
     importOut,
+    deleteImportedSection(s?.importedMatches ?? 0),
+  );
+}
+
+/**
+ * Wipe-for-re-import affordance: shown only once an import has landed matches.
+ * Removes ONLY Notion-imported matches (keeps hand-logged and live-tracked), so
+ * a bad import can be corrected and re-run cleanly.
+ */
+function deleteImportedSection(importedMatches: number): HTMLElement | null {
+  if (importedMatches <= 0) return null;
+  const label = (n: number) => `${n} imported match${n === 1 ? '' : 'es'}`;
+  return h('div', { style: { marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--line, rgba(255,255,255,0.08))' } },
+    h('div', { class: 'u-dim', style: { fontSize: '11px', marginBottom: '8px', lineHeight: '1.5' } },
+      `${label(importedMatches)} in your history. Wipe them to re-import cleanly — hand-logged and live-tracked matches are kept.`),
+    button(`Delete ${label(importedMatches)}`, {
+      variant: 'ghost',
+      onClick: () => confirmDeleteImported(importedMatches),
+    }),
+  );
+}
+
+function confirmDeleteImported(count: number): void {
+  const label = `${count} imported match${count === 1 ? '' : 'es'}`;
+  openModal((close) =>
+    h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '440px' } },
+      h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, `Delete ${label}?`),
+      h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+        'This removes only matches pulled from Notion — your hand-logged and live-tracked matches stay. Use it to re-import cleanly after fixing your Notion data. Imported accounts are kept; a re-import repopulates everything.'),
+      h('div', { style: { display: 'flex', gap: '10px' } },
+        button('Delete imported', {
+          variant: 'primary',
+          onClick: async () => {
+            close();
+            try {
+              const res = await bridge.deleteImportedMatches();
+              toast(`Deleted ${res.deleted} imported match${res.deleted === 1 ? '' : 'es'}`);
+              void store.refresh(); // updates dashboards + the Notion status (count → 0)
+            } catch (err) {
+              toast(`Delete failed — ${String(err)}`);
+            }
+          },
+        }),
+        button('Cancel', { variant: 'ghost', onClick: close }),
+      ),
+    ),
   );
 }
 

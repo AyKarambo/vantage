@@ -52,6 +52,8 @@ export interface DataProvider {
   rankAnchorMap(): RankAnchorMap;
   /** Pull matches from the configured Notion Gametracker database into history. */
   importNotion(): Promise<ImportResult>;
+  /** Delete every Notion-imported match from history (for a clean re-import); returns how many were removed. */
+  deleteImportedMatches(): { deleted: number };
   /** Attach a Review-screen read (grades + flags) to a tracked match. */
   saveReview(input: ReviewInput): void;
   /** Bulk legacy-review import; skips unknown ids and already-reviewed games. */

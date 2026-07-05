@@ -22,6 +22,8 @@ export interface NotionRuntimeDeps {
   reloadConfig: () => void;
   /** Games available to push, for the status card. */
   trackedGames: () => number;
+  /** How many local matches came from a Notion import (deletable for a clean re-import). */
+  importedMatches: () => number;
   /** Mirror the token presence into the tray. */
   onTokenState: (tokenSet: boolean) => void;
   onError: (title: string, body: string) => void;
@@ -84,6 +86,7 @@ export class NotionRuntime {
       shapeValid: this.shapeCheck?.valid,
       shapeIssues: this.shapeCheck?.issues,
       lastSyncedAt: notion.lastSyncedAt,
+      importedMatches: this.deps.importedMatches(),
     };
   }
 

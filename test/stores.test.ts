@@ -44,6 +44,23 @@ describe('HistoryStore manual-layer edits', () => {
     expect(new HistoryStore(dir).all().filter((x) => x.account === 'MainDPS')).toHaveLength(2);
     expect(h.relabelAccount('Ghost', 'X')).toBe(0);
   });
+
+  it('removeImported drops only imported games (keeps live/manual), reporting the removed set', () => {
+    const h = new HistoryStore(dir);
+    h.addMany([
+      g({ matchId: 'live', importedAt: undefined }),          // live-tracked / hand-logged
+      g({ matchId: 'imp1', importedAt: 1_700_000_000_000 }),  // imported
+      g({ matchId: 'imp2', importedAt: 1_700_000_000_000 }),  // imported
+    ]);
+    expect(h.importedCount()).toBe(2);
+    const removed = h.removeImported();
+    expect(removed.map((r) => r.matchId).sort()).toEqual(['imp1', 'imp2']);
+    expect(h.all().map((x) => x.matchId)).toEqual(['live']);
+    expect(h.importedCount()).toBe(0);
+    // Persisted (survives a reload) and a second call is a no-op.
+    expect(new HistoryStore(dir).importedCount()).toBe(0);
+    expect(h.removeImported()).toEqual([]);
+  });
 });
 
 describe('RankAnchorStore', () => {

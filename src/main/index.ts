@@ -82,6 +82,7 @@ function main(): void {
     config: () => config,
     reloadConfig: () => (config = loadConfig()),
     trackedGames: () => history.count(),
+    importedMatches: () => history.importedCount(),
     onTokenState: (tokenSet) => tray.setState({ tokenSet }),
     onError: (title, body) => {
       log.error('notion', `${title}: ${body}`);

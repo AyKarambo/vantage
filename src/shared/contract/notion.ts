@@ -68,6 +68,8 @@ export interface NotionStatus {
   shapeIssues?: string[];
   /** When the last successful sync finished (epoch ms). */
   lastSyncedAt?: number;
+  /** How many local matches came from a Notion import (deletable for a clean re-import). */
+  importedMatches: number;
 }
 
 /** Live per-game progress while a sync runs (pushed over the bridge). */

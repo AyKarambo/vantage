@@ -78,6 +78,13 @@ export interface GameRecord {
   mental?: MatchMental;
   /** The saved Review-screen read (target grades + feel flags), if graded. */
   review?: MatchReview;
+  /**
+   * Epoch ms of the Notion import that brought this record into local history —
+   * set only on games pulled from Notion (never on live-tracked or hand-logged
+   * ones). Flags the record so an import can be wiped and re-run cleanly without
+   * touching real history ({@link ../../store/history HistoryStore.removeImported}).
+   */
+  importedAt?: number;
 }
 
 /** Win/loss tally over a set of games — the unit every chart aggregates. */
