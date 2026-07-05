@@ -23,6 +23,12 @@ export interface ManualMatchInput {
   srDelta?: number;
   /** Optional target grades captured inline while logging. */
   grades?: Record<string, TargetGrade>;
+  /**
+   * When the match actually ended (epoch ms) — set when backfilling a game
+   * logged after the fact. Omitted = "just now". Clamped to the past by the
+   * receiver so a skewed clock can never produce future-stamped history.
+   */
+  playedAt?: number;
 }
 
 /**
