@@ -464,6 +464,12 @@ const mock: OwStatsApi = {
     return appSettings;
   },
   getAppInfo: async () => ({ version: 'preview', supportEmail: 'timo.seikel@gmail.com' }),
+  getDatabaseLocation: async () => ({ folder: '(browser preview — in-memory)', isDefault: true }),
+  chooseDatabaseFolder: async () => ({
+    ok: true as const,
+    location: { folder: '(browser preview — in-memory)', isDefault: true },
+    changed: false,
+  }),
   clearReview: async (matchId: string) => {
     delete previewReviews[matchId];
     save(REVIEWS_KEY, previewReviews);

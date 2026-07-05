@@ -49,7 +49,7 @@ export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 export type { GepHealthState, GepStatusPayload } from './gepStatus';
 
 // App-behavior settings + metadata (Settings screen)
-export type { AppInfo, AppUiSettings } from './appSettings';
+export type { AppInfo, AppUiSettings, DatabaseLocation, DatabaseLocationResult } from './appSettings';
 
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';

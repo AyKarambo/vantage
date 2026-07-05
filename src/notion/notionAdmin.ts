@@ -1,7 +1,7 @@
 import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
 import {
-  buildGametrackerProperties, hasPlayedAtColumn, mapRelationDatabaseId,
+  buildGametrackerProperties, hasPlayedAtColumn, hasSrDeltaColumn, mapRelationDatabaseId,
   presentSubjectiveColumns, validateGametrackerShape, type ShapeValidation,
 } from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary } from '../shared/contract';
@@ -20,6 +20,8 @@ export interface ValidateResult extends ShapeValidation {
   title?: string;
   /** Whether the database carries the optional `Played At` date column, so the writer may set it. */
   hasPlayedAt: boolean;
+  /** Whether the database carries the optional `SR Delta` number column, so the writer may set it. */
+  hasSrDelta: boolean;
   /** Subjective columns present on the database, so the writer may set them (Comms, Leaver, …). */
   subjectiveColumns: string[];
   /** The database the `Map` relation points at — lets the exporter resolve maps without a configured mapsDatabaseId. */
@@ -91,6 +93,7 @@ export class NotionAdmin {
       ...shape,
       title: titleOfDatabase(db),
       hasPlayedAt: hasPlayedAtColumn(properties),
+      hasSrDelta: hasSrDeltaColumn(properties),
       subjectiveColumns: presentSubjectiveColumns(properties),
       mapRelationDbId: mapRelationDatabaseId(properties),
     };

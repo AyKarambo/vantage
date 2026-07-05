@@ -63,8 +63,9 @@ comms · toxicity · leavers · your improvement target).
   target database, **push** your tracked games to it (deduped by Match ID) and
   **import** them back — an on-demand pull that reads the Gametracker rows into local
   history for restoring or migrating a season. The round-trip preserves each match's
-  **time** (via a `Played At` column, so restored history lands on the right days) and
-  its **auto/manual provenance**; a just-imported season won't re-duplicate itself on the
+  **time** (via a `Played At` column, so restored history lands on the right days), its
+  **skill-rating change** (via an `SR Delta` column) and **round score**, and its
+  **auto/manual provenance**; a just-imported season won't re-duplicate itself on the
   next Sync, and if the date filter would hide it all the Overview offers a one-click
   "view all time".
 
@@ -76,8 +77,13 @@ actions, day-grouped match log with hero/map cross-links, hero typeahead + remem
 the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 colorblind-safe palette option, window-position memory, and a **Settings** screen with an
 **accounts manager** (create/edit/delete accounts, per-role rank anchors) alongside the break
-reminder, close-to-tray, run-at-login and diagnostics controls. The app restores your last view on
-launch and refreshes without flicker.
+reminder, close-to-tray, run-at-login, diagnostics, and a **Data & backup** card that relocates
+your local match-history database to any folder — point it at a OneDrive/Dropbox-synced folder for
+off-machine backup. The app restores your last view on launch and refreshes without flicker.
+
+Match history is stored on-device in an embedded **SQLite** database (`history.db`); a pre-SQLite
+`history.json` is imported once on first launch and kept untouched as a frozen backup. Storage stays
+**local-first** — the only outbound path is the opt-in Notion export.
 
 ## Account safety
 

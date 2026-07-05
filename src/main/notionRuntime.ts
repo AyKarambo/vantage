@@ -49,6 +49,9 @@ export class NotionRuntime {
   // the writer may set it. Off until validation confirms it — writing a column
   // the database lacks would fail every export row.
   private hasPlayedAt = false;
+  // Whether the configured database has the optional `SR Delta` number column, so
+  // the writer may set the signed competitive SR change. Same guard as hasPlayedAt.
+  private hasSrDelta = false;
   // Subjective columns the configured database defines (Comms, Improvement Target,
   // Leaver, …), so the writer may set them. Same presence guard as hasPlayedAt.
   private writableColumns: ReadonlySet<string> = new Set();
@@ -63,6 +66,7 @@ export class NotionRuntime {
     const token = getNotionToken();
     this.shapeCheck = undefined;
     this.hasPlayedAt = false;
+    this.hasSrDelta = false;
     this.writableColumns = new Set();
     this.mapsRelationDbId = undefined;
     if (!token) {
@@ -199,11 +203,13 @@ export class NotionRuntime {
       });
       this.shapeCheck = { title: result.title, valid: result.ok, issues: [...result.missing, ...result.mismatched] };
       this.hasPlayedAt = result.hasPlayedAt;
+      this.hasSrDelta = result.hasSrDelta;
       this.writableColumns = new Set(result.subjectiveColumns);
       this.mapsRelationDbId = result.mapRelationDbId;
     } catch (err) {
       this.shapeCheck = { valid: false, issues: [String(err)] };
       this.hasPlayedAt = false;
+      this.hasSrDelta = false;
       this.writableColumns = new Set();
       this.mapsRelationDbId = undefined;
     }
@@ -214,7 +220,7 @@ export class NotionRuntime {
   private buildExporter(shapeIssues?: string[]): MapsCache | undefined {
     if (!this.client) return undefined;
     const cfg = this.deps.config();
-    const writer = new NotionWriter(this.client, cfg.notion.gametrackerDatabaseId, this.hasPlayedAt, this.writableColumns);
+    const writer = new NotionWriter(this.client, cfg.notion.gametrackerDatabaseId, this.hasPlayedAt, this.writableColumns, this.hasSrDelta);
     // Prefer an explicitly configured Maps database, else the one discovered off
     // the Gametracker's `Map` relation — so maps resolve even when the user only
     // ever picked their Gametracker database (mapsDatabaseId left blank).

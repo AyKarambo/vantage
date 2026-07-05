@@ -207,30 +207,35 @@ describe('computeDashboard — review inbox decoupled from filters', () => {
 
 describe('HistoryStore — review persistence', () => {
   let dir: string;
+  const opened: HistoryStore[] = [];
+  // SQLite locks the file open on Windows — close every instance before rmSync.
+  const hist = (): HistoryStore => { const s = new HistoryStore(dir); opened.push(s); return s; };
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'owsync-history-'));
   });
   afterEach(() => {
+    for (const s of opened) { try { s.close(); } catch { /* already closed */ } }
+    opened.length = 0;
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it('setReview attaches to a known match and survives re-instantiation', () => {
-    const store = new HistoryStore(dir);
+    const store = hist();
     const g = game({ result: 'Win' });
     store.add(g);
     const r = review({ t1: 'hit' }, { tilt: true });
     expect(store.setReview(g.matchId, r)).toBe(true);
-    const reloaded = new HistoryStore(dir).all().find((x) => x.matchId === g.matchId);
+    const reloaded = hist().all().find((x) => x.matchId === g.matchId);
     expect(reloaded?.review).toEqual(r);
   });
 
   it('setReview returns false for an unknown match id', () => {
-    const store = new HistoryStore(dir);
+    const store = hist();
     expect(store.setReview('nope', review({}))).toBe(false);
   });
 
   it('setReviews bulk-imports, skipping unknown ids and existing reviews', () => {
-    const store = new HistoryStore(dir);
+    const store = hist();
     const fresh = game({ result: 'Win' });
     const already = game({ result: 'Loss', review: review({ t1: 'missed' }) });
     store.add(fresh);
@@ -243,7 +248,7 @@ describe('HistoryStore — review persistence', () => {
     ]);
     expect(result).toEqual({ imported: 1, skipped: 2 });
 
-    const reloaded = new HistoryStore(dir).all();
+    const reloaded = hist().all();
     expect(reloaded.find((g) => g.matchId === fresh.matchId)?.review?.grades.t1).toBe('hit');
     // The existing review is never overwritten.
     expect(reloaded.find((g) => g.matchId === already.matchId)?.review?.grades.t1).toBe('missed');
