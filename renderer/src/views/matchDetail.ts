@@ -298,7 +298,8 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
         matchId: d.matchId,
         ...(editable ? { result: state.result, role: state.role, map: state.map, hero: state.hero.trim(), gameType: state.gameType } : {}),
         mental: flags,
-        ...(isComp ? { srDelta: srDelta ?? undefined } : {}),
+        // number sets, null clears (blanked field), field omitted for non-comp.
+        ...(isComp ? { srDelta: srDelta ?? null } : {}),
         grades,
       }).then(() => {
         gradedThisSession.add(d.matchId);

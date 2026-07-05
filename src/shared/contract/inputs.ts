@@ -40,7 +40,8 @@ export interface MatchEditInput {
   hero?: string;
   gameType?: string;
   mental?: MatchMental;
-  srDelta?: number;
+  /** New SR %, or `null` to clear it; `undefined` leaves it unchanged. */
+  srDelta?: number | null;
   grades?: Record<string, TargetGrade>;
 }
 

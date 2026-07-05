@@ -55,21 +55,37 @@ export class HistoryStore {
   /**
    * Patch a stored game's manual-layer fields in place (result/role/map/heroes/
    * gameType for hand-logged matches; mental/srDelta/review for any). Only the
-   * provided keys change; false if the id is unknown. The caller is responsible
-   * for not passing game-derived facts for auto-tracked (GEP) records.
+   * provided keys change; a `null` value deletes that key (e.g. clearing srDelta);
+   * false if the id is unknown. The caller is responsible for not passing
+   * game-derived facts for auto-tracked (GEP) records.
    */
   editManual(
     matchId: string,
-    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'srDelta' | 'review'>>,
+    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review'>> & { srDelta?: number | null },
   ): boolean {
     const game = this.games.find((g) => g.matchId === matchId);
     if (!game) return false;
     const target = game as unknown as Record<string, unknown>;
     for (const [k, v] of Object.entries(patch)) {
-      if (v !== undefined) target[k] = v;
+      if (v === null) delete target[k];
+      else if (v !== undefined) target[k] = v;
     }
     this.save();
     return true;
+  }
+
+  /** Rewrite the account label on every matching game (one atomic save). Returns the count changed. */
+  relabelAccount(from: string, to: string): number {
+    if (from === to) return 0;
+    let changed = 0;
+    for (const g of this.games) {
+      if (g.account === from) {
+        g.account = to;
+        changed++;
+      }
+    }
+    if (changed) this.save();
+    return changed;
   }
 
   /** Total number of stored games. */

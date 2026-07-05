@@ -53,6 +53,21 @@ export class RankAnchorStore {
     return record;
   }
 
+  /** Move every anchor from one account label to another (keeps rank tracks intact on rename). */
+  relabel(from: string, to: string): number {
+    if (from === to) return 0;
+    let changed = 0;
+    for (const a of Object.values(this.state)) {
+      if (a.account !== from) continue;
+      delete this.state[rankKey(from, a.role)];
+      a.account = to;
+      this.state[rankKey(to, a.role)] = a;
+      changed++;
+    }
+    if (changed) this.save();
+    return changed;
+  }
+
   private load(): Record<string, AnchorRecord> {
     try {
       const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Record<string, AnchorRecord>;

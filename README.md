@@ -16,9 +16,11 @@ comms · toxicity · leavers · your improvement target).
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a focus band, a focus queue and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**
-  (scoreboard, per-hero tabs, competitive progress estimate, player history, and an
+  (scoreboard, per-hero tabs, competitive progress, player history, and an
   end-of-match screenshots gallery — each section degrades gracefully to whatever the
-  game feed actually reported for that match).
+  game feed actually reported for that match). Every match is **editable** from here:
+  hand-logged matches fully, auto-tracked ones down to their manual layer (mental
+  flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
   drill-down drawer (per-map winrate, recent games, aggregates).
@@ -33,10 +35,17 @@ comms · toxicity · leavers · your improvement target).
 - **Improvement Target** — build a target (self-rated ◎ or measured ⚡), choose which
   targets are active (graded on Review), edit or archive/delete them, and track a
   library that shows whether hitting it actually moves your winrate.
-- **Log match** — the quick-capture card that opens after a game (~5 taps).
+- **Log match** — the quick-capture card that opens after a game (~5 taps): pick the
+  **account**, result, map, role, mode and hero; for competitive matches log the
+  **skill-rating %** (and, the first time for an account+role, your current **rank**),
+  split the **leaver** flag by team (my team / enemy), and grade active improvement
+  targets inline. Vantage then **calculates your live rank** from that anchor plus each
+  logged %, including OW2 **rank protection** (a loss at 0% holds the division; only a
+  further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
-  target database, and push your tracked games to it with one click (deduped by
-  Match ID).
+  target database, **push** your tracked games to it (deduped by Match ID) and now
+  **import** them back — an on-demand pull that reads the Gametracker rows into local
+  history for restoring or migrating a season.
 
 Filter everything by account, role, game mode and time range — with a one-click **Reset** chip and
 savable presets. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run
@@ -44,9 +53,10 @@ actions, find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens
 `←/→` between match details, `H/P/M/S` grading on Review), toasts with **Undo** for reversible
 actions, day-grouped match log with hero/map cross-links, hero typeahead + remembered role/mode in
 the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
-colorblind-safe palette option, window-position memory, and a **Settings** screen (break reminder,
-close-to-tray, run-at-login, diagnostics). The app restores your last view on launch and refreshes
-without flicker.
+colorblind-safe palette option, window-position memory, and a **Settings** screen with an
+**accounts manager** (create/edit/delete accounts, per-role rank anchors) alongside the break
+reminder, close-to-tray, run-at-login and diagnostics controls. The app restores your last view on
+launch and refreshes without flicker.
 
 ## Account safety
 

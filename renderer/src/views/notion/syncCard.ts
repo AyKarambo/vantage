@@ -6,6 +6,7 @@ import { h, render } from '../../dom';
 import type { ExportResult, ImportResult, NotionStatus } from '../../../../src/shared/contract';
 import { relTime } from '../../format';
 import { bridge } from '../../bridge';
+import { store } from '../../store';
 import { button, card } from '../../components/primitives';
 
 export function syncCard(s: NotionStatus | null): HTMLElement {
@@ -69,6 +70,8 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
               ? h('span', { class: 'is-loss' }, res.error)
               : importResult(res),
         );
+        // New matches landed in history — re-pull so dashboards reflect them.
+        if (res.imported) void store.refresh();
       } catch (err) {
         render(importOut, h('span', { class: 'is-loss' }, `Import failed — ${String(err)}`));
       }

@@ -299,18 +299,37 @@ const mock: OwStatsApi = {
       if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
     }
     if (input.mental !== undefined) patch.mental = input.mental;
-    if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
+    if (input.srDelta !== undefined) {
+      if (input.srDelta === null) delete patch.srDelta;
+      else patch.srDelta = input.srDelta;
+    }
     previewEdits[input.matchId] = patch;
     save(EDITS_KEY, previewEdits);
-    if (input.grades !== undefined) {
+    if (input.grades && Object.keys(input.grades).length) {
       previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
       save(REVIEWS_KEY, previewReviews);
     }
   },
   listAccounts: async () => accountList(),
   saveAccount: async (input: AccountInput) => {
+    const newLabel = input.label || input.battleTag;
+    const oldLabel = input.previousBattleTag ? previewAccounts[input.previousBattleTag] : undefined;
     if (input.previousBattleTag && input.previousBattleTag !== input.battleTag) delete previewAccounts[input.previousBattleTag];
-    previewAccounts[input.battleTag] = input.label || input.battleTag;
+    // Cascade a label rename onto games + anchors (both key by label), mirroring the app.
+    if (oldLabel && oldLabel !== newLabel) {
+      for (const g of logged) if (g.account === oldLabel) g.account = newLabel;
+      for (const g of season) if (g.account === oldLabel) g.account = newLabel;
+      for (const key of Object.keys(previewAnchors)) {
+        const a = previewAnchors[key];
+        if (a.account !== oldLabel) continue;
+        delete previewAnchors[key];
+        a.account = newLabel;
+        previewAnchors[rankKey(newLabel, a.role)] = a;
+      }
+      save(LOGGED_KEY, logged);
+      save(ANCHORS_KEY, previewAnchors);
+    }
+    previewAccounts[input.battleTag] = newLabel;
     save(ACCOUNTS_KEY, previewAccounts);
     return accountList();
   },
