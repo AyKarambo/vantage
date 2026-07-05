@@ -6,6 +6,7 @@ import { mentalSummary } from '../src/core/mental';
 import { progression, winrateToSr, tierOf } from '../src/core/progression';
 import { sampleTargets } from '../src/core/targets';
 import { computeDashboard, applyFilters } from '../src/core/dashboardData';
+import { seasonStart } from '../src/core/season';
 import { generateSampleGames } from '../src/core/sampleData';
 import { DEFAULT_BREAK_REMINDER } from '../src/core/breakReminder';
 
@@ -207,6 +208,23 @@ describe('computeDashboard', () => {
     expect(computeDashboard(games, { days: 'all', account: 'Smurf' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Smurf', tier: 'Bronze' });
   });
 
+  it('re-points primaryRank to the active Role filter when that role is anchored', () => {
+    const g = (matchId: string, role = 'damage'): GameRecord =>
+      ({ matchId, timestamp: 100, account: 'Main', role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const anchors = {
+      'Main::tank': { tier: 'Silver', division: 2, progressPct: 10, setAt: 1000 },
+      'Main::support': { tier: 'Diamond', division: 4, progressPct: 90, setAt: 1000 },
+    };
+    const games = [g('a', 'tank'), g('b', 'tank'), g('c', 'support')];
+    // No role filter → most-played (tank) wins.
+    expect(computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank', tier: 'Silver' });
+    // Role filter names the less-played anchored role → it surfaces.
+    expect(computeDashboard(games, { days: 'all', role: 'support' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'support', tier: 'Diamond' });
+    // Role filter on an unanchored role → falls back to most-played.
+    expect(computeDashboard(games, { days: 'all', role: 'damage' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank' });
+  });
+
   it('applyFilters narrows by account, role and mode', () => {
     const byAccount = applyFilters(all, { account: 'Main' });
     expect(byAccount.every((g) => g.account === 'Main')).toBe(true);
@@ -223,5 +241,14 @@ describe('computeDashboard', () => {
     const cutoff = Date.now() - 7 * 86400000;
     expect(recent.every((g) => g.timestamp >= cutoff)).toBe(true);
     expect(recent.length).toBeLessThanOrEqual(all.length);
+  });
+
+  it('narrows to the current OW2 season with days: season', () => {
+    const start = seasonStart(Date.now());
+    const inSeason = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: start });
+    const prevSeason = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: start - 1 });
+    const res = applyFilters([inSeason, prevSeason], { days: 'season' });
+    expect(res).toContain(inSeason);
+    expect(res).not.toContain(prevSeason);
   });
 });

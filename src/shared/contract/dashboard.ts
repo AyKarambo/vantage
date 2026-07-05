@@ -17,7 +17,7 @@ export interface DashboardFilters {
   account?: string; // 'all' or account name
   role?: string; // 'all' | tank | damage | support | openQ
   mode?: string; // 'all' or game type (Competitive, Quick Play, …)
-  days?: number | 'all';
+  days?: number | 'all' | 'season'; // N-day window | all time | the current OW2 season
 }
 
 /** One day's recap (the sidebar "today" card + Overview session). */

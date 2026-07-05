@@ -218,7 +218,10 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
       host,
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
         button('Save', { variant: 'primary', onClick: () => {
-          void bridge.setRankAnchor({ account, role: state.role, tier: state.tier, division: state.division, progressPct: Number(state.pct) || 0 }).then(() => { close(); onDone(); });
+          void bridge.setRankAnchor({ account, role: state.role, tier: state.tier, division: state.division, progressPct: Number(state.pct) || 0 })
+            // onDone reloads the accounts card; store.refresh re-fetches the dashboard
+            // snapshot so the always-visible sidebar chip + Overview Rank KPI update live.
+            .then(() => { close(); onDone(); void store.refresh(); });
         } }),
         button('Cancel', { variant: 'ghost', onClick: close }),
       ),
