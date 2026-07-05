@@ -54,8 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           last_tag=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)
-          range="HEAD"
-          [ -n "$last_tag" ] && range="${last_tag}..HEAD"
+          if [ -n "$last_tag" ]; then range="${last_tag}..HEAD"; else range="HEAD"; fi
           log=$(git log "$range" --format='%B')
           if grep -qiE '^[a-z]+(\([^)]*\))?!:' <<< "$log" || grep -qE 'BREAKING[ -]CHANGE' <<< "$log"; then
             level=major
