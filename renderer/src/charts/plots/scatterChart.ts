@@ -24,11 +24,12 @@ const clampN = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, 
  * line is the focus band — losing maps you can't avoid. Dot size scales with
  * how often you play the map; dot colour encodes the game mode (see the legend).
  * The winrate axis auto-fits the data so maps below 40% stay separated instead
- * of piling on one line. Hovering a dot reveals the exact map.
+ * of piling on one line. Hovering a dot reveals the exact map; `onPick` makes
+ * dots clickable (the Overview uses it to jump to the map's row on Maps).
  *
  * Returns an HTML wrapper (SVG + tooltip layer) rather than a bare SVG.
  */
-export function scatterChart(points: ScatterPoint[]): HTMLElement {
+export function scatterChart(points: ScatterPoint[], onPick?: (name: string) => void): HTMLElement {
   const wrap = h('div', { class: 'scatter-wrap' });
   if (!points.length) {
     wrap.append(emptyChart());
@@ -80,6 +81,7 @@ export function scatterChart(points: ScatterPoint[]): HTMLElement {
     dot.addEventListener('mouseenter', (e) => { tip.textContent = label; tip.classList.add('is-visible'); moveTip(e); });
     dot.addEventListener('mousemove', moveTip);
     dot.addEventListener('mouseleave', () => tip.classList.remove('is-visible'));
+    if (onPick) dot.addEventListener('click', () => onPick(p.name));
     // Native title as a no-JS fallback.
     const title = svgEl('title');
     title.textContent = label;

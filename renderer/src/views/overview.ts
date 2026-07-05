@@ -152,9 +152,11 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   );
 
   return card(
-    { title: 'Every map · winrate × volume', sub: 'Below the line = losing. Further right = you play it a lot. Fix the bottom-right first.', style: { flex: '1' } },
+    { title: 'Every map · winrate × volume', sub: 'Below the line = losing. Further right = you play it a lot. Fix the bottom-right first. Click a dot to open the map.', style: { flex: '1' } },
     h('div', { class: 'overview-scatter' },
-      h('div', { class: 'scatter-plot' }, scatterChart(points), scatterLegend(points)),
+      h('div', { class: 'scatter-plot' },
+        scatterChart(points, (name) => ctx.navigate('maps', { highlight: name })),
+        scatterLegend(points)),
       callouts,
     ),
   );
@@ -208,6 +210,7 @@ const READINESS_META: Record<string, { label: string; color: string }> = {
   loaded: { label: 'Loaded', color: PALETTE.mid },
   'in-the-hole': { label: 'In the hole', color: PALETTE.loss },
   recovering: { label: 'Recovering', color: PALETTE.accentBright },
+  rusty: { label: 'Rusty', color: PALETTE.info },
   'insufficient-data': { label: 'Not enough data', color: PALETTE.muted },
 };
 
