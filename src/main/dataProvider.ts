@@ -25,11 +25,11 @@ import type { GameRecord } from '../core/analytics';
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany'>;
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'relabelAccount'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
-  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set'>;
+  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel'>;
   /** The Notion edge: export/import, status, token lifecycle, and the database picker. */
   notion: Pick<
     NotionRuntime,
@@ -133,10 +133,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         if (input.gameType !== undefined) patch.gameType = input.gameType;
         if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
       }
-      // The manual layer applies to any match.
+      // The manual layer applies to any match. srDelta: number sets it, null
+      // clears it (editManual deletes on null), undefined leaves it unchanged.
       if (input.mental !== undefined) patch.mental = input.mental;
       if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
-      if (input.grades !== undefined) {
+      // Only stamp a review when there are grades — an edit with no targets
+      // shouldn't mark an otherwise-ungraded match as reviewed.
+      if (input.grades && Object.keys(input.grades).length) {
         patch.review = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
       }
       deps.history.editManual(input.matchId, patch);
@@ -144,10 +147,18 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     listAccounts: () => accountList(deps.getConfig().accounts),
     saveAccount: (input) => {
       const accounts = { ...deps.getConfig().accounts };
+      const newLabel = input.label || input.battleTag;
+      // Renaming the label: cascade onto stored games + rank anchors (both key by
+      // label) so existing history and rank tracks stay attached, not orphaned.
+      const oldLabel = input.previousBattleTag ? accounts[input.previousBattleTag] : undefined;
       if (input.previousBattleTag && input.previousBattleTag !== input.battleTag) {
         delete accounts[input.previousBattleTag];
       }
-      accounts[input.battleTag] = input.label || input.battleTag;
+      if (oldLabel && oldLabel !== newLabel) {
+        deps.history.relabelAccount(oldLabel, newLabel);
+        deps.rankAnchors.relabel(oldLabel, newLabel);
+      }
+      accounts[input.battleTag] = newLabel;
       deps.persistAccounts(accounts);
       return accountList(accounts);
     },
