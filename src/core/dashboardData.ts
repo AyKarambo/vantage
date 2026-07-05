@@ -4,8 +4,9 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byMode, byRole, calendar, focusBy, heroStats,
-  latestSession, sessionRecap, streak, trend, winLoss, groupBy, type GameRecord,
+  byAccount, byHero, byMap, byMode, byRole, bySessionPosition, byTimeOfDay, calendar,
+  focusBy, heroStats, latestSession, sessionRecap, streak, trend, winLoss, groupBy,
+  type GameRecord,
 } from './analytics';
 import { mapMode } from './maps';
 import { mentalSummary } from './mental';
@@ -81,6 +82,8 @@ export function computeDashboard(
     byMapType: groupBy(games, (g) => mapMode(g.map)),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     trend: trend(games, weekly ? 'week' : 'day'),
+    timeOfDay: byTimeOfDay(games),
+    sessionPosition: bySessionPosition(games),
     calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),

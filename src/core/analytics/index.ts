@@ -17,3 +17,7 @@ export { heroStats } from './heroStats';
 // Session, streak & drill-down reads
 export { streak, latestSession, calendar, heroDetail, groupByDay, sessionRecap } from './session';
 export type { DayGroup, SessionRecap } from './session';
+
+// Temporal splits (time of day, session position, fade detection)
+export { byTimeOfDay, bySessionPosition, sessionFade } from './temporal';
+export type { SessionFade } from './temporal';
