@@ -51,9 +51,13 @@ comms · toxicity · leavers · your improvement target).
   logged %, including OW2 **rank protection** (a loss at 0% holds the division; only a
   further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
-  target database, **push** your tracked games to it (deduped by Match ID) and now
+  target database, **push** your tracked games to it (deduped by Match ID) and
   **import** them back — an on-demand pull that reads the Gametracker rows into local
-  history for restoring or migrating a season.
+  history for restoring or migrating a season. The round-trip preserves each match's
+  **time** (via a `Played At` column, so restored history lands on the right days) and
+  its **auto/manual provenance**; a just-imported season won't re-duplicate itself on the
+  next Sync, and if the date filter would hide it all the Overview offers a one-click
+  "view all time".
 
 Filter everything by account, role, game mode and time range — with a one-click **Reset** chip and
 savable presets. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run

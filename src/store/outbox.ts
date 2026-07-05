@@ -43,6 +43,25 @@ export class OutboxStore {
     this.save();
   }
 
+  /**
+   * Mark many ids processed in one atomic save (e.g. after an import, so a later
+   * export skips the rows that already came from Notion). Skips ids already
+   * present and only writes when something actually changed.
+   */
+  markManyProcessed(matchIds: string[]): void {
+    let added = 0;
+    for (const matchId of matchIds) {
+      if (this.isProcessed(matchId)) continue;
+      this.state.processed.push(matchId);
+      added++;
+    }
+    if (!added) return;
+    if (this.state.processed.length > this.maxProcessed) {
+      this.state.processed = this.state.processed.slice(-this.maxProcessed);
+    }
+    this.save();
+  }
+
   /** Queue a match for (re)try. No-op if already queued. */
   enqueue(record: MatchRecord): void {
     if (this.state.pending.some((r) => r.matchId === record.matchId)) return;

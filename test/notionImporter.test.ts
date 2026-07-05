@@ -18,10 +18,13 @@ function row(p: {
   toxicMates?: boolean;
   comms?: string | null;
   improvement?: string | null;
+  matchId?: string;
+  playedAt?: string;
+  createdTime?: string;
 }) {
   return {
     id: p.id ?? 'page-1',
-    created_time: '2024-01-01T00:00:00.000Z',
+    created_time: p.createdTime ?? '2024-01-01T00:00:00.000Z',
     properties: {
       Result: { select: p.result === undefined ? { name: 'Win' } : p.result === null ? null : { name: p.result } },
       Role: { select: p.role === undefined ? { name: 'damage' } : p.role === null ? null : { name: p.role } },
@@ -29,7 +32,8 @@ function row(p: {
       Account: { select: p.account ? { name: p.account } : null },
       'Hero(es) Played': { multi_select: (p.heroes ?? []).map((name) => ({ name })) },
       'Game Type': { select: null },
-      'Match ID': { rich_text: [] },
+      'Match ID': { rich_text: p.matchId ? [{ plain_text: p.matchId }] : [] },
+      'Played At': { type: 'date', date: p.playedAt ? { start: p.playedAt } : null },
       Name: { title: p.name ? [{ plain_text: p.name }] : [] },
       Leaver: { type: 'select', select: p.leaver ? { name: p.leaver } : null },
       Tilt: { type: 'checkbox', checkbox: Boolean(p.tilt) },
@@ -107,6 +111,42 @@ describe('NotionImporter — map resolution', () => {
     const byId = Object.fromEntries(games.map((g) => [g.matchId.includes('titled') ? 'titled' : 'bare', g.map]));
     expect(byId.titled).toBe('Hollywood');
     expect(byId.bare).toBe('Unknown');
+  });
+});
+
+describe('NotionImporter — match time', () => {
+  it('prefers the Played At date over the Notion row-creation time', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ playedAt: '2026-05-01T12:34:00.000Z', createdTime: '2026-07-05T09:00:00.000Z' })],
+      maps: [],
+    });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.timestamp).toBe(Date.parse('2026-05-01T12:34:00.000Z'));
+  });
+
+  it('falls back to created_time when Played At is unset (legacy / hand-added rows)', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ createdTime: '2026-03-18T16:48:00.000Z' })],
+      maps: [],
+    });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.timestamp).toBe(Date.parse('2026-03-18T16:48:00.000Z'));
+  });
+});
+
+describe('NotionImporter — source provenance', () => {
+  it('treats a hand-added row (no Match ID) as manual', async () => {
+    const { client } = mockClient({ gametracker: [row({ id: 'abc-def' })], maps: [] });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.source).toBe('manual');
+    expect(g.matchId).toBe('manual-notion-abcdef');
+  });
+
+  it('restores a row carrying a real GEP Match ID as auto-tracked (gep)', async () => {
+    const { client } = mockClient({ gametracker: [row({ matchId: '1432799173' })], maps: [] });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.source).toBe('gep');
+    expect(g.matchId).toBe('1432799173');
   });
 });
 

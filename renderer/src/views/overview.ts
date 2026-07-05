@@ -21,10 +21,28 @@ export function overview(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view' },
     head,
+    hiddenHistoryBanner(ctx),
     recapCard(d),
     kpiRow(d),
     scatterCard(ctx),
     bottomRow(ctx),
+  );
+}
+
+/**
+ * Safety net for a just-imported (or otherwise old) history: when the active
+ * date window hides *every* game — filtered games 0 but all-time games > 0 —
+ * the Overview would otherwise render a fully blank dashboard that reads as
+ * "the import did nothing". Surface the count and a one-click way to see it.
+ */
+function hiddenHistoryBanner(ctx: ViewContext): HTMLElement | null {
+  const d = ctx.data;
+  if (d.overall.games > 0 || d.totalGamesAllTime === 0 || d.filters.days === 'all') return null;
+  const n = d.totalGamesAllTime;
+  return card({ variant: 'glow', title: 'Your history is outside this date range' },
+    h('div', { class: 'hint', style: { lineHeight: '1.55', marginBottom: '12px' } },
+      `You have ${int(n)} game${n === 1 ? '' : 's'} in your history, but none in the selected range — imported matches often carry older dates. View your full history to see them.`),
+    button(`View all time (${int(n)} games)`, { variant: 'primary', onClick: () => ctx.setFilter({ days: 'all' }) }),
   );
 }
 

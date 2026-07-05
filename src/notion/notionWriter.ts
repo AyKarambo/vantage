@@ -23,6 +23,13 @@ export class NotionWriter {
   constructor(
     private readonly client: Client,
     private readonly gametrackerDatabaseId: string,
+    /**
+     * Whether the target database has the optional `Played At` date column. Set
+     * from the cached shape validation. Guarded because `pages.create` rejects a
+     * property the database doesn't define — writing it to a pre-`Played At`
+     * database would fail every row.
+     */
+    private readonly hasPlayedAt = false,
   ) {}
 
   async createMatchPage(m: ResolvedMatch): Promise<string> {
@@ -55,6 +62,13 @@ export class NotionWriter {
     putText(props, 'Final Score', r.finalScore);
     putText(props, 'Battletag', r.battleTag);
     putText(props, 'Match ID', r.matchId);
+
+    // The match-end time, so import can restore the real timeline rather than
+    // inheriting the Notion row-creation time. Only when the database carries
+    // the column (see the constructor doc).
+    if (this.hasPlayedAt && typeof r.endedAt === 'number' && Number.isFinite(r.endedAt)) {
+      props['Played At'] = { date: { start: new Date(r.endedAt).toISOString() } };
+    }
 
     const res: any = await this.client.pages.create({
       parent: { database_id: this.gametrackerDatabaseId },

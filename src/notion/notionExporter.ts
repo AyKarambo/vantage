@@ -67,6 +67,9 @@ export function gameToMatchRecord(game: GameRecord): MatchRecord {
   const hasStats = (game.perHero?.length ?? 0) > 0;
   return {
     ...emptyMatch(game.matchId),
+    // The match-end time, so a `Played At`-capable database round-trips it back
+    // on import instead of the row-creation time.
+    endedAt: game.timestamp,
     mapName: game.map,
     outcome: resultToOutcome(game.result),
     heroRole: game.role,

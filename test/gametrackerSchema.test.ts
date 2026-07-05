@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   REQUIRED_PROPERTIES, buildGametrackerProperties, validateGametrackerShape,
+  hasPlayedAtColumn, PLAYED_AT_PROPERTY,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
@@ -22,6 +23,27 @@ describe('buildGametrackerProperties', () => {
     expect(props.Source.select.options.map((o: any) => o.name)).toEqual(['Auto', 'Manual']);
     expect(props.Result.select.options.map((o: any) => o.name)).toEqual(['Win', 'Loss', 'Draw']);
     expect(props.Role.select.options.map((o: any) => o.name)).toEqual(['tank', 'damage', 'support', 'openQ']);
+  });
+
+  it('includes the optional Played At date column for new databases', () => {
+    expect(buildGametrackerProperties()).toHaveProperty(PLAYED_AT_PROPERTY);
+    expect((buildGametrackerProperties() as any)[PLAYED_AT_PROPERTY]).toHaveProperty('date');
+  });
+
+  it('does not require Played At (legacy databases without it still validate)', () => {
+    // Not part of the shape contract — a DB missing it is neither missing nor mismatched.
+    expect(REQUIRED_PROPERTIES).not.toHaveProperty(PLAYED_AT_PROPERTY);
+    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    delete props[PLAYED_AT_PROPERTY];
+    expect(validateGametrackerShape(props, { requireMapRelation: true }).ok).toBe(true);
+  });
+});
+
+describe('hasPlayedAtColumn', () => {
+  it('is true only when a Played At date column is present', () => {
+    expect(hasPlayedAtColumn(asRetrievedShape(buildGametrackerProperties('maps-db-id')))).toBe(true);
+    expect(hasPlayedAtColumn({ [PLAYED_AT_PROPERTY]: { type: 'rich_text' } })).toBe(false); // wrong type
+    expect(hasPlayedAtColumn({})).toBe(false); // absent
   });
 });
 
