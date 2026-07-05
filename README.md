@@ -29,6 +29,14 @@ comms · toxicity · leavers · your improvement target).
   **break-reminder setting** (on/off + loss threshold) that fires a tray notification
   after N consecutive losses.
 - **Trends** — winrate over time, splits by role/mode/account, and an activity heatmap.
+- **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea
+  of *supercompensation*: it estimates whether you're grinding "into the hole" from your play
+  pattern (games/day, session length, days without a rest day) and your self-reported mental
+  state, then gives a traffic-light verdict and a **rest recommendation** (take 1–2 days off),
+  with a trend chart. Deliberately conservative and framed as an evidence-informed **wellness
+  nudge, not a diagnosis** — match results alone are a weak fatigue signal, so it leans on load
+  and mental self-report. Optional opt-in tray reminder at launch. Extends (doesn't replace) the
+  Mental break reminder.
 - **Review** — grade your active improvement targets (Hit / Partial / Missed) and flag
   how each tracked game felt; an always-visible inbox of ungraded games, independent of
   the global filters.
@@ -148,6 +156,10 @@ Electron/Overwolf/Notion plumbing kept at the edges:
 - `core/breakReminder.ts` — the pure break-reminder state machine (consecutive-loss
   threshold, re-fire cadence, re-arm on a win), driven by the main process after every
   recorded game.
+- `core/readiness/` — the pure readiness / training-load model: gap-based sessions, a local
+  4am-day boundary, EWMA acute-vs-chronic load, self-reported mental signals, and a rule-gated
+  band + rest recommendation. All thresholds are conservative, centrally tuned constants; every
+  gate is unit-tested. Surfaced on `DashboardData` like `mental`.
 - `shared/contract/` — the single typed IPC contract shared by main **and** renderer
   (import path stays `shared/contract`), including the channel map that preload and the
   renderer bridge are generated from.

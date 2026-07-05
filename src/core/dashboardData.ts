@@ -12,6 +12,7 @@ import { mentalSummary } from './mental';
 import { progression } from './progression';
 import { buildTargets, type AuthoredTarget } from './targets';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
+import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import type { DemoContext } from './demoPreference';
 import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
 
@@ -20,6 +21,8 @@ export interface ManualData {
   targets?: AuthoredTarget[];
   /** Effective break-reminder settings; defaults when absent. */
   breakReminder?: BreakReminderSettings;
+  /** Effective readiness feature settings; defaults when absent. */
+  readiness?: ReadinessSettings;
 }
 
 export function computeDashboard(
@@ -72,6 +75,11 @@ export function computeDashboard(
     reviewInbox: ungraded.slice(0, ROW_CAP).map(toMatchRow),
     pendingReviews: ungraded.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
+    // Readiness is a per-person verdict → computed over the UNFILTERED history,
+    // like reviewInbox/recap. safeReadiness never throws, so a readiness bug can
+    // never blank the whole dashboard.
+    readiness: safeReadiness(all),
+    readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     totalGamesAllTime: all.length,
     ...(recapOf(all) ?? {}),
   };

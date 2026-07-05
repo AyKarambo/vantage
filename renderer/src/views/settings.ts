@@ -8,6 +8,7 @@ import type { AccountSummary, AppUiSettings, RankSummary, Role } from '../../../
 import { bridge } from '../bridge';
 import { button, card, chip, pill, select } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
+import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
 import { logLevelToggle } from '../components/logLevelToggle';
 import { openModal } from '../components/overlay';
 import { rankLabel, roleLabel } from '../format';
@@ -27,8 +28,9 @@ export function settings(ctx: ViewContext): HTMLElement {
     viewHead('Settings', 'Accounts, app behavior, coaching nudges, appearance, diagnostics'),
     accountsCard(),
     h('div', { class: 'grid-2' },
-      card({ title: 'Coaching', sub: 'the break reminder fires a tray notification' },
+      card({ title: 'Coaching', sub: 'break reminder + readiness nudges' },
         breakReminderEditor(ctx),
+        readinessSettingsEditor(ctx),
       ),
       appBehaviorCard(ctx),
     ),

@@ -11,7 +11,7 @@ import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
   DashboardFilters, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
-  RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, SyncProgress, TargetEditInput,
+  RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -24,6 +24,7 @@ import { matchDetail } from '../../src/core/matchDetail';
 import { sourceOf } from '../../src/core/source';
 import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
+import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -31,6 +32,7 @@ const LOGGED_KEY = 'vantagePreviewLogged';
 const TARGETS_KEY = 'vantagePreviewTargets';
 const REVIEWS_KEY = 'vantagePreviewReviews';
 const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
+const READINESS_KEY = 'vantagePreviewReadiness';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
 const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
@@ -105,6 +107,10 @@ const savedBreakReminder = loadMap<unknown>(BREAK_REMINDER_KEY) as Partial<Break
 let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).length
   ? normalizeBreakReminder(savedBreakReminder)
   : { ...DEFAULT_BREAK_REMINDER };
+const savedReadiness = loadMap<unknown>(READINESS_KEY) as Partial<ReadinessSettings>;
+let readiness: ReadinessSettings = Object.keys(savedReadiness).length
+  ? normalizeReadiness(savedReadiness)
+  : { ...DEFAULT_READINESS };
 
 // Saved reviews are overlaid onto the dataset so the pure core exercises the
 // full pipeline (inbox, mental merge, target scoring) exactly as in the app.
@@ -218,7 +224,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder }),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, readiness }),
   heroDetail: async (hero: string, f: DashboardFilters) => heroDetail(applyFilters(dataset(), f), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
     const games = dataset();
@@ -407,6 +413,12 @@ const mock: OwStatsApi = {
     breakReminder = normalizeBreakReminder(input);
     save(BREAK_REMINDER_KEY, breakReminder);
     return breakReminder;
+  },
+  getReadiness: async () => readiness,
+  setReadiness: async (input: ReadinessSettings) => {
+    readiness = normalizeReadiness(input);
+    save(READINESS_KEY, readiness);
+    return readiness;
   },
   getLogEntries: async () => [...previewLog],
   getLogLevel: async () => previewLogLevel,

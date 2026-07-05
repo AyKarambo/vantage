@@ -3,6 +3,7 @@ import { heroDetail } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { ReadinessSettings } from '../../core/readiness';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
@@ -55,6 +56,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
     computeDashboard(provider.games(), filters ?? {}, provider.demoContext(), {
       targets: provider.manualTargets(),
       breakReminder: provider.getBreakReminder(),
+      readiness: provider.getReadiness(),
     }),
   );
   handle(ch.exportNotion, async (_e, filters: DashboardFilters) => {
@@ -126,6 +128,10 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.setBreakReminder, (_e, input: BreakReminderSettings) =>
     provider.setBreakReminder(input),
   );
+
+  // Readiness feature settings.
+  handle(ch.getReadiness, () => provider.getReadiness());
+  handle(ch.setReadiness, (_e, input: ReadinessSettings) => provider.setReadiness(input));
 
   // Release debug log (viewer ring, session level, renderer error forwarding).
   handle(ch.getLogEntries, () => provider.getLogEntries());
