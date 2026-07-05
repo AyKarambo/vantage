@@ -136,7 +136,7 @@ function accountsCard(): HTMLElement {
       const bt = h('input', { class: 'vt-input', type: 'text', value: a.battleTag }) as HTMLInputElement;
       const lb = h('input', { class: 'vt-input', type: 'text', value: a.label }) as HTMLInputElement;
       render(row,
-        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
+        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' } },
           labelled('BattleTag', bt), labelled('Display name', lb),
           button('Save', { variant: 'primary', onClick: () => {
             const battleTag = bt.value.trim(); if (!battleTag) return;
@@ -164,7 +164,7 @@ function accountsCard(): HTMLElement {
   function addForm(): HTMLElement {
     const bt = h('input', { class: 'vt-input', type: 'text', placeholder: 'BattleTag, e.g. You#1234' }) as HTMLInputElement;
     const lb = h('input', { class: 'vt-input', type: 'text', placeholder: 'Display name (optional)' }) as HTMLInputElement;
-    return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '12px' } },
+    return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '12px' } },
       labelled('BattleTag', bt), labelled('Display name', lb),
       button('Add account', { variant: 'soft', onClick: () => {
         const battleTag = bt.value.trim(); if (!battleTag) return;
