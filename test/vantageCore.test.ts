@@ -192,6 +192,21 @@ describe('computeDashboard', () => {
     expect(multi.primaryRank).toMatchObject({ role: 'tank', tier: 'Silver' });
   });
 
+  it('scopes primaryRank to the selected account (the sidebar switcher re-points the rank)', () => {
+    const g = (matchId: string, account: string): GameRecord =>
+      ({ matchId, timestamp: 100, account, role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const anchors = {
+      'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 },
+      'Smurf::damage': { tier: 'Bronze', division: 5, progressPct: 5, setAt: 1000 },
+    };
+    // Main is most-played, so 'all' shows Main's rank…
+    const games = [g('a', 'Main'), g('b', 'Main'), g('c', 'Smurf')];
+    expect(computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Main', tier: 'Gold' });
+    // …but filtering to Smurf re-points the rank to Smurf.
+    expect(computeDashboard(games, { days: 'all', account: 'Smurf' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Smurf', tier: 'Bronze' });
+  });
+
   it('applyFilters narrows by account, role and mode', () => {
     const byAccount = applyFilters(all, { account: 'Main' });
     expect(byAccount.every((g) => g.account === 'Main')).toBe(true);

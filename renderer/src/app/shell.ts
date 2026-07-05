@@ -257,10 +257,25 @@ export class App {
 
   private renderSidebar(state: AppState): void {
     const d = state.data;
-    const account = h('div', { class: 'sidebar-account' },
-      h('div', { class: 'avatar' }, (d?.greetingName ?? 'V').charAt(0).toUpperCase()),
+    // The chip doubles as the account switcher: it shows the active account (the
+    // selected filter, or the most-played one when viewing "all") and its rank.
+    const displayName = (d && d.filters.account !== 'all' ? d.filters.account : d?.greetingName) ?? 'Vantage';
+    const account = h('div', {
+      class: 'sidebar-account',
+      role: 'button',
+      tabindex: '0',
+      title: 'Switch account · manage accounts',
+      on: {
+        click: (e: Event) => { if (d) this.openAccountSwitcher(e.currentTarget as HTMLElement, d); },
+        keydown: (e: Event) => {
+          const key = (e as KeyboardEvent).key;
+          if ((key === 'Enter' || key === ' ') && d) { e.preventDefault(); this.openAccountSwitcher(e.currentTarget as HTMLElement, d); }
+        },
+      },
+    },
+      h('div', { class: 'avatar' }, displayName.charAt(0).toUpperCase()),
       h('div', { class: 'row-main' },
-        h('div', { class: 'account-name' }, d?.greetingName ?? 'Vantage'),
+        h('div', { class: 'account-name' }, displayName),
         h('div', { class: 'account-sub' }, d ? rankLine(d) : '—'),
       ),
       h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '▾'),
@@ -287,6 +302,24 @@ export class App {
     ]);
 
     render(this.sidebarHost, account, ...nav, this.sessionCard(state));
+  }
+
+  /** The top-left chip's account switcher: scope the dashboard to an account (or all), or jump to account management. */
+  private openAccountSwitcher(anchor: HTMLElement, d: DashboardData): void {
+    const current = d.filters.account;
+    openPopover(anchor, (close) => {
+      const item = (label: string, active: boolean, run: () => void): HTMLElement =>
+        h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
+          h('span', null, label),
+          active ? h('span', { class: 'acct-menu-check' }, '✓') : null,
+        );
+      return h('div', { class: 'acct-menu' },
+        item('All accounts', current === 'all', () => store.setFilters({ account: 'all' })),
+        ...d.options.accounts.map((a) => item(a, current === a, () => store.setFilters({ account: a }))),
+        h('div', { class: 'acct-menu-sep' }),
+        item('Manage accounts →', false, () => store.setView('settings')),
+      );
+    });
   }
 
   private sessionCard(state: AppState): HTMLElement {

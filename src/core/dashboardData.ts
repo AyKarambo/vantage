@@ -39,7 +39,10 @@ export function computeDashboard(
   const overall = winLoss(games);
   // Rank is per-person, computed over the FULL history (like readiness), not the
   // filtered set — the anchored "real" rank the sidebar/KPI show over the heuristic.
-  const primaryRank = primaryRankOf(all, manual?.rankAnchors);
+  // Scoped to the selected account when one is active, else the most-played one,
+  // so switching accounts in the sidebar re-points the rank too.
+  const primaryAccount = filters.account && filters.account !== 'all' ? filters.account : topAccount(all);
+  const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount);
   const weekly = (filters.days ?? 30) === 'all' || (filters.days as number) > 90;
   // The review inbox is deliberately unfiltered: an ungraded game must stay
   // visible (and counted in the badge) no matter how the range is narrowed.
@@ -144,15 +147,14 @@ function topAccount(games: GameRecord[]): string {
 const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
 
 /**
- * The user's real rank for the greeting (most-played) account: the calculated
- * rank of its most-played *anchored* role. Undefined when that account has no
- * rank anchor — the caller falls back to the winrate heuristic. This is what
- * makes the sidebar/KPI reflect the rank the user set in Settings instead of a
- * number derived from winrate.
+ * The user's real rank for `account`: the calculated rank of its most-played
+ * *anchored* role. Undefined when that account has no rank anchor — the caller
+ * falls back to the winrate heuristic. This is what makes the sidebar/KPI
+ * reflect the rank the user set in Settings instead of a number derived from
+ * winrate.
  */
-function primaryRankOf(all: GameRecord[], anchors: RankAnchorMap | undefined): DashboardData['primaryRank'] {
+function primaryRankOf(all: GameRecord[], anchors: RankAnchorMap | undefined, account: string): DashboardData['primaryRank'] {
   if (!anchors) return undefined;
-  const account = topAccount(all);
   const anchored = ROLES.filter((role) => anchors[rankKey(account, role)]);
   if (!anchored.length) return undefined;
   const plays = (role: Role): number => all.reduce((n, g) => (g.account === account && g.role === role ? n + 1 : n), 0);
