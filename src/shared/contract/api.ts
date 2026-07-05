@@ -7,8 +7,9 @@
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
-import type { ExportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress } from './notion';
-import type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
+import type { ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress } from './notion';
+import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
+import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
 import type { AppInfo, AppUiSettings } from './appSettings';
@@ -25,6 +26,20 @@ export interface OwStatsApi {
   clearNotionToken(): Promise<NotionStatus>;
   /** Persist a manually-logged match (appended to history). */
   logMatch(input: ManualMatchInput): Promise<{ matchId: string }>;
+  /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */
+  editMatch(input: MatchEditInput): Promise<void>;
+  /** The tracked accounts (battleTag → label), for the picker and settings. */
+  listAccounts(): Promise<AccountSummary[]>;
+  /** Create or edit an account; returns the updated list. */
+  saveAccount(input: AccountInput): Promise<AccountSummary[]>;
+  /** Delete an account by battleTag; returns the updated list. */
+  deleteAccount(battleTag: string): Promise<AccountSummary[]>;
+  /** Computed current rank for each anchored (account, role). */
+  getRanks(): Promise<RankSummary[]>;
+  /** Set (or replace) the one-time rank anchor for an (account, role). */
+  setRankAnchor(input: RankAnchorInput): Promise<RankSummary[]>;
+  /** Pull matches from the configured Notion Gametracker database into history. */
+  importNotion(): Promise<ImportResult>;
   /** Persist a new authored improvement target. */
   saveTarget(input: AuthoredTargetInput): Promise<void>;
   /** Persist the manual review (grades + flags) onto a tracked match. */
@@ -109,6 +124,13 @@ export const IPC_CHANNELS = {
   setNotionToken: 'notion:set-token',
   clearNotionToken: 'notion:clear-token',
   logMatch: 'manual:log-match',
+  editMatch: 'manual:edit-match',
+  listAccounts: 'accounts:list',
+  saveAccount: 'accounts:save',
+  deleteAccount: 'accounts:delete',
+  getRanks: 'rank:list',
+  setRankAnchor: 'rank:set-anchor',
+  importNotion: 'notion:import',
   saveTarget: 'manual:save-target',
   saveReview: 'manual:save-review',
   importReviews: 'manual:import-reviews',

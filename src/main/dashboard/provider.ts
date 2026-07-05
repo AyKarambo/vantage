@@ -2,10 +2,12 @@ import type { GameRecord } from '../../core/analytics';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { DemoContext } from '../../core/demoPreference';
+import type { RankAnchorMap } from '../../core/rank';
 import type {
-  AppInfo, AppUiSettings, AuthoredTargetInput, GepStatusPayload, LogEntry, LogLevel,
-  ManualMatchInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
-  RendererErrorInput, ReviewInput, TargetEditInput,
+  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, GepStatusPayload,
+  ImportResult, LogEntry, LogLevel, ManualMatchInput, MatchEditInput, NotionStatus,
+  NotionDatabaseSummary, NotionPageSummary, RankAnchorInput, RankSummary, RendererErrorInput,
+  ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 
 /**
@@ -33,6 +35,22 @@ export interface DataProvider {
   saveTarget(input: AuthoredTargetInput): void;
   /** Persist a manually-logged match; returns its new id. */
   logMatch(input: ManualMatchInput): { matchId: string };
+  /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */
+  editMatch(input: MatchEditInput): void;
+  /** The tracked accounts (battleTag → label). */
+  listAccounts(): AccountSummary[];
+  /** Create or edit an account; returns the updated list. */
+  saveAccount(input: AccountInput): AccountSummary[];
+  /** Delete an account by battleTag; returns the updated list. */
+  deleteAccount(battleTag: string): AccountSummary[];
+  /** Computed current rank for each anchored (account, role). */
+  getRanks(): RankSummary[];
+  /** Set (or replace) the one-time rank anchor for an (account, role); returns the ranks. */
+  setRankAnchor(input: RankAnchorInput): RankSummary[];
+  /** Anchors keyed for the rank engine, passed into the match-detail read. */
+  rankAnchorMap(): RankAnchorMap;
+  /** Pull matches from the configured Notion Gametracker database into history. */
+  importNotion(): Promise<ImportResult>;
   /** Attach a Review-screen read (grades + flags) to a tracked match. */
   saveReview(input: ReviewInput): void;
   /** Bulk legacy-review import; skips unknown ids and already-reviewed games. */

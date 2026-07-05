@@ -132,6 +132,17 @@ export function saveLocalNotionConfig(patch: Partial<NotionConfig>): void {
   fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
 }
 
+/**
+ * Persist the full `accounts` map (battleTag → label) into the user's local
+ * config file. Replaces the map wholesale — the in-app account manager owns the
+ * complete list, so create/edit/delete each write the resolved map.
+ */
+export function saveLocalAccounts(accounts: Record<string, string>): void {
+  const current = readJson<AppConfig>(userConfigPath());
+  const merged: Partial<AppConfig> = { ...current, accounts };
+  fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
+}
+
 /** Deep-merge a partial `ui` patch (same clobber-avoidance as the notion helper). */
 export function saveLocalUiConfig(patch: Partial<UiConfig>): void {
   const current = readJson<AppConfig>(userConfigPath());

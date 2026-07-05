@@ -36,6 +36,42 @@ export class HistoryStore {
     return true;
   }
 
+  /** Append many games in one atomic save, skipping ids already stored. */
+  addMany(games: GameRecord[]): { imported: number; skipped: number } {
+    let imported = 0;
+    let skipped = 0;
+    for (const game of games) {
+      if (this.has(game.matchId)) {
+        skipped++;
+        continue;
+      }
+      this.games.push(game);
+      imported++;
+    }
+    if (imported) this.save();
+    return { imported, skipped };
+  }
+
+  /**
+   * Patch a stored game's manual-layer fields in place (result/role/map/heroes/
+   * gameType for hand-logged matches; mental/srDelta/review for any). Only the
+   * provided keys change; false if the id is unknown. The caller is responsible
+   * for not passing game-derived facts for auto-tracked (GEP) records.
+   */
+  editManual(
+    matchId: string,
+    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'srDelta' | 'review'>>,
+  ): boolean {
+    const game = this.games.find((g) => g.matchId === matchId);
+    if (!game) return false;
+    const target = game as unknown as Record<string, unknown>;
+    for (const [k, v] of Object.entries(patch)) {
+      if (v !== undefined) target[k] = v;
+    }
+    this.save();
+    return true;
+  }
+
   /** Total number of stored games. */
   count(): number {
     return this.games.length;

@@ -5,8 +5,8 @@ import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
-  AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
-  RendererErrorInput, ReviewInput, TargetEditInput,
+  AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
+  MatchEditInput, RankAnchorInput, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
@@ -68,7 +68,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   // on); the competitive estimate is scoped to the current filter set.
   handle(ch.matchDetail, (_e, matchId: string, filters: DashboardFilters) => {
     const games = provider.games();
-    return matchDetail(games, matchId, applyFilters(games, filters ?? {}));
+    return matchDetail(games, matchId, applyFilters(games, filters ?? {}), provider.rankAnchorMap());
   });
 
   // Notion sync screen.
@@ -86,6 +86,19 @@ export function registerDashboardIpc(provider: DataProvider): void {
 
   // Manual (◎) writes.
   handle(ch.logMatch, (_e, input: ManualMatchInput) => provider.logMatch(input));
+  handle(ch.editMatch, (_e, input: MatchEditInput) => {
+    provider.editMatch(input);
+  });
+
+  // Accounts + rank (per account × role).
+  handle(ch.listAccounts, () => provider.listAccounts());
+  handle(ch.saveAccount, (_e, input: AccountInput) => provider.saveAccount(input));
+  handle(ch.deleteAccount, (_e, battleTag: string) => provider.deleteAccount(battleTag));
+  handle(ch.getRanks, () => provider.getRanks());
+  handle(ch.setRankAnchor, (_e, input: RankAnchorInput) => provider.setRankAnchor(input));
+
+  // Notion import (pull).
+  handle(ch.importNotion, () => provider.importNotion());
   handle(ch.saveTarget, (_e, input: AuthoredTargetInput) => {
     provider.saveTarget(input);
   });

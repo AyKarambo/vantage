@@ -2,6 +2,7 @@ import { Client } from '@notionhq/client';
 import { NotionWriter } from '../notion/notionWriter';
 import { MapsCache } from '../notion/mapsCache';
 import { NotionExporter } from '../notion/notionExporter';
+import { NotionImporter, type ImportOutcome } from '../notion/notionImporter';
 import { NotionAdmin } from '../notion/notionAdmin';
 import type { OutboxStore } from '../store/outbox';
 import {
@@ -89,6 +90,22 @@ export class NotionRuntime {
       this.deps.reloadConfig();
     }
     return result;
+  }
+
+  /**
+   * Pull rows from the configured Gametracker database back into local records
+   * (the inverse of export). Returns the mapped games for the caller to
+   * de-duplicate + persist; `unavailable` when there's no client/database.
+   */
+  async import(): Promise<ImportOutcome & { unavailable?: boolean; error?: string }> {
+    const { notion } = this.deps.config();
+    if (!this.client || !notion.gametrackerDatabaseId) return { games: [], failed: 0, unavailable: true };
+    try {
+      const importer = new NotionImporter(this.client, notion.gametrackerDatabaseId, notion.mapsDatabaseId || undefined);
+      return await importer.import();
+    } catch (err) {
+      return { games: [], failed: 0, error: String(err) };
+    }
   }
 
   setToken(token: string): NotionStatus {
