@@ -33,11 +33,14 @@ export function trends(ctx: ViewContext): HTMLElement {
       timeOfDayCard(d.timeOfDay),
       sessionPositionCard(d.sessionPosition),
     ),
-    card({ title: 'Activity', sub: 'games/day · colour = winrate' }, calendarHeatmap(d.calendar)),
+    card({ title: 'Activity', sub: 'games/day · colour = winrate · click a day to open its matches' },
+      calendarHeatmap(d.calendar, (date) => ctx.navigate('matches', { day: date }))),
   );
 }
 
-/** Best/worst window callout only when the sample is worth reading (≥10 decided games). */
+/** Best/worst window callout only when the sample is worth reading (≥10 decided games)
+ *  AND that best bucket is actually a winning one — a 38% bucket topping the
+ *  pack is still a losing window, not one worth queuing ranked into. */
 function timeOfDayCard(groups: Group[]): HTMLElement {
   const solid = groups.filter((g) => g.wins + g.losses >= 10);
   const best = solid.length >= 2 ? [...solid].sort((a, b) => b.winrate - a.winrate)[0] : null;
@@ -45,8 +48,10 @@ function timeOfDayCard(groups: Group[]): HTMLElement {
     breakdownOrdered(groups),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
       best
-        ? h('span', null, 'Your best window is ', h('span', { class: 'is-win' }, best.key.toLowerCase()),
-            ` (${pct(best.winrate)} over ${best.games} games). Queue ranked when you're sharp, not just when you're free.`)
+        ? best.winrate >= 0.5
+          ? h('span', null, 'Your best window is ', h('span', { class: 'is-win' }, best.key.toLowerCase()),
+              ` (${pct(best.winrate)} over ${best.wins + best.losses} decided games). Queue ranked when you're sharp, not just when you're free.`)
+          : 'No winning window in this range yet — every day-part is under 50%.'
         : 'Log more games to see when you play your best Overwatch.'),
   );
 }

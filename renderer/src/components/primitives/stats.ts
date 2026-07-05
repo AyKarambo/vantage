@@ -55,18 +55,23 @@ export function statBox(value: Child, label: string): HTMLElement {
 /**
  * GitHub-style activity heatmap: small fixed-size cells laid out as columns of
  * weeks × rows of weekdays. Colour encodes winrate, opacity the game count.
+ * `onPick` (optional) makes cells with `games > 0` clickable — cells with no
+ * games stay inert either way.
  */
-export function calendarHeatmap(days: CalendarDay[]): HTMLElement {
+export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => void): HTMLElement {
   const wrap = h('div', { class: 'heatmap-wrap' });
   const tips = tooltipLayer(wrap);
   const grid = h('div', { class: 'heatmap' });
   days.forEach((d, i) => {
+    const clickable = Boolean(onPick && d.games);
     const cell = h('div', {
       class: 'heatmap-cell',
       style: {
         background: d.games ? wrColor(d.winrate ?? 0) : 'var(--surface-3)',
         opacity: d.games ? String(0.4 + Math.min(d.games, 6) / 6 * 0.6) : '1',
+        ...(clickable ? { cursor: 'pointer' } : {}),
       },
+      ...(clickable ? { role: 'button', on: { click: () => onPick!(d.date) } } : {}),
     });
     tips.attach(cell, d.games ? `${d.date} · ${d.games}g · ${pct(d.winrate ?? 0)}` : `${d.date} · no games`);
     // Align the first cell to its weekday row; the rest flow down each column.

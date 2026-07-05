@@ -27,7 +27,7 @@ export type { DemoPreference } from '../../core/demoPreference';
 
 // Dashboard payloads
 export type {
-  DashboardFilters, Session, CalendarDay, MatchRow, DashboardData, HeroDetail,
+  DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
 } from './dashboard';
 
 // Match drill-down payloads

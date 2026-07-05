@@ -9,7 +9,7 @@ import {
   type GameRecord,
 } from './analytics';
 import { mapMode } from './maps';
-import { mentalSummary } from './mental';
+import { mentalSummary, rowFlags } from './mental';
 import { progression } from './progression';
 import { buildTargets, type AuthoredTarget } from './targets';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
@@ -83,7 +83,9 @@ export function computeDashboard(
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     trend: trend(games, weekly ? 'week' : 'day'),
     timeOfDay: byTimeOfDay(games),
-    sessionPosition: bySessionPosition(games),
+    // Positions are numbered over the person's whole history — a role/mode/date
+    // filter must scope which games are counted, not renumber their sittings.
+    sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
@@ -135,6 +137,7 @@ function recentMatches(games: GameRecord[]): MatchRow[] {
 }
 
 function toMatchRow(g: GameRecord): MatchRow {
+  const flags = rowFlags(g);
   return {
     matchId: g.matchId,
     timestamp: g.timestamp,
@@ -146,6 +149,7 @@ function toMatchRow(g: GameRecord): MatchRow {
     gameType: g.gameType,
     heroes: g.heroes,
     durationMinutes: g.durationMinutes,
+    ...(flags ? { flags } : {}),
   };
 }
 

@@ -7,6 +7,9 @@ import { leaverFlags, mergeLeaver } from './leaver';
  * the sidebar show. Pure and I/O-free, like the rest of `core/`.
  */
 
+/** A drill-down-able per-row mental flag (the vocabulary `rowFlags` speaks). */
+export type MatchFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'positiveComms';
+
 export interface MentalSummary {
   calm: number; // 0..100
   tilted: number; // 0..100
@@ -24,6 +27,14 @@ export interface MentalSummary {
   };
   winWhenCalm: number; // 0..1
   winWhenTilted: number; // 0..1
+  /**
+   * Decided (win+loss, draws excluded) sample sizes behind `winWhenCalm` /
+   * `winWhenTilted` — `flags.tilt` counts ALL tilt-flagged games (incl.
+   * draws), so it overstates how many decided games back the tilted
+   * winrate. Callers must gate the tilt-tax claim on these, not `flags.tilt`.
+   */
+  tiltedDecided: number;
+  calmDecided: number;
 }
 
 const EMPTY: MentalSummary = {
@@ -32,6 +43,8 @@ const EMPTY: MentalSummary = {
   flags: { tilt: 0, toxicMates: 0, leaver: 0, leaverMyTeam: 0, leaverEnemyTeam: 0, positiveComms: 0 },
   winWhenCalm: 0,
   winWhenTilted: 0,
+  tiltedDecided: 0,
+  calmDecided: 0,
 };
 
 export function mentalSummary(games: GameRecord[]): MentalSummary {
@@ -59,6 +72,8 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
   const n = games.length;
   const tiltShare = flags.tilt / n;
   const posShare = flags.positiveComms / n;
+  const calmResult = winLoss(calmGames);
+  const tiltedResult = winLoss(tiltedGames);
 
   return {
     // Two independent axes: tilt is how often you flagged tilt; calm blends
@@ -66,9 +81,31 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
     tilted: pct(tiltShare),
     calm: pct(0.5 * (1 - tiltShare) + 0.5 * posShare),
     flags,
-    winWhenCalm: winLoss(calmGames).winrate,
-    winWhenTilted: winLoss(tiltedGames).winrate,
+    winWhenCalm: calmResult.winrate,
+    winWhenTilted: tiltedResult.winrate,
+    tiltedDecided: tiltedResult.wins + tiltedResult.losses,
+    calmDecided: calmResult.wins + calmResult.losses,
   };
 }
 
 const pct = (frac: number) => Math.round(Math.max(0, Math.min(1, frac)) * 100);
+
+/**
+ * Per-row merged mental flags for one game — the same OR-merge (incl. the
+ * leaver side-merge) `mentalSummary` uses, but keyed for a single `MatchRow`
+ * instead of aggregated across a range. Returns `undefined` when nothing is
+ * flagged, so `MatchRow.flags` can stay optional and lean.
+ */
+export function rowFlags(g: GameRecord): Partial<Record<MatchFlagKey, true>> | undefined {
+  const m = g.mental ?? {};
+  const r = g.review?.flags ?? {};
+  const leaver = mergeLeaver(leaverFlags(m), leaverFlags(r));
+
+  const out: Partial<Record<MatchFlagKey, true>> = {};
+  if (m.tilt || r.tilt) out.tilt = true;
+  if (m.toxicMates || r.toxicMates) out.toxicMates = true;
+  if (leaver.myTeam || leaver.enemyTeam) out.leaver = true;
+  if (m.positiveComms || r.positiveComms) out.positiveComms = true;
+
+  return Object.keys(out).length ? out : undefined;
+}

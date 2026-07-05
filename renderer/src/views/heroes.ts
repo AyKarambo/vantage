@@ -61,14 +61,14 @@ export function heroes(ctx: ViewContext): HTMLElement {
 
 /** Open the hero drill-down drawer (also reachable from the command palette / cross-links). */
 export function openHeroDrawer(ctx: ViewContext, hero: string): void {
-  openDrawer(() => {
+  openDrawer((close) => {
     const body = h('div', null, h('div', { class: 'hint' }, 'Loading…'));
-    bridge.heroDetail(hero, ctx.data.filters).then((d) => render(body, heroDetail(d)));
+    bridge.heroDetail(hero, ctx.data.filters).then((d) => render(body, heroDetail(ctx, d, close)));
     return body;
   });
 }
 
-function heroDetail(d: HeroDetail): HTMLElement {
+function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLElement {
   const s = d.stats;
   const p = s?.per10;
   return h('div', null,
@@ -87,7 +87,12 @@ function heroDetail(d: HeroDetail): HTMLElement {
       : null,
     section('By map', d.byMap.length
       ? d.byMap.map((m) => h('div', { class: 'row', style: { padding: '6px 0' } },
-          h('span', { class: 'row-main', style: { fontSize: '12.5px' } }, m.key),
+          h('button', {
+            class: 'inline-link row-main',
+            style: { fontSize: '12.5px', textAlign: 'left' },
+            title: `Find ${m.key} on the Maps screen`,
+            on: { click: () => { close(); ctx.navigate('maps', { highlight: m.key }); } },
+          }, m.key),
           h('span', { style: { color: wrColor(m.winrate) } }, pct(m.winrate)),
           h('span', { class: 'u-dim', style: { fontSize: '11px', width: '28px', textAlign: 'right' } }, `${m.games}g`),
         ))
