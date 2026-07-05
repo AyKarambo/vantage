@@ -5,7 +5,7 @@
  */
 import type { Role, Result } from '../../core/model';
 import type { WinLoss, Group, FocusItem, HeroSummary, SessionRecap, Streak } from '../../core/analytics';
-import type { MentalSummary } from '../../core/mental';
+import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
@@ -34,6 +34,9 @@ export interface CalendarDay {
   winrate: number | null;
 }
 
+// Re-exported so renderer/main keep importing match-row vocabulary from the contract.
+export type { MatchFlagKey };
+
 /** A single match for the Matches list. */
 export interface MatchRow {
   matchId: string;
@@ -46,6 +49,8 @@ export interface MatchRow {
   gameType: string;
   heroes: string[];
   durationMinutes?: number;
+  /** Merged mental flags (quick-log OR review source) — only true keys are present. */
+  flags?: Partial<Record<MatchFlagKey, true>>;
 }
 
 /** Everything the dashboard needs for the current filter set. */

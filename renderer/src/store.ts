@@ -4,7 +4,7 @@
  * and notifies subscribers on change. Views render from a snapshot and never
  * fetch or persist directly.
  */
-import type { DashboardData, DashboardFilters } from '../../src/shared/contract';
+import type { DashboardData, DashboardFilters, MatchFlagKey } from '../../src/shared/contract';
 import { bridge } from './bridge';
 import { relTime } from './format';
 import { prefs } from './prefs';
@@ -30,6 +30,26 @@ export interface ViewParams {
   matchId?: string;
   /** Entry to scroll to and flash after navigating (e.g. a map on Maps). */
   highlight?: string;
+  /** Scope Matches to one day (a `dayKey`, `YYYY-MM-DD` UTC — same bucketing as the heatmap). */
+  day?: string;
+  /** Scope Matches to games carrying this mental flag. */
+  flag?: MatchFlagKey;
+}
+
+/** Every `ViewParams` key, kept in sync by the compiler: adding a key here
+ *  without adding it to this array is a type error, so `sameParams` can never
+ *  silently drop a new param from the dedupe/re-render checks. */
+const VIEW_PARAM_KEYS: Required<{ [K in keyof ViewParams]: true }> = {
+  matchId: true,
+  highlight: true,
+  day: true,
+  flag: true,
+};
+
+/** Structural equality over every `ViewParams` key — used by `setView`'s
+ *  navigation dedupe so a future param can't be forgotten from the check. */
+function sameParams(a: ViewParams, b: ViewParams): boolean {
+  return (Object.keys(VIEW_PARAM_KEYS) as Array<keyof ViewParams>).every((k) => a[k] === b[k]);
 }
 
 export interface AppState {
@@ -88,8 +108,7 @@ class Store {
   }
 
   setView(view: ViewId, params: ViewParams = {}): void {
-    if (view === this.state.view && params.matchId === this.state.params.matchId
-      && params.highlight === this.state.params.highlight) return;
+    if (view === this.state.view && sameParams(params, this.state.params)) return;
     // Detail pages restore to their parent list on relaunch.
     prefs.set('view', view === 'matchDetail' ? 'matches' : view);
     this.patch({ view, params });

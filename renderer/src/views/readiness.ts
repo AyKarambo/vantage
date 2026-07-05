@@ -34,7 +34,7 @@ export function readiness(ctx: ViewContext): HTMLElement {
   const r = ctx.data.readiness;
   return h('div', { class: 'view' },
     viewHead('Readiness', 'Training load & recovery — a wellness heuristic, not a diagnosis'),
-    h('div', { class: 'grid-2' }, verdictCard(r), whyCard(r)),
+    h('div', { class: 'grid-2' }, verdictCard(ctx), whyCard(r)),
     loadCard(r),
     chartCard(r),
     honestyCard(),
@@ -42,7 +42,11 @@ export function readiness(ctx: ViewContext): HTMLElement {
   );
 }
 
-function verdictCard(r: ReadinessSummary): HTMLElement {
+/** Bands where training load is the concern — worth pointing at the break reminder. */
+const BREAK_REMINDER_BANDS: ReadinessBand[] = ['loaded', 'in-the-hole'];
+
+function verdictCard(ctx: ViewContext): HTMLElement {
+  const r = ctx.data.readiness;
   const meta = BAND[r.band];
   // When confidence is low we deliberately suppress the crisp number so it never
   // reads as more certain than it is.
@@ -59,8 +63,26 @@ function verdictCard(r: ReadinessSummary): HTMLElement {
     r.recommendationText
       ? h('div', { style: { fontSize: '12.5px', marginTop: '8px', color: meta.color, lineHeight: '1.5' } }, r.recommendationText)
       : null,
+    BREAK_REMINDER_BANDS.includes(r.band) ? breakReminderHint(ctx) : null,
     h('div', { class: 'hint', style: { marginTop: '10px' } },
       `Confidence: ${r.confidence}${r.confidence === 'low' ? ' — log your mental state after games to sharpen this' : ''}`),
+  );
+}
+
+/** Loaded / in-the-hole verdicts point at the break reminder — it's the lever
+ *  that lives on Mental, so link straight there instead of leaving it implicit. */
+function breakReminderHint(ctx: ViewContext): HTMLElement {
+  const br = ctx.data.breakReminder;
+  const status = br.enabled
+    ? `Break reminder is on after ${br.afterLosses} loss${br.afterLosses === 1 ? '' : 'es'}.`
+    : 'Break reminder is off.';
+  return h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } },
+    `${status} `,
+    h('button', {
+      class: 'inline-link',
+      title: 'Open the Mental screen',
+      on: { click: () => ctx.navigate('mental') },
+    }, 'Open Mental →'),
   );
 }
 

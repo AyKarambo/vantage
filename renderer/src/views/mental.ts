@@ -1,10 +1,19 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
+import type { MatchFlagKey } from '../../../src/shared/contract';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
 import { badge, card, statBar, statBox } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { viewHead, type ViewContext } from './view';
+
+/** Human labels matching the drill-down chip on Matches. */
+const FLAG_LABELS: Record<MatchFlagKey, string> = {
+  tilt: 'tilt',
+  toxicMates: 'toxic mates',
+  leaver: 'leaver',
+  positiveComms: 'positive comms',
+};
 
 /** Decided tilted games needed before the tilt-tax number is worth believing. */
 const TILT_TAX_MIN_SAMPLE = 5;
@@ -12,7 +21,14 @@ const TILT_TAX_MIN_SAMPLE = 5;
 export function mental(ctx: ViewContext): HTMLElement {
   const m = ctx.data.mental;
   const tiltTax = Math.round((m.winWhenCalm - m.winWhenTilted) * 100);
-  const tiltSample = m.flags.tilt;
+  // Gate on decided samples on BOTH sides — `flags.tilt` includes draws (which
+  // don't feed winWhenTilted), and an empty calm side prices the tax off a 0/0
+  // sentinel winrate just as badly as a thin tilted side does.
+  const thinSide = m.tiltedDecided < TILT_TAX_MIN_SAMPLE
+    ? { label: 'tilted', n: m.tiltedDecided }
+    : m.calmDecided < TILT_TAX_MIN_SAMPLE
+      ? { label: 'calm', n: m.calmDecided }
+      : null;
 
   return h('div', { class: 'view' },
     viewHead('Mental', 'The signals the game never reports — logged by you, ◎ manual'),
@@ -30,10 +46,11 @@ export function mental(ctx: ViewContext): HTMLElement {
           statBox(h('span', { class: 'is-loss' }, pct(m.winWhenTilted)), 'When tilted'),
         ),
         h('div', { class: 'hint', style: { marginTop: '12px', lineHeight: '1.5' } },
-          // A tilt tax priced off one or two bad games would be noise dressed up
-          // as coaching — hold the claim until the sample can carry it.
-          tiltSample < TILT_TAX_MIN_SAMPLE
-            ? `Only ${tiltSample} tilted game${tiltSample === 1 ? '' : 's'} logged in this range — not enough to price the tilt tax yet. Keep flagging games.`
+          // A tilt tax priced off one or two decided games (on either side of
+          // the split) would be noise dressed up as coaching — hold the claim
+          // until both samples can carry it.
+          thinSide
+            ? `Only ${thinSide.n} decided ${thinSide.label} game${thinSide.n === 1 ? '' : 's'} in this range — not enough to price the tilt tax yet. Keep flagging games.`
             : tiltTax > 0
               ? h('span', null, 'Tilt costs you about ', h('span', { class: 'is-loss' }, `${tiltTax} points`), ' of winrate. Take the break.')
               : 'Tilt is not hurting your results right now — keep it up.'),
@@ -41,11 +58,24 @@ export function mental(ctx: ViewContext): HTMLElement {
     ),
     card({ title: 'Flags this range', sub: 'how often each came up' },
       h('div', { class: 'grid-4', style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' } },
-        statBox(String(m.flags.tilt), 'Tilt'),
-        statBox(String(m.flags.toxicMates), 'Toxic mates'),
-        statBox(String(m.flags.leaver), 'Leavers'),
-        statBox(h('span', { class: 'is-accent' }, String(m.flags.positiveComms)), 'Positive comms'),
+        flagBox(ctx, m.flags.tilt, 'Tilt', 'tilt'),
+        flagBox(ctx, m.flags.toxicMates, 'Toxic mates', 'toxicMates'),
+        flagBox(ctx, m.flags.leaver, 'Leavers', 'leaver'),
+        flagBox(ctx, m.flags.positiveComms, 'Positive comms', 'positiveComms', true),
       ),
     ),
   );
+}
+
+/** A "Flags this range" stat box; clickable when its count is non-zero, opening
+ *  Matches scoped to that flag. Zero counts stay plain (nothing to drill into). */
+function flagBox(ctx: ViewContext, count: number, label: string, flag: MatchFlagKey, accent = false): HTMLElement {
+  const value = accent ? h('span', { class: 'is-accent' }, String(count)) : String(count);
+  if (count <= 0) return statBox(value, label);
+  return h('button', {
+    class: 'inline-link',
+    style: { display: 'block', width: '100%', textAlign: 'left' },
+    title: `Show the ${FLAG_LABELS[flag]}-flagged games`,
+    on: { click: () => ctx.navigate('matches', { flag }) },
+  }, statBox(value, label));
 }

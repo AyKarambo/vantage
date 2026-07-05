@@ -1,25 +1,49 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
-import type { MatchRow } from '../../../src/shared/contract';
-import { groupByDay } from '../../../src/core/analytics';
+import type { MatchFlagKey, MatchRow } from '../../../src/shared/contract';
+import { dayKey, groupByDay } from '../../../src/core/analytics';
 import { relTime, roleLabel, signed } from '../format';
-import { button, card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
+import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
 import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 
+/** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
+const FLAG_LABELS: Record<MatchFlagKey, string> = {
+  tilt: 'tilt-flagged',
+  toxicMates: 'toxic-mates-flagged',
+  leaver: 'leaver-flagged',
+  positiveComms: 'positive-comms',
+};
+
 export function matches(ctx: ViewContext): HTMLElement {
-  const rows = ctx.data.matches;
+  const { day, flag } = ctx.params;
+  const rows = day
+    ? ctx.data.matches.filter((m) => dayKey(m.timestamp) === day)
+    : flag
+      ? ctx.data.matches.filter((m) => m.flags?.[flag])
+      : ctx.data.matches;
   const groups = groupByDay(rows);
+  const scopeChip = day || flag ? drillDownChip(ctx, day, flag) : null;
+
   return h('div', { class: 'view' },
     viewHead('Matches', `${rows.length} games in range · newest first · click a match for details`),
+    scopeChip,
     card({ class: 'card--flush', style: { padding: '8px' } },
       rows.length
         ? h('div', null, ...groups.flatMap((g) => [
             dayHeader(g.label, g.wins, g.losses),
             ...g.items.map((m) => matchRow(m, ctx)),
           ]))
-        : emptyActions(ctx),
+        : (day || flag) ? emptyState('No games match this drill-down — clear the scope above to see everything.') : emptyActions(ctx),
     ),
+  );
+}
+
+/** Dismissible "Only <scope> ✕" chip shown while a day/flag drill-down is active. */
+function drillDownChip(ctx: ViewContext, day: string | undefined, flag: MatchFlagKey | undefined): HTMLElement {
+  const label = day ? prettyDay(day) : FLAG_LABELS[flag as MatchFlagKey];
+  return h('div', { style: { margin: '0 0 12px' } },
+    chip(`Only ${label} ✕`, true, () => ctx.navigate('matches')),
   );
 }
 

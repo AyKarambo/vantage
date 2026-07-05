@@ -72,9 +72,12 @@ comms · toxicity · leavers · your improvement target).
 Filter everything by account, role, game mode and time range — with a one-click **Reset** chip and
 savable presets. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run
 actions, find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet,
-`←/→` between match details, `H/P/M/S` grading on Review), toasts with **Undo** for reversible
-actions, day-grouped match log with hero/map cross-links, hero typeahead + remembered role/mode in
-the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
+`←/→` between match details, `H/P/M/S` grading on Review, `W/L/D`+`Enter` in the log dialog),
+toasts with **Undo** for reversible actions, day-grouped match log with hero/map cross-links,
+**drill-down everywhere** (click a heatmap day or a Mental flag count to open exactly those
+matches; hero-drawer map rows and Overview scatter dots jump to the Maps screen), hero typeahead +
+remembered role/mode in the quick-log, hover tooltips + a "view as table" toggle on charts, a
+next-day session recap, a
 colorblind-safe palette option, window-position memory, and a **Settings** screen with an
 **accounts manager** (create/edit/delete accounts, per-role rank anchors) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data & backup** card that relocates
