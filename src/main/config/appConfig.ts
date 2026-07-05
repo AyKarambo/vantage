@@ -56,6 +56,13 @@ export interface AppConfig {
   breakReminder: BreakReminderSettings;
   /** Readiness / training-load coach settings (feature toggle + opt-in launch toast). */
   readiness: ReadinessSettings;
+  /**
+   * Folder holding the SQLite match-history database. Absent ⇒ the default
+   * `<userData>/data`. Point it at a cloud-synced folder (OneDrive/Dropbox) for
+   * off-machine backup. Single-machine use only — simultaneous multi-machine
+   * access to the synced file can corrupt SQLite.
+   */
+  historyDbFolder?: string;
   ui: UiConfig;
 }
 

@@ -13,7 +13,8 @@ import { currentRank, type RankAnchorMap } from '../core/rank';
 import { sourceOf } from '../core/source';
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type {
-  AccountSummary, AppInfo, AppUiSettings, GepStatusPayload, MatchEditInput, RankSummary,
+  AccountSummary, AppInfo, AppUiSettings, DatabaseLocation, DatabaseLocationResult,
+  GepStatusPayload, MatchEditInput, RankSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -62,6 +63,11 @@ export interface DataProviderDeps {
   };
   /** Version + support contact for the About card. */
   appInfo(): AppInfo;
+  /** History-database location: current value + folder-picker/relocate (owned by the composition root). */
+  database: {
+    location(): DatabaseLocation;
+    choose(): Promise<DatabaseLocationResult>;
+  };
 }
 
 /** Assemble the dashboard's DataProvider over the injected deps. */
@@ -247,6 +253,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     getAppSettings: () => deps.appSettings.get(),
     setAppSettings: (patch) => deps.appSettings.apply(patch),
     getAppInfo: () => deps.appInfo(),
+    getDatabaseLocation: () => deps.database.location(),
+    chooseDatabaseFolder: () => deps.database.choose(),
     clearReview: (matchId) => {
       deps.history.clearReview(matchId);
     },
