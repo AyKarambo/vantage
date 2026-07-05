@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "vantage-preview",
-      "runtimeExecutable": "node",
+      "runtimeExecutable": "C:\\nvm4w\\nodejs\\node.exe",
       "runtimeArgs": ["scripts/preview-server.mjs"],
       "port": 5178
     }

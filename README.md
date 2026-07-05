@@ -28,28 +28,37 @@ comms · toxicity · leavers · your improvement target).
 - **Mental** — calm/tilt state, the tilt tax on your winrate, flag counts, and a
   **break-reminder setting** (on/off + loss threshold) that fires a tray notification
   after N consecutive losses.
-- **Trends** — winrate over time, splits by role/mode/account, and an activity heatmap.
+- **Trends** — winrate over time, splits by role/mode/account, **when you win** (time-of-day
+  winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
+  within a sitting, with a "you fade from game N" read when the sample supports it), and an
+  activity heatmap.
 - **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea
   of *supercompensation*: it estimates whether you're grinding "into the hole" from your play
   pattern (games/day, session length, days without a rest day) and your self-reported mental
   state, then gives a traffic-light verdict and a **rest recommendation** (take 1–2 days off),
-  with a trend chart. Deliberately conservative and framed as an evidence-informed **wellness
-  nudge, not a diagnosis** — match results alone are a weak fatigue signal, so it leans on load
-  and mental self-report. Optional opt-in tray reminder at launch. Extends (doesn't replace) the
-  Mental break reminder.
+  with a trend chart. It watches **both directions**: overtraining *and* undertraining — a
+  week-plus layoff reads as **Rusty** (rest decays into detraining, with a ramp-back-up nudge
+  instead of an alarm) and a thin weekly rhythm gets a consistency signal ("~2 active days/week —
+  consistency builds skill faster than bingeing"). Deliberately conservative and framed as an
+  evidence-informed **wellness nudge, not a diagnosis** — match results alone are a weak fatigue
+  signal, so it leans on load and mental self-report. Optional opt-in tray reminder at launch.
+  Extends (doesn't replace) the Mental break reminder.
 - **Review** — grade your active improvement targets (Hit / Partial / Missed) and flag
   how each tracked game felt; an always-visible inbox of ungraded games, independent of
   the global filters.
 - **Improvement Target** — build a target (self-rated ◎ or measured ⚡), choose which
   targets are active (graded on Review), edit or archive/delete them, and track a
   library that shows whether hitting it actually moves your winrate.
-- **Log match** — the quick-capture card that opens after a game (~5 taps): pick the
-  **account**, result, map, role, mode and hero; for competitive matches log the
-  **skill-rating %** (and, the first time for an account+role, your current **rank**),
-  split the **leaver** flag by team (my team / enemy), and grade active improvement
-  targets inline. Vantage then **calculates your live rank** from that anchor plus each
-  logged %, including OW2 **rank protection** (a loss at 0% holds the division; only a
-  further loss demotes).
+- **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
+  `W`/`L`/`D` picks the result, the **map and hero are typeaheads** with your recent picks listed
+  first, `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries the hero over —
+  it's the same sitting). Forgot to log during the session? The **Played** chips backfill a game
+  30 min / 1 h / 2 h into the past so session analytics stay honest. Pick the **account**, role
+  and mode as before; for competitive matches log the **skill-rating %** (and, the first time for
+  an account+role, your current **rank**), split the **leaver** flag by team (my team / enemy),
+  and grade active improvement targets inline. Vantage then **calculates your live rank** from
+  that anchor plus each logged %, including OW2 **rank protection** (a loss at 0% holds the
+  division; only a further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
   target database, **push** your tracked games to it (deduped by Match ID) and
   **import** them back — an on-demand pull that reads the Gametracker rows into local
