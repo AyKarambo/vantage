@@ -48,8 +48,8 @@ interface LogState {
   anchorTier: string;
   anchorDivision: number;
   anchorPct: string;
-  /** Minutes ago the match ended (0 = just now). */
-  playedOffsetMin: number;
+  /** Absolute end-of-game timestamp (ms epoch), or null for "Just now" (stamped at save time). */
+  playedAt: number | null;
 }
 
 /** Fields carried into the next form by "Save & next" (same sitting, so the hero usually holds). */
@@ -111,7 +111,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     anchorTier: 'Gold',
     anchorDivision: 3,
     anchorPct: '',
-    playedOffsetMin: 0,
+    playedAt: null,
   };
 
   const hasAnchor = (account: string, role: Role): boolean =>
@@ -127,8 +127,15 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     return ALL_MAPS.find((m) => m.toLowerCase() === q) ?? null;
   };
 
-  // Returns false when validation failed (form stays open, error shown inline).
+  // Guards against duplicate submits from this form (Enter auto-repeat, double
+  // Enter/click before the first save resolves) — matchId is time-derived, so
+  // dedupe downstream can't catch a double-fire here.
+  let saving = false;
+
+  // Returns false when validation failed, a save is already in flight, or the
+  // save itself failed (form stays open, error/toast shown inline).
   const persist = async (): Promise<boolean> => {
+    if (saving) return false;
     const map = resolveMap();
     if (!map) {
       mapError.textContent = state.map.trim()
@@ -138,29 +145,37 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
       return false;
     }
     state.map = map;
-    const isComp = state.mode === 'Competitive';
-    const srDelta = isComp && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
-    await bridge.logMatch({
-      result: state.result,
-      role: state.role,
-      map,
-      hero: state.hero.trim() || undefined,
-      gameType: state.mode,
-      mental: mentalFrom(state.flags),
-      account: state.account,
-      ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
-      ...(Object.keys(grades).length ? { grades } : {}),
-      ...(state.playedOffsetMin > 0 ? { playedAt: Date.now() - state.playedOffsetMin * 60_000 } : {}),
-    });
-    // First competitive match for this account+role → persist the rank anchor.
-    if (isComp && !hasAnchor(state.account, state.role) && state.anchorTier) {
-      await bridge.setRankAnchor({
-        account: state.account,
+    saving = true;
+    try {
+      const isComp = state.mode === 'Competitive';
+      const srDelta = isComp && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
+      await bridge.logMatch({
+        result: state.result,
         role: state.role,
-        tier: state.anchorTier,
-        division: state.anchorDivision,
-        progressPct: Number(state.anchorPct) || 0,
+        map,
+        hero: state.hero.trim() || undefined,
+        gameType: state.mode,
+        mental: mentalFrom(state.flags),
+        account: state.account,
+        ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
+        ...(Object.keys(grades).length ? { grades } : {}),
+        ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
+      // First competitive match for this account+role → persist the rank anchor.
+      if (isComp && !hasAnchor(state.account, state.role) && state.anchorTier) {
+        await bridge.setRankAnchor({
+          account: state.account,
+          role: state.role,
+          tier: state.anchorTier,
+          division: state.anchorDivision,
+          progressPct: Number(state.anchorPct) || 0,
+        });
+      }
+    } catch {
+      toast('Save failed — nothing was logged. Try again.');
+      return false;
+    } finally {
+      saving = false;
     }
     prefs.set('logPrefill', { role: state.role, mode: state.mode, account: state.account });
     toast(`Match logged — ${state.result} · ${map}`);
@@ -170,7 +185,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
 
   const timeBadgeHost = h('span');
   const paintTime = (): void => {
-    render(timeBadgeHost, badge(`◎ manual · ${time(Date.now() - state.playedOffsetMin * 60_000)}`, 'manual'));
+    render(timeBadgeHost, badge(`◎ manual · ${time(state.playedAt ?? Date.now())}`, 'manual'));
   };
   paintTime();
 
@@ -215,7 +230,11 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const playedField = field(
     optionalLabel('Played', '— backfill a game you forgot to log'),
     choiceSegment(PLAYED_OFFSETS.map((o) => o.label), PLAYED_OFFSETS[0].label, (v) => {
-      state.playedOffsetMin = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
+      // Snapshot the absolute timestamp at click time — "Just now" stays null so
+      // both the badge and the eventual save reflect the moment actually chosen,
+      // not a live-recomputed offset that would drift while the form sits open.
+      const minutes = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
+      state.playedAt = minutes > 0 ? Date.now() - minutes * 60_000 : null;
       paintTime();
     }),
   );
@@ -303,7 +322,9 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     button('Save & next  ⌃⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext }),
   );
 
-  const form = h('div', null, header,
+  // tabindex -1: focusable via script (for the mount-time focus below) but not
+  // part of the natural Tab order.
+  const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
       field('Result', resultRow), accountField, mapField, roleField, modeField, playedField, heroField,
       rankHost, flagsBlock, targetsBlock, actions),
@@ -326,12 +347,19 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
         return;
       }
     }
-    if (e.key === 'Enter' && !(t instanceof HTMLButtonElement)) {
+    // e.repeat: ignore key-repeat from a held Enter — only a fresh keydown saves.
+    if (e.key === 'Enter' && !e.repeat && !(t instanceof HTMLButtonElement)) {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) saveAndNext();
       else saveAndClose();
     }
   });
+
+  // Nothing moves focus into the dialog by default, which leaves W/L/D dead and
+  // (worse) leaves focus on the opener button, so a stray Enter re-clicks it and
+  // stacks a second dialog. openModal appends the form after buildForm returns,
+  // so defer the focus to the next frame once it's actually in the DOM.
+  requestAnimationFrame(() => form.focus());
 
   return form;
 }

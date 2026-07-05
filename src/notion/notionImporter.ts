@@ -131,7 +131,10 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
   // filled in by hand). Only when it's absent does the row's Notion creation time
   // stand in — which is minute-truncated and really means "when this row was
   // typed", so it's the fallback, not the source of truth.
-  const timestamp = pickDate(props['Played At']) ?? (Date.parse(page.created_time ?? '') || Date.now());
+  // Clamp to now: a future-dated Played At (typo, timezone slip, or a row someone
+  // pre-filled ahead of playing) must not produce a future-stamped local record —
+  // readiness silently drops those and the Matches list would pin it forever.
+  const timestamp = Math.min(pickDate(props['Played At']) ?? (Date.parse(page.created_time ?? '') || Date.now()), Date.now());
   const durationMinutes = pickNumber(props['Match Duration (min)']);
   const finalScore = pickText(props['Final Score']);
   const srDelta = pickNumber(props['SR Delta']);
