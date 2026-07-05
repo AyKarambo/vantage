@@ -7,8 +7,16 @@ import { RankAnchorStore } from '../src/store/rankAnchors';
 import type { GameRecord } from '../src/core/analytics';
 
 let dir: string;
+const opened: HistoryStore[] = [];
+// SQLite locks the file open on Windows, so every store instance must be closed
+// before the temp dir is removed.
+const hist = (d = dir): HistoryStore => { const s = new HistoryStore(d); opened.push(s); return s; };
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-store-')); });
-afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => {
+  for (const s of opened) { try { s.close(); } catch { /* already closed */ } }
+  opened.length = 0;
+  fs.rmSync(dir, { recursive: true, force: true });
+});
 
 const g = (p: Partial<GameRecord>): GameRecord => ({
   matchId: 'm', timestamp: 0, account: 'Main', role: 'damage', map: 'Ilios',
@@ -17,14 +25,14 @@ const g = (p: Partial<GameRecord>): GameRecord => ({
 
 describe('HistoryStore manual-layer edits', () => {
   it('addMany dedups by matchId and saves once', () => {
-    const h = new HistoryStore(dir);
+    const h = hist();
     expect(h.addMany([g({ matchId: 'a' }), g({ matchId: 'b' })])).toEqual({ imported: 2, skipped: 0 });
     expect(h.addMany([g({ matchId: 'b' }), g({ matchId: 'c' })])).toEqual({ imported: 1, skipped: 1 });
     expect(h.count()).toBe(3);
   });
 
   it('editManual patches provided keys and deletes on null (clearing srDelta)', () => {
-    const h = new HistoryStore(dir);
+    const h = hist();
     h.add(g({ matchId: 'a', srDelta: 22, mental: { tilt: true } }));
     h.editManual('a', { srDelta: -10, map: 'Nepal' });
     expect(h.all()[0]).toMatchObject({ srDelta: -10, map: 'Nepal', mental: { tilt: true } });
@@ -33,20 +41,20 @@ describe('HistoryStore manual-layer edits', () => {
   });
 
   it('editManual returns false for an unknown id', () => {
-    const h = new HistoryStore(dir);
+    const h = hist();
     expect(h.editManual('nope', { map: 'x' })).toBe(false);
   });
 
   it('relabelAccount rewrites every matching game and persists', () => {
-    const h = new HistoryStore(dir);
+    const h = hist();
     h.addMany([g({ matchId: 'a', account: 'Main' }), g({ matchId: 'b', account: 'Main' }), g({ matchId: 'c', account: 'Alt' })]);
     expect(h.relabelAccount('Main', 'MainDPS')).toBe(2);
-    expect(new HistoryStore(dir).all().filter((x) => x.account === 'MainDPS')).toHaveLength(2);
+    expect(hist().all().filter((x) => x.account === 'MainDPS')).toHaveLength(2);
     expect(h.relabelAccount('Ghost', 'X')).toBe(0);
   });
 
   it('removeImported drops only imported games (keeps live/manual), reporting the removed set', () => {
-    const h = new HistoryStore(dir);
+    const h = hist();
     h.addMany([
       g({ matchId: 'live', importedAt: undefined }),          // live-tracked / hand-logged
       g({ matchId: 'imp1', importedAt: 1_700_000_000_000 }),  // imported
@@ -58,7 +66,7 @@ describe('HistoryStore manual-layer edits', () => {
     expect(h.all().map((x) => x.matchId)).toEqual(['live']);
     expect(h.importedCount()).toBe(0);
     // Persisted (survives a reload) and a second call is a no-op.
-    expect(new HistoryStore(dir).importedCount()).toBe(0);
+    expect(hist().importedCount()).toBe(0);
     expect(h.removeImported()).toEqual([]);
   });
 });
