@@ -169,6 +169,29 @@ describe('computeDashboard', () => {
     expect(d.breakReminder).toEqual(custom);
   });
 
+  it('surfaces the anchored rank as primaryRank instead of the winrate heuristic', () => {
+    const g = (matchId: string, role = 'damage'): GameRecord =>
+      ({ matchId, timestamp: 100, account: 'Main', role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+
+    // Anchor set AFTER the games (setAt > their timestamps) → rank == the anchor.
+    const anchors = { 'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 } };
+    const d = computeDashboard([g('a'), g('b')], { days: 'all' }, demo, { rankAnchors: anchors });
+    expect(d.primaryRank).toMatchObject({ account: 'Main', role: 'damage', tier: 'Gold', division: 3, progressPct: 40 });
+
+    // No anchor → primaryRank absent, so the sidebar/KPI fall back to progression.
+    expect(computeDashboard([g('a')], { days: 'all' }, demo, {}).primaryRank).toBeUndefined();
+
+    // Multiple anchored roles → the most-played one wins (tank ×2 over support ×1).
+    const multi = computeDashboard([g('a', 'tank'), g('b', 'tank'), g('c', 'support')], { days: 'all' }, demo, {
+      rankAnchors: {
+        'Main::tank': { tier: 'Silver', division: 2, progressPct: 10, setAt: 1000 },
+        'Main::support': { tier: 'Diamond', division: 4, progressPct: 90, setAt: 1000 },
+      },
+    });
+    expect(multi.primaryRank).toMatchObject({ role: 'tank', tier: 'Silver' });
+  });
+
   it('applyFilters narrows by account, role and mode', () => {
     const byAccount = applyFilters(all, { account: 'Main' });
     expect(byAccount.every((g) => g.account === 'Main')).toBe(true);

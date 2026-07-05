@@ -13,6 +13,8 @@ import { progression } from './progression';
 import { buildTargets, type AuthoredTarget } from './targets';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
+import { currentRank, rankKey, type RankAnchorMap } from './rank';
+import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
 import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
 
@@ -23,6 +25,8 @@ export interface ManualData {
   breakReminder?: BreakReminderSettings;
   /** Effective readiness feature settings; defaults when absent. */
   readiness?: ReadinessSettings;
+  /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
+  rankAnchors?: RankAnchorMap;
 }
 
 export function computeDashboard(
@@ -33,6 +37,9 @@ export function computeDashboard(
 ): DashboardData {
   const games = applyFilters(all, filters);
   const overall = winLoss(games);
+  // Rank is per-person, computed over the FULL history (like readiness), not the
+  // filtered set — the anchored "real" rank the sidebar/KPI show over the heuristic.
+  const primaryRank = primaryRankOf(all, manual?.rankAnchors);
   const weekly = (filters.days ?? 30) === 'all' || (filters.days as number) > 90;
   // The review inbox is deliberately unfiltered: an ungraded game must stay
   // visible (and counted in the badge) no matter how the range is narrowed.
@@ -58,6 +65,7 @@ export function computeDashboard(
     overall,
     streak: streak(games),
     progression: progression(games),
+    ...(primaryRank ? { primaryRank } : {}),
     session: latestSession(games),
     byRole: byRole(games),
     byAccount: byAccount(games),
@@ -131,6 +139,31 @@ function toMatchRow(g: GameRecord): MatchRow {
 /** Most-played account name — used for the Overview greeting. */
 function topAccount(games: GameRecord[]): string {
   return byAccount(games)[0]?.key ?? 'Player';
+}
+
+const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
+
+/**
+ * The user's real rank for the greeting (most-played) account: the calculated
+ * rank of its most-played *anchored* role. Undefined when that account has no
+ * rank anchor — the caller falls back to the winrate heuristic. This is what
+ * makes the sidebar/KPI reflect the rank the user set in Settings instead of a
+ * number derived from winrate.
+ */
+function primaryRankOf(all: GameRecord[], anchors: RankAnchorMap | undefined): DashboardData['primaryRank'] {
+  if (!anchors) return undefined;
+  const account = topAccount(all);
+  const anchored = ROLES.filter((role) => anchors[rankKey(account, role)]);
+  if (!anchored.length) return undefined;
+  const plays = (role: Role): number => all.reduce((n, g) => (g.account === account && g.role === role ? n + 1 : n), 0);
+  const role = [...anchored].sort((a, b) => plays(b) - plays(a))[0];
+  const rank = currentRank(all, anchors, account, role);
+  if (!rank) return undefined;
+  return {
+    account, role,
+    tier: rank.tier, division: rank.division, progressPct: rank.progressPct,
+    protected: rank.protected, needsReanchor: rank.needsReanchor,
+  };
 }
 
 const distinct = <T>(arr: T[]): T[] => [...new Set(arr)];

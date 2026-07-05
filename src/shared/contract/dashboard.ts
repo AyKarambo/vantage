@@ -66,7 +66,23 @@ export interface DashboardData {
   greetingName: string;
   overall: WinLoss;
   streak: Streak;
+  /** Winrate-derived heuristic estimate (the fallback rank). */
   progression: Progression;
+  /**
+   * The user's actual calculated rank for the greeting account's most-played
+   * anchored role — the "real" rank the sidebar/KPI show. Absent when no rank
+   * anchor is set for that account, in which case {@link progression} (the
+   * winrate heuristic) is the fallback.
+   */
+  primaryRank?: {
+    account: string;
+    role: Role;
+    tier: string;
+    division: number;
+    progressPct: number;
+    protected: boolean;
+    needsReanchor: boolean;
+  };
   session: Session | null;
   byRole: Group[];
   byAccount: Group[];

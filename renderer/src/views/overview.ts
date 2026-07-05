@@ -2,7 +2,7 @@
 import { h } from '../dom';
 import type { DashboardData, Group, SessionRecap } from '../../../src/shared/contract';
 import { mapMode } from '../../../src/core/maps';
-import { dateLong, greeting, int, pct, signed, streakText } from '../format';
+import { dateLong, greeting, int, pct, rankLabel, signed, streakText } from '../format';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, card, kpiCard, statBar, statBox } from '../components/primitives';
@@ -90,14 +90,7 @@ function kpiRow(d: DashboardData): HTMLElement {
         : undefined,
     }),
     kpiCard({ label: 'Games', value: int(d.overall.games), delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` } }),
-    kpiCard({
-      label: 'Rank',
-      value: `${d.progression.tier} ${d.progression.division}`,
-      delta: {
-        text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
-        dir: d.progression.delta >= 0 ? 'up' : 'down',
-      },
-    }),
+    rankKpi(d),
     kpiCard({
       label: 'Streak',
       value: streakText(d.streak),
@@ -105,6 +98,32 @@ function kpiRow(d: DashboardData): HTMLElement {
       delta: { text: d.streak.type === 'W' ? 'ride it' : d.streak.type === 'L' ? 'reset it' : '—' },
     }),
   );
+}
+
+/**
+ * Rank KPI — the user's real anchored rank when set, else the winrate heuristic.
+ * The anchored rank always wins, so setting a rank in Settings is reflected here.
+ */
+function rankKpi(d: DashboardData): HTMLElement {
+  const r = d.primaryRank;
+  if (r) {
+    return kpiCard({
+      label: 'Rank',
+      value: rankLabel(r.tier, r.division),
+      delta: {
+        text: r.needsReanchor ? 'set % after demotion' : `${Math.round(r.progressPct)}% in division`,
+        dir: 'up',
+      },
+    });
+  }
+  return kpiCard({
+    label: 'Rank',
+    value: `${d.progression.tier} ${d.progression.division}`,
+    delta: {
+      text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
+      dir: d.progression.delta >= 0 ? 'up' : 'down',
+    },
+  });
 }
 
 function scatterCard(ctx: ViewContext): HTMLElement {
