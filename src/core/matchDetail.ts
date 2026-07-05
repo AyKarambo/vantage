@@ -3,6 +3,9 @@ import type { RosterPlayer } from './model';
 import type { MatchDetail, ScoreboardEntry } from '../shared/contract';
 import { mapMode } from './maps';
 import { progression } from './progression';
+import { classifyGameType } from './matchFilter';
+import { sourceOf } from './source';
+import { currentRank, type RankAnchorMap } from './rank';
 import { resolveRole } from './resolvers/role';
 import { playerHistory } from './playerIndex';
 
@@ -21,6 +24,7 @@ export function matchDetail(
   all: GameRecord[],
   matchId: string,
   competitiveContext: GameRecord[] = all,
+  anchors: RankAnchorMap = {},
 ): MatchDetail | null {
   const game = all.find((g) => g.matchId === matchId);
   if (!game) return null;
@@ -34,6 +38,8 @@ export function matchDetail(
     mapType: mapMode(game.map),
     result: game.result,
     gameType: game.gameType,
+    source: sourceOf(game),
+    srDelta: game.srDelta,
     durationMinutes: game.durationMinutes,
     finalScore: game.finalScore,
     heroes: game.heroes,
@@ -41,7 +47,7 @@ export function matchDetail(
     mental: game.mental,
     review: game.review,
     scoreboard: scoreboardOf(game),
-    competitive: competitiveOf(game, competitiveContext),
+    competitive: competitiveOf(game, competitiveContext, all, anchors),
     playerHistory: playerHistory(all, game),
     screenshots: (game.screenshots ?? []).map(toMediaUrl),
   };
@@ -88,14 +94,36 @@ function rosterEntry(p: RosterPlayer, game: GameRecord): ScoreboardEntry {
 }
 
 /**
- * Competitive progress for competitive games only — the existing winrate
- * heuristic, explicitly labeled 'estimate' (the sanctioned feed does not
- * report rank; 'reported' is reserved for a future verified GEP upgrade).
+ * Competitive progress for competitive games only. When the player has set a
+ * rank anchor for this (account, role), the position is 'calculated' from that
+ * anchor + logged SR deltas (including rank protection). Otherwise it falls back
+ * to the winrate 'estimate' (the sanctioned feed does not report rank;
+ * 'reported' is reserved for a future verified GEP upgrade).
  */
-function competitiveOf(game: GameRecord, context: GameRecord[]): MatchDetail['competitive'] {
-  if (game.gameType !== 'Competitive') return undefined;
+function competitiveOf(
+  game: GameRecord,
+  context: GameRecord[],
+  all: GameRecord[],
+  anchors: RankAnchorMap,
+): MatchDetail['competitive'] {
+  if (classifyGameType(game.gameType) !== 'competitive') return undefined;
+
+  // Preferred: the calculated rank as of this match, from the anchor timeline.
+  const rank = currentRank(all, anchors, game.account, game.role, game.timestamp);
+  if (rank) {
+    return {
+      note: 'calculated',
+      tier: rank.tier,
+      division: rank.division,
+      progressPct: rank.needsReanchor ? undefined : rank.progressPct,
+      protected: rank.protected,
+      needsReanchor: rank.needsReanchor,
+    };
+  }
+
+  // Fallback: the winrate heuristic.
   const scoped = context.filter(
-    (g) => g.gameType === game.gameType && g.account === game.account && g.timestamp <= game.timestamp,
+    (g) => g.account === game.account && g.timestamp <= game.timestamp && classifyGameType(g.gameType) === 'competitive',
   );
   const p = progression(scoped.length ? scoped : [game]);
   return { note: 'estimate', tier: p.tier, division: p.division, progressPct: p.progressPct, delta: p.delta };

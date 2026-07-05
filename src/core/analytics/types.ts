@@ -15,7 +15,16 @@ export type { HeroStat } from '../model';
 export interface MatchMental {
   tilt?: boolean;
   toxicMates?: boolean;
+  /**
+   * Legacy single "someone left" flag. Newer records use the team-specific
+   * flags below; readers treat a legacy `leaver: true` as a my-team leaver
+   * (see {@link ../leaver leaverFlags}).
+   */
   leaver?: boolean;
+  /** A player left on the tracked player's team. */
+  leaverMyTeam?: boolean;
+  /** A player left on the enemy team. */
+  leaverEnemyTeam?: boolean;
   positiveComms?: boolean;
 }
 
@@ -41,6 +50,19 @@ export interface GameRecord {
   map: string;
   result: Result;
   gameType: string;
+  /**
+   * Where the record came from. Absent on older records — inferred from the
+   * matchId prefix by {@link ../source sourceOf} (manual ids start with
+   * `manual`). Auto-tracked (GEP) records lock their game-derived facts in the
+   * match editor.
+   */
+  source?: 'manual' | 'gep';
+  /**
+   * Signed skill-rating change for this competitive match, in percentage points
+   * of a division (e.g. +22, -19) — the exact number the game showed. Manual,
+   * competitive-only; feeds the calculated-rank engine ({@link ../rank}).
+   */
+  srDelta?: number;
   durationMinutes?: number;
   heroes: string[];
   /** Per-hero breakdown for the local player (from GEP roster), if available. */

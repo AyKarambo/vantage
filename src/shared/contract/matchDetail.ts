@@ -51,6 +51,10 @@ export interface MatchDetail {
   mapType: string;
   result: Result;
   gameType: string;
+  /** 'manual' = hand-logged (fully editable); 'gep' = auto-tracked (facts locked). */
+  source: 'manual' | 'gep';
+  /** Logged skill-rating change for this competitive match, in %-points. */
+  srDelta?: number;
   durationMinutes?: number;
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */
   finalScore?: string;
@@ -66,11 +70,21 @@ export interface MatchDetail {
   /** Grouped by `team` in the renderer; absent → local-row-only fallback. */
   scoreboard?: ScoreboardEntry[];
   /**
-   * Competitive progress. 'estimate' = the winrate heuristic (the feed does
-   * not report rank today); 'reported' is reserved for a future GEP upgrade.
+   * Competitive progress. 'calculated' = derived from the user's rank anchor +
+   * logged SR deltas (the real path once an anchor exists); 'estimate' = the
+   * winrate heuristic fallback; 'reported' is reserved for a future GEP upgrade.
    * `progressPct` is 0–100 within the division; `delta` is signed %-points.
+   * `protected`/`needsReanchor` describe the rank-protection state (calculated).
    */
-  competitive?: { note: 'estimate' | 'reported'; tier?: string; division?: number; progressPct?: number; delta?: number };
+  competitive?: {
+    note: 'estimate' | 'reported' | 'calculated';
+    tier?: string;
+    division?: number;
+    progressPct?: number;
+    delta?: number;
+    protected?: boolean;
+    needsReanchor?: boolean;
+  };
   /** Players seen in prior matches; [] when no roster data exists. */
   playerHistory: PlayerEncounter[];
   /** vantage-media:// URLs of end-of-match captures; [] when none. */
