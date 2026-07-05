@@ -193,11 +193,22 @@ Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pip
 
 ## Build a release
 
+Every push to `main` auto-publishes a GitHub Release: the
+[`auto-release`](.github/workflows/auto-release.yml) workflow bumps the version from
+[Conventional Commits](https://www.conventionalcommits.org/) (`feat` → minor, `fix`/others → patch,
+`type!:`/`BREAKING CHANGE` → major), builds the installer on a Windows runner, and attaches it. The
+version bump is committed back to `main` as `chore(release): vX.Y.Z`. CI installers are **unsigned**.
+
+To build locally:
+
 ```bash
 npm run release    # ow-electron-builder → release/Vantage-Setup-<ver>.exe
 ```
 
-Unsigned installer (fine for personal use — Windows SmartScreen → *More info → Run anyway*).
+Unsigned installer (fine for personal use — Windows SmartScreen → *More info → Run anyway*). To ship a
+**signed** build, download the artifact from the tag-triggered
+[`release`](.github/workflows/release.yml) workflow (or build locally), run `npm run sign:local` with
+the Certum cert (see [docs/signing.md](docs/signing.md)), and upload it to the release.
 
 ## Support
 
