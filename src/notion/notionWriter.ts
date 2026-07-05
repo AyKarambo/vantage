@@ -1,5 +1,7 @@
 import { Client } from '@notionhq/client';
 import type { MatchRecord, Result, Role } from '../core/model';
+import type { MatchMental, TargetGrade } from '../core/analytics';
+import { leaverFlags } from '../core/leaver';
 import { gameTypeLabel } from '../core/matchFilter';
 
 /** A {@link MatchRecord} plus the resolved Notion values for the four core fields. */
@@ -9,6 +11,10 @@ export interface ResolvedMatch {
   role?: Role;
   result?: Result;
   mapPageId?: string;
+  /** The merged after-game self-report (quick-log + Review flags), if any. */
+  mental?: MatchMental;
+  /** The imported "Improvement Target" grade for this match, if the user graded it. */
+  improvementGrade?: TargetGrade;
 }
 
 /**
@@ -30,6 +36,13 @@ export class NotionWriter {
      * database would fail every row.
      */
     private readonly hasPlayedAt = false,
+    /**
+     * The subjective columns the target database actually defines (from the cached
+     * shape validation). `pages.create` rejects a property the database lacks, so a
+     * subjective field is written only when its column is in this set — the same
+     * guard as `hasPlayedAt`, generalized. Empty (write nothing extra) by default.
+     */
+    private readonly writableColumns: ReadonlySet<string> = new Set(),
   ) {}
 
   async createMatchPage(m: ResolvedMatch): Promise<string> {
@@ -70,6 +83,23 @@ export class NotionWriter {
       props['Played At'] = { date: { start: new Date(r.endedAt).toISOString() } };
     }
 
+    // The subjective self-report + improvement grade the user filled in inside
+    // Vantage — written into the matching columns (mirroring NotionImporter's
+    // readers) so the round-trip is symmetric instead of dropping them into the
+    // page title. Each is guarded by column presence and by having a value.
+    const mental = m.mental;
+    if (this.writableColumns.has('Comms') && mental?.positiveComms) props['Comms'] = select('positive');
+    if (this.writableColumns.has('Improvement Target') && m.improvementGrade) {
+      props['Improvement Target'] = select(GRADE_TO_NOTION[m.improvementGrade]);
+    }
+    if (this.writableColumns.has('Leaver')) {
+      const leaver = leaverFlags(mental);
+      if (leaver.myTeam) props['Leaver'] = select('team');
+      else if (leaver.enemyTeam) props['Leaver'] = select('enemy');
+    }
+    if (this.writableColumns.has('Tilt') && mental?.tilt) props['Tilt'] = { checkbox: true };
+    if (this.writableColumns.has('Toxic Mates') && mental?.toxicMates) props['Toxic Mates'] = { checkbox: true };
+
     const res: any = await this.client.pages.create({
       parent: { database_id: this.gametrackerDatabaseId },
       properties: props,
@@ -85,6 +115,9 @@ export class NotionWriter {
 }
 
 // --- Notion property builders -------------------------------------------------
+
+/** Our {@link TargetGrade} → the Notion "Improvement Target" select option (inverse of the importer's map). */
+const GRADE_TO_NOTION: Record<TargetGrade, string> = { hit: 'hit', partial: 'partially', missed: 'missed' };
 
 function title(content: string) {
   return { title: [{ text: { content: content.slice(0, 2000) } }] };

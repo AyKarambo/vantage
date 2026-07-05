@@ -2,8 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { NotionExporter, gameToMatchRecord } from '../src/notion/notionExporter';
+import { NotionExporter, gameToMatchRecord, exportMental } from '../src/notion/notionExporter';
 import { NotionWriter } from '../src/notion/notionWriter';
+import { NotionImporter, NOTION_IMPROVEMENT_TARGET_ID } from '../src/notion/notionImporter';
 import { OutboxStore } from '../src/store/outbox';
 import type { GameRecord } from '../src/core/analytics';
 
@@ -91,5 +92,111 @@ describe('NotionWriter — Played At round-trip', () => {
     const writer = new NotionWriter(client, 'db'); // hasPlayedAt defaults false
     await writer.createMatchPage({ record: gameToMatchRecord(game('m1')) });
     expect(create.mock.calls[0][0].properties).not.toHaveProperty('Played At');
+  });
+});
+
+const SUBJECTIVE = new Set(['Comms', 'Improvement Target', 'Leaver', 'Tilt', 'Toxic Mates']);
+function captureCreate() {
+  const create = vi.fn().mockResolvedValue({ id: 'page-id' });
+  return { create, client: { pages: { create } } as any };
+}
+
+describe('NotionWriter — subjective columns', () => {
+  it('writes Comms/Improvement Target/Leaver/Tilt into their columns when present and set', async () => {
+    const { create, client } = captureCreate();
+    const writer = new NotionWriter(client, 'db', false, SUBJECTIVE);
+    await writer.createMatchPage({
+      record: gameToMatchRecord(game('m1')),
+      mental: { positiveComms: true, tilt: true, leaverMyTeam: true },
+      improvementGrade: 'partial',
+    });
+    const props = create.mock.calls[0][0].properties;
+    expect(props['Comms']).toEqual({ select: { name: 'positive' } });
+    expect(props['Improvement Target']).toEqual({ select: { name: 'partially' } }); // 'partial' → 'partially'
+    expect(props['Leaver']).toEqual({ select: { name: 'team' } });
+    expect(props['Tilt']).toEqual({ checkbox: true });
+    expect(props).not.toHaveProperty('Toxic Mates'); // not flagged → not written
+  });
+
+  it('omits every subjective column the database does not define (default empty set)', async () => {
+    const { create, client } = captureCreate();
+    const writer = new NotionWriter(client, 'db'); // no writable columns
+    await writer.createMatchPage({
+      record: gameToMatchRecord(game('m1')),
+      mental: { positiveComms: true, tilt: true },
+      improvementGrade: 'hit',
+    });
+    const props = create.mock.calls[0][0].properties;
+    for (const name of ['Comms', 'Improvement Target', 'Leaver', 'Tilt', 'Toxic Mates']) {
+      expect(props).not.toHaveProperty(name);
+    }
+  });
+
+  it('maps the enemy-team leaver and the missed grade correctly', async () => {
+    const { create, client } = captureCreate();
+    const writer = new NotionWriter(client, 'db', false, SUBJECTIVE);
+    await writer.createMatchPage({
+      record: gameToMatchRecord(game('m1')),
+      mental: { leaverEnemyTeam: true },
+      improvementGrade: 'missed',
+    });
+    const props = create.mock.calls[0][0].properties;
+    expect(props['Leaver']).toEqual({ select: { name: 'enemy' } });
+    expect(props['Improvement Target']).toEqual({ select: { name: 'missed' } });
+    expect(props).not.toHaveProperty('Tilt');
+  });
+});
+
+describe('exportMental', () => {
+  it('merges the quick-log mental and the Review flags, folding the legacy leaver', () => {
+    const g = {
+      ...game('m1'),
+      mental: { positiveComms: true },
+      review: { at: 1, grades: {}, flags: { tilt: true, leaver: true } },
+    } as GameRecord;
+    expect(exportMental(g)).toEqual({ tilt: true, positiveComms: true, leaverMyTeam: true });
+  });
+
+  it('is undefined when nothing was flagged', () => {
+    expect(exportMental(game('m1'))).toBeUndefined();
+  });
+});
+
+describe('export → import round-trip', () => {
+  it('preserves map, comms, improvement grade, leaver and tilt through Notion', async () => {
+    // Export: capture the exact properties the writer sends to pages.create.
+    const { create, client } = captureCreate();
+    create.mockResolvedValue({ id: 'created-page' });
+    const writer = new NotionWriter(client, 'gt-db', true, SUBJECTIVE);
+    const g = game('gep-777', Date.parse('2026-05-01T12:00:00.000Z'));
+    await writer.createMatchPage({
+      record: gameToMatchRecord(g),
+      account: 'Main', role: 'damage', result: 'Win',
+      mapPageId: 'map-ilios',
+      mental: exportMental({ ...g, mental: { positiveComms: true, tilt: true, leaverMyTeam: true } } as GameRecord),
+      improvementGrade: 'partial',
+    });
+    const properties = create.mock.calls[0][0].properties;
+
+    // Import: feed that created page straight back through the importer.
+    const page = { id: 'created-page', created_time: '2026-05-01T12:00:00.000Z', properties };
+    const mapsPage = { id: 'map-ilios', properties: { Name: { type: 'title', title: [{ plain_text: 'Ilios' }] } } };
+    const query = vi.fn(async ({ database_id }: any) => ({
+      results: database_id === 'gt-db' ? [page] : [mapsPage],
+      has_more: false,
+      next_cursor: null,
+    }));
+    const importer = new NotionImporter({ databases: { query } } as any, 'gt-db', 'maps-db');
+    const { games } = await importer.import();
+
+    expect(games).toHaveLength(1);
+    const back = games[0];
+    expect(back.matchId).toBe('gep-777');
+    expect(back.source).toBe('gep');
+    expect(back.map).toBe('Ilios');
+    expect(back.result).toBe('Win');
+    expect(back.role).toBe('damage');
+    expect(back.mental).toMatchObject({ positiveComms: true, tilt: true, leaverMyTeam: true });
+    expect(back.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('partial');
   });
 });

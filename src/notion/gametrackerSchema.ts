@@ -54,6 +54,43 @@ export function hasPlayedAtColumn(properties: Record<string, { type?: string } |
   return properties[PLAYED_AT_PROPERTY]?.type === 'date';
 }
 
+/**
+ * Optional "subjective" columns the {@link ../notion/notionImporter NotionImporter}
+ * *reads* but the auto-created schema doesn't define — a user adds these to their
+ * own Gametracker by hand. The exporter writes them only when the target database
+ * actually has the column (with the right type), because `pages.create` rejects an
+ * undefined property. Names and types mirror the importer's readers exactly, so the
+ * export→import round-trip is symmetric.
+ */
+export const OPTIONAL_SUBJECTIVE_PROPERTIES: Record<string, string> = {
+  Comms: 'select',
+  'Improvement Target': 'select',
+  Leaver: 'select',
+  Tilt: 'checkbox',
+  'Toxic Mates': 'checkbox',
+};
+
+/** The subjective columns present (with their expected type) in a live schema. */
+export function presentSubjectiveColumns(
+  properties: Record<string, { type?: string } | undefined>,
+): string[] {
+  return Object.entries(OPTIONAL_SUBJECTIVE_PROPERTIES)
+    .filter(([name, type]) => properties[name]?.type === type)
+    .map(([name]) => name);
+}
+
+/**
+ * The database a `Map` relation column points at, if present — lets the exporter
+ * resolve maps without a separately configured `mapsDatabaseId` (mirrors the
+ * importer's `discoverMapsDbId`). Undefined when Map is absent or not a relation.
+ */
+export function mapRelationDatabaseId(
+  properties: Record<string, { type?: string; relation?: { database_id?: string } } | undefined>,
+): string | undefined {
+  const map = properties['Map'];
+  return map?.type === 'relation' ? map.relation?.database_id ?? undefined : undefined;
+}
+
 function selectOptions(names: string[]): { options: Array<{ name: string }> } {
   return { options: names.map((name) => ({ name })) };
 }

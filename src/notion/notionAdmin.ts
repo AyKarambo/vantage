@@ -1,6 +1,9 @@
 import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
-import { buildGametrackerProperties, hasPlayedAtColumn, validateGametrackerShape, type ShapeValidation } from './gametrackerSchema';
+import {
+  buildGametrackerProperties, hasPlayedAtColumn, mapRelationDatabaseId,
+  presentSubjectiveColumns, validateGametrackerShape, type ShapeValidation,
+} from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary } from '../shared/contract';
 export type { NotionDatabaseSummary, NotionPageSummary };
 
@@ -17,6 +20,10 @@ export interface ValidateResult extends ShapeValidation {
   title?: string;
   /** Whether the database carries the optional `Played At` date column, so the writer may set it. */
   hasPlayedAt: boolean;
+  /** Subjective columns present on the database, so the writer may set them (Comms, Leaver, …). */
+  subjectiveColumns: string[];
+  /** The database the `Map` relation points at — lets the exporter resolve maps without a configured mapsDatabaseId. */
+  mapRelationDbId?: string;
 }
 
 /**
@@ -80,7 +87,13 @@ export class NotionAdmin {
     const db: any = await this.client.databases.retrieve({ database_id: databaseId });
     const properties = db.properties ?? {};
     const shape = validateGametrackerShape(properties, opts);
-    return { ...shape, title: titleOfDatabase(db), hasPlayedAt: hasPlayedAtColumn(properties) };
+    return {
+      ...shape,
+      title: titleOfDatabase(db),
+      hasPlayedAt: hasPlayedAtColumn(properties),
+      subjectiveColumns: presentSubjectiveColumns(properties),
+      mapRelationDbId: mapRelationDatabaseId(properties),
+    };
   }
 
   /** Paginated `client.search`, following `has_more`/`next_cursor`. */
