@@ -57,6 +57,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
       targets: provider.manualTargets(),
       breakReminder: provider.getBreakReminder(),
       readiness: provider.getReadiness(),
+      rankAnchors: provider.rankAnchorMap(),
     }),
   );
   handle(ch.exportNotion, async (_e, filters: DashboardFilters) => {

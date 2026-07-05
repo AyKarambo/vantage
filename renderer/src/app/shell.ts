@@ -261,8 +261,7 @@ export class App {
       h('div', { class: 'avatar' }, (d?.greetingName ?? 'V').charAt(0).toUpperCase()),
       h('div', { class: 'row-main' },
         h('div', { class: 'account-name' }, d?.greetingName ?? 'Vantage'),
-        h('div', { class: 'account-sub' },
-          d ? `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%` : '—'),
+        h('div', { class: 'account-sub' }, d ? rankLine(d) : '—'),
       ),
       h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '▾'),
     );
@@ -421,6 +420,17 @@ export class App {
 
 function routeKey(view: ViewId, matchId?: string): string {
   return matchId ? `${view}:${matchId}` : view;
+}
+
+/**
+ * The sidebar rank line: the user's real anchored rank when they've set one,
+ * otherwise the winrate-derived heuristic estimate. Showing the heuristic while
+ * an anchor exists was the "says Platinum 1 even though I set my rank" bug.
+ */
+function rankLine(d: DashboardData): string {
+  const r = d.primaryRank;
+  if (r) return r.needsReanchor ? `${rankLabel(r.tier, r.division)} · set %` : `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct)}%`;
+  return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }
 
 function comboLabel(combo: string): string {
