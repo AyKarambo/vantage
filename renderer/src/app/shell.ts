@@ -25,6 +25,7 @@ import { heroes } from '../views/heroes';
 import { focus } from '../views/focus';
 import { mental } from '../views/mental';
 import { trends } from '../views/trends';
+import { readiness } from '../views/readiness';
 import { targets } from '../views/targets';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
@@ -39,7 +40,7 @@ import { openFirstRunPrompt } from './firstRunPrompt';
 
 // matchDetail is a parameterized view: registered here (routable) but not in
 // NAV — the sidebar keeps Matches highlighted while it is active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, targets, notion, logs: logViewer, settings };
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings };
 
 interface NavItem {
   id: ViewId;
@@ -63,6 +64,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'focus', label: 'Focus', icon: '◎' },
       { id: 'mental', label: 'Mental', icon: '◐' },
       { id: 'trends', label: 'Trends', icon: '◔' },
+      { id: 'readiness', label: 'Readiness', icon: '◆' },
       { id: 'targets', label: 'Targets', icon: '✦' },
     ],
   },

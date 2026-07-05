@@ -19,6 +19,10 @@ export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
 export type { TargetSummary, TargetMode } from '../../core/targets';
 export type { BreakReminderSettings } from '../../core/breakReminder';
+export type {
+  ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,
+  ReadinessConfidence, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
+} from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
 
 // Dashboard payloads

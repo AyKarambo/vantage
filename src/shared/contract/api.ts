@@ -5,6 +5,7 @@
  * share it.
  */
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { ReadinessSettings } from '../../core/readiness';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
 import type { ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress } from './notion';
@@ -58,6 +59,10 @@ export interface OwStatsApi {
   getBreakReminder(): Promise<BreakReminderSettings>;
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */
   setBreakReminder(input: BreakReminderSettings): Promise<BreakReminderSettings>;
+  /** The currently persisted readiness feature settings. */
+  getReadiness(): Promise<ReadinessSettings>;
+  /** Persist new readiness feature settings; returns the persisted value. */
+  setReadiness(input: ReadinessSettings): Promise<ReadinessSettings>;
   /** Databases the Notion integration can see, for the picker. */
   listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
   /** Pages the Notion integration can see — candidate parents for auto-create. */
@@ -140,6 +145,8 @@ export const IPC_CHANNELS = {
   deleteTarget: 'manual:delete-target',
   getBreakReminder: 'settings:get-break-reminder',
   setBreakReminder: 'settings:set-break-reminder',
+  getReadiness: 'settings:get-readiness',
+  setReadiness: 'settings:set-readiness',
   listNotionDatabases: 'notion:list-databases',
   listNotionPages: 'notion:list-pages',
   selectNotionDatabase: 'notion:select-database',

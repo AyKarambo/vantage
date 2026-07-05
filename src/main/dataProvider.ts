@@ -5,6 +5,7 @@ import type { NotionRuntime } from './notionRuntime';
 import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
+import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { effectiveDemo } from '../core/demoPreference';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import { currentRank, type RankAnchorMap } from '../core/rank';
@@ -41,6 +42,8 @@ export interface DataProviderDeps {
   persistAccounts(accounts: Record<string, string>): void;
   /** Persist new break-reminder settings into the user's local config file. */
   persistBreakReminder(s: BreakReminderSettings): void;
+  /** Persist new readiness feature settings into the user's local config file. */
+  persistReadiness(s: ReadinessSettings): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
   recordGame(g: GameRecord): boolean;
   /** Surface a user-facing notification (the tray balloon in production). */
@@ -194,6 +197,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       config.breakReminder = normalizeBreakReminder(input);
       deps.persistBreakReminder(config.breakReminder);
       return config.breakReminder;
+    },
+    getReadiness: () => deps.getConfig().readiness,
+    setReadiness: (input) => {
+      const config = deps.getConfig();
+      config.readiness = normalizeReadiness(input);
+      deps.persistReadiness(config.readiness);
+      return config.readiness;
     },
     listNotionDatabases: () => deps.notion.listDatabases(),
     listNotionPages: () => deps.notion.listPages(),

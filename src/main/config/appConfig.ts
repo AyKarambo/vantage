@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { LogFilter } from '../../core/model';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/breakReminder';
+import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
 import type { DemoPreference } from '../../core/demoPreference';
 
 /**
@@ -53,6 +54,8 @@ export interface AppConfig {
   mapAliases: Record<string, string>;
   /** "Time for a break?" tray notification after N consecutive losses. */
   breakReminder: BreakReminderSettings;
+  /** Readiness / training-load coach settings (feature toggle + opt-in launch toast). */
+  readiness: ReadinessSettings;
   ui: UiConfig;
 }
 
@@ -65,6 +68,7 @@ const DEFAULTS: AppConfig = {
   accounts: {},
   mapAliases: {},
   breakReminder: { ...DEFAULT_BREAK_REMINDER },
+  readiness: { ...DEFAULT_READINESS },
   ui: { closeToTray: true, demoPreference: 'unset' },
 };
 
@@ -102,6 +106,7 @@ export function loadConfig(): AppConfig {
     accounts: { ...(bundled.accounts ?? {}), ...(local.accounts ?? {}) },
     mapAliases: { ...(bundled.mapAliases ?? {}), ...(local.mapAliases ?? {}) },
     breakReminder: { ...DEFAULTS.breakReminder, ...(bundled.breakReminder ?? {}), ...(local.breakReminder ?? {}) },
+    readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };
   // Env overrides (handy for one-off testing without editing files).
@@ -140,6 +145,13 @@ export function saveLocalNotionConfig(patch: Partial<NotionConfig>): void {
 export function saveLocalAccounts(accounts: Record<string, string>): void {
   const current = readJson<AppConfig>(userConfigPath());
   const merged: Partial<AppConfig> = { ...current, accounts };
+  fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
+}
+
+/** Persist the readiness feature settings into the user's local config file. */
+export function saveLocalReadiness(settings: ReadinessSettings): void {
+  const current = readJson<AppConfig>(userConfigPath());
+  const merged: Partial<AppConfig> = { ...current, readiness: settings };
   fs.writeFileSync(userConfigPath(), JSON.stringify(merged, null, 2), 'utf8');
 }
 

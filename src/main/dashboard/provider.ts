@@ -1,6 +1,7 @@
 import type { GameRecord } from '../../core/analytics';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { ReadinessSettings } from '../../core/readiness';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
@@ -67,6 +68,10 @@ export interface DataProvider {
   getBreakReminder(): BreakReminderSettings;
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */
   setBreakReminder(input: BreakReminderSettings): BreakReminderSettings;
+  /** Current readiness feature settings. */
+  getReadiness(): ReadinessSettings;
+  /** Persist new readiness feature settings; returns the persisted value. */
+  setReadiness(input: ReadinessSettings): ReadinessSettings;
   /** Databases the Notion integration can see, for the picker. */
   listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
   /** Pages the Notion integration can see — candidate parents for auto-create. */

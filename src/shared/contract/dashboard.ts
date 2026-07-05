@@ -9,6 +9,7 @@ import type { MentalSummary } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { DemoPreference } from '../../core/demoPreference';
 
 /** The filters every view is scoped by, chosen in the app shell. */
@@ -86,6 +87,10 @@ export interface DashboardData {
   pendingReviews: number;
   /** The effective break-reminder settings, so views render synchronously. */
   breakReminder: BreakReminderSettings;
+  /** Readiness / training-load verdict — computed over the UNFILTERED history (fatigue is per-person). */
+  readiness: ReadinessSummary;
+  /** The effective readiness feature settings, so views render synchronously. */
+  readinessSettings: ReadinessSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */
   totalGamesAllTime: number;
   /** Yesterday's recap (unfiltered); absent when yesterday had no games. */

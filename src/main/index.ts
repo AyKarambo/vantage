@@ -13,6 +13,7 @@ import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
+import { safeReadiness } from '../core/readiness';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
@@ -118,6 +119,7 @@ function main(): void {
       config = loadConfig();
     },
     persistBreakReminder: (breakReminder) => saveLocalConfig({ breakReminder }),
+    persistReadiness: (readiness) => saveLocalConfig({ readiness }),
     recordGame: (game) => pipeline.recordGame(game),
     notify: (title, body) => tray.notify(title, body),
     sampleGames: generateSampleGames,
@@ -239,6 +241,20 @@ function main(): void {
     tokenSet: Boolean(getNotionToken()),
   });
   notion.rebuild();
+
+  // Readiness launch nudge (opt-in, off by default): one tray toast when the
+  // player is grinding into the hole. A post-hoc read of stored history only —
+  // never touches the game (guardrail 1).
+  if (config.readiness.enabled && config.readiness.launchToast) {
+    const readiness = safeReadiness(history.all());
+    if (readiness.band === 'in-the-hole') {
+      tray.notify(
+        'Readiness: time to rest',
+        readiness.recommendationText || 'You may be grinding into the hole — a rest day should help your form rebound.',
+      );
+    }
+  }
+
   // Open the dashboard on a manual launch; when auto-launched at login (--hidden),
   // stay in the tray so we never steal focus from a running game.
   if (!process.argv.includes('--hidden')) dashboard.open();

@@ -162,7 +162,36 @@ function bottomRow(ctx: ViewContext): HTMLElement {
         : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Mental.')),
   );
 
-  return h('div', { class: 'overview-bottom' }, focusQueue, mental);
+  return h('div', { class: 'overview-bottom' }, focusQueue, mental, readinessCard(ctx));
+}
+
+const READINESS_META: Record<string, { label: string; color: string }> = {
+  fresh: { label: 'Fresh', color: PALETTE.win },
+  steady: { label: 'Steady', color: PALETTE.win },
+  loaded: { label: 'Loaded', color: PALETTE.mid },
+  'in-the-hole': { label: 'In the hole', color: PALETTE.loss },
+  recovering: { label: 'Recovering', color: PALETTE.accentBright },
+  'insufficient-data': { label: 'Not enough data', color: PALETTE.muted },
+};
+
+/** Compact readiness teaser — only when the feature is on; deep-links to the screen. */
+function readinessCard(ctx: ViewContext): HTMLElement | null {
+  const d = ctx.data;
+  if (!d.readinessSettings.enabled) return null;
+  const r = d.readiness;
+  const meta = READINESS_META[r.band] ?? READINESS_META['insufficient-data'];
+  const showScore = r.score !== null && r.confidence !== 'low';
+  return card({ title: 'Readiness', style: { flex: '1' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', marginTop: '2px' } },
+      h('span', { style: { width: '11px', height: '11px', borderRadius: '50%', background: meta.color, flex: '0 0 auto' } }),
+      h('span', { style: { fontSize: '15px', fontWeight: '600' } }, meta.label),
+      showScore ? h('span', { class: 'mono', style: { marginLeft: 'auto', fontSize: '15px', color: meta.color } }, String(r.score)) : null,
+    ),
+    h('div', { class: 'hint', style: { marginTop: '9px', lineHeight: '1.45' } }, r.recommendationText || r.headline),
+    h('div', { style: { marginTop: '10px' } },
+      button('Open readiness →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('readiness') }),
+    ),
+  );
 }
 
 // --- helpers ----------------------------------------------------------------

@@ -19,6 +19,7 @@ export type ViewId =
   | 'focus'
   | 'mental'
   | 'trends'
+  | 'readiness'
   | 'targets'
   | 'notion'
   | 'logs'
@@ -58,7 +59,7 @@ const STORAGE_KEY = 'vantageFilters';
 /** The last visited top-level view, restored on launch (never a detail page). */
 function initialView(): ViewId {
   const saved = prefs.get('view');
-  const valid: ViewId[] = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'targets', 'notion', 'logs', 'settings'];
+  const valid: ViewId[] = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings'];
   return valid.includes(saved as ViewId) ? (saved as ViewId) : 'overview';
 }
 

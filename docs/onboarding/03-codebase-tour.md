@@ -40,6 +40,7 @@ unit-testable and shared with the browser preview.
 | [`targets/`](../../src/core/targets) | Improvement targets: types, `buildTargets()` scoring against review grades, demo `sampleTargets`. |
 | [`playerIndex.ts`](../../src/core/playerIndex.ts) | "Seen this player before" — encounters across stored rosters. |
 | [`breakReminder.ts`](../../src/core/breakReminder.ts) | Loss-streak break-reminder state machine. |
+| [`readiness/`](../../src/core/readiness) | Training-load / supercompensation model: gap-based sessions, local 4am-day buckets, EWMA acute-vs-chronic load, mental self-report signals, and a rule-gated readiness band + rest recommendation. Conservative, centrally-tuned constants. |
 | [`maps.ts`](../../src/core/maps.ts) | Map → game-mode lookup (`MAP_MODES`). |
 | [`counterwatchParse.ts`](../../src/core/counterwatchParse.ts) | Extracts `MatchRecord`s from Counterwatch's LevelDB/V8-serialized IndexedDB. |
 | [`sampleData/`](../../src/core/sampleData) | `generateSampleGames()` — deterministic, seeded demo dataset (drives preview + first-run demo mode). |
