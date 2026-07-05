@@ -1,6 +1,7 @@
 import { Client } from '@notionhq/client';
-import type { GameRecord } from '../core/analytics';
+import type { GameRecord, MatchMental, MatchReview, TargetGrade } from '../core/analytics';
 import type { Result, Role } from '../core/model';
+import type { AuthoredTarget } from '../core/targets';
 import { gameTypeLabel } from '../core/matchFilter';
 
 /**
@@ -16,6 +17,29 @@ export interface ImportOutcome {
 
 const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
 const RESULTS: Result[] = ['Win', 'Loss', 'Draw'];
+
+/** Notion's per-match "Improvement Target" select → our TargetGrade. */
+const IMPROVEMENT_GRADES: Record<string, TargetGrade> = { hit: 'hit', partially: 'partial', missed: 'missed' };
+
+/**
+ * The single generic target the imported per-match "Improvement Target" grades
+ * attach to. Notion tracks one improvement grade per match rather than our named
+ * multi-target model, so the import maps them all onto this one authored target;
+ * {@link notionImprovementTarget} seeds it so the grades surface on the dashboard.
+ */
+export const NOTION_IMPROVEMENT_TARGET_ID = 'notion-improvement-target';
+
+/** The authored target the imported improvement grades are scored against. */
+export function notionImprovementTarget(createdAt: number): AuthoredTarget {
+  return {
+    id: NOTION_IMPROVEMENT_TARGET_ID,
+    name: 'Improvement Target',
+    mode: 'self',
+    rule: 'Imported from Notion — did you hit your improvement focus this match?',
+    createdAt,
+    isActive: true,
+  };
+}
 
 export class NotionImporter {
   constructor(
@@ -123,6 +147,18 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
       }]
     : undefined;
 
+  // The subjective self-report the user filled in on the row: leaver (split by
+  // team), tilt, toxic mates, positive comms. Lives on `mental` so it counts in
+  // the mental summary without marking the game "reviewed".
+  const mental = mentalFrom(props);
+  // The per-match improvement grade becomes a Review grade against the single
+  // imported target (see NOTION_IMPROVEMENT_TARGET_ID). Attaching a review marks
+  // the game graded, which is correct — the user already graded it in Notion.
+  const grade = IMPROVEMENT_GRADES[(pickSelect(props['Improvement Target']) ?? '').toLowerCase()];
+  const review: MatchReview | undefined = grade
+    ? { at: timestamp, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: grade }, flags: {} }
+    : undefined;
+
   return {
     matchId,
     timestamp,
@@ -136,6 +172,8 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
     ...(durationMinutes != null ? { durationMinutes } : {}),
     ...(finalScore ? { finalScore } : {}),
     ...(perHero ? { perHero } : {}),
+    ...(mental ? { mental } : {}),
+    ...(review ? { review } : {}),
   };
 }
 
@@ -155,6 +193,25 @@ function pickText(prop: any): string {
 }
 function pickRelationId(prop: any): string | undefined {
   return Array.isArray(prop?.relation) && prop.relation.length ? prop.relation[0].id : undefined;
+}
+function pickCheckbox(prop: any): boolean {
+  return prop?.checkbox === true;
+}
+/**
+ * The imported after-game self-report. `Leaver` is a select (team|enemy) mapped
+ * onto the two team-specific flags; `Comms` only contributes when positive (the
+ * model tracks positive comms, not the negative variants). Undefined when the
+ * row flagged nothing, so blank rows don't carry an empty mental object.
+ */
+function mentalFrom(props: any): MatchMental | undefined {
+  const mental: MatchMental = {};
+  const leaver = pickSelect(props['Leaver']);
+  if (leaver === 'team') mental.leaverMyTeam = true;
+  if (leaver === 'enemy') mental.leaverEnemyTeam = true;
+  if (pickCheckbox(props['Tilt'])) mental.tilt = true;
+  if (pickCheckbox(props['Toxic Mates'])) mental.toxicMates = true;
+  if (pickSelect(props['Comms']) === 'positive') mental.positiveComms = true;
+  return Object.keys(mental).length ? mental : undefined;
 }
 function titleOf(page: any): string {
   for (const value of Object.values<any>(page?.properties ?? {})) {
