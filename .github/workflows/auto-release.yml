@@ -1,12 +1,15 @@
 # Auto-release on every push to main.
 #
-# Bumps the version from Conventional Commits (feat -> minor, fix/others ->
-# patch, a `type!:` subject or `BREAKING CHANGE` footer -> major), builds the
-# unsigned Windows installer, and publishes a GitHub Release with it attached.
+# Tag-driven: the version is derived from the latest `v*` tag plus the
+# Conventional Commits since it (feat -> minor, fix/others -> patch, a `type!:`
+# subject or `BREAKING CHANGE` footer -> major). The bump is applied to
+# package.json only inside the runner (so the built installer carries the right
+# version) and is NOT committed back — nothing is pushed to the protected `main`
+# branch. The release action creates the tag and publishes the GitHub Release.
 #
-# The bump commit is pushed back to main with the default GITHUB_TOKEN, which by
-# design does NOT re-trigger workflows, and is marked [skip ci] as a second
-# guard, so this never loops on itself.
+# Because it never pushes to a branch, it cannot loop on itself and needs no
+# bypass of branch protection. package.json on `main` stays at its floor; the
+# tag, the Release and the installer filename carry the real version.
 #
 # Signing stays a manual, local step: CI artifacts are UNSIGNED (SmartScreen
 # still warns). The tag-triggered `release.yml` builds a downloadable unsigned
@@ -24,13 +27,10 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: write # create the tag + GitHub Release
 
 jobs:
   release:
-    # Don't act on our own bump commit (belt-and-suspenders alongside the
-    # GITHUB_TOKEN no-retrigger behaviour and [skip ci]).
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,13 +48,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      - name: Determine version bump from Conventional Commits
+      - name: Compute next version from tags + Conventional Commits
         id: bump
         shell: bash
         run: |
           set -euo pipefail
           last_tag=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)
-          if [ -n "$last_tag" ]; then range="${last_tag}..HEAD"; else range="HEAD"; fi
+          if [ -n "$last_tag" ]; then base="${last_tag#v}"; range="${last_tag}..HEAD"; else base="0.0.0"; range="HEAD"; fi
           log=$(git log "$range" --format='%B')
           if grep -qiE '^[a-z]+(\([^)]*\))?!:' <<< "$log" || grep -qE 'BREAKING[ -]CHANGE' <<< "$log"; then
             level=major
@@ -63,11 +63,13 @@ jobs:
           else
             level=patch
           fi
-          new=$(npm version "$level" --no-git-tag-version)
+          next=$(node -e "const p='${base}'.split('.').map(Number);const l='${level}';const v=l==='major'?[p[0]+1,0,0]:l==='minor'?[p[0],p[1]+1,0]:[p[0],p[1],p[2]+1];console.log(v.join('.'))")
+          # Apply to package.json for the build only — not committed.
+          npm version "$next" --no-git-tag-version --allow-same-version >/dev/null
           echo "level=$level" >> "$GITHUB_OUTPUT"
-          echo "tag=$new" >> "$GITHUB_OUTPUT"
-          echo "version=${new#v}" >> "$GITHUB_OUTPUT"
-          echo "Bump: ${last_tag:-<none>} -> $new ($level)"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+          echo "Bump: ${last_tag:-<none>} ($base) -> v$next ($level)"
 
       # ow-electron-builder -> release/Vantage-Setup-<ver>.exe (unsigned; --publish=never)
       - name: Build installer
@@ -76,18 +78,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run release
 
-      - name: Commit, tag and push the version bump
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package.json package-lock.json
-          git commit -m "chore(release): ${{ steps.bump.outputs.tag }} [skip ci]"
-          git tag "${{ steps.bump.outputs.tag }}"
-          git push origin HEAD:main
-          git push origin "${{ steps.bump.outputs.tag }}"
-
+      # Creates the tag at this commit and publishes the Release with the exe.
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
