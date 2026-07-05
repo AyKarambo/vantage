@@ -34,6 +34,9 @@ export interface ViewParams {
   day?: string;
   /** Scope Matches to games carrying this mental flag. */
   flag?: MatchFlagKey;
+  /** Targets: prefill the builder with this name (self-rated) on open — the
+   *  Focus screen's per-map "＋ target" quick-create. */
+  prefillName?: string;
 }
 
 /** Every `ViewParams` key, kept in sync by the compiler: adding a key here
@@ -44,6 +47,7 @@ const VIEW_PARAM_KEYS: Required<{ [K in keyof ViewParams]: true }> = {
   highlight: true,
   day: true,
   flag: true,
+  prefillName: true,
 };
 
 /** Structural equality over every `ViewParams` key — used by `setView`'s

@@ -15,3 +15,7 @@ export type { TargetMode, AuthoredTarget, TargetSummary } from './types';
 // Sample and scoring paths
 export { sampleTargets } from './sampleTargets';
 export { buildTargets } from './scoring';
+
+// Curated starter templates for the builder's "Start from a template" chips
+export type { TargetTemplate } from './templates';
+export { TARGET_TEMPLATES } from './templates';

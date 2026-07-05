@@ -46,9 +46,11 @@ comms · toxicity · leavers · your improvement target).
 - **Review** — grade your active improvement targets (Hit / Partial / Missed) and flag
   how each tracked game felt; an always-visible inbox of ungraded games, independent of
   the global filters.
-- **Improvement Target** — build a target (self-rated ◎ or measured ⚡), choose which
-  targets are active (graded on Review), edit or archive/delete them, and track a
-  library that shows whether hitting it actually moves your winrate.
+- **Improvement Target** — build a target (self-rated ◎ or measured ⚡), or start from a
+  **curated template** (trade discipline, ult economy, comms, warm-up, replay review); choose
+  which targets are active (graded on Review), edit or archive/delete them, and track a
+  library that shows whether hitting it actually moves your winrate. The **Focus** screen can
+  create a map-practice target for a losing map in one click (**＋ target**).
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map and hero are typeaheads** with your recent picks listed
   first, `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries the hero over —
