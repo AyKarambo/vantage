@@ -25,7 +25,13 @@ export class NotionImporter {
   ) {}
 
   async import(): Promise<ImportOutcome> {
-    const mapsById = this.mapsDatabaseId ? await this.loadMapNames(this.mapsDatabaseId) : {};
+    // The Map column is a relation into the Maps database; resolving it to a name
+    // needs that database's id. Prefer an explicitly configured one, but fall back
+    // to reading it off the Gametracker schema — most users only ever pick their
+    // Gametracker database, leaving mapsDatabaseId unset, in which case every map
+    // would otherwise import as "Unknown".
+    const mapsDbId = this.mapsDatabaseId || (await this.discoverMapsDbId());
+    const mapsById = mapsDbId ? await this.loadMapNames(mapsDbId) : {};
     const pages = await this.queryAll(this.gametrackerDatabaseId);
     const games: GameRecord[] = [];
     let failed = 0;
@@ -60,6 +66,22 @@ export class NotionImporter {
     const out: Record<string, string> = {};
     for (const page of await this.queryAll(mapsDatabaseId)) out[page.id] = titleOf(page);
     return out;
+  }
+
+  /**
+   * The database the Gametracker's `Map` relation points at, read straight off
+   * the Gametracker schema. Lets map resolution work without a separately
+   * configured mapsDatabaseId. Best-effort: undefined if the column is missing,
+   * isn't a relation, or the retrieve fails.
+   */
+  private async discoverMapsDbId(): Promise<string | undefined> {
+    try {
+      const db: any = await this.client.databases.retrieve({ database_id: this.gametrackerDatabaseId });
+      const mapProp = db?.properties?.['Map'];
+      return mapProp?.type === 'relation' ? mapProp.relation?.database_id ?? undefined : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 
