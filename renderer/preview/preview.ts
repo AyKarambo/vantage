@@ -8,18 +8,21 @@
  * real app persists them to disk.
  */
 import type {
-  AppUiSettings, AuthoredTargetInput, BreakReminderSettings, DashboardFilters, GepHealthState,
-  GepStatusPayload, LogEntry, LogLevel, ManualMatchInput, NotionDatabaseSummary,
-  NotionPageSummary, NotionStatus, OwStatsApi, RendererErrorInput, ReviewInput, SyncProgress,
-  TargetEditInput,
+  AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
+  DashboardFilters, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
+  MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
+  RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
+import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters } from '../../src/core/dashboardData';
 import { heroDetail } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
+import { sourceOf } from '../../src/core/source';
+import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
@@ -31,6 +34,9 @@ const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
 const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
+const ACCOUNTS_KEY = 'vantagePreviewAccounts';
+const ANCHORS_KEY = 'vantagePreviewAnchors';
+const EDITS_KEY = 'vantagePreviewEdits';
 
 const load = <T>(key: string): T[] => {
   try {
@@ -62,6 +68,39 @@ const logged: GameRecord[] = load<GameRecord>(LOGGED_KEY);
 const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
   .map((t) => ({ ...t, isActive: t.isActive ?? true }));
 const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
+// Manual-layer edits from the Matches drill-down, overlaid onto any match.
+const previewEdits: Record<string, Partial<GameRecord>> = loadMap<Partial<GameRecord>>(EDITS_KEY);
+// Accounts (battleTag → label). Seeded from the sample season's accounts.
+type AnchorRecord = RankAnchor & { account: string; role: Role };
+const seededAccounts = (): Record<string, string> => {
+  const names = [...new Set(season.map((g) => g.account))];
+  return Object.fromEntries(names.map((n) => [`${n}#0000`, n]));
+};
+const storedAccounts = loadMap<string>(ACCOUNTS_KEY);
+const previewAccounts: Record<string, string> = Object.keys(storedAccounts).length ? storedAccounts : seededAccounts();
+const previewAnchors: Record<string, AnchorRecord> = loadMap<AnchorRecord>(ANCHORS_KEY);
+const anchorMap = (): RankAnchorMap => {
+  const out: RankAnchorMap = {};
+  for (const a of Object.values(previewAnchors)) {
+    out[rankKey(a.account, a.role)] = { tier: a.tier, division: a.division, progressPct: a.progressPct, setAt: a.setAt };
+  }
+  return out;
+};
+const accountList = (): AccountSummary[] =>
+  Object.entries(previewAccounts).map(([battleTag, label]) => ({ battleTag, label: label || battleTag }));
+const previewRanks = (): RankSummary[] => {
+  const games = dataset();
+  const map = anchorMap();
+  return Object.values(previewAnchors).map((a) => {
+    const s = currentRank(games, map, a.account, a.role);
+    return {
+      account: a.account, role: a.role,
+      tier: s?.tier ?? a.tier, division: s?.division ?? a.division,
+      progressPct: s?.progressPct ?? a.progressPct,
+      protected: s?.protected ?? false, needsReanchor: s?.needsReanchor ?? false,
+    };
+  });
+};
 const savedBreakReminder = loadMap<unknown>(BREAK_REMINDER_KEY) as Partial<BreakReminderSettings>;
 let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).length
   ? normalizeBreakReminder(savedBreakReminder)
@@ -73,9 +112,12 @@ let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).lengt
 // season shows only while opted in with no real games — so ?demo=off/unset
 // previews the honest empty states end-to-end.
 const dataset = (): GameRecord[] =>
-  (logged.length ? logged : appSettings.demoPreference === 'on' ? season : []).map((g) =>
-    previewReviews[g.matchId] ? { ...g, review: previewReviews[g.matchId] } : g,
-  );
+  (logged.length ? logged : appSettings.demoPreference === 'on' ? season : []).map((g) => {
+    let out = g;
+    if (previewEdits[g.matchId]) out = { ...out, ...previewEdits[g.matchId] };
+    if (previewReviews[g.matchId]) out = { ...out, review: previewReviews[g.matchId] };
+    return out;
+  });
 
 const findTarget = (id: string): AuthoredTarget | undefined => targets.find((t) => t.id === id);
 
@@ -180,7 +222,7 @@ const mock: OwStatsApi = {
   heroDetail: async (hero: string, f: DashboardFilters) => heroDetail(applyFilters(dataset(), f), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
     const games = dataset();
-    return matchDetail(games, matchId, applyFilters(games, f));
+    return matchDetail(games, matchId, applyFilters(games, f), anchorMap());
   },
   exportNotion: async () => {
     if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
@@ -224,19 +266,72 @@ const mock: OwStatsApi = {
   },
   logMatch: async (input: ManualMatchInput) => {
     const matchId = `manual-${Date.now()}`;
+    const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
     logged.push({
       matchId,
       timestamp: Date.now(),
-      account: 'You',
+      account: input.account || Object.values(previewAccounts)[0] || 'You',
       role: input.role,
       map: input.map,
       result: input.result,
       gameType: input.gameType,
+      source: 'manual',
       heroes: input.hero ? [input.hero] : [],
       mental: input.mental,
+      ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
     });
     save(LOGGED_KEY, logged);
+    if (grades) {
+      previewReviews[matchId] = { at: Date.now(), grades, flags: input.mental ?? {} };
+      save(REVIEWS_KEY, previewReviews);
+    }
     return { matchId };
+  },
+  editMatch: async (input: MatchEditInput) => {
+    const game = dataset().find((g) => g.matchId === input.matchId);
+    if (!game) return;
+    const patch: Partial<GameRecord> = { ...previewEdits[input.matchId] };
+    if (sourceOf(game) === 'manual') {
+      if (input.result !== undefined) patch.result = input.result;
+      if (input.role !== undefined) patch.role = input.role;
+      if (input.map !== undefined) patch.map = input.map;
+      if (input.gameType !== undefined) patch.gameType = input.gameType;
+      if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
+    }
+    if (input.mental !== undefined) patch.mental = input.mental;
+    if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
+    previewEdits[input.matchId] = patch;
+    save(EDITS_KEY, previewEdits);
+    if (input.grades !== undefined) {
+      previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
+      save(REVIEWS_KEY, previewReviews);
+    }
+  },
+  listAccounts: async () => accountList(),
+  saveAccount: async (input: AccountInput) => {
+    if (input.previousBattleTag && input.previousBattleTag !== input.battleTag) delete previewAccounts[input.previousBattleTag];
+    previewAccounts[input.battleTag] = input.label || input.battleTag;
+    save(ACCOUNTS_KEY, previewAccounts);
+    return accountList();
+  },
+  deleteAccount: async (battleTag: string) => {
+    delete previewAccounts[battleTag];
+    save(ACCOUNTS_KEY, previewAccounts);
+    return accountList();
+  },
+  getRanks: async () => previewRanks(),
+  setRankAnchor: async (input: RankAnchorInput) => {
+    previewAnchors[rankKey(input.account, input.role)] = {
+      account: input.account, role: input.role,
+      tier: input.tier, division: input.division, progressPct: input.progressPct, setAt: Date.now(),
+    };
+    save(ANCHORS_KEY, previewAnchors);
+    return previewRanks();
+  },
+  importNotion: async () => {
+    if (!selectedNotionDatabaseId) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
+    // No real Notion rows in the harness — return a canned result so the UI is testable.
+    return { imported: 4, skipped: 2, failed: 0 };
   },
   saveTarget: async (input: AuthoredTargetInput) => {
     targets.push({ id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input });

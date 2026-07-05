@@ -1,12 +1,13 @@
 import { app, shell } from 'electron';
 import * as path from 'path';
 import {
-  loadConfig, saveLocalConfig, saveLocalUiConfig, getNotionToken, userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath, type AppConfig,
 } from './config';
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
 import { HistoryStore } from '../store/history';
 import { ManualStore } from '../store/manualLog';
+import { RankAnchorStore } from '../store/rankAnchors';
 import { GepService, type GepStatus } from './gep';
 import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -68,6 +69,7 @@ function main(): void {
   const outbox = new OutboxStore(dataDir);
   const history = new HistoryStore(dataDir);
   const manual = new ManualStore(dataDir);
+  const rankAnchors = new RankAnchorStore(dataDir);
   const aggregator = new MatchAggregator();
   const screenshots = new ScreenshotService(path.join(dataDir, 'screenshots'), log.adapter('shots'));
   screenshots.registerProtocol();
@@ -108,8 +110,13 @@ function main(): void {
   const dataProvider = createDataProvider({
     history,
     manual,
+    rankAnchors,
     notion,
     getConfig: () => config,
+    persistAccounts: (accounts) => {
+      saveLocalAccounts(accounts);
+      config = loadConfig();
+    },
     persistBreakReminder: (breakReminder) => saveLocalConfig({ breakReminder }),
     recordGame: (game) => pipeline.recordGame(game),
     notify: (title, body) => tray.notify(title, body),

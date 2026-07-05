@@ -29,11 +29,14 @@ export type {
 // Match drill-down payloads
 export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';
 
-// Notion export payloads
-export type { ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress } from './notion';
+// Notion export/import payloads
+export type { ExportResult, ImportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress } from './notion';
 
 // Manual-entry inputs
-export type { ManualMatchInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
+export type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
+
+// Accounts + rank
+export type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 
 // Logging payloads (release debug log + in-app viewer)
 export type { LogEntry, LogLevel, RendererErrorInput } from './logging';

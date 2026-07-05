@@ -7,7 +7,12 @@ import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
 import { effectiveDemo } from '../core/demoPreference';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
-import type { AppInfo, AppUiSettings, GepStatusPayload } from '../shared/contract';
+import { currentRank, type RankAnchorMap } from '../core/rank';
+import { sourceOf } from '../core/source';
+import type { RankAnchorStore } from '../store/rankAnchors';
+import type {
+  AccountSummary, AppInfo, AppUiSettings, GepStatusPayload, MatchEditInput, RankSummary,
+} from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
 /**
@@ -19,17 +24,21 @@ import type { GameRecord } from '../core/analytics';
 
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
-  /** Durable game history: dataset reads plus review writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview'>;
+  /** Durable game history: dataset reads plus review + manual-layer writes. */
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
-  /** The Notion edge: export, status, token lifecycle, and the database picker. */
+  /** Per-(account, role) rank anchors for the calculated-rank engine. */
+  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set'>;
+  /** The Notion edge: export/import, status, token lifecycle, and the database picker. */
   notion: Pick<
     NotionRuntime,
-    'export' | 'status' | 'setToken' | 'clearToken' | 'listDatabases' | 'listPages' | 'selectDatabase' | 'createDatabase'
+    'export' | 'import' | 'status' | 'setToken' | 'clearToken' | 'listDatabases' | 'listPages' | 'selectDatabase' | 'createDatabase'
   >;
   /** Live app config — re-read on every use (accounts, breakReminder), never cached. */
   getConfig(): AppConfig;
+  /** Persist the full accounts map (battleTag → label) into the user's local config. */
+  persistAccounts(accounts: Record<string, string>): void;
   /** Persist new break-reminder settings into the user's local config file. */
   persistBreakReminder(s: BreakReminderSettings): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
@@ -90,19 +99,83 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     deleteTarget: (id) => deps.manual.removeTarget(id),
     logMatch: (input) => {
       const matchId = `manual-${Date.now()}`;
+      const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
       deps.recordGame({
         matchId,
         timestamp: Date.now(),
-        account: Object.values(deps.getConfig().accounts)[0] ?? 'You',
+        account: input.account || Object.values(deps.getConfig().accounts)[0] || 'You',
         role: input.role,
         map: input.map,
         result: input.result,
         gameType: input.gameType,
+        source: 'manual',
         heroes: input.hero ? [input.hero] : [],
         mental: input.mental,
+        ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
+        // Inline target grades captured while logging are stored as a review, the
+        // same shape the Review screen writes — so they score identically.
+        ...(grades ? { review: { at: Date.now(), grades, flags: input.mental ?? {} } } : {}),
       });
       deps.notify('Match logged', `${input.result} · ${input.map}`);
       return { matchId };
+    },
+    editMatch: (input: MatchEditInput) => {
+      const game = deps.history.all().find((g) => g.matchId === input.matchId);
+      if (!game) return;
+      const isManual = sourceOf(game) === 'manual';
+      const patch: Parameters<HistoryStore['editManual']>[1] = {};
+      // Game-derived facts are editable only for hand-logged matches; auto-tracked
+      // (GEP) matches keep them locked.
+      if (isManual) {
+        if (input.result !== undefined) patch.result = input.result;
+        if (input.role !== undefined) patch.role = input.role;
+        if (input.map !== undefined) patch.map = input.map;
+        if (input.gameType !== undefined) patch.gameType = input.gameType;
+        if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
+      }
+      // The manual layer applies to any match.
+      if (input.mental !== undefined) patch.mental = input.mental;
+      if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
+      if (input.grades !== undefined) {
+        patch.review = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
+      }
+      deps.history.editManual(input.matchId, patch);
+    },
+    listAccounts: () => accountList(deps.getConfig().accounts),
+    saveAccount: (input) => {
+      const accounts = { ...deps.getConfig().accounts };
+      if (input.previousBattleTag && input.previousBattleTag !== input.battleTag) {
+        delete accounts[input.previousBattleTag];
+      }
+      accounts[input.battleTag] = input.label || input.battleTag;
+      deps.persistAccounts(accounts);
+      return accountList(accounts);
+    },
+    deleteAccount: (battleTag) => {
+      const accounts = { ...deps.getConfig().accounts };
+      delete accounts[battleTag];
+      deps.persistAccounts(accounts);
+      return accountList(accounts);
+    },
+    getRanks: () => rankSummaries(deps),
+    setRankAnchor: (input) => {
+      deps.rankAnchors.set({
+        account: input.account,
+        role: input.role,
+        tier: input.tier,
+        division: input.division,
+        progressPct: input.progressPct,
+        setAt: Date.now(),
+      });
+      return rankSummaries(deps);
+    },
+    rankAnchorMap: (): RankAnchorMap => deps.rankAnchors.map(),
+    importNotion: async () => {
+      const res = await deps.notion.import();
+      if (res.unavailable) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
+      if (res.error) return { imported: 0, skipped: 0, failed: res.failed, error: res.error };
+      const { imported, skipped } = deps.history.addMany(res.games);
+      return { imported, skipped, failed: res.failed };
     },
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {
@@ -136,4 +209,27 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       deps.history.clearReview(matchId);
     },
   };
+}
+
+/** Shape the accounts map (battleTag → label) into the contract's summary list. */
+function accountList(accounts: Record<string, string>): AccountSummary[] {
+  return Object.entries(accounts).map(([battleTag, label]) => ({ battleTag, label: label || battleTag }));
+}
+
+/** Compute the live rank for every anchored (account, role). */
+function rankSummaries(deps: DataProviderDeps): RankSummary[] {
+  const games = deps.history.all();
+  const map = deps.rankAnchors.map();
+  return deps.rankAnchors.all().map((a) => {
+    const s = currentRank(games, map, a.account, a.role);
+    return {
+      account: a.account,
+      role: a.role,
+      tier: s?.tier ?? a.tier,
+      division: s?.division ?? a.division,
+      progressPct: s?.progressPct ?? a.progressPct,
+      protected: s?.protected ?? false,
+      needsReanchor: s?.needsReanchor ?? false,
+    };
+  });
 }

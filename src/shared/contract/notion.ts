@@ -14,6 +14,20 @@ export interface ExportResult {
   error?: string;
 }
 
+/** Result of a Notion import (pull) attempt. */
+export interface ImportResult {
+  /** New matches added to local history. */
+  imported: number;
+  /** Rows skipped because their Match ID already existed locally. */
+  skipped: number;
+  /** Rows that could not be mapped (per-row failure isolation). */
+  failed: number;
+  /** True when no token/database is configured (nothing was attempted). */
+  unavailable?: boolean;
+  /** Set when the whole import short-circuited (e.g. auth/query error). */
+  error?: string;
+}
+
 /** A database the Notion integration can see, from the picker's list. */
 export interface NotionDatabaseSummary {
   id: string;
