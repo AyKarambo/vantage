@@ -48,12 +48,17 @@ function harness(games: GameRecord[], failed = 0, initialAccounts: Record<string
         }
         return { imported, skipped: gs.length - imported };
       },
+      removeImported: () => {
+        const removed = stored.filter((g) => g.importedAt != null);
+        for (const r of removed) stored.splice(stored.indexOf(r), 1);
+        return removed;
+      },
     },
     manual: { targets: () => [...targets], addTarget },
     getConfig: () => ({ accounts }),
     persistAccounts,
   } as unknown as DataProviderDeps;
-  return { provider: createDataProvider(deps), addTarget, targets, removeTarget, persistAccounts, getAccounts: () => accounts };
+  return { provider: createDataProvider(deps), addTarget, targets, removeTarget, persistAccounts, getAccounts: () => accounts, getStored: () => stored };
 }
 
 describe('importNotion — seeding the imported improvement target', () => {
@@ -137,5 +142,23 @@ describe('importNotion — seeding imported accounts', () => {
     await provider.importNotion();
     await provider.importNotion();
     expect(persistAccounts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('importNotion — flagging + wiping imported matches', () => {
+  it('stamps every imported game with importedAt so it can be identified', async () => {
+    const { provider, getStored } = harness([accountGame('m1', 'Karambo'), accountGame('m2', 'BobRoss')]);
+    await provider.importNotion();
+    expect(getStored().every((g) => typeof g.importedAt === 'number')).toBe(true);
+  });
+
+  it('deleteImportedMatches removes only the imported games and reports the count', async () => {
+    const { provider, getStored } = harness([gradedGame('m1'), plainGame('m2')]);
+    await provider.importNotion();
+    // A hand-logged / live game (no importedAt) that must survive the wipe.
+    getStored().push({ ...plainGame('live'), importedAt: undefined });
+    const res = provider.deleteImportedMatches();
+    expect(res).toEqual({ deleted: 2 });
+    expect(getStored().map((g) => g.matchId)).toEqual(['live']);
   });
 });

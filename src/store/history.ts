@@ -93,6 +93,25 @@ export class HistoryStore {
     return this.games.length;
   }
 
+  /** How many stored games came from a Notion import (carry `importedAt`). */
+  importedCount(): number {
+    return this.games.reduce((n, g) => (g.importedAt != null ? n + 1 : n), 0);
+  }
+
+  /**
+   * Drop every game that came from a Notion import (carries `importedAt`),
+   * leaving live-tracked and hand-logged games untouched — so a bad import can
+   * be wiped and re-run cleanly. Returns the removed games (one atomic save).
+   */
+  removeImported(): GameRecord[] {
+    const removed = this.games.filter((g) => g.importedAt != null);
+    if (removed.length) {
+      this.games = this.games.filter((g) => g.importedAt == null);
+      this.save();
+    }
+    return removed;
+  }
+
   /** Append end-of-match capture paths to a stored game; false if the id is unknown. */
   addScreenshots(matchId: string, screenshots: string[]): boolean {
     const game = this.games.find((g) => g.matchId === matchId);

@@ -206,6 +206,9 @@ if (gepParam === 'cycle') {
 
 const syncListeners = new Set<(p: SyncProgress) => void>();
 
+// Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
+let previewImportedMatches = 0;
+
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
   return {
@@ -220,6 +223,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
     shapeValid: db ? true : undefined,
     shapeIssues: undefined,
     lastSyncedAt: db ? Date.now() - 3_600_000 : undefined,
+    importedMatches: previewImportedMatches,
   };
 }
 
@@ -356,7 +360,13 @@ const mock: OwStatsApi = {
   importNotion: async () => {
     if (!selectedNotionDatabaseId) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
     // No real Notion rows in the harness — return a canned result so the UI is testable.
-    return { imported: 4, skipped: 2, failed: 0 };
+    previewImportedMatches += 4;
+    return { imported: 4, skipped: 2, failed: 0, accountsAdded: 2 };
+  },
+  deleteImportedMatches: async () => {
+    const deleted = previewImportedMatches;
+    previewImportedMatches = 0;
+    return { deleted };
   },
   saveTarget: async (input: AuthoredTargetInput) => {
     targets.push({ id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input });

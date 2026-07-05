@@ -99,8 +99,9 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.getRanks, () => provider.getRanks());
   handle(ch.setRankAnchor, (_e, input: RankAnchorInput) => provider.setRankAnchor(input));
 
-  // Notion import (pull).
+  // Notion import (pull) + wipe-for-re-import.
   handle(ch.importNotion, () => provider.importNotion());
+  handle(ch.deleteImportedMatches, () => provider.deleteImportedMatches());
   handle(ch.saveTarget, (_e, input: AuthoredTargetInput) => {
     provider.saveTarget(input);
   });

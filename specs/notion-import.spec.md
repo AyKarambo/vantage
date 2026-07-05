@@ -15,7 +15,11 @@ history — closing the round-trip while staying local-first and opt-in.
 - **De-duplication by Match ID**: rows whose Match ID already exists locally are skipped;
   rows with no Vantage Match ID get a fresh local `manual-notion-*` id and are treated as
   manual.
-- Clear import summary (imported / skipped / failed counts).
+- Clear import summary (imported / skipped / failed / accounts-added counts).
+- **Wipe-for-re-import**: every imported record is flagged (`importedAt`), and a "Delete
+  imported matches" action (behind a confirm) removes *only* those records — leaving
+  hand-logged and live-tracked matches untouched — so a bad import can be corrected in
+  Notion and re-run cleanly. The Notion status reports how many imported matches exist.
 
 ## Out-of-Scope
 - Ongoing/continuous two-way sync or conflict resolution beyond dedup.

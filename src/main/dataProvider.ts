@@ -27,7 +27,7 @@ import type { GameRecord } from '../core/analytics';
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'relabelAccount'>;
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'relabelAccount' | 'removeImported'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -192,7 +192,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // Did an earlier import already bring in improvement grades? Checked
       // before addMany so it reflects the pre-import state.
       const seededBefore = deps.history.all().some((g) => g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID] !== undefined);
-      const { imported, skipped } = deps.history.addMany(res.games);
+      // Stamp every imported game so it can be wiped for a clean re-import
+      // (removeImported) without touching live-tracked or hand-logged matches.
+      const importedAt = Date.now();
+      const { imported, skipped } = deps.history.addMany(res.games.map((g) => ({ ...g, importedAt })));
       // Imported "Improvement Target" grades are keyed to one generic target;
       // seed it on the FIRST import that carries them so they surface on the
       // dashboard. `seededBefore` keeps a re-import from resurrecting a target
@@ -208,6 +211,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const accountsAdded = seedImportedAccounts(deps, res.games);
       return { imported, skipped, failed: res.failed, ...(accountsAdded ? { accountsAdded } : {}) };
     },
+    deleteImportedMatches: () => ({ deleted: deps.history.removeImported().length }),
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {
       const config = deps.getConfig();
