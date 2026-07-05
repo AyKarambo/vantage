@@ -7,8 +7,10 @@ import { gameTypeLabel } from '../core/matchFilter';
 /**
  * Reads rows from a Notion Gametracker database back into local {@link GameRecord}s
  * — the inverse of {@link NotionWriter}. Best-effort and per-row isolated: a row
- * that can't be mapped is counted as failed, not fatal. Imported rows are treated
- * as manual (◎) and keyed by their stored Match ID for de-duplication upstream.
+ * that can't be mapped is counted as failed, not fatal. Rows are keyed by their
+ * stored Match ID for de-duplication upstream; a hand-added row (no Match ID)
+ * becomes a manual (◎) record with a fresh `manual-notion-*` id, while a row
+ * carrying a real GEP Match ID restores as an auto-tracked (⚡) record.
  */
 export interface ImportOutcome {
   games: GameRecord[];
@@ -125,7 +127,11 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
   const mapRel = pickRelationId(props['Map']);
   const map = (mapRel && mapsById[mapRel]) || mapFromTitle(props['Name']) || 'Unknown';
   const matchId = pickText(props['Match ID']) || `manual-notion-${String(page.id).replace(/-/g, '')}`;
-  const timestamp = Date.parse(page.created_time ?? '') || Date.now();
+  // Prefer the real match-end time from `Played At` (written by the exporter, or
+  // filled in by hand). Only when it's absent does the row's Notion creation time
+  // stand in — which is minute-truncated and really means "when this row was
+  // typed", so it's the fallback, not the source of truth.
+  const timestamp = pickDate(props['Played At']) ?? (Date.parse(page.created_time ?? '') || Date.now());
   const durationMinutes = pickNumber(props['Match Duration (min)']);
   const finalScore = pickText(props['Final Score']);
 
@@ -159,6 +165,12 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
     ? { at: timestamp, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: grade }, flags: {} }
     : undefined;
 
+  // Provenance follows the Match ID, not a hard-coded 'manual': a hand-added row
+  // (no Match ID → a `manual-notion-*` id) is manual, but an app-exported
+  // auto-tracked match carries its real GEP id and must restore as 'gep' so its
+  // game-derived facts stay locked in the editor (matching `sourceOf`).
+  const source: 'manual' | 'gep' = matchId.startsWith('manual') ? 'manual' : 'gep';
+
   return {
     matchId,
     timestamp,
@@ -167,7 +179,7 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
     map,
     result,
     gameType,
-    source: 'manual',
+    source,
     heroes,
     ...(durationMinutes != null ? { durationMinutes } : {}),
     ...(finalScore ? { finalScore } : {}),
@@ -193,6 +205,13 @@ function pickText(prop: any): string {
 }
 function pickRelationId(prop: any): string | undefined {
   return Array.isArray(prop?.relation) && prop.relation.length ? prop.relation[0].id : undefined;
+}
+/** A Notion date property → epoch ms, or undefined when unset/unparseable. */
+function pickDate(prop: any): number | undefined {
+  const start = prop?.date?.start;
+  if (!start) return undefined;
+  const ms = Date.parse(start);
+  return Number.isNaN(ms) ? undefined : ms;
 }
 function pickCheckbox(prop: any): boolean {
   return prop?.checkbox === true;

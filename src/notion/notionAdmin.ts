@@ -1,6 +1,6 @@
 import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
-import { buildGametrackerProperties, validateGametrackerShape, type ShapeValidation } from './gametrackerSchema';
+import { buildGametrackerProperties, hasPlayedAtColumn, validateGametrackerShape, type ShapeValidation } from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary } from '../shared/contract';
 export type { NotionDatabaseSummary, NotionPageSummary };
 
@@ -15,6 +15,8 @@ export interface CreateGametrackerResult {
 /** Shape-check verdict for an existing database, plus its title for display in the picker. */
 export interface ValidateResult extends ShapeValidation {
   title?: string;
+  /** Whether the database carries the optional `Played At` date column, so the writer may set it. */
+  hasPlayedAt: boolean;
 }
 
 /**
@@ -76,8 +78,9 @@ export class NotionAdmin {
   /** Validate a database's live shape against the Gametracker schema. */
   async validate(databaseId: string, opts: { requireMapRelation?: boolean } = {}): Promise<ValidateResult> {
     const db: any = await this.client.databases.retrieve({ database_id: databaseId });
-    const shape = validateGametrackerShape(db.properties ?? {}, opts);
-    return { ...shape, title: titleOfDatabase(db) };
+    const properties = db.properties ?? {};
+    const shape = validateGametrackerShape(properties, opts);
+    return { ...shape, title: titleOfDatabase(db), hasPlayedAt: hasPlayedAtColumn(properties) };
   }
 
   /** Paginated `client.search`, following `has_more`/`next_cursor`. */

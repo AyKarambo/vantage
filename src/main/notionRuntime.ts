@@ -43,6 +43,10 @@ export class NotionRuntime {
   // Cached async validation of the configured database's shape; undefined =
   // not yet checked (or nothing to check).
   private shapeCheck?: { title?: string; valid: boolean; issues: string[] };
+  // Whether the configured database has the optional `Played At` date column, so
+  // the writer may set it. Off until validation confirms it — writing a column
+  // the database lacks would fail every export row.
+  private hasPlayedAt = false;
 
   constructor(private readonly deps: NotionRuntimeDeps) {}
 
@@ -50,6 +54,7 @@ export class NotionRuntime {
   rebuild(): void {
     const token = getNotionToken();
     this.shapeCheck = undefined;
+    this.hasPlayedAt = false;
     if (!token) {
       this.client = this.exporter = this.admin = undefined;
       this.deps.onTokenState(false);
@@ -102,7 +107,12 @@ export class NotionRuntime {
     if (!this.client || !notion.gametrackerDatabaseId) return { games: [], failed: 0, unavailable: true };
     try {
       const importer = new NotionImporter(this.client, notion.gametrackerDatabaseId, notion.mapsDatabaseId || undefined);
-      return await importer.import();
+      const result = await importer.import();
+      // Imported rows already live in Notion, so mark them exported: a later
+      // "Sync to Notion" then skips them instead of writing duplicate rows back
+      // into the same database (the outbox is the export dedupe key).
+      this.deps.outbox.markManyProcessed(result.games.map((g) => g.matchId));
+      return result;
     } catch (err) {
       return { games: [], failed: 0, error: String(err) };
     }
@@ -177,8 +187,10 @@ export class NotionRuntime {
         requireMapRelation: Boolean(notion.mapsDatabaseId),
       });
       this.shapeCheck = { title: result.title, valid: result.ok, issues: [...result.missing, ...result.mismatched] };
+      this.hasPlayedAt = result.hasPlayedAt;
     } catch (err) {
       this.shapeCheck = { valid: false, issues: [String(err)] };
+      this.hasPlayedAt = false;
     }
     this.buildExporter(this.shapeCheck.valid ? undefined : this.shapeCheck.issues);
   }
@@ -187,7 +199,7 @@ export class NotionRuntime {
   private buildExporter(shapeIssues?: string[]): MapsCache | undefined {
     if (!this.client) return undefined;
     const cfg = this.deps.config();
-    const writer = new NotionWriter(this.client, cfg.notion.gametrackerDatabaseId);
+    const writer = new NotionWriter(this.client, cfg.notion.gametrackerDatabaseId, this.hasPlayedAt);
     const maps = new MapsCache(this.client, cfg.notion.mapsDatabaseId, cfg.mapAliases);
     this.exporter = new NotionExporter(writer, maps, this.deps.outbox, shapeIssues);
     return maps;

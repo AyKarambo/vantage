@@ -43,4 +43,20 @@ describe('OutboxStore', () => {
     expect(store.isProcessed('a')).toBe(false); // evicted
     expect(store.isProcessed('d')).toBe(true);
   });
+
+  it('markManyProcessed marks a batch, dedupes, and persists once', () => {
+    const store = new OutboxStore(dir);
+    store.markProcessed('m1');
+    store.markManyProcessed(['m1', 'm2', 'm3']); // m1 already present
+    expect(['m1', 'm2', 'm3'].every((id) => store.isProcessed(id))).toBe(true);
+    // Persisted (single atomic save) and readable by a fresh instance.
+    expect(new OutboxStore(dir).isProcessed('m3')).toBe(true);
+  });
+
+  it('markManyProcessed respects the cap', () => {
+    const store = new OutboxStore(dir, 3);
+    store.markManyProcessed(['a', 'b', 'c', 'd']);
+    expect(store.isProcessed('a')).toBe(false); // evicted
+    expect(store.isProcessed('d')).toBe(true);
+  });
 });

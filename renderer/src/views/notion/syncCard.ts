@@ -7,6 +7,7 @@ import type { ExportResult, ImportResult, NotionStatus } from '../../../../src/s
 import { relTime } from '../../format';
 import { bridge } from '../../bridge';
 import { store } from '../../store';
+import { toast } from '../../components/toast';
 import { button, card } from '../../components/primitives';
 
 export function syncCard(s: NotionStatus | null): HTMLElement {
@@ -70,6 +71,15 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
               ? h('span', { class: 'is-loss' }, res.error)
               : importResult(res),
         );
+        // Also confirm via a toast: store.refresh() below rebuilds this whole
+        // view, tearing down the in-card chip, so the toast is the confirmation
+        // that survives the re-render.
+        if (!res.unavailable && !res.error) {
+          const bits = [`${res.imported} imported`];
+          if (res.skipped) bits.push(`${res.skipped} skipped`);
+          if (res.failed) bits.push(`${res.failed} failed`);
+          toast(`Notion import — ${bits.join(' · ')}`);
+        }
         // New matches landed in history — re-pull so dashboards reflect them.
         if (res.imported) void store.refresh();
       } catch (err) {
