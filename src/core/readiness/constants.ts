@@ -78,8 +78,8 @@ export const READINESS_TUNING = {
   rustDays: 7,
   /** At/above this many rest days the rust signal escalates from watch → high. */
   rustSevereDays: 10,
-  /** Score decay per rest day past the supercompensation peak (day 4). */
-  rustDecayPerDay: 8,
+  /** Score decay per rest day past the supercompensation peak (rest day 3). */
+  rustDecayPerDay: 12,
   /** Cap on the rust score penalty (keeps a long layoff amber, never red — you're rested, just dull). */
   rustPenaltyCap: 45,
   /** Fewer active days/week than this (chronic window) → consistency nudge signal. */

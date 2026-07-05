@@ -67,6 +67,12 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
     if (n > 0) chronicActiveDays += 1;
   }
 
+  // Frequency is rated over the days the history can actually witness — a
+  // 15-day-old account has 15 observable days, not 21, and must not read as
+  // playing ~30% less than it does.
+  const firstOrdinal = games.length ? dayOrdinal(games[0].timestamp) : refOrdinal;
+  const observedDays = Math.max(1, Math.min(T.chronicDays, refOrdinal - firstOrdinal + 1));
+
   const acuteLoad = ewma(series, T.acuteDays);
   const chronicLoad = ewma(series, T.chronicDays);
   const acuteSlice = series.slice(-T.acuteDays);
@@ -98,7 +104,7 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
     ratioTrusted,
     consecutiveDays,
     chronicActiveDays,
-    activeDaysPerWeek: round2(chronicActiveDays / (T.chronicDays / 7)),
+    activeDaysPerWeek: round2(chronicActiveDays / (observedDays / 7)),
     recentLongSession,
     lastSessionGames: last?.games ?? 0,
     lastSessionMinutes: last ? last.minutes : null,

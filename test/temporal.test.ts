@@ -94,6 +94,23 @@ describe('bySessionPosition', () => {
   it('empty input → empty output', () => {
     expect(bySessionPosition([])).toEqual([]);
   });
+
+  it('include keeps true positions: filters scope the count, never renumber the sitting', () => {
+    // 5-game sitting: tank, tank, tank, tank, damage. A Damage role filter must
+    // report that last game as position 5, not "game 1 of a damage session".
+    const sitting = [
+      ...run(0, 18, 4).map((g) => ({ ...g, role: 'tank' as Role })),
+      game({ timestamp: at(0, 18) + 4 * 12 * MIN, role: 'damage' as Role, matchId: 'dps-game' }),
+    ];
+    const buckets = bySessionPosition(sitting, { include: new Set(['dps-game']) });
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].key).toBe('5');
+    expect(buckets[0].games).toBe(1);
+  });
+
+  it('an empty include set aggregates nothing', () => {
+    expect(bySessionPosition(run(0, 18, 3), { include: new Set() })).toEqual([]);
+  });
 });
 
 describe('sessionFade', () => {
