@@ -888,6 +888,45 @@ table.data tbody tr:hover {
   padding: 3px 0;
 }
 
+/* Account switcher menu (top-left chip popover) */
+.acct-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.acct-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.acct-menu-item:hover {
+  background: var(--surface-2);
+}
+.acct-menu-item.is-active {
+  background: var(--surface-2);
+  color: var(--accent-bright);
+}
+.acct-menu-item .acct-menu-check {
+  color: var(--accent-bright);
+  font-size: 12px;
+}
+.acct-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
 /* Toasts ---------------------------------------------------------------------- */
 .toast-host {
   position: fixed;

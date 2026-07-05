@@ -119,6 +119,12 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.sidebar-account:hover {
+  border-color: var(--border-2);
+  background: var(--surface-3);
 }
 .avatar {
   width: 30px;

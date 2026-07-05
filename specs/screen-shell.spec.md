@@ -11,6 +11,9 @@
 
 ## In-Scope
 
+**Sidebar account chip** (top-left):
+- [fix 2026-07-05] Shows the active account (the selected account filter, or the most-played one when viewing "all accounts") with its **real anchored rank** — the calculated rank of that account's most-played anchored role, falling back to the winrate heuristic only when the account has no anchor. Clicking the chip (it's a `role="button"`, Enter/Space too) opens an **account switcher** popover: **All accounts** + every account in the snapshot (the active one checked) — each scopes the whole dashboard via the global account filter — then **Manage accounts →** (jumps to Settings). Switching re-points the rank line to the chosen account.
+
 **Command palette** (`Ctrl+K`, or the titlebar "Search or log a match" button):
 - [explicit] Item groups, in curated default order: **Action** (Log match · Keyboard shortcuts · Replay the intro tour), **Screen** (every sidebar entry), **Map** (each map in the current snapshot → Maps view with `{ highlight }`), **Hero** (each hero with stats → hero drill-down drawer), **Match** (the 30 most recent rows of the current snapshot → match detail; hero names, game type, and account are matchable keywords).
 - [explicit] Hand-rolled fuzzy ranking (`fuzzy.ts`), max 12 results; the empty query shows the curated order with actions first, so `Ctrl+K` → `Enter` still logs a match (the old Ctrl+K muscle-memory).

@@ -68,6 +68,12 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
 export function supercompensationSchematic(): SVGSVGElement {
   const W = 260, H = 92, base = 50;
   const s = svgRoot(W, H);
+  // svgRoot is fluid (width:100%), which would let this fixed illustration balloon
+  // to its flex container's width (and, via the aspect ratio, its height). Cap it
+  // at its design size; it still shrinks below 260px on a narrow layout.
+  s.style.width = `${W}px`;
+  s.style.maxWidth = '100%';
+  s.style.height = 'auto';
   s.appendChild(svgEl('line', { x1: 8, y1: base, x2: W - 8, y2: base, stroke: PALETTE.grid, 'stroke-dasharray': '3 3' }));
   s.appendChild(svgText(10, base - 4, 'baseline', { anchor: 'start', size: 8, fill: PALETTE.dim }));
   // Baseline → fatigue dip → rebound above baseline → decay back to baseline.
