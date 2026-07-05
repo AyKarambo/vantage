@@ -176,9 +176,12 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
       severity: state.restDays >= T.rustSevereDays ? 'high' : 'watch',
     });
   } else if (load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek) {
+    // One decimal, not Math.round — rounding 2.7 up to the threshold value (3)
+    // would flag the exact frequency the tuning calls sufficient.
+    const rate = load.activeDaysPerWeek.toFixed(1).replace(/\.0$/, '');
     out.push({
       key: 'low-frequency',
-      label: `only ~${Math.round(load.activeDaysPerWeek)} active day${Math.round(load.activeDaysPerWeek) === 1 ? '' : 's'}/week — consistency builds skill faster than bingeing`,
+      label: `only ~${rate} active day${rate === '1' ? '' : 's'}/week — consistency builds skill faster than bingeing`,
       severity: load.activeDaysPerWeek < T.lowFrequencyWatchPerWeek ? 'watch' : 'ok',
     });
   }

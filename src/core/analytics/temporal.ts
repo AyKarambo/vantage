@@ -34,22 +34,36 @@ const SESSION_GAP_MINUTES = 90;
 /** Positions past this are pooled into the final "N+" bucket. */
 const MAX_POSITION = 6;
 
+export interface SessionPositionOpts {
+  /** Session-break threshold; a gap of MORE than this many minutes starts a new sitting. */
+  gapMinutes?: number;
+  /**
+   * When set, positions are still numbered over ALL `games` (a sitting is a
+   * per-person fact — filters must not renumber it), but only matches whose id
+   * is in the set are aggregated. This is how the dashboard keeps "game # in
+   * session" honest under role/mode/date filters.
+   */
+  include?: ReadonlySet<string>;
+}
+
 /**
  * Winrate by game number within a session: '1'..'5' and '6+'. A session is a
- * run of games with less than `gapMinutes` between consecutive end timestamps.
- * Empty buckets are omitted; order is always 1 → 6+.
+ * run of games where consecutive end timestamps are at most `gapMinutes` apart
+ * (a strictly larger gap starts a new sitting). Empty buckets are omitted;
+ * order is always 1 → 6+.
  */
-export function bySessionPosition(games: GameRecord[], gapMinutes: number = SESSION_GAP_MINUTES): Group[] {
+export function bySessionPosition(games: GameRecord[], opts: SessionPositionOpts = {}): Group[] {
   const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
-  const gapMs = gapMinutes * 60_000;
+  const gapMs = (opts.gapMinutes ?? SESSION_GAP_MINUTES) * 60_000;
   const buckets = new Map<string, GameRecord[]>();
   let prev: GameRecord | null = null;
   let position = 0;
   for (const g of sorted) {
     position = prev !== null && g.timestamp - prev.timestamp <= gapMs ? position + 1 : 1;
+    prev = g;
+    if (opts.include && !opts.include.has(g.matchId)) continue;
     const key = position >= MAX_POSITION ? `${MAX_POSITION}+` : String(position);
     (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(g);
-    prev = g;
   }
   const order = [...Array.from({ length: MAX_POSITION - 1 }, (_, i) => String(i + 1)), `${MAX_POSITION}+`];
   return order

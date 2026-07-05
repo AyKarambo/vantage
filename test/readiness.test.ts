@@ -5,6 +5,7 @@ import {
   DEFAULT_READINESS,
   normalizeReadiness,
 } from '../src/core/readiness';
+import { restEffectFor } from '../src/core/readiness/score';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 
@@ -188,6 +189,27 @@ describe('undertraining — rust after a layoff', () => {
     expect(rested.score).not.toBeNull();
     expect(rusty.score!).toBeLessThan(rested.score!);
   });
+
+  it('restEffectFor is continuous: peaks at +25 on day 3, decays monotonically, floors at the cap', () => {
+    const curve = Array.from({ length: 13 }, (_, d) => restEffectFor(d));
+    expect(curve[3]).toBe(25);
+    expect(Math.max(...curve)).toBe(25);
+    for (let d = 4; d < curve.length; d += 1) expect(curve[d]).toBeLessThanOrEqual(curve[d - 1]);
+    const steps = curve.slice(1).map((v, i) => Math.abs(v - curve[i]));
+    expect(Math.max(...steps)).toBeLessThanOrEqual(12); // no hidden cliff bigger than the decay rate
+    expect(restEffectFor(60)).toBe(-45); // rustPenaltyCap floor
+  });
+
+  it('stale pre-layoff penalties fade with rest: a heavy grinder never scores red while rusty', () => {
+    // 10 tilted games/day would carry ~93 points of frozen penalties; after a
+    // week-plus layoff those must have faded — rested-but-dull is amber, not 0.
+    const red = span(10, 28, { perDay: 10, mental: TILT });
+    for (const restDays of [7, 8, 10, 13]) {
+      const r = computeReadiness(red, ts(28 + restDays, 20));
+      expect(r.band).toBe('rusty');
+      expect(r.score!).toBeGreaterThanOrEqual(55);
+    }
+  });
 });
 
 // ---- undertraining: low weekly frequency -----------------------------------
@@ -207,6 +229,19 @@ describe('undertraining — low play frequency', () => {
 
   it('a daily player gets no consistency nudge', () => {
     const r = computeReadiness(span(5, 35, { perDay: 3, mental: CALM }), ts(35, 20));
+    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(false);
+  });
+
+  it('a short (15-day) daily history is not misread as low-frequency', () => {
+    // Only 15 observable days: dividing by the full 21-day window would rate
+    // this 5-days-a-week rhythm (11 active days) at ~3.7/week instead of ~5.1 —
+    // understating a new account by ~30%. Rate over the observed span instead.
+    const games: GameRecord[] = [];
+    for (let d = 21; d <= 35; d += 1) {
+      if ((d - 21) % 7 < 5) games.push(...span(d, d, { perDay: 2, mental: CALM }));
+    }
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.load.activeDaysPerWeek).toBeGreaterThanOrEqual(4.5);
     expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(false);
   });
 

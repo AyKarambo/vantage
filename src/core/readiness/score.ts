@@ -80,23 +80,29 @@ export function scoreFromState(state: StateAt): number {
     T.outcomePenaltyCap,
   );
 
+  // Penalties are frozen at the LAST ACTIVE day, so they must fade as real rest
+  // days pass (mirroring the loadCurrent signal gate) — otherwise a heavy
+  // grinder's stale penalties would stack with the rust penalty into a
+  // near-zero "red" score that the rustPenaltyCap explicitly promises can't
+  // happen. Fully faded once the recovery window (restFullRecoverDays) + one
+  // settling day has passed.
+  const fade = Math.max(0, 1 - restDays / (T.restFullRecoverDays + 1));
   const restEffect = restEffectFor(restDays);
 
-  return clamp(Math.round(100 - loadPenalty - mentalPenalty - outcomePenalty + restEffect), 0, 100);
+  return clamp(Math.round(100 - (loadPenalty + mentalPenalty + outcomePenalty) * fade + restEffect), 0, 100);
 }
 
 /**
  * Rest follows the supercompensation curve, not a straight line: recovery climbs
- * to a peak over the first days off, then decays — a long layoff is detraining,
- * not extra rest. Positive through day 4, negative (rust) from ~day 5 on,
- * floored at -rustPenaltyCap so even months away read "dull", never "wrecked".
+ * to a +25 peak on rest day 3, then decays continuously — a long layoff is
+ * detraining, not extra rest. Turns negative (rust) from rest day 6, floored at
+ * -rustPenaltyCap so even months away read "dull", never "wrecked".
  */
 export function restEffectFor(restDays: number): number {
   if (restDays <= 0) return 0;
-  if (restDays <= T.restFullRecoverDays + 1) return Math.min(restDays * 12, T.restRecoveryCap);
-  const pastPeak = restDays - (T.restFullRecoverDays + 2);
-  if (pastPeak === 0) return 10; // day 4 — rebound fading, not yet rust
-  return Math.max(-T.rustPenaltyCap, 10 - pastPeak * T.rustDecayPerDay);
+  const peakDay = T.restFullRecoverDays + 1;
+  if (restDays <= peakDay) return Math.min(restDays * 12, T.restRecoveryCap);
+  return Math.max(-T.rustPenaltyCap, T.restRecoveryCap - (restDays - peakDay) * T.rustDecayPerDay);
 }
 
 /** Fresh vs steady — both green, cosmetic label only. */
