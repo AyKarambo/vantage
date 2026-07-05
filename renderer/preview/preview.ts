@@ -279,7 +279,7 @@ const mock: OwStatsApi = {
     const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
     logged.push({
       matchId,
-      timestamp: Date.now(),
+      timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
       account: input.account || Object.values(previewAccounts)[0] || 'You',
       role: input.role,
       map: input.map,

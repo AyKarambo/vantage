@@ -12,6 +12,8 @@ export interface TypeaheadOpts {
   onChange: (value: string) => void;
   inputClass?: string;
   maxItems?: number;
+  /** Show the top suggestions on focus, before anything is typed (browse mode). */
+  showOnFocus?: boolean;
 }
 
 export function typeahead(opts: TypeaheadOpts): HTMLElement {
@@ -53,19 +55,28 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
     ));
   };
 
-  input.addEventListener('input', () => {
-    opts.onChange(input.value);
+  const refilter = (): void => {
     const q = input.value.trim().toLowerCase();
     if (!q) {
-      closeList();
-      return;
+      if (!opts.showOnFocus) {
+        closeList();
+        return;
+      }
+      items = opts.suggestions.slice(0, max);
+    } else {
+      const starts = opts.suggestions.filter((s) => s.toLowerCase().startsWith(q));
+      const contains = opts.suggestions.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
+      items = [...starts, ...contains].slice(0, max);
     }
-    const starts = opts.suggestions.filter((s) => s.toLowerCase().startsWith(q));
-    const contains = opts.suggestions.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
-    items = [...starts, ...contains].slice(0, max);
     selected = items.length ? 0 : -1;
     paint();
+  };
+
+  input.addEventListener('input', () => {
+    opts.onChange(input.value);
+    refilter();
   });
+  if (opts.showOnFocus) input.addEventListener('focus', refilter);
 
   input.addEventListener('keydown', (e) => {
     if (list.classList.contains('hidden')) return;
@@ -75,6 +86,7 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
       paint();
     } else if ((e.key === 'Enter' || e.key === 'Tab') && selected >= 0) {
       e.preventDefault();
+      e.stopPropagation(); // picking must not reach a surrounding Enter-to-save handler
       pick(items[selected]);
     } else if (e.key === 'Escape') {
       e.stopPropagation(); // close the list, not the surrounding modal

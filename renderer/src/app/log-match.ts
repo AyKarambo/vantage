@@ -9,6 +9,7 @@
  */
 import { h, render } from '../dom';
 import { time, roleLabel } from '../format';
+import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { typeahead } from '../components/typeahead';
@@ -23,10 +24,17 @@ import type { AccountSummary, MatchMental, RankSummary, Result, Role, TargetGrad
 import type { ViewContext } from '../views/view';
 
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy', 'Positive comms'];
-const MAP_OPTIONS = Object.keys(MAP_MODES).sort().map((m) => ({ value: m, label: m }));
+const ALL_MAPS = Object.keys(MAP_MODES).sort();
 const MODES = ['Competitive', 'Quick Play'];
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support' };
 const DIVISIONS = [5, 4, 3, 2, 1];
+/** "Played" backfill choices — end-of-game time relative to now, in minutes. */
+const PLAYED_OFFSETS: Array<{ label: string; minutes: number }> = [
+  { label: 'Just now', minutes: 0 },
+  { label: '30m ago', minutes: 30 },
+  { label: '1h ago', minutes: 60 },
+  { label: '2h ago', minutes: 120 },
+];
 
 interface LogState {
   result: Result;
@@ -40,7 +48,23 @@ interface LogState {
   anchorTier: string;
   anchorDivision: number;
   anchorPct: string;
+  /** Minutes ago the match ended (0 = just now). */
+  playedOffsetMin: number;
 }
+
+/** Fields carried into the next form by "Save & next" (same sitting, so the hero usually holds). */
+export interface LogCarry {
+  hero?: string;
+}
+
+// Cheatsheet entries only — the dialog binds these keys itself (the global
+// dispatcher never fires over an open overlay), so `when` keeps them inert.
+const never = (): boolean => false;
+registerShortcut({ combo: 'w', description: 'Result: Win (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'l', description: 'Result: Loss (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'd', description: 'Result: Draw (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'enter', description: 'Save the match (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 
 /** Turn the chip selection into the optional per-match mental self-report. */
 function mentalFrom(flags: Set<string>): MatchMental | undefined {
@@ -53,15 +77,15 @@ function mentalFrom(flags: Set<string>): MatchMental | undefined {
   return Object.keys(m).length ? m : undefined;
 }
 
-export function openLogMatch(ctx: ViewContext): void {
+export function openLogMatch(ctx: ViewContext, carry?: LogCarry): void {
   // Accounts + current ranks decide the picker options and whether the first-time
   // rank anchor is still needed — fetch both before building the form.
   void Promise.all([bridge.listAccounts(), bridge.getRanks()]).then(([accounts, ranks]) => {
-    openModal((close) => buildForm(ctx, close, accounts, ranks));
+    openModal((close) => buildForm(ctx, close, accounts, ranks, carry));
   });
 }
 
-function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary[], ranks: RankSummary[]): HTMLElement {
+function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary[], ranks: RankSummary[], carry?: LogCarry): HTMLElement {
   const accountOptions = accounts.length
     ? accounts.map((a) => ({ value: a.label, label: a.label }))
     : [{ value: 'You', label: 'You' }];
@@ -78,8 +102,8 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const state: LogState = {
     result: 'Win',
     role: seededRole ?? (prefill?.role as Role) ?? 'damage',
-    map: 'Ilios',
-    hero: '',
+    map: '',
+    hero: carry?.hero ?? '',
     mode: prefill?.mode ?? 'Competitive',
     account: defaultAccount,
     flags: new Set<string>(),
@@ -87,6 +111,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     anchorTier: 'Gold',
     anchorDivision: 3,
     anchorPct: '',
+    playedOffsetMin: 0,
   };
 
   const hasAnchor = (account: string, role: Role): boolean =>
@@ -95,19 +120,37 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
 
-  const persist = async (): Promise<void> => {
+  /** Resolve free-typed map text onto the canonical map list (case-insensitive). */
+  const resolveMap = (): string | null => {
+    const q = state.map.trim().toLowerCase();
+    if (!q) return null;
+    return ALL_MAPS.find((m) => m.toLowerCase() === q) ?? null;
+  };
+
+  // Returns false when validation failed (form stays open, error shown inline).
+  const persist = async (): Promise<boolean> => {
+    const map = resolveMap();
+    if (!map) {
+      mapError.textContent = state.map.trim()
+        ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
+        : 'Pick the map — start typing and choose from the list.';
+      mapError.classList.remove('hidden');
+      return false;
+    }
+    state.map = map;
     const isComp = state.mode === 'Competitive';
     const srDelta = isComp && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
     await bridge.logMatch({
       result: state.result,
       role: state.role,
-      map: state.map,
+      map,
       hero: state.hero.trim() || undefined,
       gameType: state.mode,
       mental: mentalFrom(state.flags),
       account: state.account,
       ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
       ...(Object.keys(grades).length ? { grades } : {}),
+      ...(state.playedOffsetMin > 0 ? { playedAt: Date.now() - state.playedOffsetMin * 60_000 } : {}),
     });
     // First competitive match for this account+role → persist the rank anchor.
     if (isComp && !hasAnchor(state.account, state.role) && state.anchorTier) {
@@ -120,27 +163,45 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
       });
     }
     prefs.set('logPrefill', { role: state.role, mode: state.mode, account: state.account });
-    toast(`Match logged — ${state.result} · ${state.map}`);
+    toast(`Match logged — ${state.result} · ${map}`);
     ctx.refresh();
+    return true;
   };
+
+  const timeBadgeHost = h('span');
+  const paintTime = (): void => {
+    render(timeBadgeHost, badge(`◎ manual · ${time(Date.now() - state.playedOffsetMin * 60_000)}`, 'manual'));
+  };
+  paintTime();
 
   const header = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
     h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, 'Log match'),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-      badge(`◎ manual · ${time(Date.now())}`, 'manual'),
+      timeBadgeHost,
       h('button', { class: 'overlay-close', on: { click: close } }, '✕'),
     ),
   );
 
   const resultRow = choiceRow(['Win', 'Loss', 'Draw'], state.result, {
     Win: 'win', Loss: 'loss', Draw: 'draw',
-  }, (v) => (state.result = v as Result));
+  }, (v) => (state.result = v as Result), { Win: 'W', Loss: 'L', Draw: 'D' });
 
   const accountField = field('Account',
     select(accountOptions, state.account, (v) => { state.account = v; paintRank(); }),
   );
 
-  const mapField = field('Map', select(MAP_OPTIONS, state.map, (v) => (state.map = v)));
+  const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
+  const mapField = field('Map',
+    typeahead({
+      value: state.map,
+      placeholder: 'start typing — recent maps listed first',
+      suggestions: mapSuggestions(ctx),
+      showOnFocus: true,
+      inputClass: 'vt-input',
+      onChange: (v) => { state.map = v; mapError.classList.add('hidden'); },
+    }),
+  );
+  mapField.append(mapError);
 
   const roleLabelInitial = Object.keys(ROLE_LABELS).find((k) => ROLE_LABELS[k] === state.role) ?? 'Damage';
   const roleField = field('Role',
@@ -151,12 +212,21 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     choiceSegment(MODES, MODES.includes(state.mode) ? state.mode : 'Competitive', (v) => { state.mode = v; paintRank(); }),
   );
 
+  const playedField = field(
+    optionalLabel('Played', '— backfill a game you forgot to log'),
+    choiceSegment(PLAYED_OFFSETS.map((o) => o.label), PLAYED_OFFSETS[0].label, (v) => {
+      state.playedOffsetMin = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
+      paintTime();
+    }),
+  );
+
   const heroField = field(
     optionalLabel('Hero'),
     typeahead({
       value: state.hero,
       placeholder: 'e.g. Tracer',
       suggestions: heroSuggestions(ctx),
+      showOnFocus: true,
       onChange: (v) => (state.hero = v),
     }),
   );
@@ -218,25 +288,75 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
       )
     : null;
 
+  const saveAndClose = (): void => { void persist().then((ok) => { if (ok) close(); }); };
+  const saveAndNext = (): void => {
+    void persist().then((ok) => {
+      if (!ok) return;
+      close();
+      // Same sitting → the hero usually holds; map/result never do.
+      openLogMatch(ctx, { hero: state.hero });
+    });
+  };
+
   const actions = h('div', { style: { display: 'flex', gap: '10px', paddingTop: '2px' } },
-    button('Save ⏎', { variant: 'primary', class: 'btn--block', onClick: () => void persist().then(close) }),
-    button('Save & next', { onClick: () => void persist().then(() => { close(); openLogMatch(ctx); }) }),
+    button('Save ⏎', { variant: 'primary', class: 'btn--block', onClick: saveAndClose }),
+    button('Save & next  ⌃⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext }),
   );
 
-  return h('div', null, header,
+  const form = h('div', null, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
-      field('Result', resultRow), accountField, mapField, roleField, modeField, heroField,
+      field('Result', resultRow), accountField, mapField, roleField, modeField, playedField, heroField,
       rankHost, flagsBlock, targetsBlock, actions),
   );
+
+  // Keyboard flow: W/L/D pick the result when not typing; Enter saves from
+  // anywhere but a button (a focused button keeps its native click) and the
+  // typeahead swallows Enter itself while its list is open.
+  form.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
+    if (!typing) {
+      const byKey: Record<string, string> = { w: 'Win', l: 'Loss', d: 'Draw' };
+      const pick = byKey[e.key.toLowerCase()];
+      if (pick && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        resultRow.querySelectorAll('button').forEach((b) => {
+          if (b.dataset.value === pick) b.click();
+        });
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !(t instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) saveAndNext();
+      else saveAndClose();
+    }
+  });
+
+  return form;
 }
 
 // --- little local builders --------------------------------------------------
 
-/** Canonical hero list plus anything already seen in this player's data. */
+/** Canonical hero list, the player's recent heroes first (they repeat within a session). */
 function heroSuggestions(ctx: ViewContext): string[] {
-  const seen = new Set<string>(ALL_HEROES);
-  for (const hs of ctx.data.heroStats) seen.add(hs.hero);
-  return [...seen].sort((a, b) => a.localeCompare(b));
+  const recent: string[] = [];
+  for (const m of ctx.data.matches) {
+    for (const hero of m.heroes) if (!recent.includes(hero)) recent.push(hero);
+  }
+  const rest = new Set<string>(ALL_HEROES);
+  for (const hs of ctx.data.heroStats) rest.add(hs.hero);
+  for (const r of recent) rest.delete(r);
+  return [...recent, ...[...rest].sort((a, b) => a.localeCompare(b))];
+}
+
+/** Canonical map list, recently-played maps first — the typeahead's browse order. */
+function mapSuggestions(ctx: ViewContext): string[] {
+  const recent: string[] = [];
+  for (const m of ctx.data.matches) if (!recent.includes(m.map)) recent.push(m.map);
+  const rest = ALL_MAPS.filter((m) => !recent.includes(m));
+  // Only canonical maps are suggested; recents can include legacy names, filter them.
+  return [...recent.filter((m) => ALL_MAPS.includes(m)), ...rest];
 }
 
 function field(label: Node | string, control: Node): HTMLElement {
@@ -259,16 +379,21 @@ function numInput(value: string, placeholder: string, onChange: (v: string) => v
   }) as HTMLInputElement;
 }
 
-/** A row of large colour-coded choices (Result). */
+/** A row of large colour-coded choices (Result), with optional single-key hints. */
 function choiceRow(
   options: string[],
   initial: string | null,
   state: Record<string, 'win' | 'loss' | 'mid' | 'draw'>,
   onPick: (value: string) => void,
+  keys?: Record<string, string>,
 ): HTMLElement {
   const row = h('div', { style: { display: 'flex', gap: '8px' } });
   const buttons = options.map((opt) => {
-    const btn = h('button', { class: `choice choice--${state[opt]}${opt === initial ? ' is-active' : ''}` }, opt);
+    const btn = h('button', { class: `choice choice--${state[opt]}${opt === initial ? ' is-active' : ''}` },
+      opt,
+      keys?.[opt] ? h('span', { class: 'kbd', style: { marginLeft: '7px', fontSize: '9.5px', opacity: '0.7' } }, keys[opt]) : null,
+    );
+    btn.dataset.value = opt;
     btn.addEventListener('click', () => {
       for (const b of buttons) b.classList.remove('is-active');
       btn.classList.add('is-active');

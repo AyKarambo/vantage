@@ -106,7 +106,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
       deps.recordGame({
         matchId,
-        timestamp: Date.now(),
+        timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
         account: input.account || Object.values(deps.getConfig().accounts)[0] || 'You',
         role: input.role,
         map: input.map,
