@@ -129,12 +129,80 @@ describe('AC A — insufficient data', () => {
 // ---- stale recency gate ---------------------------------------------------
 
 describe('stale history', () => {
-  it('a healthy history that ended long ago → fresh, score null, low confidence', () => {
+  it('a healthy history that ended long ago → rusty, score null, low confidence', () => {
     const games = span(0, 18, { perDay: 3, mental: CALM }); // ends day 18
     const r = computeReadiness(games, ts(40, 20)); // 22 rest days
-    expect(r.band).toBe('fresh');
+    expect(r.band).toBe('rusty');
     expect(r.score).toBeNull();
     expect(r.confidence).toBe('low');
+    expect(r.recommendation).toBe('ramp-back-up');
+    expect(r.signals.some((s) => s.key === 'rust-gap')).toBe(true);
+  });
+});
+
+// ---- undertraining: rust after a layoff ------------------------------------
+
+describe('undertraining — rust after a layoff', () => {
+  const history = span(5, 28, { perDay: 3, mental: CALM }); // healthy daily play, ends day 28
+
+  it('6 rest days → still fresh (a long weekend off is not rust)', () => {
+    const r = computeReadiness(history, ts(34, 20));
+    expect(r.band).toBe('fresh');
+  });
+
+  it('7 rest days → rusty with the ramp-back-up nudge', () => {
+    const r = computeReadiness(history, ts(35, 20));
+    expect(r.band).toBe('rusty');
+    expect(r.recommendation).toBe('ramp-back-up');
+    expect(r.signals.some((s) => s.key === 'rust-gap' && s.severity === 'watch')).toBe(true);
+  });
+
+  it('10+ rest days → the rust signal escalates to high', () => {
+    const r = computeReadiness(history, ts(38, 20));
+    expect(r.band).toBe('rusty');
+    expect(r.signals.some((s) => s.key === 'rust-gap' && s.severity === 'high')).toBe(true);
+  });
+
+  it('a heavy (red) history also lands on rusty after a long layoff, not fresh', () => {
+    const red = span(10, 28, { perDay: 10, mental: TILT });
+    const r = computeReadiness(red, ts(36, 20)); // 8 rest days
+    expect(r.band).toBe('rusty');
+  });
+
+  it('score decays with a long layoff: 10 rest days scores below 2 rest days', () => {
+    const rested = computeReadiness(history, ts(30, 20)); // 2 rest days (peak recovery)
+    const rusty = computeReadiness(history, ts(38, 20)); // 10 rest days
+    expect(rusty.score).not.toBeNull();
+    expect(rested.score).not.toBeNull();
+    expect(rusty.score!).toBeLessThan(rested.score!);
+  });
+});
+
+// ---- undertraining: low weekly frequency -----------------------------------
+
+describe('undertraining — low play frequency', () => {
+  it('a weekends-only player gets the consistency nudge while staying green', () => {
+    // Two active days per week (Sat/Sun pattern) over five weeks, playing "today".
+    const games: GameRecord[] = [];
+    for (const d of [0, 1, 7, 8, 14, 15, 21, 22, 28, 29]) {
+      games.push(...span(d, d, { perDay: 4, mental: CALM }));
+    }
+    const r = computeReadiness(games, ts(29, 20));
+    expect(['fresh', 'steady']).toContain(r.band);
+    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(true);
+    expect(r.load.activeDaysPerWeek).toBeLessThan(3);
+  });
+
+  it('a daily player gets no consistency nudge', () => {
+    const r = computeReadiness(span(5, 35, { perDay: 3, mental: CALM }), ts(35, 20));
+    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(false);
+  });
+
+  it('rust and low-frequency never fire together (the gap owns the layoff case)', () => {
+    const history = span(5, 28, { perDay: 3, mental: CALM });
+    const r = computeReadiness(history, ts(36, 20)); // 8 rest days → rusty
+    expect(r.signals.some((s) => s.key === 'rust-gap')).toBe(true);
+    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(false);
   });
 });
 

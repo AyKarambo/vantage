@@ -12,6 +12,8 @@ const CVD_WIN_LOSS = { win: '#4f8fd6', winText: '#9cc3ec', loss: '#d68a3a', loss
 export const PALETTE = {
   ...DEFAULT_WIN_LOSS,
   mid: '#d6a24f',
+  /** Informational cyan — states that are neither good nor alarming (e.g. rusty). */
+  info: '#5bc0de',
   accent: '#7c6cf5',
   accentBright: '#8878ff',
   accentText: '#d7d2ff',

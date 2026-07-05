@@ -69,6 +69,24 @@ export const READINESS_TUNING = {
   /** Active days (within the chronic window) needed for high confidence. */
   confidenceActiveDays: 12,
 
+  /**
+   * Undertraining (the inverse risk): rest is recovery up to a point, then it is
+   * detraining. A week without a single game reads as "rusty" — mechanics and
+   * game-sense sharpness decay measurably on that timescale. Conservative on
+   * purpose, like everything here: a long weekend off must NOT get flagged.
+   */
+  rustDays: 7,
+  /** At/above this many rest days the rust signal escalates from watch → high. */
+  rustSevereDays: 10,
+  /** Score decay per rest day past the supercompensation peak (day 4). */
+  rustDecayPerDay: 8,
+  /** Cap on the rust score penalty (keeps a long layoff amber, never red — you're rested, just dull). */
+  rustPenaltyCap: 45,
+  /** Fewer active days/week than this (chronic window) → consistency nudge signal. */
+  lowFrequencyDaysPerWeek: 3,
+  /** Below this many active days/week the nudge escalates from ok → watch. */
+  lowFrequencyWatchPerWeek: 2,
+
   /** Score penalty caps (score is illustrative; the band is rule-gated). */
   loadPenaltyCap: 45,
   mentalPenaltyCap: 40,

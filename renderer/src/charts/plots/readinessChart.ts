@@ -37,6 +37,17 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
       fill: z.color, 'fill-opacity': 0.07,
     }));
   }
+
+  // Rest-gap shading: days with zero games get a faint column so layoffs are
+  // visible at a glance (they're what drags the score down via rust).
+  const colW = n > 1 ? (W - padL - padR) / (n - 1) : 0;
+  points.forEach((p, i) => {
+    if (p.games > 0) return;
+    s.appendChild(svgEl('rect', {
+      x: xAt(i) - colW / 2, y: padT, width: colW, height: H - padT - padB,
+      fill: PALETTE.muted, 'fill-opacity': 0.08,
+    }));
+  });
   for (const v of [0, 50, 100]) {
     s.appendChild(svgEl('line', { x1: padL, y1: yAt(v), x2: W - padR, y2: yAt(v), stroke: PALETTE.grid }));
     s.appendChild(svgText(padL - 6, yAt(v) + 3, String(v), { anchor: 'end', size: 9, fill: PALETTE.dim }));
@@ -81,7 +92,13 @@ export function supercompensationSchematic(): SVGSVGElement {
     d: 'M8,50 L42,50 C62,84 92,82 112,64 C136,42 152,24 176,28 C202,33 218,44 252,50',
     fill: 'none', stroke: PALETTE.accentBright, 'stroke-width': 2,
   }));
+  // The decay tail past the rebound — keep resting and the gains detrain away.
+  s.appendChild(svgEl('path', {
+    d: 'M218,44 C232,48 244,54 252,58',
+    fill: 'none', stroke: PALETTE.info, 'stroke-width': 1.5, 'stroke-dasharray': '3 3',
+  }));
   s.appendChild(svgText(70, 80, 'fatigue', { anchor: 'middle', size: 8, fill: PALETTE.loss }));
   s.appendChild(svgText(176, 18, 'supercompensation', { anchor: 'middle', size: 8, fill: PALETTE.win }));
+  s.appendChild(svgText(250, 70, 'rust', { anchor: 'end', size: 8, fill: PALETTE.info }));
   return s;
 }

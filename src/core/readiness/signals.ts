@@ -46,6 +46,8 @@ export interface LoadState {
   ratioTrusted: boolean;
   consecutiveDays: number;
   chronicActiveDays: number;
+  /** Active days per week over the chronic window — the play-frequency read behind the undertraining nudge. */
+  activeDaysPerWeek: number;
   recentLongSession: boolean;
   lastSessionGames: number;
   lastSessionMinutes: number | null;
@@ -96,6 +98,7 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
     ratioTrusted,
     consecutiveDays,
     chronicActiveDays,
+    activeDaysPerWeek: round2(chronicActiveDays / (T.chronicDays / 7)),
     recentLongSession,
     lastSessionGames: last?.games ?? 0,
     lastSessionMinutes: last ? last.minutes : null,

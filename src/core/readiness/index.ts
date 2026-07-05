@@ -47,6 +47,7 @@ function emptyLoad(restDays = 0): ReadinessLoad {
     chronicPerDay: 0,
     ratio: 1,
     consecutiveDays: 0,
+    activeDaysPerWeek: 0,
     restDays,
     lastSessionGames: 0,
     lastSessionMinutes: null,
@@ -59,6 +60,7 @@ function toLoad(state: StateAt): ReadinessLoad {
     chronicPerDay: state.load.chronicPerDay,
     ratio: state.load.ratio,
     consecutiveDays: state.load.consecutiveDays,
+    activeDaysPerWeek: state.load.activeDaysPerWeek,
     restDays: state.restDays,
     lastSessionGames: state.load.lastSessionGames,
     lastSessionMinutes: state.load.lastSessionMinutes,
@@ -96,6 +98,13 @@ function adviceFor(band: ReadinessBand, state: StateAt): Advice {
       };
     case 'recovering':
       return { recommendation: 'none', recommendationText: '', headline: "You've rested — readiness is rebuilding." };
+    case 'rusty':
+      return {
+        recommendation: 'ramp-back-up',
+        recommendationText:
+          'Ease back in: an aim warmup and a couple of unranked games before you queue ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
+        headline: `${state.restDays} days since your last game — expect some rust.`,
+      };
     case 'fresh':
       return {
         recommendation: 'none',
@@ -152,6 +161,23 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
     out.push({ key: 'loss-streak', label: `${outcome.lossStreak} losses in a row (recent results)`, severity: 'watch' });
   }
 
+  // Undertraining — the inverse risk. A long gap decays sharpness; a thin weekly
+  // rhythm is not enough stimulus to actually improve. Never fired together: the
+  // gap signal owns the layoff case, the frequency nudge the "plays rarely" case.
+  if (state.restDays >= T.rustDays) {
+    out.push({
+      key: 'rust-gap',
+      label: `${state.restDays} days since your last game — sharpness decays after ~4`,
+      severity: state.restDays >= T.rustSevereDays ? 'high' : 'watch',
+    });
+  } else if (load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek) {
+    out.push({
+      key: 'low-frequency',
+      label: `only ~${Math.round(load.activeDaysPerWeek)} active day${Math.round(load.activeDaysPerWeek) === 1 ? '' : 's'}/week — consistency builds skill faster than bingeing`,
+      severity: load.activeDaysPerWeek < T.lowFrequencyWatchPerWeek ? 'watch' : 'ok',
+    });
+  }
+
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]).slice(0, 5);
 }
 
@@ -178,15 +204,22 @@ function insufficientSummary(headline: string, trend: ReadinessTrendPoint[]): Re
   };
 }
 
+// A long-stale history used to read as "fresh — rested", which hid the real
+// story: rest past the recovery window is detraining. The verdict is honest
+// about the rust while the load numbers stay empty (a weeks-old baseline says
+// nothing about today's fitness).
 function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): ReadinessSummary {
   return {
-    band: 'fresh',
+    band: 'rusty',
     score: null,
     confidence: 'low',
-    headline: `Rested — no games in ${restDays} days.`,
-    recommendation: 'none',
-    recommendationText: '',
-    signals: [],
+    headline: `No games in ${restDays} days — fully rested, but expect rust.`,
+    recommendation: 'ramp-back-up',
+    recommendationText:
+      'Ease back in: an aim warmup and a couple of unranked games before you queue ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
+    signals: [
+      { key: 'rust-gap', label: `${restDays} days since your last game — sharpness decays after ~4`, severity: 'high' },
+    ],
     load: emptyLoad(restDays),
     trend,
   };
