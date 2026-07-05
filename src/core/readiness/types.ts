@@ -3,17 +3,18 @@
  * (no `any`) so they cross the typed IPC contract unchanged.
  */
 
-/** Traffic-light verdict. `insufficient-data` = not enough history to judge. */
+/** Traffic-light verdict. `rusty` = undertrained (long layoff), `insufficient-data` = not enough history to judge. */
 export type ReadinessBand =
   | 'fresh'
   | 'steady'
   | 'loaded'
   | 'in-the-hole'
   | 'recovering'
+  | 'rusty'
   | 'insufficient-data';
 
-/** What the coach suggests. `rest-1-2-days` is the only strong ask. */
-export type ReadinessRecommendation = 'none' | 'ease-up' | 'rest-1-2-days';
+/** What the coach suggests. `rest-1-2-days` is the only strong ask; `ramp-back-up` is the undertraining nudge. */
+export type ReadinessRecommendation = 'none' | 'ease-up' | 'rest-1-2-days' | 'ramp-back-up';
 
 /** How much the model trusts its own read (driven by history density + mental coverage). */
 export type ReadinessConfidence = 'low' | 'medium' | 'high';
@@ -35,6 +36,8 @@ export interface ReadinessLoad {
   ratio: number;
   /** Consecutive active days ending at the last active day, no rest day between. */
   consecutiveDays: number;
+  /** Active days per week over the chronic window — the play-frequency read. */
+  activeDaysPerWeek: number;
   /** Whole rest days since the last game (0 = played today). */
   restDays: number;
   /** Games in the most recent session. */

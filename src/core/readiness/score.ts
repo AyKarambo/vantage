@@ -32,8 +32,8 @@ const EMPTY_STATE: StateAt = {
   restDays: 0,
   load: {
     acutePerDay: 0, chronicPerDay: 0, ratio: 1, ratioTrusted: false, consecutiveDays: 0,
-    chronicActiveDays: 0, recentLongSession: false, lastSessionGames: 0, lastSessionMinutes: null,
-    highLoad: false, sustainedLoad: false,
+    chronicActiveDays: 0, activeDaysPerWeek: 0, recentLongSession: false, lastSessionGames: 0,
+    lastSessionMinutes: null, highLoad: false, sustainedLoad: false,
   },
   mental: { coverage: 0, tiltKnown: false, acuteTilt: 0, baseTilt: 0, acutePositive: 0, fatigued: false },
   outcome: { lossStreak: 0, winrateDip: 0, srTrend: null },
@@ -80,9 +80,23 @@ export function scoreFromState(state: StateAt): number {
     T.outcomePenaltyCap,
   );
 
-  const restRecovery = Math.min(restDays * 12, T.restRecoveryCap);
+  const restEffect = restEffectFor(restDays);
 
-  return clamp(Math.round(100 - loadPenalty - mentalPenalty - outcomePenalty + restRecovery), 0, 100);
+  return clamp(Math.round(100 - loadPenalty - mentalPenalty - outcomePenalty + restEffect), 0, 100);
+}
+
+/**
+ * Rest follows the supercompensation curve, not a straight line: recovery climbs
+ * to a peak over the first days off, then decays — a long layoff is detraining,
+ * not extra rest. Positive through day 4, negative (rust) from ~day 5 on,
+ * floored at -rustPenaltyCap so even months away read "dull", never "wrecked".
+ */
+export function restEffectFor(restDays: number): number {
+  if (restDays <= 0) return 0;
+  if (restDays <= T.restFullRecoverDays + 1) return Math.min(restDays * 12, T.restRecoveryCap);
+  const pastPeak = restDays - (T.restFullRecoverDays + 2);
+  if (pastPeak === 0) return 10; // day 4 — rebound fading, not yet rust
+  return Math.max(-T.rustPenaltyCap, 10 - pastPeak * T.rustDecayPerDay);
 }
 
 /** Fresh vs steady — both green, cosmetic label only. */
@@ -99,6 +113,10 @@ export function bandForState(state: StateAt): ReadinessBand {
     if (load.highLoad || mental.fatigued) return 'loaded';
     return greenSplit(state);
   }
+  // Resting past the recovery window is detraining — rust wins over "fresh"
+  // whatever state the layoff started from. (rustDays > restFullRecoverDays,
+  // so a heavy grinder still passes through recovering → fresh on the way.)
+  if (restDays >= T.rustDays) return 'rusty';
   // Resting: a heavy pre-rest state recovers, otherwise the player is simply fresh.
   if (state.heavy) return restDays >= T.restFullRecoverDays ? 'fresh' : 'recovering';
   return greenSplit(state);

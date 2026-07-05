@@ -18,6 +18,7 @@ const BAND: Record<ReadinessBand, { label: string; color: string }> = {
   loaded: { label: 'Loaded', color: PALETTE.mid },
   'in-the-hole': { label: 'In the hole', color: PALETTE.loss },
   recovering: { label: 'Recovering', color: PALETTE.accentBright },
+  rusty: { label: 'Rusty', color: PALETTE.info },
   'insufficient-data': { label: 'Not enough data', color: PALETTE.muted },
 };
 
@@ -81,10 +82,11 @@ function whyCard(r: ReadinessSummary): HTMLElement {
 function loadCard(r: ReadinessSummary): HTMLElement {
   const l = r.load;
   return card({ title: 'Training load', sub: 'across all your accounts (fatigue is per-person)' },
-    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '4px' } },
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginTop: '4px' } },
       statBox(String(l.acutePerDay), 'games/day (recent)'),
       statBox(`${l.ratio.toFixed(2)}×`, 'vs baseline'),
       statBox(String(l.consecutiveDays), 'days in a row'),
+      statBox(String(Math.round(l.activeDaysPerWeek)), 'active days/week'),
       statBox(l.restDays === 0 ? 'today' : `${l.restDays}d ago`, 'last played'),
     ),
     l.lastSessionGames
@@ -100,7 +102,7 @@ function chartCard(r: ReadinessSummary): HTMLElement {
     h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' } },
       supercompensationSchematic(),
       h('div', { class: 'hint', style: { flex: '1', minWidth: '190px', lineHeight: '1.5' } },
-        'The supercompensation idea: training tires you (dip), then rest lifts you above your old baseline (rebound). Grinding without recovery keeps you stuck in the dip.'),
+        'The supercompensation idea: training tires you (dip), then rest lifts you above your old baseline (rebound). Grinding without recovery keeps you stuck in the dip — and resting past the rebound decays it back down (rust). Greyed columns above are days you didn’t play.'),
     ),
   );
 }
@@ -108,7 +110,7 @@ function chartCard(r: ReadinessSummary): HTMLElement {
 function honestyCard(): HTMLElement {
   return card({ title: 'How to read this', variant: 'plain' },
     h('div', { class: 'hint', style: { lineHeight: '1.6' } },
-      'Readiness is an evidence-informed wellness heuristic borrowed from sports training theory — not a medical or diagnostic tool. It leans on your self-reported mental state and your play pattern (games/day, session length, days without a break), because match results alone are a weak fatigue signal. Treat it as a nudge, and trust your own read.'),
+      'Readiness is an evidence-informed wellness heuristic borrowed from sports training theory — not a medical or diagnostic tool. It leans on your self-reported mental state and your play pattern (games/day, session length, days without a break), because match results alone are a weak fatigue signal. It watches both directions: overtraining (grinding without rest) and undertraining (long layoffs or too few sessions a week to actually improve). Treat it as a nudge, and trust your own read.'),
   );
 }
 
