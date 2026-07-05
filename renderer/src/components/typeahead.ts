@@ -57,18 +57,22 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
 
   const refilter = (): void => {
     const q = input.value.trim().toLowerCase();
+    let browsing = false;
     if (!q) {
       if (!opts.showOnFocus) {
         closeList();
         return;
       }
       items = opts.suggestions.slice(0, max);
+      browsing = true;
     } else {
       const starts = opts.suggestions.filter((s) => s.toLowerCase().startsWith(q));
       const contains = opts.suggestions.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
       items = [...starts, ...contains].slice(0, max);
     }
-    selected = items.length ? 0 : -1;
+    // Browse mode (empty query, shown on focus): nothing preselected, so Tab/Enter
+    // fall through instead of silently committing the top suggestion.
+    selected = items.length ? (browsing ? -1 : 0) : -1;
     paint();
   };
 

@@ -132,6 +132,16 @@ describe('NotionImporter — match time', () => {
     const [g] = (await new NotionImporter(client, GT).import()).games;
     expect(g.timestamp).toBe(Date.parse('2026-03-18T16:48:00.000Z'));
   });
+
+  it('clamps a future-dated Played At to now, matching the manual-log clamp', async () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const { client } = mockClient({
+      gametracker: [row({ playedAt: future })],
+      maps: [],
+    });
+    const [g] = (await new NotionImporter(client, GT).import()).games;
+    expect(g.timestamp).toBeLessThanOrEqual(Date.now());
+  });
 });
 
 describe('NotionImporter — source provenance', () => {
