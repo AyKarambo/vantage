@@ -152,4 +152,23 @@ describe('NotionAdmin.validate', () => {
     expect(result.missing).toContain('Result');
     expect(result.mismatched).toContain('Eliminations');
   });
+
+  it('surfaces the present subjective columns and the Map relation target', async () => {
+    const client = mockClient();
+    client.databases.retrieve.mockResolvedValue({
+      title: [{ plain_text: 'Gametracker' }],
+      properties: {
+        Map: { type: 'relation', relation: { database_id: 'maps-db-99' } },
+        Comms: { type: 'select' },
+        Tilt: { type: 'checkbox' },
+        Leaver: { type: 'rich_text' }, // wrong type → not writable, excluded
+      },
+    });
+
+    const admin = new NotionAdmin(client);
+    const result = await admin.validate('db-id');
+
+    expect(result.subjectiveColumns.sort()).toEqual(['Comms', 'Tilt']);
+    expect(result.mapRelationDbId).toBe('maps-db-99');
+  });
 });

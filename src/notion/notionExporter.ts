@@ -1,6 +1,8 @@
 import { emptyMatch, type MatchRecord, type Result } from '../core/model';
-import type { GameRecord } from '../core/analytics';
+import type { GameRecord, MatchMental } from '../core/analytics';
+import { leaverFlags, mergeLeaver } from '../core/leaver';
 import { NotionWriter } from './notionWriter';
+import { NOTION_IMPROVEMENT_TARGET_ID } from './notionImporter';
 import { MapsCache } from './mapsCache';
 import type { OutboxStore } from '../store/outbox';
 
@@ -39,6 +41,8 @@ export class NotionExporter {
           role: game.role,
           result: game.result,
           mapPageId: map.pageId,
+          mental: exportMental(game),
+          improvementGrade: game.review?.grades?.[NOTION_IMPROVEMENT_TARGET_ID],
         });
         this.outbox.markProcessed(game.matchId);
         ok++;
@@ -87,4 +91,24 @@ export function gameToMatchRecord(game: GameRecord): MatchRecord {
 
 function resultToOutcome(result: Result): string {
   return result === 'Win' ? 'Victory' : result === 'Loss' ? 'Defeat' : 'Draw';
+}
+
+/**
+ * The after-game self-report to export, merged from both places it can live: the
+ * quick-log `mental` and the Review screen's `review.flags`. Leaver is normalised
+ * to the team-specific flags (folding the legacy single flag). Undefined when the
+ * player flagged nothing, so a blank match writes no subjective columns.
+ */
+export function exportMental(game: GameRecord): MatchMental | undefined {
+  const a = game.mental;
+  const b = game.review?.flags;
+  if (!a && !b) return undefined;
+  const leaver = mergeLeaver(leaverFlags(a), leaverFlags(b));
+  const mental: MatchMental = {};
+  if (a?.tilt || b?.tilt) mental.tilt = true;
+  if (a?.toxicMates || b?.toxicMates) mental.toxicMates = true;
+  if (a?.positiveComms || b?.positiveComms) mental.positiveComms = true;
+  if (leaver.myTeam) mental.leaverMyTeam = true;
+  if (leaver.enemyTeam) mental.leaverEnemyTeam = true;
+  return Object.keys(mental).length ? mental : undefined;
 }

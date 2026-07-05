@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   REQUIRED_PROPERTIES, buildGametrackerProperties, validateGametrackerShape,
-  hasPlayedAtColumn, PLAYED_AT_PROPERTY,
+  hasPlayedAtColumn, PLAYED_AT_PROPERTY, presentSubjectiveColumns, mapRelationDatabaseId,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
@@ -89,6 +89,37 @@ describe('validateGametrackerShape', () => {
     props['Comms'] = { type: 'checkbox' };
     const result = validateGametrackerShape(props, { requireMapRelation: true });
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('presentSubjectiveColumns', () => {
+  it('lists the subjective columns present with the expected type', () => {
+    const props = {
+      Comms: { type: 'select' },
+      'Improvement Target': { type: 'select' },
+      Leaver: { type: 'select' },
+      Tilt: { type: 'checkbox' },
+      'Toxic Mates': { type: 'checkbox' },
+    };
+    expect(presentSubjectiveColumns(props).sort()).toEqual(
+      ['Comms', 'Improvement Target', 'Leaver', 'Tilt', 'Toxic Mates'].sort(),
+    );
+  });
+
+  it('ignores wrong-typed and absent columns (they would fail pages.create)', () => {
+    expect(presentSubjectiveColumns({ Comms: { type: 'rich_text' }, Tilt: { type: 'checkbox' } })).toEqual(['Tilt']);
+    expect(presentSubjectiveColumns({})).toEqual([]);
+  });
+});
+
+describe('mapRelationDatabaseId', () => {
+  it('returns the relation target when Map is a relation', () => {
+    expect(mapRelationDatabaseId({ Map: { type: 'relation', relation: { database_id: 'maps-db' } } })).toBe('maps-db');
+  });
+
+  it('is undefined when Map is absent or not a relation', () => {
+    expect(mapRelationDatabaseId({})).toBeUndefined();
+    expect(mapRelationDatabaseId({ Map: { type: 'rich_text' } })).toBeUndefined();
   });
 });
 
