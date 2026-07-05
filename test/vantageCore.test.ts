@@ -27,6 +27,15 @@ describe('mapMode', () => {
     expect(mapMode('Colosseo')).toBe('Push');
     expect(mapMode('Nonexistent Map')).toBe('Unknown');
   });
+
+  it('resolves the newer maps so imports do not bucket them as Unknown', () => {
+    expect(mapMode('Neon Junktion')).toBe('Hybrid');
+    expect(mapMode('Redwood Dam')).toBe('Push');
+    expect(mapMode('Place Lacroix')).toBe('Push');
+    expect(mapMode('Wuxing University')).toBe('Control');
+    expect(mapMode('Gogadoro')).toBe('Control');
+    expect(mapMode('Arena Victoriae')).toBe('Control');
+  });
 });
 
 describe('mentalSummary', () => {
