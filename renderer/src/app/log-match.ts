@@ -66,11 +66,18 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     ? accounts.map((a) => ({ value: a.label, label: a.label }))
     : [{ value: 'You', label: 'You' }];
   const prefill = prefs.get('logPrefill');
-  const defaultAccount = accountOptions.find((o) => o.value === prefill?.account)?.value ?? accountOptions[0].value;
+  // Prefill Account/Role from the active dashboard filter when it names a specific
+  // value — logging while scoped to an account/role should target it — otherwise
+  // fall back to the last-logged values. Role only when the log form can represent
+  // it (Tank/Damage/Support; Open Queue isn't a log option). Mode stays on prefs.
+  const { account: filterAccount, role: filterRole } = ctx.data.filters;
+  const seededAccount = filterAccount !== 'all' ? accountOptions.find((o) => o.value === filterAccount)?.value : undefined;
+  const defaultAccount = seededAccount ?? accountOptions.find((o) => o.value === prefill?.account)?.value ?? accountOptions[0].value;
+  const seededRole = filterRole !== 'all' && Object.values(ROLE_LABELS).includes(filterRole as Role) ? (filterRole as Role) : undefined;
 
   const state: LogState = {
     result: 'Win',
-    role: (prefill?.role as Role) ?? 'damage',
+    role: seededRole ?? (prefill?.role as Role) ?? 'damage',
     map: 'Ilios',
     hero: '',
     mode: prefill?.mode ?? 'Competitive',

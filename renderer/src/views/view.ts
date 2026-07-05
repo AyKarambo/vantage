@@ -44,10 +44,10 @@ export function filterBar(
       [
         { value: '7', label: 'Last 7 days' },
         { value: '30', label: 'Last 30 days' },
-        { value: '90', label: 'This season' },
+        { value: 'season', label: 'This season' },
         { value: 'all', label: 'All time' },
       ],
-      (v) => setFilter({ days: v === 'all' ? 'all' : Number(v) })),
+      (v) => setFilter({ days: v === 'all' || v === 'season' ? v : Number(v) })),
     changed
       ? h('button', {
           class: 'filter-reset',
@@ -103,7 +103,7 @@ function summarizeFilters(f: Required<DashboardFilters>): string {
   if (f.mode !== 'all') parts.push(f.mode);
   if (f.role !== 'all') parts.push(roleLabel(f.role));
   if (f.account !== 'all') parts.push(f.account);
-  parts.push(f.days === 'all' ? 'all time' : `${f.days}d`);
+  parts.push(f.days === 'all' ? 'all time' : f.days === 'season' ? 'this season' : `${f.days}d`);
   return parts.join(' · ');
 }
 

@@ -14,6 +14,7 @@ import { buildTargets, type AuthoredTarget } from './targets';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { currentRank, rankKey, type RankAnchorMap } from './rank';
+import { seasonStart } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
 import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
@@ -42,8 +43,11 @@ export function computeDashboard(
   // Scoped to the selected account when one is active, else the most-played one,
   // so switching accounts in the sidebar re-points the rank too.
   const primaryAccount = filters.account && filters.account !== 'all' ? filters.account : topAccount(all);
-  const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount);
-  const weekly = (filters.days ?? 30) === 'all' || (filters.days as number) > 90;
+  const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount, filters.role);
+  // Long ranges (all-time, >90d) bucket the trend by week; a season (~63d) and
+  // shorter windows stay daily, matching the pre-'season' behavior of the old 90.
+  const days = filters.days ?? 30;
+  const weekly = days === 'all' || (typeof days === 'number' && days > 90);
   // The review inbox is deliberately unfiltered: an ungraded game must stay
   // visible (and counted in the badge) no matter how the range is narrowed.
   const ungraded = all.filter((g) => !g.review).sort((a, b) => b.timestamp - a.timestamp);
@@ -108,7 +112,10 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
   if (f.role && f.role !== 'all') out = out.filter((g) => g.role === f.role);
   if (f.mode && f.mode !== 'all') out = out.filter((g) => g.gameType === f.mode);
   if (f.days && f.days !== 'all') {
-    const cutoff = Date.now() - (f.days as number) * 86400000;
+    const now = Date.now();
+    // 'season' cuts off at the current OW2 season's real start; a number is a
+    // rolling day window. Both share one `now` so the two paths stay consistent.
+    const cutoff = f.days === 'season' ? seasonStart(now) : now - f.days * 86400000;
     out = out.filter((g) => g.timestamp >= cutoff);
   }
   return out;
@@ -147,18 +154,27 @@ function topAccount(games: GameRecord[]): string {
 const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
 
 /**
- * The user's real rank for `account`: the calculated rank of its most-played
- * *anchored* role. Undefined when that account has no rank anchor — the caller
- * falls back to the winrate heuristic. This is what makes the sidebar/KPI
- * reflect the rank the user set in Settings instead of a number derived from
- * winrate.
+ * The user's real rank for `account`: the calculated rank of the active Role
+ * filter when it names an anchored role, otherwise its most-played *anchored*
+ * role. Undefined when that account has no rank anchor — the caller falls back
+ * to the winrate heuristic. This is what makes the sidebar/KPI reflect the rank
+ * the user set in Settings instead of a number derived from winrate, and lets a
+ * Role filter re-point it to whichever role you're looking at.
  */
-function primaryRankOf(all: GameRecord[], anchors: RankAnchorMap | undefined, account: string): DashboardData['primaryRank'] {
+function primaryRankOf(
+  all: GameRecord[],
+  anchors: RankAnchorMap | undefined,
+  account: string,
+  roleFilter?: string,
+): DashboardData['primaryRank'] {
   if (!anchors) return undefined;
   const anchored = ROLES.filter((role) => anchors[rankKey(account, role)]);
   if (!anchored.length) return undefined;
   const plays = (role: Role): number => all.reduce((n, g) => (g.account === account && g.role === role ? n + 1 : n), 0);
-  const role = [...anchored].sort((a, b) => plays(b) - plays(a))[0];
+  const mostPlayed = [...anchored].sort((a, b) => plays(b) - plays(a))[0];
+  // Honor an active Role filter that has an anchor here; else most-played.
+  const filtered = anchored.find((r) => r === roleFilter);
+  const role = filtered ?? mostPlayed;
   const rank = currentRank(all, anchors, account, role);
   if (!rank) return undefined;
   return {
