@@ -194,10 +194,13 @@ Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pip
 ## Build a release
 
 Every push to `main` auto-publishes a GitHub Release: the
-[`auto-release`](.github/workflows/auto-release.yml) workflow bumps the version from
-[Conventional Commits](https://www.conventionalcommits.org/) (`feat` → minor, `fix`/others → patch,
-`type!:`/`BREAKING CHANGE` → major), builds the installer on a Windows runner, and attaches it. The
-version bump is committed back to `main` as `chore(release): vX.Y.Z`. CI installers are **unsigned**.
+[`auto-release`](.github/workflows/auto-release.yml) workflow derives the next version from the latest
+`v*` tag plus the [Conventional Commits](https://www.conventionalcommits.org/) since it (`feat` →
+minor, `fix`/others → patch, `type!:`/`BREAKING CHANGE` → major), builds the installer on a Windows
+runner, and publishes a tagged Release with it attached. It's **tag-driven** — the version is baked
+into the built installer but not committed back, so nothing pushes to the protected `main` branch
+(`package.json`'s version field stays at its floor; the tag/Release/installer carry the real version).
+CI installers are **unsigned**.
 
 To build locally:
 
