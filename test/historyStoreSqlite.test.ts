@@ -110,6 +110,19 @@ describe('HistoryStore (SQLite) — relocate', () => {
     expect(fresh.count()).toBe(2);
   });
 
+  it('stays fully usable after relocating (round-trip a -> b -> a)', () => {
+    const a = tmp();
+    const b = tmp();
+    const s = open(a);
+    s.add(g({ matchId: 'x' }));
+    s.relocate(b);
+    s.add(g({ matchId: 'y' })); // writable at the new location
+    expect(fs.existsSync(path.join(a, DB_FILE))).toBe(false); // source cleaned up
+    s.relocate(a); // and back again — reopen path exercised twice
+    expect(s.all().map((r) => r.matchId)).toEqual(['x', 'y']);
+    expect(fs.existsSync(path.join(b, DB_FILE))).toBe(false);
+  });
+
   it('refuses to overwrite a database already present in the target folder', () => {
     const a = tmp();
     const b = tmp();
