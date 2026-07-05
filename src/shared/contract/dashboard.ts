@@ -91,6 +91,10 @@ export interface DashboardData {
   byMapType: Group[];
   byHero: Group[];
   trend: Group[];
+  /** Winrate per local day-part (Morning/Afternoon/Evening/Night). */
+  timeOfDay: Group[];
+  /** Winrate by game number within a session ('1'..'5', '6+'). */
+  sessionPosition: Group[];
   calendar: CalendarDay[];
   focusMaps: FocusItem[];
   heroStats: HeroSummary[];
