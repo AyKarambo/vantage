@@ -1,28 +1,21 @@
 /**
  * The break-reminder on/off + threshold editor, shared by the Mental screen
  * (inline, where the stat lives) and the Settings screen (the canonical
- * settings home). Changes apply immediately with an Undo toast.
+ * settings home). Changes apply immediately and re-render (no toast).
  */
 import { h } from '../dom';
 import type { BreakReminderSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { chip, select } from './primitives';
-import { toast } from './toast';
 import type { ViewContext } from '../views/view';
 
 export function breakReminderEditor(ctx: ViewContext): HTMLElement {
   const r = ctx.data.breakReminder;
 
+  // Applies instantly and re-renders; no toast (settings toasts were distracting).
   const set = (patch: Partial<BreakReminderSettings>): void => {
-    const previous: BreakReminderSettings = { ...r };
     void bridge.setBreakReminder({ ...r, ...patch }).then(() => {
       ctx.refresh();
-      toast('Break reminder updated', {
-        action: {
-          label: 'Undo',
-          run: () => void bridge.setBreakReminder(previous).then(() => ctx.refresh()),
-        },
-      });
     });
   };
 
