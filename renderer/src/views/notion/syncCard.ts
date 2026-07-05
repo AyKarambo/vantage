@@ -3,7 +3,7 @@
  * Disabled until connected with at least one tracked game.
  */
 import { h, render } from '../../dom';
-import type { ExportResult, NotionStatus } from '../../../../src/shared/contract';
+import type { ExportResult, ImportResult, NotionStatus } from '../../../../src/shared/contract';
 import { relTime } from '../../format';
 import { bridge } from '../../bridge';
 import { button, card } from '../../components/primitives';
@@ -49,14 +49,53 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
         ? 'No tracked games yet — play a game and they’ll appear here to sync.'
         : 'Pushes every tracked game to your database; matches already synced are skipped.';
 
-  return card({ variant: 'raised', title: 'Sync now', sub: 'push tracked games' },
+  // Import (pull) — the inverse of sync: read the Gametracker rows back into
+  // local history (dedup by Match ID). Enabled once connected.
+  const importOut = h('div', { style: { marginTop: '8px', minHeight: '18px' } });
+  const canImport = Boolean(s?.connected);
+  const importBtn = button('Import from Notion', {
+    variant: 'soft',
+    disabled: !canImport,
+    onClick: async () => {
+      importBtn.disabled = true;
+      render(importOut, h('span', { class: 'u-muted' }, 'Importing…'));
+      try {
+        const res = await bridge.importNotion();
+        render(
+          importOut,
+          res.unavailable
+            ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
+            : res.error
+              ? h('span', { class: 'is-loss' }, res.error)
+              : importResult(res),
+        );
+      } catch (err) {
+        render(importOut, h('span', { class: 'is-loss' }, `Import failed — ${String(err)}`));
+      }
+      importBtn.disabled = false;
+    },
+  });
+
+  return card({ variant: 'raised', title: 'Sync now', sub: 'push tracked games · pull them back' },
     h('div', { class: 'hint', style: { lineHeight: '1.5' } }, note),
     s?.lastSyncedAt
       ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } }, `Last synced ${relTime(s.lastSyncedAt)}`)
       : null,
-    h('div', { style: { marginTop: '12px' } }, btn),
+    h('div', { style: { marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' } }, btn, importBtn),
     out,
+    canImport
+      ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '10px' } },
+          'Import reads every Gametracker row into local history; matches already stored are skipped.')
+      : null,
+    importOut,
   );
+}
+
+function importResult(res: ImportResult): HTMLElement {
+  const parts = [chipText(`${res.imported} imported`, 'win')];
+  if (res.skipped) parts.push(chipText(`${res.skipped} skipped`, 'muted'));
+  if (res.failed) parts.push(chipText(`${res.failed} failed`, 'loss'));
+  return h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...parts);
 }
 
 function syncResult(res: ExportResult): HTMLElement {

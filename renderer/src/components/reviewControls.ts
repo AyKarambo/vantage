@@ -61,7 +61,8 @@ const FLAGS: Array<{ label: string; key: keyof MatchMental }> = [
   { label: 'Tilted', key: 'tilt' },
   { label: 'Good comms', key: 'positiveComms' },
   { label: 'Toxic mate', key: 'toxicMates' },
-  { label: 'Leaver', key: 'leaver' },
+  { label: 'Leaver — my team', key: 'leaverMyTeam' },
+  { label: 'Leaver — enemy', key: 'leaverEnemyTeam' },
 ];
 
 /** The four mental-flag chips, seeded from (and toggling) the caller's `flags`. */

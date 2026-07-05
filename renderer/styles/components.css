@@ -667,7 +667,8 @@ table.data tbody tr:hover {
 
 /* Selects & number inputs (measured target builder) ------------------------- */
 .vt-select,
-.vt-num {
+.vt-num,
+.vt-input {
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -679,8 +680,14 @@ table.data tbody tr:hover {
   transition: border-color var(--dur) var(--ease);
 }
 .vt-select:focus,
-.vt-num:focus {
+.vt-num:focus,
+.vt-input:focus {
   border-color: var(--accent);
+}
+/* Full-width text/number input (match editor, account manager). */
+.vt-input {
+  width: 100%;
+  box-sizing: border-box;
 }
 .vt-num {
   width: 64px;
