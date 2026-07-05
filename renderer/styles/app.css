@@ -276,6 +276,15 @@
   gap: 14px;
 }
 
+/* Charts scale with the window up to a comfortable cap, then stop growing so
+   the trend line and priority scatter don't become absurdly large on very wide
+   monitors. Small/medium windows are unaffected; the fixed-size donut and
+   sparkline set their own dimensions and are not touched here. */
+.chart-wrap,
+.scatter-wrap {
+  max-width: 960px;
+}
+
 /* Overview ------------------------------------------------------------------ */
 .overview-scatter {
   display: flex;

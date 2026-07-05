@@ -21,7 +21,7 @@ import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
 import { EVENT_CHANNELS, type GepStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
-import { isAutoLaunchEnabled, setAutoLaunch } from './autolaunch';
+import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
 import { GepRecorder, readRecording, replayRecording } from './recorder';
 
@@ -119,7 +119,11 @@ function main(): void {
     appSettings: {
       get: () => ({
         closeToTray: config.ui.closeToTray,
-        runAtLogin: isAutoLaunchEnabled(),
+        // Display the persisted intent, not the OS read-back. On an unpackaged /
+        // dev Windows build, getLoginItemSettings().openAtLogin does not reliably
+        // reflect a value just written by setLoginItemSettings, which made the
+        // toggle look "dead" (it re-painted with the stale old value).
+        runAtLogin: config.runAtLogin,
         demoPreference: config.ui.demoPreference,
       }),
       apply: (patch) => {
@@ -130,6 +134,7 @@ function main(): void {
         if (patch.runAtLogin !== undefined) {
           setAutoLaunch(patch.runAtLogin);
           saveLocalConfig({ runAtLogin: patch.runAtLogin });
+          config = loadConfig();
           tray.setState({ autoLaunch: patch.runAtLogin });
         }
         if (patch.demoPreference !== undefined) {
@@ -138,7 +143,7 @@ function main(): void {
         }
         return {
           closeToTray: config.ui.closeToTray,
-          runAtLogin: isAutoLaunchEnabled(),
+          runAtLogin: config.runAtLogin,
           demoPreference: config.ui.demoPreference,
         };
       },
@@ -223,7 +228,7 @@ function main(): void {
 
   tray.init({
     status: tray0Status(history.count(), config.ui.demoPreference === 'on'),
-    autoLaunch: isAutoLaunchEnabled(),
+    autoLaunch: config.runAtLogin,
     tokenSet: Boolean(getNotionToken()),
   });
   notion.rebuild();

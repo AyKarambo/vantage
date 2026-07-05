@@ -9,7 +9,6 @@ import { bridge } from '../bridge';
 import { card, chip } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { logLevelToggle } from '../components/logLevelToggle';
-import { toast } from '../components/toast';
 import { isColorblind, setColorblind } from '../theme';
 import { store } from '../store';
 import { viewHead, type ViewContext } from './view';
@@ -50,16 +49,13 @@ function appBehaviorCard(ctx: ViewContext): HTMLElement {
     if (p.demoPreference !== undefined) void store.refresh();
   };
 
-  function apply(patch: Partial<AppUiSettings>, undoPatch: Partial<AppUiSettings>, label: string): void {
+  // Settings apply instantly; the chip itself flips to show the new state, so no
+  // toast is fired here (they were distracting on every toggle). The change is
+  // trivially reversible by toggling back.
+  function apply(patch: Partial<AppUiSettings>): void {
     void bridge.setAppSettings(patch).then((applied) => {
       paint(applied);
       refetchIfDemo(patch);
-      toast(label, {
-        action: {
-          label: 'Undo',
-          run: () => void bridge.setAppSettings(undoPatch).then((u) => { paint(u); refetchIfDemo(undoPatch); }),
-        },
-      });
     });
   }
 
@@ -67,24 +63,19 @@ function appBehaviorCard(ctx: ViewContext): HTMLElement {
     render(body,
       h('div', null,
         chip(s.closeToTray ? '✕ keeps Vantage in the tray' : '✕ quits Vantage', s.closeToTray,
-          () => apply({ closeToTray: !s.closeToTray }, { closeToTray: s.closeToTray },
-            s.closeToTray ? 'Close now quits the app' : 'Close now minimizes to the tray')),
+          () => apply({ closeToTray: !s.closeToTray })),
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           'When on, closing the window keeps tracking games in the background.'),
       ),
       h('div', null,
         chip(s.runAtLogin ? 'Run at login: on' : 'Run at login: off', s.runAtLogin,
-          () => apply({ runAtLogin: !s.runAtLogin }, { runAtLogin: s.runAtLogin }, 'Run at login updated')),
+          () => apply({ runAtLogin: !s.runAtLogin })),
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           'Starts hidden in the tray so it never steals focus from a game.'),
       ),
       h('div', null,
         chip(s.demoPreference === 'on' ? 'Demo data: on' : 'Demo data: off', s.demoPreference === 'on',
-          () => apply(
-            { demoPreference: s.demoPreference === 'on' ? 'off' : 'on' },
-            { demoPreference: s.demoPreference },
-            'Demo data updated',
-          )),
+          () => apply({ demoPreference: s.demoPreference === 'on' ? 'off' : 'on' })),
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           ctx.data.hasRealHistory
             ? 'You have tracked games, so this has no visible effect — real data always wins. It applies again only if your history is empty.'
