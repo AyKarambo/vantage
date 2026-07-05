@@ -247,11 +247,28 @@ export class HistoryStore {
     if (fs.existsSync(target)) {
       throw new Error(`A history database already exists at ${target}`);
     }
+    const fromDir = this.dir;
+    const fromPath = this.dbPath;
     this.db.close();
-    moveFile(this.dbPath, target);
-    this.dir = newDir;
-    this.dbPath = target;
-    this.open();
+    try {
+      // Copy first (also works across drives), then open the copy — so any
+      // failure can roll back to the original file, which is still intact.
+      fs.copyFileSync(fromPath, target);
+      this.dir = newDir;
+      this.dbPath = target;
+      this.open();
+    } catch (err) {
+      // The move failed after we closed the handle: restore the store to its
+      // original location and reopen it so history stays usable, then surface
+      // the error. Never leave the store with a closed handle.
+      this.dir = fromDir;
+      this.dbPath = fromPath;
+      try { if (fs.existsSync(target)) fs.unlinkSync(target); } catch { /* harmless leftover */ }
+      this.open();
+      throw err;
+    }
+    // The new location is live; drop the original copy (a leftover is harmless).
+    try { fs.unlinkSync(fromPath); } catch { /* best effort */ }
   }
 
   /** Close the database handle. Required before deleting the file (Windows locks it open). */
@@ -293,16 +310,5 @@ export class HistoryStore {
       this.db.exec('ROLLBACK');
       throw err;
     }
-  }
-}
-
-/** Move a file, falling back to copy+unlink when rename crosses a drive (EXDEV). */
-function moveFile(from: string, to: string): void {
-  try {
-    fs.renameSync(from, to);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
-    fs.copyFileSync(from, to);
-    fs.unlinkSync(from);
   }
 }
