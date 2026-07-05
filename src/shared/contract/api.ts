@@ -13,7 +13,7 @@ import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditI
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
-import type { AppInfo, AppUiSettings } from './appSettings';
+import type { AppInfo, AppUiSettings, DatabaseLocation, DatabaseLocationResult } from './appSettings';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -89,6 +89,10 @@ export interface OwStatsApi {
   setAppSettings(patch: Partial<AppUiSettings>): Promise<AppUiSettings>;
   /** Version + support contact (Settings screen's About card). */
   getAppInfo(): Promise<AppInfo>;
+  /** Where the match-history database currently lives (Settings screen). */
+  getDatabaseLocation(): Promise<DatabaseLocation>;
+  /** Open a folder picker and, if a folder is chosen, relocate the database there. */
+  chooseDatabaseFolder(): Promise<DatabaseLocationResult>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
   /** Subscribe to new log entries; returns an unsubscribe function. */
@@ -162,6 +166,8 @@ export const IPC_CHANNELS = {
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',
   getAppInfo: 'app:info',
+  getDatabaseLocation: 'settings:get-db-location',
+  chooseDatabaseFolder: 'settings:choose-db-folder',
   clearReview: 'manual:clear-review',
 } as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 

@@ -5,10 +5,10 @@ import type { ReadinessSettings } from '../../core/readiness';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
-  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, GepStatusPayload,
-  ImportResult, LogEntry, LogLevel, ManualMatchInput, MatchEditInput, NotionStatus,
-  NotionDatabaseSummary, NotionPageSummary, RankAnchorInput, RankSummary, RendererErrorInput,
-  ReviewInput, TargetEditInput,
+  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, DatabaseLocation,
+  DatabaseLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel, ManualMatchInput,
+  MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, RankAnchorInput,
+  RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 
 /**
@@ -98,6 +98,10 @@ export interface DataProvider {
   setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
   /** Version + support contact. */
   getAppInfo(): AppInfo;
+  /** Where the match-history database currently lives. */
+  getDatabaseLocation(): DatabaseLocation;
+  /** Open a folder picker and, if chosen, relocate the database; async (shows a dialog). */
+  chooseDatabaseFolder(): Promise<DatabaseLocationResult>;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
 }

@@ -4,7 +4,7 @@
  * appearance (colorblind palette), and diagnostics (log level + viewer).
  */
 import { h, render } from '../dom';
-import type { AccountSummary, AppUiSettings, RankSummary, Role } from '../../../src/shared/contract';
+import type { AccountSummary, AppUiSettings, DatabaseLocation, RankSummary, Role } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { button, card, chip, pill, select } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
@@ -47,7 +47,41 @@ export function settings(ctx: ViewContext): HTMLElement {
       ),
       diagnosticsCard(),
     ),
+    dataLocationCard(),
   );
+}
+
+/**
+ * Data & backup — where the SQLite match-history database lives. Point it at a
+ * cloud-synced folder for off-machine backup. Relocation happens in the main
+ * process (move the file, reopen); this just shows the folder and a picker.
+ */
+function dataLocationCard(): HTMLElement {
+  const body = h('div', { class: 'stack', style: { gap: '8px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
+  void bridge.getDatabaseLocation().then((loc) => paint(loc));
+
+  function paint(loc: DatabaseLocation, error?: string): void {
+    render(body,
+      h('div', { style: { fontSize: '12px', fontWeight: '600' } }, loc.isDefault ? 'Default location' : 'Custom folder'),
+      h('div', { class: 'mono u-dim', style: { fontSize: '11px', wordBreak: 'break-all' } }, loc.folder),
+      error ? h('div', { class: 'hint' }, `⚠ ${error}`) : null,
+      h('div', { style: { marginTop: '2px' } }, button('Change folder…', { variant: 'soft', onClick: choose })),
+      h('div', { class: 'hint', style: { marginTop: '6px' } },
+        'Point this at a cloud-synced folder (OneDrive, Dropbox) for off-machine backup. Use from one machine only — editing the synced file from two machines at once can corrupt it. Notion export stays a separate, portable backup.'),
+    );
+  }
+
+  function choose(): void {
+    void bridge.chooseDatabaseFolder().then((res) => {
+      if (!res.ok) {
+        void bridge.getDatabaseLocation().then((loc) => paint(loc, `Couldn't move the database: ${res.error}`));
+        return;
+      }
+      paint(res.location);
+    });
+  }
+
+  return card({ title: 'Data & backup', sub: 'where your match history is stored' }, body);
 }
 
 /** Close-to-tray + run-at-login + demo data — persisted in the main process. */

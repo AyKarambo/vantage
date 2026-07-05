@@ -1,4 +1,4 @@
-import { app, shell } from 'electron';
+import { app, shell, dialog } from 'electron';
 import * as path from 'path';
 import {
   loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath, type AppConfig,
@@ -6,6 +6,8 @@ import {
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
 import { HistoryStore } from '../store/history';
+import { migrateJsonHistory } from '../store/historyMigration';
+import { resolveHistoryDir } from '../store/historyLocation';
 import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
 import { GepService, type GepStatus } from './gep';
@@ -68,7 +70,32 @@ function main(): void {
 
   const dataDir = path.join(app.getPath('userData'), 'data');
   const outbox = new OutboxStore(dataDir);
-  const history = new HistoryStore(dataDir);
+
+  // History lives in a user-configurable folder (default <userData>/data) so it
+  // can sit in a cloud-synced folder for backup. If a configured folder can't be
+  // opened, fail loud rather than silently creating a second, empty database.
+  let historyDir = resolveHistoryDir(config.historyDbFolder, dataDir);
+  let history: HistoryStore;
+  try {
+    history = new HistoryStore(historyDir);
+  } catch (err) {
+    log.error('store', 'failed to open history database', { dir: historyDir, error: String(err) });
+    if (historyDir !== dataDir) {
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'Vantage — history database unavailable',
+        message: 'Your Vantage match-history folder is unavailable.',
+        detail: `Could not open the database in:\n${historyDir}\n\nIf this is a synced folder (OneDrive/Dropbox), reconnect it and restart Vantage. Vantage won't start, to avoid creating a second empty database and appearing to lose your history.`,
+      });
+      app.quit();
+      return;
+    }
+    throw err;
+  }
+  // One-time import of a pre-SQLite history.json — kept frozen as a backup. The
+  // legacy file always lived in the default data dir, wherever the DB is now.
+  migrateJsonHistory(history, path.join(dataDir, 'history.json'));
+
   const manual = new ManualStore(dataDir);
   const rankAnchors = new RankAnchorStore(dataDir);
   const aggregator = new MatchAggregator();
@@ -159,6 +186,30 @@ function main(): void {
       },
     },
     appInfo: () => ({ version: app.getVersion(), supportEmail: 'timo.seikel@gmail.com' }),
+    database: {
+      location: () => ({ folder: historyDir, isDefault: historyDir === dataDir }),
+      choose: async () => {
+        const res = await dialog.showOpenDialog({
+          title: 'Choose the Vantage database folder',
+          properties: ['openDirectory', 'createDirectory'],
+        });
+        const current = { folder: historyDir, isDefault: historyDir === dataDir };
+        if (res.canceled || !res.filePaths.length) return { ok: true as const, location: current, changed: false };
+        const chosen = res.filePaths[0];
+        try {
+          history.relocate(chosen);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error('store', 'history database relocate failed', { dir: chosen, error: message });
+          return { ok: false as const, error: message };
+        }
+        saveLocalConfig({ historyDbFolder: chosen });
+        config = loadConfig();
+        historyDir = resolveHistoryDir(config.historyDbFolder, dataDir);
+        log.info('store', 'history database relocated', { dir: historyDir });
+        return { ok: true as const, location: { folder: historyDir, isDefault: historyDir === dataDir }, changed: true };
+      },
+    },
   });
 
   const handlers: TrayHandlers = {

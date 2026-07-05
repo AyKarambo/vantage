@@ -152,6 +152,8 @@ export function registerDashboardIpc(provider: DataProvider): void {
     provider.setAppSettings(patch),
   );
   handle(ch.getAppInfo, () => provider.getAppInfo());
+  handle(ch.getDatabaseLocation, () => provider.getDatabaseLocation());
+  handle(ch.chooseDatabaseFolder, () => provider.chooseDatabaseFolder());
   handle(ch.clearReview, (_e, matchId: string) => {
     provider.clearReview(matchId);
   });

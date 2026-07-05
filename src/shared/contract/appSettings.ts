@@ -17,3 +17,16 @@ export interface AppInfo {
   version: string;
   supportEmail: string;
 }
+
+/** Where the SQLite match-history database currently lives (Settings screen). */
+export interface DatabaseLocation {
+  /** Absolute folder the database file lives in. */
+  folder: string;
+  /** True when it's the default `<userData>/data` location (no user override). */
+  isDefault: boolean;
+}
+
+/** Outcome of a "choose database folder" action — cancelled/applied, or rejected. */
+export type DatabaseLocationResult =
+  | { ok: true; location: DatabaseLocation; changed: boolean }
+  | { ok: false; error: string };
