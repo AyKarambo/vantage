@@ -23,9 +23,10 @@ function plainGame(matchId: string): GameRecord {
  * (so `all` reflects real state and `skipped` is real) plus an upserting target
  * store. `import` returns the same rows each call — imports are full re-scans.
  */
-function harness(games: GameRecord[], failed = 0) {
+function harness(games: GameRecord[], failed = 0, initialAccounts: Record<string, string> = { You: 'You' }) {
   const stored: GameRecord[] = [];
   const targets: AuthoredTarget[] = [];
+  let accounts: Record<string, string> = { ...initialAccounts };
   const addTarget = vi.fn((t: AuthoredTarget) => {
     const i = targets.findIndex((x) => x.id === t.id);
     if (i >= 0) targets[i] = t; else targets.push(t);
@@ -35,6 +36,7 @@ function harness(games: GameRecord[], failed = 0) {
     const i = targets.findIndex((t) => t.id === id);
     if (i >= 0) targets.splice(i, 1);
   };
+  const persistAccounts = vi.fn((a: Record<string, string>) => { accounts = a; });
   const deps = {
     notion: { import: async () => ({ games, failed }) },
     history: {
@@ -48,8 +50,10 @@ function harness(games: GameRecord[], failed = 0) {
       },
     },
     manual: { targets: () => [...targets], addTarget },
+    getConfig: () => ({ accounts }),
+    persistAccounts,
   } as unknown as DataProviderDeps;
-  return { provider: createDataProvider(deps), addTarget, targets, removeTarget };
+  return { provider: createDataProvider(deps), addTarget, targets, removeTarget, persistAccounts, getAccounts: () => accounts };
 }
 
 describe('importNotion — seeding the imported improvement target', () => {
@@ -93,5 +97,45 @@ describe('importNotion — seeding the imported improvement target', () => {
     expect(first).toEqual({ imported: 1, skipped: 0, failed: 3 });
     const second = await provider.importNotion(); // same row → deduped
     expect(second).toEqual({ imported: 0, skipped: 1, failed: 3 });
+  });
+});
+
+/** A game with an explicit account label (Notion's Account column value). */
+function accountGame(matchId: string, account: string): GameRecord {
+  return {
+    matchId, timestamp: 1, account, role: 'damage', map: 'Ilios', result: 'Win',
+    gameType: 'Competitive', source: 'manual', heroes: [],
+  };
+}
+
+describe('importNotion — seeding imported accounts', () => {
+  it('registers a name-only entry for each imported account label not already known', async () => {
+    const { provider, getAccounts } = harness(
+      [accountGame('m1', 'Karambo'), accountGame('m2', 'BobRoss'), accountGame('m3', 'Karambo')],
+      0,
+      {}, // no accounts configured yet
+    );
+    const res = await provider.importNotion();
+    expect(res.accountsAdded).toBe(2);
+    expect(getAccounts()).toEqual({ Karambo: 'Karambo', BobRoss: 'BobRoss' });
+  });
+
+  it('does not duplicate an account already mapped (case-insensitively, e.g. via a battleTag)', async () => {
+    const { provider, getAccounts, persistAccounts } = harness(
+      [accountGame('m1', 'Karambo')],
+      0,
+      { 'karambo#21442': 'karambo' }, // already mapped under a real battleTag
+    );
+    const res = await provider.importNotion();
+    expect(res.accountsAdded).toBeUndefined(); // nothing new
+    expect(persistAccounts).not.toHaveBeenCalled();
+    expect(getAccounts()).toEqual({ 'karambo#21442': 'karambo' });
+  });
+
+  it('is idempotent — a second import adds no further accounts', async () => {
+    const { provider, persistAccounts } = harness([accountGame('m1', 'Baranbo')], 0, {});
+    await provider.importNotion();
+    await provider.importNotion();
+    expect(persistAccounts).toHaveBeenCalledTimes(1);
   });
 });

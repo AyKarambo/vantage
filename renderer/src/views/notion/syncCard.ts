@@ -78,10 +78,11 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
           const bits = [`${res.imported} imported`];
           if (res.skipped) bits.push(`${res.skipped} skipped`);
           if (res.failed) bits.push(`${res.failed} failed`);
+          if (res.accountsAdded) bits.push(`${res.accountsAdded} account${res.accountsAdded === 1 ? '' : 's'} added`);
           toast(`Notion import — ${bits.join(' · ')}`);
         }
-        // New matches landed in history — re-pull so dashboards reflect them.
-        if (res.imported) void store.refresh();
+        // New matches or accounts landed — re-pull so dashboards/pickers reflect them.
+        if (res.imported || res.accountsAdded) void store.refresh();
       } catch (err) {
         render(importOut, h('span', { class: 'is-loss' }, `Import failed — ${String(err)}`));
       }
@@ -108,6 +109,7 @@ function importResult(res: ImportResult): HTMLElement {
   const parts = [chipText(`${res.imported} imported`, 'win')];
   if (res.skipped) parts.push(chipText(`${res.skipped} skipped`, 'muted'));
   if (res.failed) parts.push(chipText(`${res.failed} failed`, 'loss'));
+  if (res.accountsAdded) parts.push(chipText(`${res.accountsAdded} account${res.accountsAdded === 1 ? '' : 's'} added`, 'win'));
   return h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...parts);
 }
 

@@ -202,7 +202,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (importingGrades && !targetExists && !seededBefore) {
         deps.manual.addTarget(notionImprovementTarget(Date.now()));
       }
-      return { imported, skipped, failed: res.failed };
+      // Surface the imported accounts so they appear in the account manager, the
+      // filters and the rank UI — Notion only stores the account *label*, not the
+      // battleTag, so each becomes a name-only entry that live play reconnects to.
+      const accountsAdded = seedImportedAccounts(deps, res.games);
+      return { imported, skipped, failed: res.failed, ...(accountsAdded ? { accountsAdded } : {}) };
     },
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {
@@ -243,6 +247,29 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       deps.history.clearReview(matchId);
     },
   };
+}
+
+/**
+ * Register a name-only account (`label → label`) for every distinct account
+ * label in the imported games that isn't already represented in the config
+ * (compared case-insensitively, since {@link resolveAccount} matches that way).
+ * Notion's `Account` column carries only the label, never the battleTag, so a
+ * name-only entry is the faithful seed: it lists/rank-anchors the account and,
+ * via `resolveAccount`'s name-only fallback, reconnects to live GEP play from
+ * the real battleTag later. Returns how many were added.
+ */
+function seedImportedAccounts(deps: DataProviderDeps, games: GameRecord[]): number {
+  const accounts = { ...deps.getConfig().accounts };
+  const known = new Set(Object.values(accounts).map((label) => label.toLowerCase()));
+  let added = 0;
+  for (const label of new Set(games.map((g) => g.account))) {
+    if (!label || known.has(label.toLowerCase())) continue;
+    accounts[label] = label; // name-only entry: battleTag key == label
+    known.add(label.toLowerCase());
+    added++;
+  }
+  if (added) deps.persistAccounts(accounts);
+  return added;
 }
 
 /** Shape the accounts map (battleTag → label) into the contract's summary list. */

@@ -26,6 +26,8 @@ export interface ImportResult {
   unavailable?: boolean;
   /** Set when the whole import short-circuited (e.g. auth/query error). */
   error?: string;
+  /** New accounts surfaced from the imported rows' Account column (name-only entries). */
+  accountsAdded?: number;
 }
 
 /** A database the Notion integration can see, from the picker's list. */
