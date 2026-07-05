@@ -4,6 +4,7 @@
  */
 import { h, render } from '../../dom';
 import type { TargetMode, TargetSummary } from '../../../../src/shared/contract';
+import { TARGET_TEMPLATES } from '../../../../src/core/targets';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
 import { bridge } from '../../bridge';
@@ -27,6 +28,9 @@ export interface BuilderHandle {
   el: HTMLElement;
   /** Load an existing target into the builder (edit mode). */
   edit: (t: TargetSummary) => void;
+  /** Load a template (or a Focus quick-create) into the builder — always
+   *  creates on save, even if the builder was mid-edit (AC 1–2). */
+  prefill: (t: { name: string; mode: TargetMode; rule: string }) => void;
 }
 
 // NOTE: save()'s rule template (`${stat} ${op} ${value}`) and edit()'s parse regex
@@ -83,6 +87,16 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
         title: state.editingId ? 'Edit target' : 'Define a target',
         sub: state.editingId ? 'stats keep accruing across edits' : 'Make it yours',
       },
+      h('div', { class: 'field-label' }, 'Start from a template'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '7px', marginBottom: '16px' } },
+        ...TARGET_TEMPLATES.map((t) =>
+          h('button', {
+            class: 'chip',
+            title: t.blurb,
+            on: { click: () => prefill(t) },
+          }, t.name),
+        ),
+      ),
       h('div', { class: 'field-label' }, 'Name your focus'),
       h('input', {
         class: 'target-name-input',
@@ -102,8 +116,10 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     ));
   };
 
-  const edit = (t: TargetSummary): void => {
-    state.editingId = t.id;
+  // Shared by edit() and prefill(): loads name/mode and, for measured rules,
+  // parses the `${stat} ${op} ${value}` string back into the stat/op/value
+  // controls. Keep this regex identical to save()'s template (see note above).
+  const loadRule = (t: { name: string; mode: TargetMode; rule: string }): void => {
     state.name = t.name;
     state.mode = t.mode;
     state.saved = false;
@@ -113,12 +129,25 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
       state.op = rule[2];
       state.value = rule[3].replace(/,/g, '');
     }
+  };
+
+  const edit = (t: TargetSummary): void => {
+    state.editingId = t.id;
+    loadRule(t);
+    draw();
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const prefill = (t: { name: string; mode: TargetMode; rule: string }): void => {
+    // Always creates on save — abandon any in-progress edit (AC 2).
+    state.editingId = null;
+    loadRule(t);
     draw();
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   draw();
-  return { el: host, edit };
+  return { el: host, edit, prefill };
 }
 
 export function selfBlock(): HTMLElement {

@@ -98,7 +98,7 @@ export class App {
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
-  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; epoch: number } | null = null;
+  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; epoch: number } | null = null;
   /** Per-route scroll positions, restored when navigating back (session only). */
   private readonly scrollMemory = new Map<string, number>();
 
@@ -230,12 +230,14 @@ export class App {
       highlight: state.params.highlight,
       day: state.params.day,
       flag: state.params.flag,
+      prefillName: state.params.prefillName,
       epoch: state.renderEpoch,
     };
     const last = this.lastRendered;
     if (last && last.data === key.data && last.view === key.view
       && last.matchId === key.matchId && last.highlight === key.highlight
-      && last.day === key.day && last.flag === key.flag && last.epoch === key.epoch) return;
+      && last.day === key.day && last.flag === key.flag && last.prefillName === key.prefillName
+      && last.epoch === key.epoch) return;
     // Remember where the outgoing route was scrolled; restore it when a
     // navigation (not a data refresh on the same route) returns here.
     if (last) this.scrollMemory.set(routeKey(last.view, last.matchId), this.contentHost.scrollTop);

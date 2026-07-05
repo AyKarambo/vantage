@@ -14,7 +14,7 @@ export function focus(ctx: ViewContext): HTMLElement {
     viewHead('Focus', 'Lose a lot and play a lot — these cost you the most points'),
     card({ title: 'Priority maps', sub: 'net = losses − wins' },
       losing.length
-        ? h('div', { class: 'stack', style: { gap: '14px' } }, ...losing.map((m) => focusRow(m, maxNet)))
+        ? h('div', { class: 'stack', style: { gap: '14px' } }, ...losing.map((m) => focusRow(ctx, m, maxNet)))
         : h('div', { class: 'empty empty--good' }, 'No net-losing maps right now — nice. 🎯'),
     ),
     card({ variant: 'glow', title: 'Build a focus routine' },
@@ -25,7 +25,7 @@ export function focus(ctx: ViewContext): HTMLElement {
   );
 }
 
-function focusRow(m: FocusItem, maxNet: number): HTMLElement {
+function focusRow(ctx: ViewContext, m: FocusItem, maxNet: number): HTMLElement {
   const fill = h('span', { style: { display: 'block', height: '100%', background: PALETTE.loss, borderRadius: 'inherit' } });
   applyStyle(fill, { width: `${Math.round((m.net / maxNet) * 100)}%` });
   return h('div', null,
@@ -35,6 +35,16 @@ function focusRow(m: FocusItem, maxNet: number): HTMLElement {
         h('span', { class: 'is-loss mono', style: { fontSize: '13px' } }, `${signed(-m.net)} net`),
         h('span', { class: 'mono', style: { color: wrColor(m.winrate) } }, pct(m.winrate)),
         h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${m.games}g`),
+        h('button', {
+          class: 'btn btn--ghost',
+          style: { padding: '3px 8px', fontSize: '10.5px' },
+          title: `Create a practice target for ${m.key}`,
+          on: {
+            click: () => ctx.navigate('targets', {
+              prefillName: `Practice ${m.key}: queue it unranked + review one replay`,
+            }),
+          },
+        }, '＋ target'),
       ),
     ),
     h('div', { class: 'track track--slim' }, fill),

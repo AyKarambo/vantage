@@ -12,6 +12,11 @@ import { libraryCard } from './library';
 
 export function targets(ctx: ViewContext): HTMLElement {
   const builder = builderCard(ctx);
+  // Focus's per-map "＋ target" quick-create lands here with a name to prefill —
+  // self-rated by default, same as a fresh builder's grading mode.
+  if (ctx.params.prefillName) {
+    builder.prefill({ name: ctx.params.prefillName, mode: 'self', rule: 'You grade it' });
+  }
   // Real mode with no authored targets shows an honest empty state (not the
   // demo sample library, and not an empty "Your targets" shell).
   const noTargets = !ctx.data.isSample && ctx.data.targets.length === 0;
