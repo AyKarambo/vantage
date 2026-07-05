@@ -169,6 +169,18 @@ describe('undertraining — rust after a layoff', () => {
     expect(r.band).toBe('rusty');
   });
 
+  it('a rusty verdict does not surface stale load/tilt signals from before the layoff', () => {
+    // 19 straight heavy tilted days would scream overtraining — but they ended
+    // 8 days ago. "22 days in a row" under a Rusty verdict reads as its opposite.
+    const red = span(10, 28, { perDay: 10, mental: TILT });
+    const r = computeReadiness(red, ts(36, 20));
+    const keys = r.signals.map((s) => s.key);
+    expect(keys).toContain('rust-gap');
+    for (const stale of ['consecutive-days', 'games-per-day', 'load-ratio', 'long-session', 'tilt', 'loss-streak']) {
+      expect(keys).not.toContain(stale);
+    }
+  });
+
   it('score decays with a long layoff: 10 rest days scores below 2 rest days', () => {
     const rested = computeReadiness(history, ts(30, 20)); // 2 rest days (peak recovery)
     const rusty = computeReadiness(history, ts(38, 20)); // 10 rest days
