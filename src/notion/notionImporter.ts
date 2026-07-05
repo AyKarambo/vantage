@@ -134,6 +134,7 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
   const timestamp = pickDate(props['Played At']) ?? (Date.parse(page.created_time ?? '') || Date.now());
   const durationMinutes = pickNumber(props['Match Duration (min)']);
   const finalScore = pickText(props['Final Score']);
+  const srDelta = pickNumber(props['SR Delta']);
 
   const stats = {
     eliminations: pickNumber(props['Eliminations']),
@@ -182,6 +183,7 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
     source,
     heroes,
     ...(durationMinutes != null ? { durationMinutes } : {}),
+    ...(srDelta != null ? { srDelta } : {}),
     ...(finalScore ? { finalScore } : {}),
     ...(perHero ? { perHero } : {}),
     ...(mental ? { mental } : {}),

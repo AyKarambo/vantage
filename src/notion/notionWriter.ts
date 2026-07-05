@@ -43,6 +43,12 @@ export class NotionWriter {
      * guard as `hasPlayedAt`, generalized. Empty (write nothing extra) by default.
      */
     private readonly writableColumns: ReadonlySet<string> = new Set(),
+    /**
+     * Whether the target database has the optional `SR Delta` number column. Same
+     * presence guard as `hasPlayedAt` — a Vantage-authored value, written only when
+     * the column exists and the match carries a competitive SR change.
+     */
+    private readonly hasSrDelta = false,
   ) {}
 
   async createMatchPage(m: ResolvedMatch): Promise<string> {
@@ -81,6 +87,11 @@ export class NotionWriter {
     // the column (see the constructor doc).
     if (this.hasPlayedAt && typeof r.endedAt === 'number' && Number.isFinite(r.endedAt)) {
       props['Played At'] = { date: { start: new Date(r.endedAt).toISOString() } };
+    }
+    // The signed competitive SR change, so import restores it instead of dropping
+    // it. Guarded by column presence, like Played At.
+    if (this.hasSrDelta && typeof r.srDelta === 'number' && Number.isFinite(r.srDelta)) {
+      props['SR Delta'] = { number: r.srDelta };
     }
 
     // The subjective self-report + improvement grade the user filled in inside
