@@ -91,6 +91,39 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
 
 export class App {
   private readonly sidebarHost = h('aside', { class: 'sidebar' });
+  // Persistent sidebar nodes. The sidebar is built once and then mutated in
+  // place, so a background refresh (notably the window-focus refetch, which
+  // patches `refreshing` synchronously) can never tear down a nav button
+  // between its mousedown and mouseup. A rebuilt button mid-click swallows the
+  // click — that was the "have to click a screen twice to switch it" bug.
+  private readonly avatarEl = h('div', { class: 'avatar' });
+  private readonly accountNameEl = h('div', { class: 'account-name' });
+  private readonly accountSubEl = h('div', { class: 'account-sub' });
+  private readonly accountChip = h('div', {
+    class: 'sidebar-account',
+    role: 'button',
+    tabindex: '0',
+    title: 'Switch account · manage accounts',
+    on: {
+      click: (e: Event) => { const d = store.get().data; if (d) this.openAccountSwitcher(e.currentTarget as HTMLElement, d); },
+      keydown: (e: Event) => {
+        const key = (e as KeyboardEvent).key;
+        const d = store.get().data;
+        if ((key === 'Enter' || key === ' ') && d) { e.preventDefault(); this.openAccountSwitcher(e.currentTarget as HTMLElement, d); }
+      },
+    },
+  },
+    this.avatarEl,
+    h('div', { class: 'row-main' }, this.accountNameEl, this.accountSubEl),
+    h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '▾'),
+  );
+  private readonly navButtons = new Map<ViewId, HTMLButtonElement>();
+  private readonly sessionBody = h('div');
+  private readonly sessionCardEl = h('div', { class: 'sidebar-session' },
+    h('div', { class: 'nav-group' }, "Today's session"),
+    this.sessionBody,
+  );
+  private sidebarBuilt = false;
   private readonly filterHost = h('div', { class: 'filterbar-wrap hidden' });
   private readonly contentHost = h('main', { class: 'content' });
   private readonly statusLabel = h('span', null, 'Loading…');
@@ -105,6 +138,11 @@ export class App {
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
   private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; epoch: number } | null = null;
+  /** The snapshot the filter bar was last built for. Background refreshes patch
+   *  `refreshing`/`status` without changing `data`, so re-rendering the bar then
+   *  would tear down its live controls mid-click and swallow the click — the
+   *  same class of bug as the sidebar rebuild. Only rebuild on a new snapshot. */
+  private lastFilterData: DashboardData | null = null;
   /** Per-route scroll positions, restored when navigating back (session only). */
   private readonly scrollMemory = new Map<string, number>();
 
@@ -230,7 +268,11 @@ export class App {
     const hidden = !state.data || FILTERLESS_VIEWS.has(state.view);
     this.filterHost.classList.toggle('hidden', hidden);
     if (!state.data || hidden) return;
+    // Hidden views keep their built bar in the DOM (just CSS-hidden), so a
+    // return to the same snapshot reuses it rather than rebuilding.
+    if (this.lastFilterData === state.data) return;
     render(this.filterHost, filterBar(state.data, (patch) => store.setFilters(patch)));
+    this.lastFilterData = state.data;
   }
 
   private renderContent(state: AppState): void {
@@ -280,30 +322,14 @@ export class App {
   }
 
   private renderSidebar(state: AppState): void {
+    if (!this.sidebarBuilt) this.buildSidebar();
     const d = state.data;
     // The chip doubles as the account switcher: it shows the active account (the
     // selected filter, or the most-played one when viewing "all") and its rank.
     const displayName = (d && d.filters.account !== 'all' ? d.filters.account : d?.greetingName) ?? 'Vantage';
-    const account = h('div', {
-      class: 'sidebar-account',
-      role: 'button',
-      tabindex: '0',
-      title: 'Switch account · manage accounts',
-      on: {
-        click: (e: Event) => { if (d) this.openAccountSwitcher(e.currentTarget as HTMLElement, d); },
-        keydown: (e: Event) => {
-          const key = (e as KeyboardEvent).key;
-          if ((key === 'Enter' || key === ' ') && d) { e.preventDefault(); this.openAccountSwitcher(e.currentTarget as HTMLElement, d); }
-        },
-      },
-    },
-      h('div', { class: 'avatar' }, displayName.charAt(0).toUpperCase()),
-      h('div', { class: 'row-main' },
-        h('div', { class: 'account-name' }, displayName),
-        h('div', { class: 'account-sub' }, d ? rankLine(d) : '—'),
-      ),
-      h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '▾'),
-    );
+    this.avatarEl.textContent = displayName.charAt(0).toUpperCase();
+    this.accountNameEl.textContent = displayName;
+    this.accountSubEl.textContent = d ? rankLine(d) : '—';
 
     // Saving a review doesn't refetch, so subtract the games graded since the
     // last snapshot (only those the snapshot still counts as pending).
@@ -311,21 +337,51 @@ export class App {
     const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
     // Parameterized views highlight their parent list in the sidebar.
     const activeNav: ViewId = state.view === 'matchDetail' ? 'matches' : state.view;
-    const nav = NAV.flatMap((section) => [
-      h('div', { class: 'nav-group' }, section.group),
-      ...section.items.map((item) =>
-        h('button', {
-          class: `nav-item${item.id === activeNav ? ' is-active' : ''}`,
+    for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
+    this.updateReviewBadge(pendingReviews);
+
+    render(this.sessionBody, this.sessionSummary(state));
+  }
+
+  /**
+   * Build the sidebar skeleton once — account chip, nav buttons, session card —
+   * as stable DOM nodes. Everything that changes per snapshot is mutated in
+   * place afterwards; the nodes themselves are never recreated, so a background
+   * refresh can't destroy a nav button under an in-progress click.
+   */
+  private buildSidebar(): void {
+    const children: Array<Node> = [this.accountChip];
+    for (const section of NAV) {
+      children.push(h('div', { class: 'nav-group' }, section.group));
+      for (const item of section.items) {
+        const btn = h('button', {
+          class: 'nav-item',
           on: { click: () => store.setView(item.id) },
         },
           h('span', { class: 'nav-icon' }, item.icon),
           item.label,
-          item.id === 'review' && pendingReviews > 0 ? h('span', { class: 'nav-badge' }, String(pendingReviews)) : null,
-        ),
-      ),
-    ]);
+        );
+        this.navButtons.set(item.id, btn);
+        children.push(btn);
+      }
+    }
+    children.push(this.sessionCardEl);
+    render(this.sidebarHost, ...children);
+    this.sidebarBuilt = true;
+  }
 
-    render(this.sidebarHost, account, ...nav, this.sessionCard(state));
+  /** Reflect the pending-review count on the Review nav item in place, so the
+   *  button (a live click target) is never rebuilt. */
+  private updateReviewBadge(pending: number): void {
+    const btn = this.navButtons.get('review');
+    if (!btn) return;
+    const existing = btn.querySelector('.nav-badge');
+    if (pending > 0) {
+      if (existing) existing.textContent = String(pending);
+      else btn.append(h('span', { class: 'nav-badge' }, String(pending)));
+    } else {
+      existing?.remove();
+    }
   }
 
   /** The top-left chip's account switcher: scope the dashboard to an account (or all), or jump to account management. */
@@ -346,16 +402,16 @@ export class App {
     });
   }
 
-  private sessionCard(state: AppState): HTMLElement {
+  /** The "Today's session" body, re-rendered into the persistent session card. */
+  private sessionSummary(state: AppState): HTMLElement {
     const s = state.data?.session;
-    const body = s && s.games
+    return s && s.games
       ? h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '5px' } },
           h('span', { class: 'mono', style: { fontSize: '17px', fontWeight: '600' } }, `${s.wins}–${s.losses}`),
           h('span', { style: { fontSize: '11px', color: 'var(--win-text)' } }, `${signed(s.wins - s.losses)} net`),
           h('span', { class: 'u-muted', style: { fontSize: '11px' } }, `· ${pct(s.winrate)}`),
         )
       : h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px' } }, 'No games today yet');
-    return h('div', { class: 'sidebar-session' }, h('div', { class: 'nav-group' }, "Today's session"), body);
   }
 
   /** The status-bar connection indicator: dot color + short truthful label. */
