@@ -143,6 +143,13 @@ export class App {
    *  would tear down its live controls mid-click and swallow the click — the
    *  same class of bug as the sidebar rebuild. Only rebuild on a new snapshot. */
   private lastFilterData: DashboardData | null = null;
+  /** True while a pointer is held down inside the content host. A same-route
+   *  data refresh that lands mid-press is deferred (see {@link renderContent})
+   *  rather than tearing the pressed element out from under its click — the same
+   *  class of bug as the sidebar/filter-bar rebuilds, but async and rarer. */
+  private contentPressed = false;
+  /** A content refresh held back during a press; flushed once the press ends. */
+  private pendingContentRender = false;
   /** Per-route scroll positions, restored when navigating back (session only). */
   private readonly scrollMemory = new Map<string, number>();
 
@@ -299,6 +306,18 @@ export class App {
       && last.matchId === key.matchId && last.highlight === key.highlight
       && last.day === key.day && last.flag === key.flag && last.prefillName === key.prefillName
       && last.epoch === key.epoch) return;
+    // Having passed the equality check with every non-`data` field equal means
+    // only the snapshot changed — a background refresh. If the user is pressing
+    // inside the content host, defer it: replacing the pressed element mid-click
+    // makes the browser drop the click (down/up must share a target), which is
+    // how an in-content navigation click gets swallowed. Flushed on release
+    // (see bindGlobals). Route/epoch changes fall through and render at once.
+    if (this.contentPressed && last && last.view === key.view && last.matchId === key.matchId
+      && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
+      && last.prefillName === key.prefillName && last.epoch === key.epoch) {
+      this.pendingContentRender = true;
+      return;
+    }
     // Remember where the outgoing route was scrolled; restore it when a
     // navigation (not a data refresh on the same route) returns here.
     if (last) this.scrollMemory.set(routeKey(last.view, last.matchId), this.contentHost.scrollTop);
@@ -528,6 +547,28 @@ export class App {
     });
     // Window focus re-pulls newly tracked games (stale-while-revalidate).
     window.addEventListener('focus', () => void store.refresh());
+    // Track a press inside the content host so renderContent can hold back a
+    // refresh that would otherwise tear the pressed element out mid-click. All
+    // three use the capture phase so a child's stopPropagation can't leave the
+    // flag stuck. Release is on window (the pointer may lift outside content).
+    this.contentHost.addEventListener('pointerdown', () => { this.contentPressed = true; }, true);
+    const releasePress = (): void => {
+      if (!this.contentPressed) return;
+      this.contentPressed = false;
+      if (!this.pendingContentRender) return;
+      this.pendingContentRender = false;
+      // A macrotask runs after the native click that follows pointerup, so this
+      // never removes the element the click still needs. renderContent re-reads
+      // current state — a navigation click that already re-rendered dedupes it.
+      setTimeout(() => this.renderContent(store.get()), 0);
+    };
+    window.addEventListener('pointerup', releasePress, true);
+    window.addEventListener('pointercancel', releasePress, true);
+    // Safety net: if the window loses focus mid-press (app switch, focus theft),
+    // a pointerup might never reach us. Clearing the flag on blur guarantees a
+    // same-route refresh can never be held back indefinitely — and the focus
+    // handler above refetches on return anyway.
+    window.addEventListener('blur', releasePress);
   }
 }
 
