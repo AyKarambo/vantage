@@ -71,16 +71,18 @@
   --accent-border: rgba(124, 108, 245, 0.3);
   --grad-accent: linear-gradient(135deg, #8878ff, #6250e6);
 
-  /* Semantic ------------------------------------------------------------- */
-  --win: #57a684;
-  --win-text: #8fe0b8;
-  --win-soft: rgba(87, 166, 132, 0.18);
-  --win-border: rgba(87, 166, 132, 0.5);
-  --loss: #d1685f;
-  --loss-text: #d18a84;
-  --loss-soft: rgba(209, 104, 95, 0.14);
-  --mid: #d6a24f;
-  --mid-text: #e0b878;
+  /* Semantic — winrate colours (Aurora scheme = default) ----------------- */
+  /* Kept in sync with renderer/src/winrateScheme.ts; the other schemes override
+     these under html[data-wr="…"] below. --track is scheme-independent. */
+  --win: #65bda6;
+  --win-text: #98ddca;
+  --win-soft: rgba(101, 189, 166, 0.18);
+  --win-border: rgba(101, 189, 166, 0.5);
+  --loss: #ca777f;
+  --loss-text: #dca3a8;
+  --loss-soft: rgba(202, 119, 127, 0.16);
+  --mid: #bca976;
+  --mid-text: #dac99a;
   --track: rgba(255, 255, 255, 0.06);
 
   /* Radius --------------------------------------------------------------- */
@@ -109,8 +111,25 @@
   --dur: 140ms;
 }
 
-/* Colorblind-safe palette (Settings → Appearance): blue/orange win-loss. */
-html[data-cvd] {
+/* Winrate colour schemes (Settings → Appearance). Aurora is the :root default
+   above; these override the win/mid/loss family for the other choices. Keep in
+   sync with renderer/src/winrateScheme.ts. */
+
+/* Teal & coral — teal win, neutral-sand mid, coral loss. */
+html[data-wr='teal-coral'] {
+  --win: #63b6ad;
+  --win-text: #98d7d1;
+  --win-soft: rgba(99, 182, 173, 0.18);
+  --win-border: rgba(99, 182, 173, 0.5);
+  --loss: #d1887b;
+  --loss-text: #e2b0a7;
+  --loss-soft: rgba(209, 136, 123, 0.16);
+  --mid: #b4a27e;
+  --mid-text: #d6c5a4;
+}
+
+/* Colorblind-safe — blue/orange win-loss; mid stays amber (never clashes). */
+html[data-wr='colorblind'] {
   --win: #4f8fd6;
   --win-text: #9cc3ec;
   --win-soft: rgba(79, 143, 214, 0.18);
@@ -118,4 +137,6 @@ html[data-cvd] {
   --loss: #d68a3a;
   --loss-text: #e0ac72;
   --loss-soft: rgba(214, 138, 58, 0.14);
+  --mid: #d6a24f;
+  --mid-text: #e0b878;
 }

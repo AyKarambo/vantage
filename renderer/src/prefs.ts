@@ -5,6 +5,7 @@
  */
 import type { DashboardFilters } from '../../src/shared/contract';
 import { migrateLegacySeasonDays } from '../../src/core/season';
+import type { WinrateScheme } from './winrateScheme';
 
 export interface HeroSortPref {
   key: string;
@@ -51,8 +52,14 @@ interface PrefsShape {
   filterPresets: FilterPresetPref[];
   /** Day-key of the last session recap shown (one per day). */
   recapShown: string;
-  /** Colorblind-safe palette toggle. */
-  colorblind: boolean;
+  /** Active winrate colour scheme (Appearance). Applied at bundle load in `theme.ts`. */
+  winrateScheme: WinrateScheme;
+  /**
+   * @deprecated Superseded by {@link winrateScheme}. Retained read-only so the
+   * one-time migration in `theme.ts` (`resolveWinrateScheme`) can map a legacy
+   * `true` to the `colorblind` scheme; never written anymore.
+   */
+  colorblind?: boolean;
   /** Matches-list per-field display mode, merged over `MATCH_COLUMNS_DEFAULT`. */
   matchColumns: MatchColumnsPref;
 }
