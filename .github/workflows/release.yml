@@ -22,7 +22,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 24 = current active LTS (not 20): the history store runs on node:sqlite,
+          # a builtin that Node 20 lacks, so `npm test` here must have it too (the
+          # packaged app gets it from ow-electron 39's bundled Node 22.22; source is
+          # type-pinned to that runtime via @types/node@22). LTS-only by policy.
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run typecheck

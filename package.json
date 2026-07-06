@@ -70,16 +70,16 @@
     }
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15"
+    "@notionhq/client": "^2.3.0"
   },
   "devDependencies": {
     "@overwolf/ow-electron": "39.6.1",
     "@overwolf/ow-electron-builder": "26.8.5",
-    "@overwolf/ow-electron-packages-types": "^0.0.5",
-    "@types/node": "^20.11.0",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.4.5",
-    "vitest": "^3.2.4"
+    "@overwolf/ow-electron-packages-types": "^1.1.4",
+    "@types/node": "^22.20.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   },
   "allowScripts": {
     "electron-winstaller@5.4.0": true,

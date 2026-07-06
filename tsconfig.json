@@ -1,5 +1,10 @@
 {
   "compilerOptions": {
+    // TS6 deprecates "Node"/baseUrl (removed in TS7); the sanctioned escape hatch
+    // per https://aka.ms/ts6 while a real migration to NodeNext (which changes
+    // extension/exports-field resolution semantics — a separate, deliberate
+    // project, not a drive-by dependency bump) is still pending.
+    "ignoreDeprecations": "6.0",
     "target": "ES2021",
     "module": "CommonJS",
     "moduleResolution": "Node",
