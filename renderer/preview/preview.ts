@@ -380,6 +380,11 @@ const mock: OwStatsApi = {
     previewImportedMatches = 0;
     return { deleted };
   },
+  cleanupNotionDuplicates: async () => {
+    if (!selectedNotionDatabaseId) return { archived: 0, kept: 0, failed: 0, unavailable: true };
+    // No real Notion rows in the harness — return a canned result so the UI is testable.
+    return { archived: 2, kept: 1, failed: 0 };
+  },
   saveTarget: async (input: AuthoredTargetInput) => {
     targets.push({ id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input });
     save(TARGETS_KEY, targets);

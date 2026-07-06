@@ -4,7 +4,8 @@ import type { GameRecord, MatchMental } from '../core/analytics';
 import { leaverFlags, mergeLeaver } from '../core/leaver';
 import { aggregateImprovementGrade, matchExportSignature, NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { NotionWriter } from './notionWriter';
-import { resolveDataSourceId } from './dataSourceResolver';
+import { queryAllPages, queryDataSourcePages } from './pageScan';
+import { groupByEffectiveMatchId, pickCanonicalRow, rowRefOf, type RowRef } from './dedup';
 import { MapsCache } from './mapsCache';
 import type { OutboxStore } from '../store/outbox';
 import type { ExportResult } from '../shared/contract';
@@ -16,7 +17,14 @@ import type { ExportResult } from '../shared/contract';
  * `Improvement Target` grade via the aggregate rule, and — on the first sync
  * after upgrading from a pre-ledger install — backfills legacy exported rows
  * (tracked only in the old `processed[]` list) by resolving their existing
- * Notion page via a one-time `Match ID` query.
+ * Notion page against the lazy existing-rows index (`existingRowsIndex`).
+ *
+ * Never blind-creates for a match with no ledger record: both the ordinary
+ * create path and the legacy backfill first consult that index (one lazy
+ * paged scan of the configured database per `export()` call, built only when
+ * the first unledgered match needs it) so a hand-added or ledger-lost row
+ * already sitting in Notion is adopted instead of duplicated
+ * (`specs/notion-sync-dedup.spec.md`).
  */
 export class NotionExporter {
   constructor(
@@ -35,10 +43,13 @@ export class NotionExporter {
      */
     private readonly authoredTargetIds: () => ReadonlySet<string> = () => new Set(),
     /**
-     * The Notion client + resolved Gametracker location, needed only for the
-     * one-time legacy backfill's `Match ID` query. Omit to skip the backfill
-     * (e.g. in tests that don't exercise it) — every other export path works
-     * without it.
+     * The Notion client + resolved Gametracker location, needed for the
+     * legacy backfill AND the create-guard's existing-rows index (both resolve
+     * hand-added/id-less rows the same way — see {@link existingRowsIndex}).
+     * Omit to skip both (e.g. minimal tests that don't exercise them): the
+     * backfill no-ops and the create-guard degrades to today's blind create —
+     * every other export path works without it. The real runtime always
+     * supplies this.
      */
     private readonly legacyLookup?: { client: Client; gametrackerDatabaseId: string; dataSourceId?: string },
     /**
@@ -55,6 +66,60 @@ export class NotionExporter {
   ) {}
 
   /**
+   * Lazy existing-rows index (`effectiveMatchId → RowRef[]`), built at most
+   * once per {@link export} call — reset to `undefined` at the top of every
+   * `export()` so a later call on the same exporter instance re-scans rather
+   * than serving a stale result. Within one call, the promise itself is
+   * cached (not just its result) so concurrent/subsequent lookups reuse the
+   * single in-flight scan instead of racing a second one — the paged scan
+   * runs exactly once even across many unledgered games in one sync.
+   */
+  private existingRowsIndexPromise?: Promise<Map<string, RowRef[]>>;
+
+  /**
+   * Build (once) the existing-rows index the create-guard and legacy backfill
+   * both resolve against: every row of the configured Gametracker database,
+   * projected via `rowRefOf` and grouped by `effectiveMatchId` — so a hand-
+   * added row with an empty `Match ID` cell is still found, keyed by the same
+   * derived id the importer would generate for it. Requires `legacyLookup`
+   * (the caller's contract: absent → this is never called, see
+   * {@link lookupExistingRow}). Prefers `legacyLookup.dataSourceId` when
+   * supplied (already resolved by the runtime — pages directly via
+   * `queryDataSourcePages`, no redundant resolve round trip); falls back to
+   * `queryAllPages`, which resolves `gametrackerDatabaseId` itself.
+   */
+  private existingRowsIndex(): Promise<Map<string, RowRef[]>> {
+    if (!this.existingRowsIndexPromise) {
+      this.existingRowsIndexPromise = (async () => {
+        const { client, gametrackerDatabaseId, dataSourceId } = this.legacyLookup!;
+        const pages = dataSourceId
+          ? await queryDataSourcePages(client, dataSourceId)
+          : await queryAllPages(client, gametrackerDatabaseId);
+        return groupByEffectiveMatchId(pages.map(rowRefOf));
+      })();
+    }
+    return this.existingRowsIndexPromise;
+  }
+
+  /**
+   * Resolve `matchId` against the existing-rows index, building it on first
+   * use. `undefined` when `legacyLookup` is absent (the guard is skipped
+   * entirely — today's blind create; documented on the constructor) so a
+   * caller never needs to distinguish "no lookup available" from "index says
+   * not found". Multi-row groups (duplicates already in Notion) resolve to
+   * the canonical row via `pickCanonicalRow`; this method does not favor a
+   * ledgered page id, since a match reaching this lookup has none.
+   */
+  private async lookupExistingRow(matchId: string): Promise<{ pageId: string; hadMatchIdText: boolean } | undefined> {
+    if (!this.legacyLookup) return undefined;
+    const index = await this.existingRowsIndex();
+    const rows = index.get(matchId);
+    if (!rows || rows.length === 0) return undefined;
+    const canonical = pickCanonicalRow(rows, { ledgeredPageId: undefined });
+    return { pageId: canonical.pageId, hadMatchIdText: Boolean(canonical.matchIdText) };
+  }
+
+  /**
    * Export/update each in-scope game against the ledger + signature, running
    * the one-time legacy backfill first. Per-game failures are counted, not
    * thrown.
@@ -66,6 +131,11 @@ export class NotionExporter {
     if (this.shapeIssues && this.shapeIssues.length) {
       return { ok: 0, failed: 0, skipped: 0, error: `Database is missing: ${this.shapeIssues.join(', ')}` };
     }
+    // The existing-rows index is scoped to THIS export() call, not the exporter
+    // instance's lifetime — a later call must re-scan (Notion may have changed
+    // since, e.g. a row created by the previous call) rather than serve stale
+    // results from a promise cached across calls.
+    this.existingRowsIndexPromise = undefined;
     let ok = 0;
     let failed = 0;
     let skipped = 0;
@@ -120,10 +190,23 @@ export class NotionExporter {
 
         if (pageId === undefined) {
           // Not in the ledger at all (or ledgered against a different,
-          // previously-configured database) → create in the current database.
-          const newPageId = await this.createPage(game, grade);
-          this.outbox.recordExport(game.matchId, { pageId: newPageId, signature, databaseId: this.configuredDatabaseId });
-          ok++;
+          // previously-configured database). Before blind-creating, consult
+          // the existing-rows index — a hand-added or ledger-lost row may
+          // already be sitting in the configured database (AC4/AC5). A
+          // duplicate is worse than a retryable failure: if the scan itself
+          // throws, this `try` propagates it to the per-game `catch` below
+          // (→ failed++) rather than falling back to create.
+          const found = await this.lookupExistingRow(game.matchId);
+          if (found) {
+            const outcome = await this.adoptExistingRow(found, game, grade, signature);
+            if (outcome === 'recreated') recreated++;
+            else if (outcome === 'updated') updated++;
+            else ok++;
+          } else {
+            const newPageId = await this.createPage(game, grade);
+            this.outbox.recordExport(game.matchId, { pageId: newPageId, signature, databaseId: this.configuredDatabaseId });
+            ok++;
+          }
         } else if (this.outbox.signatureFor(game.matchId, this.configuredDatabaseId) === signature) {
           // Ledger record, nothing changed since the last write → skip.
           skipped++;
@@ -148,16 +231,26 @@ export class NotionExporter {
     return this.writer.createMatchPage(resolved);
   }
 
-  /** Try `updateMatchPage`; if the linked page is gone (either error shape), recreate it. */
+  /**
+   * Try `updateMatchPage`; if the linked page is gone (either error shape), recreate it.
+   * `opts.stampMatchId` threads through to `updateMatchPage` — set when adopting a
+   * found row (create-guard or legacy backfill) whose `Match ID` cell was empty, so
+   * the adoption heals the row instead of leaving it id-less for the next scan.
+   */
   private async updateOrRecreate(
     pageId: string,
     game: GameRecord,
     grade: ReturnType<typeof aggregateImprovementGrade>,
     signature: string,
+    opts?: { stampMatchId?: boolean },
   ): Promise<'updated' | 'recreated'> {
     const resolved = await this.resolveMatch(game, grade);
     try {
-      await this.writer.updateMatchPage(pageId, resolved);
+      // Pass `opts` only when actually set — keeps the ordinary (non-adopting)
+      // update call a plain 2-arg call, matching `updateMatchPage`'s contract
+      // that `stampMatchId` is opt-in, not a third positional always sent.
+      if (opts) await this.writer.updateMatchPage(pageId, resolved, opts);
+      else await this.writer.updateMatchPage(pageId, resolved);
       this.outbox.recordExport(game.matchId, { pageId, signature, databaseId: this.configuredDatabaseId });
       return 'updated';
     } catch (err) {
@@ -189,44 +282,52 @@ export class NotionExporter {
     }
   }
 
-  /** One legacy-backfill row: resolve its existing page by `Match ID`, update or recreate + adopt the ledger baseline. */
+  /**
+   * One legacy-backfill row: resolve its existing page via the same
+   * existing-rows index the create-guard uses (so a hand-added row with an
+   * empty `Match ID` cell is found by its derived id, fixing the reported
+   * duplicate bug — AC3), update or recreate + adopt the ledger baseline.
+   */
   private async backfillLegacy(game: GameRecord): Promise<'updated' | 'recreated' | 'ok'> {
     const grade = aggregateImprovementGrade(game.review, {
       visibleTargetIds: this.authoredTargetIds(),
       bookkeepingId: NOTION_IMPROVEMENT_TARGET_ID,
     });
     const signature = matchExportSignature(game, grade);
-    const foundPageId = await this.findLegacyPage(game.matchId);
+    const found = await this.lookupExistingRow(game.matchId);
 
-    if (foundPageId) {
-      // Skip the write when there's nothing to complete (empty signature) to
-      // minimize outbound traffic; either way adopt the found page as the
-      // ledger baseline so the query is never repeated for this match.
-      if (signature !== EMPTY_EXPORT_SIGNATURE) {
-        const resolved = await this.resolveMatch(game, grade);
-        await this.writer.updateMatchPage(foundPageId, resolved);
-      }
-      this.outbox.recordExport(game.matchId, { pageId: foundPageId, signature, databaseId: this.configuredDatabaseId });
-      return signature !== EMPTY_EXPORT_SIGNATURE ? 'updated' : 'ok';
-    }
+    if (found) return this.adoptExistingRow(found, game, grade, signature);
     // Row truly gone — recreate it.
     const newPageId = await this.createPage(game, grade);
     this.outbox.recordExport(game.matchId, { pageId: newPageId, signature, databaseId: this.configuredDatabaseId });
     return 'recreated';
   }
 
-  /** Resolve `matchId`'s existing Notion page via a `Match ID` query, or undefined if none exists. */
-  private async findLegacyPage(matchId: string): Promise<string | undefined> {
-    if (!this.legacyLookup) return undefined;
-    const { client, gametrackerDatabaseId, dataSourceId } = this.legacyLookup;
-    const sourceId = dataSourceId ?? (await resolveDataSourceId(client, gametrackerDatabaseId));
-    const res: any = await client.dataSources.query({
-      data_source_id: sourceId,
-      filter: { property: 'Match ID', rich_text: { equals: matchId } },
-      page_size: 1,
+  /**
+   * Adopt a row the existing-rows index resolved for an unledgered match —
+   * shared by the create-guard and the legacy backfill so the two paths can
+   * never diverge on write semantics. With an EMPTY signature there is nothing
+   * to push, and `updateMatchPage`'s forUpdate contract would actively BLANK
+   * the row's subjective cells (`select: null` / `checkbox: false`) — on a
+   * hand-added row those cells are the user's hand-authored data and the blank
+   * is not trash-recoverable. So the empty-signature adopt only stamps the
+   * `Match ID` cell (when it was empty) and records the ledger baseline
+   * (→ 'ok'); only a non-empty signature performs the full update.
+   */
+  private async adoptExistingRow(
+    found: { pageId: string; hadMatchIdText: boolean },
+    game: GameRecord,
+    grade: ReturnType<typeof aggregateImprovementGrade>,
+    signature: string,
+  ): Promise<'updated' | 'recreated' | 'ok'> {
+    if (signature === EMPTY_EXPORT_SIGNATURE) {
+      if (!found.hadMatchIdText) await this.writer.stampMatchId(found.pageId, game.matchId);
+      this.outbox.recordExport(game.matchId, { pageId: found.pageId, signature, databaseId: this.configuredDatabaseId });
+      return 'ok';
+    }
+    return this.updateOrRecreate(found.pageId, game, grade, signature, {
+      stampMatchId: !found.hadMatchIdText,
     });
-    const page = res.results?.[0];
-    return page ? String(page.id) : undefined;
   }
 
   /** Build the `ResolvedMatch` the writer expects, shared by create/update/recreate. */

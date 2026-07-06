@@ -121,9 +121,14 @@ history — closing the round-trip while staying local-first and opt-in.
   Source is inferred from the Match ID (a `manual`-prefixed id ⇒ manual; a real GEP id ⇒ auto), so an
   app-exported (auto-tracked) match restored on a new machine keeps its locked ⚡ facts instead of
   becoming a wrongly-editable ◎ manual row.
-- **Import ↔ sync idempotency** (resolved 2026-07-05) → a completed import marks every imported Match ID
-  as already-processed in the export outbox, so a subsequent "Sync to Notion" skips them instead of
-  writing duplicate rows back into the same Gametracker database.
+- **Import ↔ sync idempotency** (resolved 2026-07-05; hardened 2026-07-06 by
+  `notion-sync-dedup.spec.md`, which supersedes the ledger-only mechanism described here) → a
+  completed import records every imported match in the export ledger, so a subsequent "Sync to
+  Notion" skips/updates instead of writing duplicate rows. Since `notion-sync-dedup`, the link no
+  longer depends on local ledger state alone: import **writes the generated Match ID back onto
+  id-less rows**, export **never blind-creates** (it resolves existing rows in the database
+  first — by `Match ID` cell or by the id derived from the page), and an explicit "Clean up
+  duplicate rows" action archives duplicates that predate the fix.
 - **Empty-window safety net** (resolved 2026-07-05) → when the active date filter hides *all* history
   (filtered games = 0 but all-time games > 0), the Overview surfaces a "View all time (N games)"
   affordance instead of a blank screen, so restored history with old timestamps is never invisible.

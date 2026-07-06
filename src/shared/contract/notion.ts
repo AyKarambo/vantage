@@ -39,6 +39,34 @@ export interface ImportResult {
   error?: string;
   /** New accounts surfaced from the imported rows' Account column (name-only entries). */
   accountsAdded?: number;
+  /**
+   * Redundant Notion rows detected during import — rows that resolved to the
+   * same match id as another row (the shape existing duplicates have: a hand
+   * row plus a re-created copy). Only the canonical row was imported/ledgered;
+   * the rest are left untouched in Notion until the user runs the explicit
+   * "Clean up duplicates" action, which archives them.
+   */
+  duplicates?: number;
+}
+
+/**
+ * Result of the opt-in "Clean up duplicates" action: re-scans the configured
+ * Gametracker database, groups rows by effective match id, and for every
+ * group with more than one row keeps a single canonical row while archiving
+ * the rest to Notion trash (restorable, never a hard delete). Never run
+ * implicitly by import or export — only from this explicit, confirmed action.
+ */
+export interface CleanupDuplicatesResult {
+  /** Redundant rows successfully moved to Notion trash (`in_trash: true`). */
+  archived: number;
+  /** Duplicate groups found; each group's canonical row was kept (and re-pointed the ledger at it). */
+  kept: number;
+  /** Per-row archive failures — isolated, never abort the rest of the scan. */
+  failed: number;
+  /** True when there's no client/database configured — nothing was attempted. */
+  unavailable?: boolean;
+  /** Set when the whole scan (not a single row) failed. */
+  error?: string;
 }
 
 /**

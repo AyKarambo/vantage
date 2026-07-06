@@ -320,3 +320,103 @@ describe('NotionImporter — page id', () => {
     expect(games.map((g) => g.pageId)).toEqual(['page-abc', 'page-def']);
   });
 });
+
+describe('NotionImporter — Match ID write-back (AC1/AC2)', () => {
+  it('stamps the derived id onto a hand-added row\'s empty Match ID cell', async () => {
+    const pageId = '11111111-1111-1111-1111-111111111111';
+    const { client } = mockClient({ gametracker: [row({ id: pageId })], maps: [] });
+    const update = vi.fn().mockResolvedValue({});
+    (client as any).pages = { update };
+
+    const { games, duplicates } = await new NotionImporter(client, GT).import();
+
+    expect(duplicates).toBe(0);
+    expect(games).toHaveLength(1);
+    const derivedId = `manual-notion-${pageId.replace(/-/g, '')}`;
+    expect(games[0].matchId).toBe(derivedId);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({
+      page_id: pageId,
+      properties: { 'Match ID': { rich_text: [{ text: { content: derivedId } }] } },
+    });
+  });
+
+  it('never stamps a row whose Match ID cell already carries text', async () => {
+    const { client } = mockClient({ gametracker: [row({ matchId: '1432799173' })], maps: [] });
+    const update = vi.fn().mockResolvedValue({});
+    (client as any).pages = { update };
+
+    await new NotionImporter(client, GT).import();
+
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('imports the row normally even when the stamp write rejects (best-effort)', async () => {
+    const pageId = '22222222-2222-2222-2222-222222222222';
+    const { client } = mockClient({ gametracker: [row({ id: pageId })], maps: [] });
+    const update = vi.fn().mockRejectedValue(new Error('API error'));
+    (client as any).pages = { update };
+
+    const { games, failed } = await new NotionImporter(client, GT).import();
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(failed).toBe(0);
+    expect(games).toHaveLength(1);
+    expect(games[0].matchId).toBe(`manual-notion-${pageId.replace(/-/g, '')}`);
+  });
+});
+
+describe('NotionImporter — canonical dedupe + duplicates count (AC8)', () => {
+  it('collapses a hand row + its re-created copy into one game under the canonical (hand) pageId', async () => {
+    const handPageId = '33333333-3333-3333-3333-333333333333';
+    const derivedId = `manual-notion-${handPageId.replace(/-/g, '')}`;
+    const { client } = mockClient({
+      gametracker: [
+        row({ id: handPageId, createdTime: '2026-01-01T00:00:00.000Z' }), // hand row: no Match ID text
+        row({ id: 'copy-page', matchId: derivedId, createdTime: '2026-02-01T00:00:00.000Z' }), // re-created copy
+      ],
+      maps: [],
+    });
+    const update = vi.fn().mockResolvedValue({});
+    (client as any).pages = { update };
+
+    const { games, duplicates } = await new NotionImporter(client, GT).import();
+
+    expect(games).toHaveLength(1);
+    expect(games[0].pageId).toBe(handPageId);
+    expect(games[0].matchId).toBe(derivedId);
+    expect(duplicates).toBe(1);
+    // Only the canonical (hand) row is stamped — it had no Match ID text; the
+    // copy already carried the id and must never be touched.
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({
+      page_id: handPageId,
+      properties: { 'Match ID': { rich_text: [{ text: { content: derivedId } }] } },
+    });
+  });
+
+  it('prefers the ledgered page over createdTime ordering when neither row embeds the id', async () => {
+    // Two rows both carry the SAME Match ID text (neither is derivable back to a
+    // pageId via embeddedPageId), so canonical selection falls through to the
+    // ledger-preference tier.
+    const sharedMatchId = '1432799173';
+    const { client } = mockClient({
+      gametracker: [
+        row({ id: 'older-page', matchId: sharedMatchId, createdTime: '2026-01-01T00:00:00.000Z' }),
+        row({ id: 'ledgered-page', matchId: sharedMatchId, createdTime: '2026-02-01T00:00:00.000Z' }),
+      ],
+      maps: [],
+    });
+    const update = vi.fn().mockResolvedValue({});
+    (client as any).pages = { update };
+    const ledgeredPageIdFor = vi.fn((matchId: string) => (matchId === sharedMatchId ? 'ledgered-page' : undefined));
+
+    const { games, duplicates } = await new NotionImporter(client, GT, undefined, ledgeredPageIdFor).import();
+
+    expect(games).toHaveLength(1);
+    expect(games[0].pageId).toBe('ledgered-page');
+    expect(duplicates).toBe(1);
+    // Both rows already carry Match ID text — write-back must never fire.
+    expect(update).not.toHaveBeenCalled();
+  });
+});

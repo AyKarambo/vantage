@@ -116,6 +116,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   // Notion import (pull) + wipe-for-re-import.
   handle(ch.importNotion, () => provider.importNotion());
   handle(ch.deleteImportedMatches, () => provider.deleteImportedMatches());
+  handle(ch.cleanupNotionDuplicates, () => provider.cleanupNotionDuplicates());
   handle(ch.saveTarget, (_e, input: AuthoredTargetInput) => {
     provider.saveTarget(input);
   });

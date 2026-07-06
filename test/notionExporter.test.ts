@@ -37,6 +37,7 @@ function stubWriter() {
   return {
     createMatchPage: vi.fn().mockResolvedValue('new-page-id'),
     updateMatchPage: vi.fn().mockResolvedValue(undefined),
+    stampMatchId: vi.fn().mockResolvedValue(undefined),
   } as unknown as NotionWriter;
 }
 function stubMaps() {
@@ -342,38 +343,52 @@ describe('NotionExporter — page-gone recreate', () => {
 });
 
 describe('NotionExporter — legacy backfill', () => {
-  it('legacy processed row: Match ID query finds the page → updateMatchPage once, createMatchPage not, updated:1, ledger recorded', async () => {
+  it('legacy processed row: hand row (empty Match ID) found by scan → updateMatchPage once + stamped, createMatchPage not, updated:1, ledger recorded (AC3)', async () => {
     const dir = tmpDir();
     const outbox = new OutboxStore(dir);
     // Simulate a pre-ledger outbox.json: only the old processed[] list, no records.
-    fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-legacy-1'] }));
+    fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['manual-notion-abc123abc123abc123abc123abc123ab'] }));
     const reloaded = new OutboxStore(dir);
 
     const create = vi.fn();
     const update = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn().mockResolvedValue({ results: [{ id: 'found-page' }], has_more: false, next_cursor: null });
+    // The scan returns the id-less hand row this legacy id derives from: no
+    // `Match ID` rich_text at all — the old per-id filter-query mock shape is
+    // retired along with `findLegacyPage`.
+    const query = vi.fn().mockResolvedValue({
+      results: [{ id: 'abc123ab-c123-abc1-23ab-c123abc123ab', properties: {} }],
+      has_more: false,
+      next_cursor: null,
+    });
     const client = { pages: { create, update }, dataSources: { query } } as any;
     const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
     const maps = stubMaps();
 
     // Reviewed offline since the legacy export: carries a positiveComms flag now.
-    const g = game('gep-legacy-1', { mental: { positiveComms: true } });
+    const g = game('manual-notion-abc123abc123abc123abc123abc123ab', { mental: { positiveComms: true } });
     const exporter = new NotionExporter(
       writer, maps, reloaded, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
     );
     const result = await exporter.export([g]);
 
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0][0].page_id).toBe('found-page');
+    const updateCall = update.mock.calls[0][0];
+    expect(updateCall.page_id).toBe('abc123ab-c123-abc1-23ab-c123abc123ab');
+    // Adoption heals the id-less hand row: the update payload stamps Match ID.
+    expect(updateCall.properties['Match ID']).toEqual({
+      rich_text: [{ text: { content: 'manual-notion-abc123abc123abc123abc123abc123ab' } }],
+    });
     expect(create).not.toHaveBeenCalled();
     expect(result.updated).toBe(1);
-    expect(reloaded.pageIdFor('gep-legacy-1')).toBe('found-page');
-    expect(reloaded.signatureFor('gep-legacy-1')).toBe(JSON.stringify({ grade: null, flags: ['positiveComms'] }));
+    expect(reloaded.pageIdFor('manual-notion-abc123abc123abc123abc123abc123ab')).toBe('abc123ab-c123-abc1-23ab-c123abc123ab');
+    expect(reloaded.signatureFor('manual-notion-abc123abc123abc123abc123abc123ab')).toBe(
+      JSON.stringify({ grade: null, flags: ['positiveComms'] }),
+    );
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('legacy processed row: Match ID query finds nothing → createMatchPage called, recreated:1', async () => {
+  it('legacy processed row: scan finds nothing relevant → createMatchPage called, recreated:1', async () => {
     const dir = tmpDir();
     const outbox = new OutboxStore(dir);
     fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-legacy-2'] }));
@@ -396,6 +411,314 @@ describe('NotionExporter — legacy backfill', () => {
     expect(update).not.toHaveBeenCalled();
     expect(result.recreated).toBe(1);
     expect(reloaded.pageIdFor('gep-legacy-2')).toBe('new-legacy-page');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('legacy processed row whose page already carries Match ID text → updated in place, no stamp', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-legacy-texted'] }));
+    const reloaded = new OutboxStore(dir);
+
+    const create = vi.fn();
+    const update = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({
+      results: [{
+        id: 'found-page-texted',
+        properties: { 'Match ID': { rich_text: [{ plain_text: 'gep-legacy-texted' }] } },
+      }],
+      has_more: false,
+      next_cursor: null,
+    });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game('gep-legacy-texted', { mental: { positiveComms: true } });
+    const exporter = new NotionExporter(
+      writer, maps, reloaded, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(update).toHaveBeenCalledTimes(1);
+    const updateCall = update.mock.calls[0][0];
+    expect(updateCall.page_id).toBe('found-page-texted');
+    expect(updateCall.properties).not.toHaveProperty('Match ID');
+    expect(create).not.toHaveBeenCalled();
+    expect(result.updated).toBe(1);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('NotionExporter — create-guard (no blind creates for unledgered matches)', () => {
+  it('AC4: unledgered manual-notion match found by its embedded page id (id-less row) → adopted (update, no create), stamped', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir); // no ledger record at all — as after ledger loss
+    const matchId = 'manual-notion-abc123abc123abc123abc123abc123ab';
+    const pageId = 'abc123ab-c123-abc1-23ab-c123abc123ab';
+
+    const create = vi.fn();
+    const update = vi.fn().mockResolvedValue(undefined);
+    // Scan returns the hand row this id derives from, with an empty Match ID cell.
+    const query = vi.fn().mockResolvedValue({ results: [{ id: pageId, properties: {} }], has_more: false, next_cursor: null });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game(matchId, { mental: { positiveComms: true } });
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
+    const updateCall = update.mock.calls[0][0];
+    expect(updateCall.page_id).toBe(pageId);
+    expect(updateCall.properties['Match ID']).toEqual({ rich_text: [{ text: { content: matchId } }] });
+    expect(result.updated).toBe(1);
+    expect(result.ok).toBe(0);
+    expect(outbox.pageIdFor(matchId)).toBe(pageId);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('AC5: unledgered GEP match found by Match ID text → adopted (update, no create), NOT stamped', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir); // no ledger record — as after ledger loss
+    const matchId = 'gep-lost-1';
+    const pageId = 'existing-gep-page';
+
+    const create = vi.fn();
+    const update = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({
+      results: [{ id: pageId, properties: { 'Match ID': { rich_text: [{ plain_text: matchId }] } } }],
+      has_more: false,
+      next_cursor: null,
+    });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game(matchId, { mental: { positiveComms: true } });
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
+    const updateCall = update.mock.calls[0][0];
+    expect(updateCall.page_id).toBe(pageId);
+    expect(updateCall.properties).not.toHaveProperty('Match ID'); // already had text — not re-stamped
+    expect(result.updated).toBe(1);
+    expect(outbox.pageIdFor(matchId)).toBe(pageId);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('adopting an id-less row with NOTHING to push (empty signature) only stamps Match ID — never blanks the row\'s subjective cells', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir); // ledger lost — the spec\'s motivating case
+    const matchId = 'manual-notion-abc123abc123abc123abc123abc123ab';
+    const pageId = 'abc123ab-c123-abc1-23ab-c123abc123ab';
+
+    const create = vi.fn();
+    const update = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({ results: [{ id: pageId, properties: {} }], has_more: false, next_cursor: null });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    // Comms/Tilt writable — exactly the columns updateMatchPage\'s forUpdate
+    // contract would blank (`select: null` / `checkbox: false`) and destroy the
+    // user\'s hand-filled values on a row the app has never written to.
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms', 'Tilt']));
+    const maps = stubMaps();
+
+    const g = game(matchId); // no review, no mental → EMPTY export signature
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
+    const props = update.mock.calls[0][0].properties;
+    // The stamp-only write: Match ID and NOTHING else — no blanked selects/checkboxes.
+    expect(Object.keys(props)).toEqual(['Match ID']);
+    expect(props['Match ID']).toEqual({ rich_text: [{ text: { content: matchId } }] });
+    expect(result).toEqual({ ok: 1, failed: 0, skipped: 0, updated: 0, recreated: 0 });
+    expect(outbox.pageIdFor(matchId)).toBe(pageId);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('adopting a texted row with nothing to push writes nothing at all — ledger baseline only', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const matchId = 'gep-lost-empty';
+    const pageId = 'existing-gep-page-2';
+
+    const create = vi.fn();
+    const update = vi.fn();
+    const query = vi.fn().mockResolvedValue({
+      results: [{ id: pageId, properties: { 'Match ID': { rich_text: [{ plain_text: matchId }] } } }],
+      has_more: false,
+      next_cursor: null,
+    });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game(matchId); // empty signature, row already self-identifying
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: 1, failed: 0, skipped: 0, updated: 0, recreated: 0 });
+    expect(outbox.pageIdFor(matchId)).toBe(pageId);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('AC6: nothing found in the scan → createPage runs as today', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi.fn().mockResolvedValue({ id: 'brand-new-page' });
+    const update = vi.fn();
+    const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game('gep-genuinely-new');
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+    expect(result.ok).toBe(1);
+    expect(outbox.pageIdFor('gep-genuinely-new')).toBe('brand-new-page');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('the scan runs at most once per export() call, even across several unledgered games', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi.fn().mockResolvedValue({ id: 'p-new' });
+    const update = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const games = [game('gep-multi-1'), game('gep-multi-2'), game('gep-multi-3')];
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export(games);
+
+    // One page of results ⇒ the loop's pagination call count is exactly the
+    // number of pages fetched, not one per game — the scan itself runs once.
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(result.ok).toBe(3);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('the index is rebuilt on a second export() call, not reused stale from the first', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi.fn().mockResolvedValue({ id: 'p-new' });
+    const update = vi.fn();
+    const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+
+    await exporter.export([game('gep-call-1')]);
+    await exporter.export([game('gep-call-2')]);
+
+    // Each export() call gets its own fresh scan — two calls, two scans.
+    expect(query).toHaveBeenCalledTimes(2);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('AC12: ledgered + unchanged signature → skipped, the scan is never run', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const emptySig = JSON.stringify({ grade: null, flags: [] });
+    outbox.recordExport('gep-unchanged', { pageId: 'page-unchanged', signature: emptySig });
+
+    const create = vi.fn();
+    const update = vi.fn();
+    const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game('gep-unchanged');
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(result).toEqual({ ok: 0, failed: 0, skipped: 1, updated: 0, recreated: 0 });
+    expect(query).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('no legacyLookup supplied → the guard is skipped entirely, blind-creates as before (documented degradation)', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const writer = stubWriter();
+    const maps = stubMaps();
+
+    // No legacyLookup argument at all.
+    const exporter = new NotionExporter(writer, maps, outbox);
+    const result = await exporter.export([game('gep-no-lookup')]);
+
+    expect(writer.createMatchPage).toHaveBeenCalledTimes(1);
+    expect(writer.updateMatchPage).not.toHaveBeenCalled();
+    expect(result.ok).toBe(1);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('scan failure on an unledgered match → counted as failed, never falls back to create (a duplicate is worse than a retryable failure)', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi.fn();
+    const update = vi.fn();
+    const query = vi.fn().mockRejectedValue(new Error('network error'));
+    const client = { pages: { create, update }, dataSources: { query } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
+    const maps = stubMaps();
+
+    const g = game('gep-scan-fails');
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' },
+    );
+    const result = await exporter.export([g]);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(result.failed).toBe(1);
+    expect(result.ok).toBe(0);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -438,7 +761,11 @@ describe('NotionExporter — progress tick accounting', () => {
 
     const create = vi.fn().mockResolvedValue({ id: 'fresh-page-1' });
     const update = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn().mockResolvedValue({ results: [{ id: 'found-page-3' }], has_more: false, next_cursor: null });
+    const query = vi.fn().mockResolvedValue({
+      results: [{ id: 'found-page-3', properties: { 'Match ID': { rich_text: [{ plain_text: 'gep-legacy-3' }] } } }],
+      has_more: false,
+      next_cursor: null,
+    });
     const client = { pages: { create, update }, dataSources: { query } } as any;
     const writer = new NotionWriter(client, 'db', false, new Set(['Comms']));
     const maps = stubMaps();

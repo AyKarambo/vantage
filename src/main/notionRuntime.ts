@@ -4,6 +4,8 @@ import { MapsCache } from '../notion/mapsCache';
 import { NotionExporter } from '../notion/notionExporter';
 import { NotionImporter, type ImportOutcome } from '../notion/notionImporter';
 import { NotionAdmin } from '../notion/notionAdmin';
+import { queryAllPages, queryDataSourcePages } from '../notion/pageScan';
+import { groupByEffectiveMatchId, pickCanonicalRow, rowRefOf } from '../notion/dedup';
 import type { OutboxStore } from '../store/outbox';
 import {
   getNotionToken, setNotionToken, clearNotionToken, saveLocalNotionConfig, notionDatabaseSource,
@@ -12,7 +14,8 @@ import {
 import type { GameRecord } from '../core/analytics';
 import { aggregateImprovementGrade, matchExportSignature, NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import type {
-  ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SubjectiveColumnDiag,
+  CleanupDuplicatesResult, ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
+  SubjectiveColumnDiag,
 } from '../shared/contract';
 
 /**
@@ -147,9 +150,17 @@ export class NotionRuntime {
    */
   async import(): Promise<ImportOutcome & { unavailable?: boolean; error?: string }> {
     const { notion } = this.deps.config();
-    if (!this.client || !notion.gametrackerDatabaseId) return { games: [], failed: 0, unavailable: true };
+    if (!this.client || !notion.gametrackerDatabaseId) return { games: [], failed: 0, duplicates: 0, unavailable: true };
     try {
-      const importer = new NotionImporter(this.client, notion.gametrackerDatabaseId, notion.mapsDatabaseId || undefined);
+      const importer = new NotionImporter(
+        this.client, notion.gametrackerDatabaseId, notion.mapsDatabaseId || undefined,
+        // Ledger preference for canonical-row selection (`pickCanonicalRow`'s
+        // second precedence tier): what the local ledger already points at for
+        // this match id, in the currently-configured database — so a group
+        // whose embedded-id rule can't resolve it still prefers the row
+        // Vantage already knows about over an arbitrary earliest-created pick.
+        (matchId) => this.deps.outbox.pageIdFor(matchId, notion.gametrackerDatabaseId),
+      );
       const result = await importer.import();
       // Imported rows already live in Notion, so ledger them as exported with the
       // signature the exporter would compute: the next "Sync to Notion" skips them
@@ -168,7 +179,87 @@ export class NotionRuntime {
       }
       return result;
     } catch (err) {
-      return { games: [], failed: 0, error: String(err) };
+      return { games: [], failed: 0, duplicates: 0, error: String(err) };
+    }
+  }
+
+  /**
+   * Opt-in duplicate cleanup (AC9–AC11): re-scans the configured database at
+   * ACTION TIME (never from stale import state — Notion may have changed
+   * since the last import/export), groups rows by effective match id, and for
+   * every group with more than one row keeps the canonical row
+   * (`pickCanonicalRow`, preferring whatever the ledger already points at)
+   * while archiving the rest to Notion trash (`in_trash: true` —
+   * restorable ~30 days, never a hard delete).
+   *
+   * Per-row isolated: one group's archive failure is counted in `failed` and
+   * does not stop the remaining groups from being processed (AC11). Stamping
+   * the canonical row's `Match ID` (when it lacks one) and re-pointing the
+   * ledger at it are both best-effort follow-ups to a successful group —
+   * neither failure is counted, mirroring the importer's write-back and the
+   * exporter's adoption stamp.
+   *
+   * Never called from `import()` or `export()` — archiving only ever happens
+   * here, behind the caller's explicit confirm (AC10).
+   */
+  async cleanupDuplicates(): Promise<CleanupDuplicatesResult> {
+    const { notion } = this.deps.config();
+    if (!this.client || !notion.gametrackerDatabaseId) {
+      return { archived: 0, kept: 0, failed: 0, unavailable: true };
+    }
+    const client = this.client;
+    const databaseId = notion.gametrackerDatabaseId;
+    try {
+      // Prefer the already-resolved data source id from the last validate()
+      // (paging directly, no redundant `databases.retrieve`); fall back to
+      // `queryAllPages`, which resolves `databaseId` itself.
+      const pages = this.gametrackerSourceId
+        ? await queryDataSourcePages(client, this.gametrackerSourceId)
+        : await queryAllPages(client, databaseId);
+      const groups = groupByEffectiveMatchId(pages.map(rowRefOf));
+
+      let archived = 0;
+      let kept = 0;
+      let failed = 0;
+      for (const [effectiveId, rows] of groups) {
+        if (rows.length <= 1) continue; // no duplicate — nothing to clean up
+        kept++;
+        const canonical = pickCanonicalRow(rows, {
+          ledgeredPageId: this.deps.outbox.pageIdFor(effectiveId, databaseId),
+        });
+        for (const row of rows) {
+          if (row.pageId === canonical.pageId) continue;
+          try {
+            await client.pages.update({ page_id: row.pageId, in_trash: true } as any);
+            archived++;
+          } catch {
+            // Per-row isolation (AC11): this group's other duplicates and every
+            // other group still get processed; only this archive is lost.
+            failed++;
+          }
+        }
+        if (!canonical.matchIdText) {
+          try {
+            await client.pages.update({
+              page_id: canonical.pageId,
+              properties: { 'Match ID': { rich_text: [{ text: { content: effectiveId } }] } },
+            } as any);
+          } catch {
+            // Best-effort, same as the importer's write-back — never counted.
+          }
+        }
+        try {
+          this.deps.outbox.repointExport(effectiveId, { pageId: canonical.pageId, databaseId });
+        } catch {
+          // Best-effort like the stamp above: a ledger-write failure (disk
+          // full, file lock) must not abort the remaining groups or discard
+          // this run's real archive counts — the export create-guard re-adopts
+          // the canonical row if the ledger stays stale.
+        }
+      }
+      return { archived, kept, failed };
+    } catch (err) {
+      return { archived: 0, kept: 0, failed: 0, error: String(err) };
     }
   }
 

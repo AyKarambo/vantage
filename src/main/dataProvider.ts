@@ -38,6 +38,7 @@ export interface DataProviderDeps {
     NotionRuntime,
     | 'export' | 'import' | 'status' | 'setToken' | 'clearToken'
     | 'listDatabases' | 'listPages' | 'selectDatabase' | 'createDatabase' | 'clearExports'
+    | 'cleanupDuplicates'
   >;
   /** Live app config — re-read on every use (accounts, breakReminder), never cached. */
   getConfig(): AppConfig;
@@ -225,6 +226,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         imported, skipped, failed: res.failed,
         ...(merged ? { merged } : {}),
         ...(accountsAdded ? { accountsAdded } : {}),
+        ...(res.duplicates ? { duplicates: res.duplicates } : {}),
       };
     },
     deleteImportedMatches: () => {
@@ -232,6 +234,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       deps.notion.clearExports(removed.map((g) => g.matchId));
       return { deleted: removed.length };
     },
+    cleanupNotionDuplicates: () => deps.notion.cleanupDuplicates(),
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {
       const config = deps.getConfig();
