@@ -1,7 +1,7 @@
 import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
 import {
-  buildGametrackerProperties, hasPlayedAtColumn, hasSrDeltaColumn, mapRelationDatabaseId,
+  buildGametrackerProperties, hasPlayedAtColumn, hasSrDeltaColumn, mapRelationSourceId,
   presentSubjectiveColumns, validateGametrackerShape, type ShapeValidation,
 } from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary } from '../shared/contract';
@@ -26,6 +26,8 @@ export interface ValidateResult extends ShapeValidation {
   subjectiveColumns: string[];
   /** The database the `Map` relation points at — lets the exporter resolve maps without a configured mapsDatabaseId. */
   mapRelationDbId?: string;
+  /** The validated database's first data source id, so the writer can parent new rows on it directly. */
+  dataSourceId?: string;
 }
 
 /**
@@ -38,10 +40,29 @@ export interface ValidateResult extends ShapeValidation {
 export class NotionAdmin {
   constructor(private readonly client: Client) {}
 
-  /** Databases the integration has been shared with. */
+  /**
+   * Databases the integration has been shared with. v5's search only returns data
+   * sources (not databases directly), so this searches those and maps each back to
+   * its parent database id — deduped (first wins) since a single-source database
+   * (the only kind Vantage creates or expects) surfaces as exactly one data source.
+   */
   async listDatabases(): Promise<NotionDatabaseSummary[]> {
-    const results = await this.searchAll('database');
-    return results.map((obj) => ({ id: obj.id, title: titleOfDatabase(obj), url: obj.url }));
+    const results = await this.searchAll('data_source');
+    const seen = new Set<string>();
+    const databases: NotionDatabaseSummary[] = [];
+    for (const obj of results) {
+      // A restricted-token search can return a PartialDataSourceObjectResponse —
+      // no parent/title/url. Skip it rather than falling back to the data
+      // source's own id: emitting a data-source id as a "database id" would
+      // corrupt config if picked (a picker entry titled 'Untitled' with no url),
+      // which is worse than the entry being absent from the list.
+      const databaseId = obj?.parent?.database_id;
+      if (!databaseId) continue;
+      if (seen.has(databaseId)) continue;
+      seen.add(databaseId);
+      databases.push({ id: databaseId, title: titleOfDatabase(obj), url: obj.url });
+    }
+    return databases;
   }
 
   /** Pages the integration has been shared with — candidate parents for auto-create. */
@@ -53,19 +74,23 @@ export class NotionAdmin {
   /**
    * Creates a Maps database under `parentPageId`, populates it with one page
    * per `MAP_MODES` key, then creates the Gametracker database with its `Map`
-   * relation pointing at the Maps database. Order matters: the Gametracker
-   * database needs the Maps database id to build its relation property.
+   * relation pointing at the Maps data source. Order matters: the Gametracker
+   * database needs the Maps data source id to build its relation property.
+   * Properties nest under `initial_data_source` (v5's `databases.create` shape);
+   * both creates return `data_sources[0].id` for the single source each database
+   * gets. Returned ids/urls stay database-level — that's still what config stores.
    */
   async createGametracker(parentPageId: string): Promise<CreateGametrackerResult> {
     const mapsDb: any = await this.client.databases.create({
       parent: { type: 'page_id', page_id: parentPageId },
       title: [{ type: 'text', text: { content: 'Maps' } }],
-      properties: { Name: { title: {} } },
+      initial_data_source: { properties: { Name: { title: {} } } },
     });
+    const mapsSourceId = firstDataSourceId(mapsDb, 'Maps');
 
     for (const name of Object.keys(MAP_MODES)) {
       await this.client.pages.create({
-        parent: { database_id: mapsDb.id },
+        parent: { type: 'data_source_id', data_source_id: mapsSourceId },
         properties: { Name: { title: [{ text: { content: name } }] } },
       });
     }
@@ -73,7 +98,7 @@ export class NotionAdmin {
     const gametrackerDb: any = await this.client.databases.create({
       parent: { type: 'page_id', page_id: parentPageId },
       title: [{ type: 'text', text: { content: 'Gametracker' } }],
-      properties: buildGametrackerProperties(mapsDb.id) as any,
+      initial_data_source: { properties: buildGametrackerProperties(mapsSourceId) as any },
     });
 
     return {
@@ -84,10 +109,16 @@ export class NotionAdmin {
     };
   }
 
-  /** Validate a database's live shape against the Gametracker schema. */
+  /**
+   * Validate a database's live shape against the Gametracker schema. Two-step
+   * under v5: `databases.retrieve` for the title + first data source id, then
+   * `dataSources.retrieve` for the properties the schema validators read.
+   */
   async validate(databaseId: string, opts: { requireMapRelation?: boolean } = {}): Promise<ValidateResult> {
     const db: any = await this.client.databases.retrieve({ database_id: databaseId });
-    const properties = db.properties ?? {};
+    const dataSourceId: string | undefined = db?.data_sources?.[0]?.id;
+    const source: any = dataSourceId ? await this.client.dataSources.retrieve({ data_source_id: dataSourceId }) : undefined;
+    const properties = source?.properties ?? {};
     const shape = validateGametrackerShape(properties, opts);
     return {
       ...shape,
@@ -95,12 +126,13 @@ export class NotionAdmin {
       hasPlayedAt: hasPlayedAtColumn(properties),
       hasSrDelta: hasSrDeltaColumn(properties),
       subjectiveColumns: presentSubjectiveColumns(properties),
-      mapRelationDbId: mapRelationDatabaseId(properties),
+      mapRelationDbId: mapRelationSourceId(properties),
+      dataSourceId,
     };
   }
 
   /** Paginated `client.search`, following `has_more`/`next_cursor`. */
-  private async searchAll(value: 'database' | 'page'): Promise<any[]> {
+  private async searchAll(value: 'data_source' | 'page'): Promise<any[]> {
     const results: any[] = [];
     let cursor: string | undefined;
     do {
@@ -114,6 +146,22 @@ export class NotionAdmin {
     } while (cursor);
     return results;
   }
+}
+
+/**
+ * Read a freshly-created database's first data source id, throwing a clear
+ * error when it's missing/empty (a restricted-token response can come back
+ * partial) BEFORE any dependent object — Map pages, the Gametracker's relation
+ * — gets created against a garbage `undefined` id.
+ */
+function firstDataSourceId(db: any, label: string): string {
+  const id = db?.data_sources?.[0]?.id;
+  if (!id) {
+    throw new Error(
+      `${label} database has no visible data sources — the integration token may lack read-content capability`,
+    );
+  }
+  return id;
 }
 
 // Near-duplicate of mapsCache's extractTitle — kept separate deliberately (dedupe would

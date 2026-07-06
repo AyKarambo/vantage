@@ -49,43 +49,71 @@ function mapPage(id: string, title: string) {
   return { id, properties: { Name: { type: 'title', title: [{ plain_text: title }] } } };
 }
 
+const GT_DS = 'gametracker-ds';
+const MAPS_DS = 'maps-ds';
+
 /**
- * Mock @notionhq client. `query` dispatches on database_id; `retrieve` returns
- * the Gametracker schema whose `Map` relation points at MAPS (unless overridden).
+ * Mock @notionhq client for the v5 (database → data source) shape. `GT` and
+ * `MAPS` are database ids; `databases.retrieve` resolves each to its data
+ * source id (GT_DS / MAPS_DS), `dataSources.query` dispatches on the resolved
+ * data_source_id, and `dataSources.retrieve` returns the Gametracker schema
+ * whose `Map` relation points at MAPS_DS (unless overridden).
  */
 function mockClient(opts: {
   gametracker: any[];
   maps?: any[];
   mapRelationDbId?: string | null; // null → Map isn't a relation (no discovery)
 }) {
-  const retrieve = vi.fn().mockResolvedValue({
-    properties: {
-      Map:
-        opts.mapRelationDbId === null
-          ? { type: 'rich_text' }
-          : { type: 'relation', relation: { database_id: opts.mapRelationDbId ?? MAPS } },
-    },
+  // `databases.retrieve` only knows the two configured database ids (GT, MAPS);
+  // an already-resolved data source id (e.g. the discovered MAPS_DS) rejects, so
+  // `resolveDataSourceId` falls through to `dataSources.retrieve` for it — the
+  // "id that is already a data-source id" path exercised for real by the resolver.
+  const databasesRetrieve = vi.fn(async ({ database_id }: any) => {
+    if (database_id === GT) return { data_sources: [{ id: GT_DS }] };
+    if (database_id === MAPS) return { data_sources: [{ id: MAPS_DS }] };
+    throw new Error(`not a database id: ${database_id}`);
   });
-  const query = vi.fn(async ({ database_id }: any) => ({
-    results: database_id === MAPS ? opts.maps ?? [] : opts.gametracker,
+  const dataSourcesRetrieve = vi.fn(async ({ data_source_id }: any) => {
+    if (data_source_id === GT_DS) {
+      return {
+        properties: {
+          Map:
+            opts.mapRelationDbId === null
+              ? { type: 'rich_text' }
+              : { type: 'relation', relation: { data_source_id: opts.mapRelationDbId ?? MAPS_DS } },
+        },
+      };
+    }
+    return { id: data_source_id }; // resolver's "already a data source id" fallback
+  });
+  const query = vi.fn(async ({ data_source_id }: any) => ({
+    results: data_source_id === MAPS_DS ? opts.maps ?? [] : opts.gametracker,
     has_more: false,
     next_cursor: null,
   }));
-  return { client: { databases: { retrieve, query } } as any, retrieve, query };
+  return {
+    client: { databases: { retrieve: databasesRetrieve }, dataSources: { query, retrieve: dataSourcesRetrieve } } as any,
+    retrieve: dataSourcesRetrieve,
+    databasesRetrieve,
+    query,
+  };
 }
 
 describe('NotionImporter — map resolution', () => {
   it('discovers the Maps database from the schema and resolves relations when mapsDatabaseId is unset', async () => {
-    const { client, retrieve } = mockClient({
+    const { client, retrieve, databasesRetrieve } = mockClient({
       gametracker: [row({ mapId: 'm-ilios' }), row({ id: 'page-2', mapId: 'm-kr' })],
       maps: [mapPage('m-ilios', 'Ilios'), mapPage('m-kr', "King's Row")],
     });
     // No mapsDatabaseId passed — the user's real situation.
     const { games, failed } = await new NotionImporter(client, GT).import();
 
-    expect(retrieve).toHaveBeenCalledWith({ database_id: GT });
+    expect(retrieve).toHaveBeenCalledWith({ data_source_id: GT_DS });
     expect(failed).toBe(0);
     expect(games.map((g) => g.map)).toEqual(['Ilios', "King's Row"]);
+    // Discovery and the row query both need GT resolved — the per-instance memo
+    // means only one databases.retrieve call for it, not two.
+    expect(databasesRetrieve.mock.calls.filter(([{ database_id }]: any) => database_id === GT)).toHaveLength(1);
   });
 
   it('uses an explicitly configured mapsDatabaseId without discovering', async () => {
@@ -111,6 +139,19 @@ describe('NotionImporter — map resolution', () => {
     const byId = Object.fromEntries(games.map((g) => [g.matchId.includes('titled') ? 'titled' : 'bare', g.map]));
     expect(byId.titled).toBe('Hollywood');
     expect(byId.bare).toBe('Unknown');
+  });
+
+  it('rejects when the Gametracker id cannot be resolved (unreachable database)', async () => {
+    const client = {
+      databases: { retrieve: vi.fn().mockRejectedValue(new Error('object_not_found')) },
+      dataSources: {
+        retrieve: vi.fn().mockRejectedValue(new Error('not a data source either')),
+        query: vi.fn(),
+      },
+    } as any;
+
+    await expect(new NotionImporter(client, GT).import()).rejects.toThrow('object_not_found');
+    expect(client.dataSources.query).not.toHaveBeenCalled();
   });
 });
 

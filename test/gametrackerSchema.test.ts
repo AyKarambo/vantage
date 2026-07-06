@@ -2,21 +2,26 @@ import { describe, it, expect } from 'vitest';
 import {
   REQUIRED_PROPERTIES, buildGametrackerProperties, validateGametrackerShape,
   hasPlayedAtColumn, PLAYED_AT_PROPERTY, hasSrDeltaColumn, SR_DELTA_PROPERTY,
-  presentSubjectiveColumns, mapRelationDatabaseId,
+  presentSubjectiveColumns, mapRelationSourceId,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
   it('includes every REQUIRED_PROPERTIES entry with the matching Notion type', () => {
-    const props = buildGametrackerProperties('maps-db-id');
+    const props = buildGametrackerProperties('maps-ds-id');
     for (const [name, type] of Object.entries(REQUIRED_PROPERTIES)) {
       expect(props).toHaveProperty(name);
       expect(props[name]).toHaveProperty(type);
     }
   });
 
-  it('includes the Map relation only when a maps database id is given', () => {
-    expect(buildGametrackerProperties('maps-db-id')).toHaveProperty('Map');
+  it('includes the Map relation only when a maps data source id is given', () => {
+    expect(buildGametrackerProperties('maps-ds-id')).toHaveProperty('Map');
     expect(buildGametrackerProperties()).not.toHaveProperty('Map');
+  });
+
+  it('builds the Map relation from a data source id, single_property', () => {
+    const props: any = buildGametrackerProperties('maps-ds-id');
+    expect(props['Map']).toEqual({ relation: { data_source_id: 'maps-ds-id', single_property: {} } });
   });
 
   it('pre-seeds Source/Result/Role select options', () => {
@@ -34,7 +39,7 @@ describe('buildGametrackerProperties', () => {
   it('does not require Played At (legacy databases without it still validate)', () => {
     // Not part of the shape contract — a DB missing it is neither missing nor mismatched.
     expect(REQUIRED_PROPERTIES).not.toHaveProperty(PLAYED_AT_PROPERTY);
-    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    const props = asRetrievedShape(buildGametrackerProperties('maps-ds-id'));
     delete props[PLAYED_AT_PROPERTY];
     expect(validateGametrackerShape(props, { requireMapRelation: true }).ok).toBe(true);
   });
@@ -46,7 +51,7 @@ describe('buildGametrackerProperties', () => {
 
   it('does not require SR Delta (legacy databases without it still validate)', () => {
     expect(REQUIRED_PROPERTIES).not.toHaveProperty(SR_DELTA_PROPERTY);
-    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    const props = asRetrievedShape(buildGametrackerProperties('maps-ds-id'));
     delete props[SR_DELTA_PROPERTY];
     expect(validateGametrackerShape(props, { requireMapRelation: true }).ok).toBe(true);
   });
@@ -54,7 +59,7 @@ describe('buildGametrackerProperties', () => {
 
 describe('hasSrDeltaColumn', () => {
   it('is true only when an SR Delta number column is present', () => {
-    expect(hasSrDeltaColumn(asRetrievedShape(buildGametrackerProperties('maps-db-id')))).toBe(true);
+    expect(hasSrDeltaColumn(asRetrievedShape(buildGametrackerProperties('maps-ds-id')))).toBe(true);
     expect(hasSrDeltaColumn({ [SR_DELTA_PROPERTY]: { type: 'rich_text' } })).toBe(false); // wrong type
     expect(hasSrDeltaColumn({})).toBe(false); // absent
   });
@@ -62,7 +67,7 @@ describe('hasSrDeltaColumn', () => {
 
 describe('hasPlayedAtColumn', () => {
   it('is true only when a Played At date column is present', () => {
-    expect(hasPlayedAtColumn(asRetrievedShape(buildGametrackerProperties('maps-db-id')))).toBe(true);
+    expect(hasPlayedAtColumn(asRetrievedShape(buildGametrackerProperties('maps-ds-id')))).toBe(true);
     expect(hasPlayedAtColumn({ [PLAYED_AT_PROPERTY]: { type: 'rich_text' } })).toBe(false); // wrong type
     expect(hasPlayedAtColumn({})).toBe(false); // absent
   });
@@ -70,7 +75,7 @@ describe('hasPlayedAtColumn', () => {
 
 describe('validateGametrackerShape', () => {
   it('round-trips: a freshly built schema validates ok (with a maps id)', () => {
-    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    const props = asRetrievedShape(buildGametrackerProperties('maps-ds-id'));
     const result = validateGametrackerShape(props, { requireMapRelation: true });
     expect(result).toEqual({ ok: true, missing: [], mismatched: [] });
   });
@@ -89,7 +94,7 @@ describe('validateGametrackerShape', () => {
   });
 
   it('lists a missing property', () => {
-    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    const props = asRetrievedShape(buildGametrackerProperties('maps-ds-id'));
     delete props['Result'];
     const result = validateGametrackerShape(props, { requireMapRelation: true });
     expect(result.ok).toBe(false);
@@ -97,7 +102,7 @@ describe('validateGametrackerShape', () => {
   });
 
   it('lists a type mismatch', () => {
-    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    const props = asRetrievedShape(buildGametrackerProperties('maps-ds-id'));
     props['Eliminations'] = { type: 'rich_text' };
     const result = validateGametrackerShape(props, { requireMapRelation: true });
     expect(result.ok).toBe(false);
@@ -105,7 +110,7 @@ describe('validateGametrackerShape', () => {
   });
 
   it('tolerates extra user columns (e.g. Leaver/Comms/Tilt)', () => {
-    const props = asRetrievedShape(buildGametrackerProperties('maps-db-id'));
+    const props = asRetrievedShape(buildGametrackerProperties('maps-ds-id'));
     props['Tilt'] = { type: 'checkbox' };
     props['Comms'] = { type: 'checkbox' };
     const result = validateGametrackerShape(props, { requireMapRelation: true });
@@ -133,14 +138,20 @@ describe('presentSubjectiveColumns', () => {
   });
 });
 
-describe('mapRelationDatabaseId', () => {
-  it('returns the relation target when Map is a relation', () => {
-    expect(mapRelationDatabaseId({ Map: { type: 'relation', relation: { database_id: 'maps-db' } } })).toBe('maps-db');
+describe('mapRelationSourceId', () => {
+  it('prefers the data_source_id when present', () => {
+    expect(mapRelationSourceId({
+      Map: { type: 'relation', relation: { data_source_id: 'maps-ds', database_id: 'maps-db' } },
+    })).toBe('maps-ds');
+  });
+
+  it('falls back to database_id when data_source_id is absent', () => {
+    expect(mapRelationSourceId({ Map: { type: 'relation', relation: { database_id: 'maps-db' } } })).toBe('maps-db');
   });
 
   it('is undefined when Map is absent or not a relation', () => {
-    expect(mapRelationDatabaseId({})).toBeUndefined();
-    expect(mapRelationDatabaseId({ Map: { type: 'rich_text' } })).toBeUndefined();
+    expect(mapRelationSourceId({})).toBeUndefined();
+    expect(mapRelationSourceId({ Map: { type: 'rich_text' } })).toBeUndefined();
   });
 });
 

@@ -70,7 +70,7 @@
     }
   },
   "dependencies": {
-    "@notionhq/client": "^2.3.0"
+    "@notionhq/client": "^5.22.0"
   },
   "devDependencies": {
     "@overwolf/ow-electron": "39.6.1",

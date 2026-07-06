@@ -49,6 +49,13 @@ export class NotionWriter {
      * the column exists and the match carries a competitive SR change.
      */
     private readonly hasSrDelta = false,
+    /**
+     * The validated database's data source id (from `NotionAdmin.validate`), if
+     * known. New rows parent on it directly; falling back to `database_id` only
+     * covers the pre-validation window — valid since Gametracker/Maps are always
+     * single-source databases, so the database-id parent still resolves correctly.
+     */
+    private readonly dataSourceId?: string,
   ) {}
 
   async createMatchPage(m: ResolvedMatch): Promise<string> {
@@ -111,10 +118,10 @@ export class NotionWriter {
     if (this.writableColumns.has('Tilt') && mental?.tilt) props['Tilt'] = { checkbox: true };
     if (this.writableColumns.has('Toxic Mates') && mental?.toxicMates) props['Toxic Mates'] = { checkbox: true };
 
-    const res: any = await this.client.pages.create({
-      parent: { database_id: this.gametrackerDatabaseId },
-      properties: props,
-    });
+    const parent = this.dataSourceId
+      ? { data_source_id: this.dataSourceId }
+      : { database_id: this.gametrackerDatabaseId };
+    const res: any = await this.client.pages.create({ parent, properties: props });
     return res.id as string;
   }
 
