@@ -13,7 +13,11 @@ export interface RankPosition {
   tier: string;
   /** 1..5 (5 = lowest band of the tier, 1 = highest). */
   division: number;
-  /** 0..100 within the division. */
+  /**
+   * 0..100 within the division. On a computed {@link RankState}, can go negative while
+   * `protected` is true — the rank-protection buffer the live client also shows as a
+   * negative percentage; the next match's delta pays that carry down.
+   */
   progressPct: number;
 }
 
@@ -29,8 +33,10 @@ export interface RankAnchor extends RankPosition {
 /** The computed live position for an (account, role), plus its protection state. */
 export interface RankState extends RankPosition {
   /**
-   * Sitting at 0% after a loss, holding the division: the next loss demotes, a
-   * win or draw climbs back out. Mirrors OW2's rank-protection buffer.
+   * Holding the division after a loss that would have dropped it — `progressPct` carries
+   * the true negative value instead of clamping to 0. A further loss demotes; a win or
+   * draw adds its delta on top of the carry, clearing protection once the total is
+   * positive again. Mirrors OW2's rank-protection buffer (shown negative in-game).
    */
   protected: boolean;
   /**

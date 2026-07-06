@@ -34,9 +34,13 @@ export interface RankSummary {
   role: Role;
   tier: string;
   division: number;
-  /** Meaningless while `needsReanchor` is true (the % is unknown post-demotion). */
+  /**
+   * Meaningless while `needsReanchor` is true (the % is unknown post-demotion). Can be
+   * negative while `protected` is true — the rank-protection buffer's carry, mirroring
+   * the live client's own negative display.
+   */
   progressPct: number;
-  /** Sitting at 0% after a loss, holding the division (rank protection). */
+  /** Holding the division after a loss that would have dropped it (rank protection). */
   protected: boolean;
   /** A protected loss demoted; the new intra-division % awaits the next log/edit. */
   needsReanchor: boolean;

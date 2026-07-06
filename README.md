@@ -70,8 +70,9 @@ comms · toxicity · leavers · your improvement target).
   (and, the first time for an account+role, your current **rank**), split the **leaver** flag by
   team (my team / enemy), and grade active improvement targets inline. Vantage then **calculates
   your live rank** from
-  that anchor plus each logged %, including OW2 **rank protection** (a loss at 0% holds the
-  division; only a further loss demotes).
+  that anchor plus each logged %, including OW2 **rank protection** (a loss that would drop
+  below 0% holds the division and keeps the true negative carry — matching the game's own
+  negative display — until a win or draw pays it back above 0%; only a further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
   target database, **push** your tracked games to it and **import** them back — an
   on-demand pull that reads the Gametracker rows into local history for restoring or

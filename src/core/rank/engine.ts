@@ -55,29 +55,42 @@ function demoteOne(pos: RankPosition): RankPosition {
   return { tier: TIERS[ti], division: div, progressPct: 0 };
 }
 
-/** Advance one competitive match. Protection keys on the result, not the delta sign. */
+/**
+ * Advance one competitive match. Protection keys on the running total's sign, not the
+ * delta sign or the result type — a protected loss keeps its true negative carry (the
+ * in-game rank-protection buffer, e.g. "-19%"), and the following win or draw pays that
+ * carry down before it can climb, exactly as the live client does.
+ */
 export function applyMatch(state: RankState, match: RankMatchInput): RankState {
   // Once a protected loss has demoted, the rank is frozen until it's re-anchored
   // (the new intra-division % is unknown and must not be guessed).
   if (state.needsReanchor) return state;
 
   const delta = match.srDelta ?? 0;
+  const next = state.progressPct + delta;
 
   if (match.result === 'Loss') {
-    const next = state.progressPct + delta;
     if (next > 0) {
       return { ...applyGain(state, next), protected: false, needsReanchor: false };
     }
     if (state.protected) {
-      // Second loss at the floor → demote one division, % now unknown.
+      // Second consecutive dip into the buffer → demote one division, % now unknown.
       return { ...demoteOne(state), protected: false, needsReanchor: true };
     }
-    // First loss to the floor → hold the division at 0% (protected).
-    return { tier: state.tier, division: state.division, progressPct: 0, protected: true, needsReanchor: false };
+    // First loss into the buffer: hold the division, keep the true (negative) carry —
+    // the next match's delta is added on top of it, not on top of a phantom 0.
+    return { tier: state.tier, division: state.division, progressPct: next, protected: true, needsReanchor: false };
   }
 
-  // Win or Draw: protection clears; climb with promotion carry.
-  return { ...applyGain(state, state.progressPct + delta), protected: false, needsReanchor: false };
+  // Win or Draw: pay down any outstanding carry before climbing.
+  if (next > 0) {
+    return { ...applyGain(state, next), protected: false, needsReanchor: false };
+  }
+  if (state.protected) {
+    // Didn't fully clear the buffer — stays protected at the smaller negative carry.
+    return { tier: state.tier, division: state.division, progressPct: next, protected: true, needsReanchor: false };
+  }
+  return { ...applyGain(state, next), protected: false, needsReanchor: false };
 }
 
 /** Start a fresh live state from an anchor position. */
