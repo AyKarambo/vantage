@@ -14,6 +14,16 @@ import type {
   ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
 } from '../shared/contract';
 
+/**
+ * The Notion API version every request pins (the `Notion-Version` header).
+ * 2026-03-11 is the latest per developers.notion.com/reference/versioning;
+ * SDK 5.12+ supports it but still DEFAULTS to 2025-09-03, so it must be opted
+ * into explicitly. Safe for Vantage's surface: the 2026-03-11 breaking changes
+ * (archived→in_trash, block `after`→`position`, transcription→meeting_notes)
+ * touch fields/endpoints this app never reads or calls.
+ */
+const NOTION_API_VERSION = '2026-03-11';
+
 export interface NotionRuntimeDeps {
   outbox: OutboxStore;
   /** Live app config — re-read through this on every use, never cached. */
@@ -78,7 +88,7 @@ export class NotionRuntime {
       this.deps.onTokenState(false);
       return;
     }
-    this.client = new Client({ auth: token });
+    this.client = new Client({ auth: token, notionVersion: NOTION_API_VERSION });
     this.admin = new NotionAdmin(this.client);
     const maps = this.buildExporter();
     this.deps.onTokenState(true);
