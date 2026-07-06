@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { NotionImporter, NOTION_IMPROVEMENT_TARGET_ID, notionImprovementTarget } from '../src/notion/notionImporter';
+import { NotionImporter, NOTION_IMPROVEMENT_TARGET_ID } from '../src/notion/notionImporter';
+import { NOTION_IMPROVEMENT_TARGET_ID as CORE_NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
+import * as notionImporterModule from '../src/notion/notionImporter';
 
 const GT = 'gametracker-db';
 const MAPS = 'maps-db';
@@ -302,8 +304,19 @@ describe('NotionImporter — improvement grade', () => {
     expect(g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('hit');
   });
 
-  it('notionImprovementTarget seeds a stable, active self-target', () => {
-    const t = notionImprovementTarget(1234);
-    expect(t).toMatchObject({ id: NOTION_IMPROVEMENT_TARGET_ID, mode: 'self', isActive: true, createdAt: 1234 });
+  it('re-exports the same internal id core/targets defines — no local synthetic-target factory', () => {
+    expect(NOTION_IMPROVEMENT_TARGET_ID).toBe(CORE_NOTION_IMPROVEMENT_TARGET_ID);
+    expect((notionImporterModule as Record<string, unknown>)['notionImprovementTarget']).toBeUndefined();
+  });
+});
+
+describe('NotionImporter — page id', () => {
+  it('exposes each imported row\'s Notion page id for recordImported', async () => {
+    const { client } = mockClient({
+      gametracker: [row({ id: 'page-abc', matchId: '1432799173' }), row({ id: 'page-def', matchId: '1432799174' })],
+      maps: [],
+    });
+    const { games } = await new NotionImporter(client, GT).import();
+    expect(games.map((g) => g.pageId)).toEqual(['page-abc', 'page-def']);
   });
 });

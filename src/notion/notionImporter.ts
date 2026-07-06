@@ -1,7 +1,7 @@
 import { Client } from '@notionhq/client';
 import type { GameRecord, MatchMental, MatchReview, TargetGrade } from '../core/analytics';
 import type { Result, Role } from '../core/model';
-import type { AuthoredTarget } from '../core/targets';
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { gameTypeLabel } from '../core/matchFilter';
 import { resolveDataSourceId } from './dataSourceResolver';
 
@@ -12,9 +12,14 @@ import { resolveDataSourceId } from './dataSourceResolver';
  * stored Match ID for de-duplication upstream; a hand-added row (no Match ID)
  * becomes a manual (◎) record with a fresh `manual-notion-*` id, while a row
  * carrying a real GEP Match ID restores as an auto-tracked (⚡) record.
+ *
+ * Each game also carries the Notion `pageId` it was read from (`page.id`), so
+ * callers can thread it into `OutboxStore.recordImported` — an imported-then-
+ * edited row updates its existing page in place instead of being re-created by
+ * a later export.
  */
 export interface ImportOutcome {
-  games: GameRecord[];
+  games: Array<GameRecord & { pageId: string }>;
   failed: number;
 }
 
@@ -25,24 +30,13 @@ const RESULTS: Result[] = ['Win', 'Loss', 'Draw'];
 const IMPROVEMENT_GRADES: Record<string, TargetGrade> = { hit: 'hit', partially: 'partial', missed: 'missed' };
 
 /**
- * The single generic target the imported per-match "Improvement Target" grades
- * attach to. Notion tracks one improvement grade per match rather than our named
- * multi-target model, so the import maps them all onto this one authored target;
- * {@link notionImprovementTarget} seeds it so the grades surface on the dashboard.
+ * The internal id the imported per-match "Improvement Target" grade is stored
+ * under (`review.grades[NOTION_IMPROVEMENT_TARGET_ID]`) — re-exported here for
+ * back-compat with existing importers of this module. The canonical definition
+ * now lives in `src/core/targets` (`notionBookkeeping.ts`) so pure `core/` code
+ * (aggregation, merge) can reference it without importing the Notion edge.
  */
-export const NOTION_IMPROVEMENT_TARGET_ID = 'notion-improvement-target';
-
-/** The authored target the imported improvement grades are scored against. */
-export function notionImprovementTarget(createdAt: number): AuthoredTarget {
-  return {
-    id: NOTION_IMPROVEMENT_TARGET_ID,
-    name: 'Improvement Target',
-    mode: 'self',
-    rule: 'Imported from Notion — did you hit your improvement focus this match?',
-    createdAt,
-    isActive: true,
-  };
-}
+export { NOTION_IMPROVEMENT_TARGET_ID };
 
 export class NotionImporter {
   // Per-instance memo of resolveDataSourceId results, keyed by the configured id.
@@ -71,12 +65,12 @@ export class NotionImporter {
     // `NotionRuntime.import` already try/catches this into `{ error }`, which the
     // sync card renders red, restoring the pre-migration surfaced-failure behavior.
     const pages = await this.queryAll(this.gametrackerDatabaseId);
-    const games: GameRecord[] = [];
+    const games: Array<GameRecord & { pageId: string }> = [];
     let failed = 0;
     for (const page of pages) {
       try {
         const game = toGame(page, mapsById);
-        if (game) games.push(game);
+        if (game) games.push({ ...game, pageId: String(page.id) });
         else failed++;
       } catch {
         failed++;

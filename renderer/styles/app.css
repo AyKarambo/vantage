@@ -425,9 +425,20 @@
 }
 
 /* Matches ------------------------------------------------------------------- */
+/*
+ * Fixed leading (result badge, main content) and trailing (map-type pill,
+ * relative time) tracks. The middle of the template — one `auto` track per
+ * field currently in 'column' mode (spec F1) — is set per row from JS
+ * (`matches.ts` `matchRowGridTemplate`, plain element-style assignment via the
+ * h() style option; CSP-safe, no <style> tag). This base rule is only the
+ * zero-column-cell fallback: without a per-row template, extra `.match-col`
+ * cells would overflow this fixed track count and wrap onto an implicit
+ * second row, breaking every row's alignment as soon as any field is switched
+ * to 'column'.
+ */
 .match-row {
   display: grid;
-  grid-template-columns: 44px 1fr auto auto;
+  grid-template-columns: 44px 1fr 84px 46px;
   align-items: center;
   gap: 14px;
   padding: 10px 12px;

@@ -1,5 +1,6 @@
 import { winLoss, type GameRecord, type TargetGrade } from '../analytics';
 import { sampleTargets } from './sampleTargets';
+import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
 import type { AuthoredTarget, TargetSummary } from './types';
 
 /**
@@ -14,11 +15,17 @@ import type { AuthoredTarget, TargetSummary } from './types';
  * the sample library is shown ONLY in demo mode; a real user who has authored
  * none sees an honestly empty list (the renderer shows a create-your-first
  * empty state). Archiving every target must not resurrect the demo data.
+ *
+ * Defense-in-depth (spec B2): the hidden Notion bookkeeping id
+ * ({@link NOTION_IMPROVEMENT_TARGET_ID}) is never listed or scored here, even
+ * if it somehow ended up in `authored` — it is an internal id, not a
+ * user-authored target.
  */
 export function buildTargets(games: GameRecord[], demo: boolean, authored?: AuthoredTarget[]): TargetSummary[] {
-  if (authored && authored.length) {
+  const visible = authored?.filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID);
+  if (visible && visible.length) {
     const base = winLoss(games).winrate || 0.5;
-    return [...authored].sort((a, b) => b.createdAt - a.createdAt).map((t) => authoredSummary(t, games, base));
+    return [...visible].sort((a, b) => b.createdAt - a.createdAt).map((t) => authoredSummary(t, games, base));
   }
   return demo ? sampleTargets(games) : [];
 }

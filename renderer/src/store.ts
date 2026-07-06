@@ -5,6 +5,7 @@
  * fetch or persist directly.
  */
 import type { DashboardData, DashboardFilters, MatchFlagKey } from '../../src/shared/contract';
+import { migrateLegacySeasonDays } from '../../src/core/season';
 import { bridge } from './bridge';
 import { relTime } from './format';
 import { prefs } from './prefs';
@@ -77,7 +78,7 @@ export interface AppState {
 type Listener = (state: AppState) => void;
 
 /** The neutral filter set — exported so the filter bar can offer "Reset". */
-export const FILTER_DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', mode: 'all', days: 30 };
+export const FILTER_DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', days: 30 };
 const STORAGE_KEY = 'vantageFilters';
 
 /** The last visited top-level view, restored on launch (never a detail page). */
@@ -139,7 +140,22 @@ class Store {
     const cold = !this.state.data;
     this.patch(cold ? { loading: true } : { refreshing: true });
     try {
-      const data = await bridge.getDashboard(this.state.filters);
+      let data = await bridge.getDashboard(this.state.filters);
+      // First payload only: an unlistable persisted season id falls back to the
+      // default window now that `options.seasons` is finally known (spec D2).
+      // A background refresh never re-runs this — the user could be actively
+      // sitting on a season that briefly has no visible data.
+      if (cold) {
+        const reconciled = reconcileSeasonFilter(this.state.filters, data);
+        if (reconciled !== this.state.filters) {
+          this.state.filters = reconciled;
+          persistFilters(reconciled);
+          // The snapshot just fetched was scoped to the stale (unlistable)
+          // season filter — refetch under the reconciled filters so the
+          // rendered data actually matches `state.filters`.
+          data = await bridge.getDashboard(this.state.filters);
+        }
+      }
       this.patch({ data, loading: false, refreshing: false, stale: false, error: null, status: statusText(data) });
     } catch (err) {
       if (this.state.data) {
@@ -162,12 +178,38 @@ export function statusText(d: DashboardData): string {
   return `${d.overall.games} games${demo} · updated ${relTime(d.generatedAt)}`;
 }
 
+/**
+ * Cold-load migration (spec D1/D2): drop the retired `mode` key and translate
+ * the legacy current-season sentinel (`days: 'season'`) into an addressable
+ * `{ season: id }`. Reconciling an *unlistable* `{ season: id }` (a persisted
+ * id no longer offered) needs `options.seasons` from the first dashboard
+ * payload, so that step happens in `refresh()`, not here.
+ */
 function loadFilters(): Partial<DashboardFilters> {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<DashboardFilters> & { mode?: unknown };
+    const { mode: _mode, ...rest } = raw;
+    if ((rest.days as unknown) === 'season') {
+      rest.days = migrateLegacySeasonDays(Date.now());
+    }
+    return rest;
   } catch {
     return {};
   }
+}
+
+/**
+ * Once the first payload arrives, fall back a persisted `{ season: id }` that
+ * isn't in the freshly-computed options list to the default 30-day window
+ * (spec D2: "falls back to the default without crashing"). Cheap/idempotent —
+ * a no-op once the filters already match an offered season (or aren't a
+ * season filter at all).
+ */
+function reconcileSeasonFilter(filters: Required<DashboardFilters>, data: DashboardData): Required<DashboardFilters> {
+  const days = filters.days;
+  if (typeof days !== 'object') return filters;
+  const known = data.options.seasons.some((s) => s.id === days.season);
+  return known ? filters : { ...filters, days: FILTER_DEFAULTS.days };
 }
 
 function persistFilters(filters: DashboardFilters): void {

@@ -77,13 +77,18 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
         // that survives the re-render.
         if (!res.unavailable && !res.error) {
           const bits = [`${res.imported} imported`];
+          if (res.merged) bits.push(`${res.merged} updated`);
           if (res.skipped) bits.push(`${res.skipped} skipped`);
           if (res.failed) bits.push(`${res.failed} failed`);
           if (res.accountsAdded) bits.push(`${res.accountsAdded} account${res.accountsAdded === 1 ? '' : 's'} added`);
           toast(`Notion import — ${bits.join(' · ')}`);
         }
-        // New matches or accounts landed — re-pull so dashboards/pickers reflect them.
-        if (res.imported || res.accountsAdded) void store.refresh();
+        // New matches, merged updates, or accounts landed — re-pull so
+        // dashboards/pickers/the pending-review queue reflect them. A merge-only
+        // import (0 imported) still needs this: it can fill in bookkeeping
+        // grades/mental on already-tracked matches, which the pending queue
+        // reads live.
+        if (res.imported || res.merged || res.accountsAdded) void store.refresh();
       } catch (err) {
         render(importOut, h('span', { class: 'is-loss' }, `Import failed — ${String(err)}`));
       }
@@ -154,6 +159,7 @@ function confirmDeleteImported(count: number): void {
 
 function importResult(res: ImportResult): HTMLElement {
   const parts = [chipText(`${res.imported} imported`, 'win')];
+  if (res.merged) parts.push(chipText(`${res.merged} updated`, 'win'));
   if (res.skipped) parts.push(chipText(`${res.skipped} skipped`, 'muted'));
   if (res.failed) parts.push(chipText(`${res.failed} failed`, 'loss'));
   if (res.accountsAdded) parts.push(chipText(`${res.accountsAdded} account${res.accountsAdded === 1 ? '' : 's'} added`, 'win'));
@@ -162,9 +168,17 @@ function importResult(res: ImportResult): HTMLElement {
 
 function syncResult(res: ExportResult): HTMLElement {
   const parts = [chipText(`${res.ok} synced`, 'win')];
+  if (res.updated) parts.push(chipText(`${res.updated} updated`, 'win'));
+  if (res.recreated) parts.push(chipText(`${res.recreated} recreated`, 'muted'));
   if (res.skipped) parts.push(chipText(`${res.skipped} skipped`, 'muted'));
   if (res.failed) parts.push(chipText(`${res.failed} failed`, 'loss'));
-  return h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...parts);
+  return h('div', null,
+    h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...parts),
+    res.recreated
+      ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } },
+          `${res.recreated} row${res.recreated === 1 ? '' : 's'} recreated — the Notion page had been deleted or archived.`)
+      : null,
+  );
 }
 
 function chipText(text: string, kind: 'win' | 'loss' | 'muted'): HTMLElement {

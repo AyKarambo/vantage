@@ -9,6 +9,3 @@ export type Role = 'damage' | 'tank' | 'support' | 'openQ';
 
 /** Notion `Result` select options. */
 export type Result = 'Win' | 'Loss' | 'Draw';
-
-/** Which matches we persist. Mirrors the user's decision (Competitive only by default). */
-export type LogFilter = 'Competitive' | 'CompetitiveAndQuickPlay' | 'Everything';

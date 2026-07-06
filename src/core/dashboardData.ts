@@ -4,10 +4,11 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byMode, byRole, bySessionPosition, byTimeOfDay, calendar,
+  byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar,
   focusBy, heroStats, latestSession, sessionRecap, streak, trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
+import { isCompetitive } from './matchFilter';
 import { mapMode } from './maps';
 import { mentalSummary, rowFlags } from './mental';
 import { progression } from './progression';
@@ -15,7 +16,7 @@ import { buildTargets, type AuthoredTarget } from './targets';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { currentRank, rankKey, type RankAnchorMap } from './rank';
-import { seasonStart } from './season';
+import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
 import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
@@ -32,11 +33,16 @@ export interface ManualData {
 }
 
 export function computeDashboard(
-  all: GameRecord[],
+  allGames: GameRecord[],
   filters: DashboardFilters,
   demo: DemoContext,
   manual?: ManualData,
 ): DashboardData {
+  // Vantage is competitive-only (spec D1): scope every count/stat/option to
+  // competitive games ONCE, here, rather than re-filtering in each analytic.
+  // Non-competitive rows may still exist in the DB (pre-update history) but
+  // must be invisible everywhere the dashboard looks.
+  const all = allGames.filter((g) => isCompetitive(g.gameType));
   const games = applyFilters(all, filters);
   const overall = winLoss(games);
   // Rank is per-person, computed over the FULL history (like readiness), not the
@@ -61,13 +67,13 @@ export function computeDashboard(
     filters: {
       account: filters.account ?? 'all',
       role: filters.role ?? 'all',
-      mode: filters.mode ?? 'all',
       days: filters.days ?? 30,
     },
     options: {
       accounts: distinct(all.map((g) => g.account)).sort(),
       roles: distinct(all.map((g) => g.role)),
-      modes: distinct(all.map((g) => g.gameType)).sort(),
+      seasons: seasonsForData(all.map((g) => g.timestamp), Date.now())
+        .map((w) => ({ id: w.id, label: w.label })),
     },
     greetingName: topAccount(all),
     overall,
@@ -77,13 +83,12 @@ export function computeDashboard(
     session: latestSession(games),
     byRole: byRole(games),
     byAccount: byAccount(games),
-    byMode: byMode(games),
     byMap: byMap(games),
     byMapType: groupBy(games, (g) => mapMode(g.map)),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     trend: trend(games, weekly ? 'week' : 'day'),
     timeOfDay: byTimeOfDay(games),
-    // Positions are numbered over the person's whole history — a role/mode/date
+    // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.
     sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     calendar: calendar(games, 35),
@@ -95,9 +100,10 @@ export function computeDashboard(
     reviewInbox: ungraded.slice(0, ROW_CAP).map(toMatchRow),
     pendingReviews: ungraded.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
-    // Readiness is a per-person verdict → computed over the UNFILTERED history,
-    // like reviewInbox/recap. safeReadiness never throws, so a readiness bug can
-    // never blank the whole dashboard.
+    // Readiness is a per-person verdict → computed over the UNFILTERED
+    // (but now competitive-only, plan D1) history, like reviewInbox/recap.
+    // safeReadiness never throws, so a readiness bug can never blank the
+    // whole dashboard.
     readiness: safeReadiness(all),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     totalGamesAllTime: all.length,
@@ -115,13 +121,23 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
   let out = games;
   if (f.account && f.account !== 'all') out = out.filter((g) => g.account === f.account);
   if (f.role && f.role !== 'all') out = out.filter((g) => g.role === f.role);
-  if (f.mode && f.mode !== 'all') out = out.filter((g) => g.gameType === f.mode);
   if (f.days && f.days !== 'all') {
-    const now = Date.now();
-    // 'season' cuts off at the current OW2 season's real start; a number is a
-    // rolling day window. Both share one `now` so the two paths stay consistent.
-    const cutoff = f.days === 'season' ? seasonStart(now) : now - f.days * 86400000;
-    out = out.filter((g) => g.timestamp >= cutoff);
+    if (typeof f.days === 'object') {
+      // A specific season id (spec D2/D3): resolve to its [start, end) window.
+      // An unknown/unlistable id (untrusted IPC, or a season that rolled off
+      // the list) falls back to the 30-day window rather than showing nothing.
+      const now = Date.now();
+      const w = seasonWindowById(f.days.season, now);
+      if (w) {
+        out = out.filter((g) => g.timestamp >= w.start && g.timestamp < w.end);
+      } else {
+        const cutoff = now - 30 * 86400000;
+        out = out.filter((g) => g.timestamp >= cutoff);
+      }
+    } else {
+      const cutoff = Date.now() - f.days * 86400000;
+      out = out.filter((g) => g.timestamp >= cutoff);
+    }
   }
   return out;
 }
@@ -149,6 +165,8 @@ function toMatchRow(g: GameRecord): MatchRow {
     gameType: g.gameType,
     heroes: g.heroes,
     durationMinutes: g.durationMinutes,
+    ...(g.srDelta !== undefined ? { srDelta: g.srDelta } : {}),
+    ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(flags ? { flags } : {}),
   };
 }

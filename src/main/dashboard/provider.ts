@@ -5,8 +5,8 @@ import type { ReadinessSettings } from '../../core/readiness';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
-  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, DatabaseLocation,
-  DatabaseLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel, ManualMatchInput,
+  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, DataLocation,
+  DataLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, RankAnchorInput,
   RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
@@ -98,10 +98,14 @@ export interface DataProvider {
   setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
   /** Version + support contact. */
   getAppInfo(): AppInfo;
-  /** Where the match-history database currently lives. */
-  getDatabaseLocation(): DatabaseLocation;
-  /** Open a folder picker and, if chosen, relocate the database; async (shows a dialog). */
-  chooseDatabaseFolder(): Promise<DatabaseLocationResult>;
+  /** Where Vantage's data folder currently lives (DB + manual data + screenshots). */
+  getDataLocation(): DataLocation;
+  /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder; async (shows a dialog). */
+  chooseDataFolder(): Promise<DataLocationResult>;
+  /** Commit a chosen data folder — migrates by default, or adopts in place when the caller confirms. */
+  setDataFolder(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
+  /** First-run folder picker; validates the choice and adopts existing Vantage data automatically. */
+  chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
 }

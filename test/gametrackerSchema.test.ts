@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   REQUIRED_PROPERTIES, buildGametrackerProperties, validateGametrackerShape,
   hasPlayedAtColumn, PLAYED_AT_PROPERTY, hasSrDeltaColumn, SR_DELTA_PROPERTY,
-  presentSubjectiveColumns, mapRelationSourceId,
+  presentSubjectiveColumns, mapRelationSourceId, diagnoseSubjectiveColumns,
+  OPTIONAL_SUBJECTIVE_PROPERTIES,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
@@ -135,6 +136,54 @@ describe('presentSubjectiveColumns', () => {
   it('ignores wrong-typed and absent columns (they would fail pages.create)', () => {
     expect(presentSubjectiveColumns({ Comms: { type: 'rich_text' }, Tilt: { type: 'checkbox' } })).toEqual(['Tilt']);
     expect(presentSubjectiveColumns({})).toEqual([]);
+  });
+});
+
+describe('diagnoseSubjectiveColumns', () => {
+  it('classifies a correctly-typed select column as available', () => {
+    const props = { Comms: { type: 'select' } };
+    const diags = diagnoseSubjectiveColumns(props);
+    expect(diags.find((d) => d.column === 'Comms')).toEqual({ column: 'Comms', status: 'available' });
+  });
+
+  it('classifies Comms as wrong-type with actualType when present as rich_text', () => {
+    const props = { Comms: { type: 'rich_text' } };
+    const diags = diagnoseSubjectiveColumns(props);
+    expect(diags.find((d) => d.column === 'Comms')).toEqual({
+      column: 'Comms', status: 'wrong-type', actualType: 'rich_text',
+    });
+  });
+
+  it('classifies a trailing-space near-miss name with actualName', () => {
+    const props = { 'comms ': { type: 'select' } };
+    const diags = diagnoseSubjectiveColumns(props);
+    expect(diags.find((d) => d.column === 'Comms')).toEqual({
+      column: 'Comms', status: 'near-miss', actualName: 'comms ',
+    });
+  });
+
+  it('classifies a wrong-case near-miss name with actualName', () => {
+    const props = { 'improvement target': { type: 'select' } };
+    const diags = diagnoseSubjectiveColumns(props);
+    expect(diags.find((d) => d.column === 'Improvement Target')).toEqual({
+      column: 'Improvement Target', status: 'near-miss', actualName: 'improvement target',
+    });
+  });
+
+  it('classifies an absent column with no near-miss as missing', () => {
+    const diags = diagnoseSubjectiveColumns({});
+    expect(diags.find((d) => d.column === 'Leaver')).toEqual({ column: 'Leaver', status: 'missing' });
+  });
+
+  it('returns one diagnostic per OPTIONAL_SUBJECTIVE_PROPERTIES entry', () => {
+    const diags = diagnoseSubjectiveColumns({});
+    expect(diags.map((d) => d.column).sort()).toEqual(Object.keys(OPTIONAL_SUBJECTIVE_PROPERTIES).sort());
+  });
+
+  it('does not report an exact-name match as a near-miss of itself', () => {
+    const props = { Tilt: { type: 'checkbox' } };
+    const diags = diagnoseSubjectiveColumns(props);
+    expect(diags.find((d) => d.column === 'Tilt')).toEqual({ column: 'Tilt', status: 'available' });
   });
 });
 

@@ -21,6 +21,11 @@ comms · toxicity · leavers · your improvement target).
   game feed actually reported for that match). Every match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
+  A **Customize view** popover lets you set role, heroes, account, SR delta, duration
+  and final score each to hidden, inline (folded into the row's meta line), or its own
+  aligned column — the choice persists across sessions. The meta line only ever joins
+  the fields you've set to inline that actually have a value for that row (no `—`
+  placeholders or dangling `·`), and disappears entirely when nothing applies.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
   drill-down drawer (per-map winrate, recent games, aggregates).
@@ -28,7 +33,7 @@ comms · toxicity · leavers · your improvement target).
 - **Mental** — calm/tilt state, the tilt tax on your winrate, flag counts, and a
   **break-reminder setting** (on/off + loss threshold) that fires a tray notification
   after N consecutive losses.
-- **Trends** — winrate over time, splits by role/mode/account, **when you win** (time-of-day
+- **Trends** — winrate over time, splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and an
   activity heatmap.
@@ -42,7 +47,12 @@ comms · toxicity · leavers · your improvement target).
   consistency builds skill faster than bingeing"). Deliberately conservative and framed as an
   evidence-informed **wellness nudge, not a diagnosis** — match results alone are a weak fatigue
   signal, so it leans on load and mental self-report. Optional opt-in tray reminder at launch.
-  Extends (doesn't replace) the Mental break reminder.
+  Extends (doesn't replace) the Mental break reminder. It's the one screen that ignores the
+  filter bar entirely (no filter bar is even shown) and the account switcher — readiness is
+  about the person, not a slice of their history; a **"How is this calculated?"** link on the
+  verdict card opens a modal with the full methodology (verdict bands, signals, the training-load
+  model, the supercompensation model and its schematic, confidence levels, and the honesty
+  disclaimer).
 - **Review** — grade your active improvement targets (Hit / Partial / Missed) and flag
   how each tracked game felt; an always-visible inbox of ungraded games, independent of
   the global filters.
@@ -55,36 +65,64 @@ comms · toxicity · leavers · your improvement target).
   `W`/`L`/`D` picks the result, the **map and hero are typeaheads** with your recent picks listed
   first, `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries the hero over —
   it's the same sitting). Forgot to log during the session? The **Played** chips backfill a game
-  30 min / 1 h / 2 h into the past so session analytics stay honest. Pick the **account**, role
-  and mode as before; for competitive matches log the **skill-rating %** (and, the first time for
-  an account+role, your current **rank**), split the **leaver** flag by team (my team / enemy),
-  and grade active improvement targets inline. Vantage then **calculates your live rank** from
+  30 min / 1 h / 2 h into the past so session analytics stay honest. Pick the **account** and
+  role; every logged match is competitive, so there's no mode picker — log the **skill-rating %**
+  (and, the first time for an account+role, your current **rank**), split the **leaver** flag by
+  team (my team / enemy), and grade active improvement targets inline. Vantage then **calculates
+  your live rank** from
   that anchor plus each logged %, including OW2 **rank protection** (a loss at 0% holds the
   division; only a further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
-  target database, **push** your tracked games to it (deduped by Match ID) and
-  **import** them back — an on-demand pull that reads the Gametracker rows into local
-  history for restoring or migrating a season. The round-trip preserves each match's
-  **time** (via a `Played At` column, so restored history lands on the right days), its
-  **skill-rating change** (via an `SR Delta` column) and **round score**, and its
-  **auto/manual provenance**; a just-imported season won't re-duplicate itself on the
-  next Sync, and if the date filter would hide it all the Overview offers a one-click
-  "view all time".
+  target database, **push** your tracked games to it and **import** them back — an
+  on-demand pull that reads the Gametracker rows into local history for restoring or
+  migrating a season. The round-trip preserves each match's **time** (via a `Played At`
+  column, so restored history lands on the right days), its **skill-rating change** (via
+  an `SR Delta` column) and **round score**, and its **auto/manual provenance**; a
+  just-imported season won't re-duplicate itself on the next Sync, and if the date
+  filter would hide it all the Overview offers a one-click "view all time". Sync is
+  **update-in-place**, not create-only: re-syncing a match you've since reviewed (target
+  grades, comms) fills in its `Improvement Target`/`Comms` cells on the existing row, and
+  clearing a flag or grade locally clears the matching cell on the next sync — no
+  duplicate rows. Multi-target reviews export as one aggregate grade (all hit → `hit`,
+  all missed → `missed`, any mix → `partially`). If you delete a row in Notion, the next
+  sync recreates it and the sync result calls it out (`N recreated`). Importing a row you
+  graded in Notion (`Improvement Target`) now **merges into the existing local match**
+  instead of leaving it stuck in the pending queue — as hidden bookkeeping, so it never
+  shows up as an extra target on the Targets or Review screens; a local review or mental
+  record you already entered always wins over what's in Notion. Opening the Notion
+  screen also shows a **per-column status** for the five optional subjective columns
+  (Comms, Improvement Target, Leaver, Tilt, Toxic Mates): available, or skipped with a
+  reason (missing, wrong type, or a near-miss name like `comms ` you probably meant).
+  Only the manual **Sync** button ever sends data outbound — no automatic traffic.
 
-Filter everything by account, role, game mode and time range — with a one-click **Reset** chip and
-savable presets. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run
-actions, find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet,
-`←/→` between match details, `H/P/M/S` grading on Review, `W/L/D`+`Enter` in the log dialog),
-toasts with **Undo** for reversible actions, day-grouped match log with hero/map cross-links,
-**drill-down everywhere** (click a heatmap day or a Mental flag count to open exactly those
-matches; hero-drawer map rows and Overview scatter dots jump to the Maps screen), hero typeahead +
-remembered role/mode in the quick-log, hover tooltips + a "view as table" toggle on charts, a
-next-day session recap, a
+Vantage tracks **competitive matches only** — quick play and arcade games are never recorded,
+live or manually logged, so every stat, count, and export is competitive by construction (existing
+non-competitive rows from before this were simply hidden, not deleted). Filter by role and time
+range — with a one-click **Reset** chip and savable presets. The time filter offers `Last 7 days`,
+`Last 30 days`, one entry per **named competitive season** with data (e.g. `2026 Season 3`, newest
+first, current season always listed), and `All time`; there's no account or game-mode filter in the
+bar — the account switcher in the top-left already covers "which account", and mode no longer
+applies. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run actions,
+find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet, `←/→`
+between match details, `H/P/M/S` grading on Review, `W/L/D`+`Enter` in the log dialog), toasts with
+**Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
+everywhere** (click a heatmap day or a Mental flag count to open exactly those matches; hero-drawer
+map rows and Overview scatter dots jump to the Maps screen), hero typeahead + remembered role in
+the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 colorblind-safe palette option, window-position memory, and a **Settings** screen with an
 **accounts manager** (create/edit/delete accounts, per-role rank anchors) alongside the break
-reminder, close-to-tray, run-at-login, diagnostics, and a **Data & backup** card that relocates
-your local match-history database to any folder — point it at a OneDrive/Dropbox-synced folder for
-off-machine backup. The app restores your last view on launch and refreshes without flicker.
+reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
+*all* your data — match history, targets, outbox, rank anchors, and screenshots — to any folder,
+moved together with a copy-verify-then-delete guarantee. Point it at a OneDrive/Dropbox-synced
+folder for off-machine backup (use it from one machine at a time — editing the same synced files
+from two machines at once can corrupt them). The app restores your last view on launch and
+refreshes without flicker.
+
+The **first time you launch Vantage**, before any demo-data prompt, it asks where to keep your
+data: the default app-data folder (preselected) or a folder you choose via the native picker,
+validated as creatable and writable. Pointing it at a folder that already holds Vantage data (say,
+an existing OneDrive backup) **adopts** that data as-is rather than overwriting or migrating it.
+Existing installs updating to this version see no prompt and keep their current location.
 
 Match history is stored on-device in an embedded **SQLite** database (`history.db`); a pre-SQLite
 `history.json` is imported once on first launch and kept untouched as a frozen backup. Storage stays
@@ -154,7 +192,9 @@ your *Overwatch* page's connections, then paste the token on that screen. Once a
 saved, a **Database** card lets you either **choose** a database the integration can
 already see, or have Vantage **create one for you** (a Maps database plus a matching
 Gametracker database, correctly shaped, under a page you pick). Then hit **Sync**. Match
-IDs are deduped, so re-syncing never double-writes. (The tray's **Set Notion token** still
+IDs are deduped, so re-syncing never creates a duplicate row — but it does **update** an
+already-exported match's row when its review or mental flags changed since the last sync
+(and recreates it if you deleted it in Notion). (The tray's **Set Notion token** still
 works too; a hand-edited `appsettings.json` database id is still supported as a fallback.)
 
 ## Architecture

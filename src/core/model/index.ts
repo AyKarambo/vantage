@@ -6,7 +6,7 @@
  */
 
 // Vocabularies
-export type { Role, Result, LogFilter } from './enums';
+export type { Role, Result } from './enums';
 
 // GEP wire shape
 export type { GepMessage } from './gep';

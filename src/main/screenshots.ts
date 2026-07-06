@@ -32,7 +32,7 @@ interface RecorderLike {
 
 export class ScreenshotService {
   constructor(
-    private readonly root: string,
+    private root: string,
     private readonly log: (...args: unknown[]) => void = () => {},
   ) {}
 
@@ -46,6 +46,22 @@ export class ScreenshotService {
     } catch (err) {
       this.log('media protocol registration failed', String(err));
     }
+  }
+
+  /**
+   * Re-point captures/serving at a new screenshots root — the backing for the
+   * user-configurable data location (spec Area C). The migration executor
+   * copies the `screenshots/` directory itself (it's a plain recursive file
+   * copy, no handle to close); this only needs to repoint `this.root` so
+   * future captures and protocol reads land at the new location, and
+   * re-register the protocol handler for good measure (harmless if already
+   * registered — `protocol.handle` throws, which `registerProtocol` already
+   * logs and swallows).
+   */
+  relocate(newDir: string): void {
+    this.root = newDir;
+    fs.mkdirSync(this.root, { recursive: true });
+    this.registerProtocol();
   }
 
   private serve(rawUrl: string): Response | Promise<Response> {

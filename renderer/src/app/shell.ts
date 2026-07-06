@@ -37,10 +37,16 @@ import { openLogMatch } from './log-match';
 import { openPalette } from './palette';
 import { openOnboarding, shouldOnboard } from './onboarding';
 import { openFirstRunPrompt } from './firstRunPrompt';
+import { openDataLocationPrompt } from './dataLocationPrompt';
 
 // matchDetail is a parameterized view: registered here (routable) but not in
 // NAV — the sidebar keeps Matches highlighted while it is active.
 const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings };
+
+/** Views that suppress the global filter bar — their data is account-agnostic
+ *  (readiness tracks the player, not a per-account selection) or otherwise
+ *  unaffected by it, so showing the bar would imply a control that does nothing. */
+const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness']);
 
 interface NavItem {
   id: ViewId;
@@ -196,21 +202,34 @@ export class App {
     }
   }
 
-  /** Once, after the first real snapshot: ask the demo question (if never asked), then the tour. */
+  /**
+   * Once, after the first real snapshot: ask where to keep data (only on a
+   * fresh install — `needsFirstRunChoice`), then the demo question (if never
+   * asked), then the tour. The data-location step runs first because it must
+   * complete before meaningful data is written (spec C1/C4).
+   */
   private maybeFirstRun(state: AppState): void {
     if (this.firstRunHandled || !state.data) return;
     this.firstRunHandled = true;
     const openTour = (): void => {
       if (shouldOnboard()) openOnboarding(store.get().data?.isSample ?? false);
     };
-    if (state.data.demoPreference === 'unset') openFirstRunPrompt(openTour);
-    else openTour();
+    const openDemoPrompt = (): void => {
+      if (state.data!.demoPreference === 'unset') openFirstRunPrompt(openTour);
+      else openTour();
+    };
+    void bridge.getDataLocation().then((loc) => {
+      if (loc.needsFirstRunChoice) openDataLocationPrompt(openDemoPrompt);
+      else openDemoPrompt();
+    });
   }
 
-  /** The one global filter bar — persistent above every screen, unified look. */
+  /** The one global filter bar — persistent above every screen, unified look,
+   *  except views in {@link FILTERLESS_VIEWS} whose data isn't scoped by it. */
   private renderFilters(state: AppState): void {
-    this.filterHost.classList.toggle('hidden', !state.data);
-    if (!state.data) return;
+    const hidden = !state.data || FILTERLESS_VIEWS.has(state.view);
+    this.filterHost.classList.toggle('hidden', hidden);
+    if (!state.data || hidden) return;
     render(this.filterHost, filterBar(state.data, (patch) => store.setFilters(patch)));
   }
 
@@ -402,8 +421,8 @@ export class App {
       h('div', { class: 'cheatsheet' },
         h('h3', { style: { fontSize: '15px', marginBottom: '12px' } }, 'Keyboard shortcuts'),
         ...shortcutGroups().map((g) =>
-          h('div', { style: { marginBottom: '12px' } },
-            h('div', { class: 'nav-group', style: { padding: '0 0 4px' } }, g.group),
+          h('div', null,
+            h('div', { class: 'nav-group' }, g.group),
             ...g.items.map((s) =>
               h('div', { class: 'cheatsheet-row' },
                 h('span', { class: 'kbd' }, comboLabel(s.combo)),

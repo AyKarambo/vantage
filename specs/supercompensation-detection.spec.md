@@ -1,8 +1,13 @@
 # Feature spec: Readiness & training-load coach (`supercompensation-detection`)
 
 **Source:** Spec interview + `/deep-research` synthesis (supercompensation, overtraining/overreaching, esports fatigue), 2026-07-05. **Approved 2026-07-05.**
-**Related specs:** `screen-mental.spec.md` (mental self-report + break reminder this builds on), `screen-overview.spec.md` (secondary surface), `screen-settings.spec.md` (enable/disable).
+**Related specs:** `screen-mental.spec.md` (mental self-report + break reminder this builds on), `screen-overview.spec.md` (secondary surface), `screen-settings.spec.md` (enable/disable), `screen-shell.spec.md` (per-view filter-bar suppression, added 2026-07-06).
 **Extends, does not replace:** the short-horizon loss-streak break reminder in `src/core/breakReminder.ts`.
+**Updated 2026-07-06** after the `feedback-batch-2026-07` Area E fix (schematic moved from the
+main view into a "How is this calculated?" modal, the view is now exempt from the global filter
+bar) and the Area D competitive-only change (the readiness input is now the competitive-only
+history) — see `feedback-batch-2026-07.spec.md` Areas E and D for the originating
+problems/requirements and their own acceptance criteria.
 
 ## Intent (WHAT & WHY)
 
@@ -36,6 +41,22 @@ Load-bearing for the whole feature: the detection is built to respect this, and 
 - **"In-the-hole" detection:** a red verdict requires **sustained cumulative load** (consecutive days without rest + acute:chronic above a conservative bound) **and** elevated subjective fatigue — corroborated, but not gated, by an outcome dip.
 - **Rest recommendation & recovery:** on red, recommend 1–2 full rest days; **detect a rest day** (a local calendar day with zero games) and, after 1–2 rest days, de-escalate `recovering` → `fresh` and clear the recommendation ("readiness to return").
 - A new **Readiness/Form screen** (`renderer/src/views/`): current verdict (traffic-light + score), the top reasons, the recommendation, a **dependency-free SVG** conceptual supercompensation curve with the player's recent readiness trend, and a **plain-language honesty note**.
+  - **(updated 2026-07-06, Area E)** The supercompensation schematic illustration is **removed
+    from the main view** — the trend card keeps only the readiness-trend curve + a short
+    caption. The schematic moved into a "How is this calculated?" modal (below), it did not
+    disappear.
+  - **(updated 2026-07-06, Area E)** The screen renders with **no global filter bar** — the shell
+    gained a per-view "hide filter bar" capability (`FILTERLESS_VIEWS`, `renderer/src/app/shell.ts`)
+    and Readiness is in it. The view stays independent of *all* selection, including the account
+    switcher — the player is the same person regardless of which account/role/time window is
+    selected elsewhere in the app. This applies to the enabled and disabled (off-state) view alike.
+  - **(added 2026-07-06, Area E)** The verdict card gets a clickable "How is this calculated?"
+    affordance (`openModal`, `renderer/src/views/readiness.ts`) opening a modal with the detailed
+    methodology: verdict bands, contributing signals and their meaning, the training-load model
+    (acute load vs. baseline ratio), the supercompensation model — **including the schematic that
+    moved out of the main view** — confidence levels, and the honesty disclaimer. Closes via
+    Escape, backdrop click, or a close button. The short honesty note stays on the main view too
+    (Area E kept existing cards; the modal is the fuller reference, not a replacement).
 - A **secondary Overview surface**: a compact readiness chip (always shown when the feature is enabled) that deep-links to the screen; when red, a gentle, dismissible nudge on the chip.
 - An **optional tray toast** at app launch when the current verdict is red — **off by default**, opt-in via Settings (mirrors the existing break-reminder toast pattern without adding noise).
 - **Typed IPC:** a new contract type + channel delivering the readiness result to the renderer (via the existing dashboard read-model plumbing).
@@ -65,6 +86,14 @@ Load-bearing for the whole feature: the detection is built to respect this, and 
 - **Conservative, centrally-defined thresholds:** all windows/weights/cutoffs are named constants in one place (tunable), chosen to avoid false alarms; outcomes weighted below behavioral+mental; recent games weigh more (EWMA). No scattered magic numbers.
 - **Works without SR:** `srDelta` is frequently absent (manual only) — a sensible verdict must come from timestamps, results, and mental flags alone; SR only sharpens when present.
 - **Fatigue is per-person:** the verdict aggregates across all accounts/roles regardless of the dashboard account/role filter (the range/`days` filter may still scope the trend view; the verdict uses a fixed recent horizon).
+  - **(updated 2026-07-06, Area D cross-reference)** The history the verdict is computed over is
+    now the **competitive-only** history (`isCompetitive`-filtered upstream in
+    `computeDashboard`, `src/core/dashboardData.ts`) rather than the truly-unfiltered set — an
+    accepted consequence of "everything is competitive" (`dashboard-filter-fixes.spec.md` Area
+    D). This does not weaken "unaffected by filters/accounts": the verdict still ignores the
+    filter bar and the account switcher entirely; it is simply no longer fed non-competitive
+    rows at all. A user with pre-existing non-competitive history may see their verdict shift
+    once, on the release that ships this change — intended, not a regression.
 - **Day boundaries:** "rest day" / "games-per-day" use a **local** day boundary (configurable reset hour a candidate — see Open Questions), since the existing UTC `dayKey` can misattribute late-night sessions; "session" uses a **time-gap** boundary independent of calendar day.
 - **Minimum history:** below a defined baseline (e.g. < ~14 active days or < N games) the model returns `insufficient-data` rather than guessing.
 - Computed O(n) over in-memory history on the normal read-model refresh — no measurable performance cost.
@@ -86,13 +115,22 @@ Load-bearing for the whole feature: the detection is built to respect this, and 
 
 **Readiness/Form screen & surfaces:**
 
-- Given the player opens the Readiness screen, then it shows the traffic-light band + score, top contributing signals as plain text, the recommendation, and an SVG supercompensation curve with the recent readiness trend.
+- Given the player opens the Readiness screen, then it shows the traffic-light band + score, top contributing signals as plain text, the recommendation, and an SVG supercompensation-trend curve with the recent readiness trend (the illustrative schematic itself lives in the methodology modal, not the main card — see below).
 - Given a red (`in-the-hole`) verdict, then the screen states a clear, plain-language rest recommendation with its reasoning.
 - Given the screen renders in any state, then it displays the honesty note and shows no clinical stage labels or per-player predictive claims.
 - Given the feature is enabled, then Overview shows a compact readiness chip linking to the screen; when red, a gentle dismissible nudge appears on it.
 - Given the launch-toast setting is on and the verdict is red at app launch, then one gentle tray toast fires; given it is off (default), then no toast fires regardless of verdict.
 - Given the user disables the feature in Settings, then no readiness chip, nudge, toast, or verdict is surfaced anywhere.
 - Given demo/sample data is active, then the screen renders from it without error, clearly as the sample layer.
+- **(added 2026-07-06, Area E)** Given the readiness view (coach enabled or disabled), when it
+  renders, then no supercompensation schematic and no filter bar are present anywhere on the
+  main view.
+- **(added 2026-07-06, Area E)** Given the readiness view, when the user switches accounts or
+  picks "All accounts" in the top-left switcher, then the verdict, signals, and trend are
+  unchanged.
+- **(added 2026-07-06, Area E)** Given the verdict card, when the user clicks "How is this
+  calculated?", then a modal opens containing the methodology explanation — including the
+  supercompensation schematic — and closes via Escape, backdrop click, or close button.
 
 ## Resolved questions
 
@@ -102,10 +140,20 @@ Load-bearing for the whole feature: the detection is built to respect this, and 
 4. **Signal weighting (from research)** — behavioral load + self-reported mental state **primary**; match outcomes (win/loss, streaks, SR) **weak, corroborating**, cannot trigger red alone.
 5. **Scope of "detection"** — flags **elevated overtraining *risk* / fatigue-conducive conditions** and surfaces performance-vs-baseline as an observation; does **not** diagnose an overtraining stage.
 6. **Fatigue is per-person** — aggregates across accounts/roles, not per the dashboard filter.
+   **(refined 2026-07-06)** The view also carries no filter bar at all (Area E) and now
+   aggregates over the competitive-only history (Area D cross-reference) — see Constraints.
 7. **Relationship to break reminder** — **extends, not replaces** `breakReminder.ts` (short-horizon loss-streak nudge stays).
 8. **The curve** — a conceptual **illustration**, not a fitted prediction.
+   **(refined 2026-07-06, Area E)** The illustration itself moved out of the main trend card
+   into the "How is this calculated?" modal; the main card keeps only the readiness-trend curve.
 9. **Launch nudge** — Overview chip always shown (when enabled); the tray toast on a red verdict at launch is **opt-in, off by default**.
 10. **In-app copy language** — **English**, matching the existing app locale.
+11. **(added 2026-07-06) Readiness explainer entry** — a "How is this calculated?" link on the
+    verdict card opens a modal with the full methodology (bands, signals, training-load and
+    supercompensation models, the relocated schematic, confidence levels, honesty disclaimer).
+12. **(added 2026-07-06) Filter-bar exemption mechanism** — the shell's per-view
+    `FILTERLESS_VIEWS` set (currently just `readiness`), toggling the existing filter-host
+    `hidden` class rather than a new per-view context/API. See `screen-shell.spec.md`.
 
 ## Open Questions
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { dayKey, groupByDay, sessionRecap } from '../src/core/analytics';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
 
 const NOW = Date.UTC(2026, 6, 4, 15, 0, 0); // Jul 4, 15:00 UTC (dayKey buckets by UTC day)
 
@@ -119,5 +120,28 @@ describe('sessionRecap', () => {
 
     const ungraded = [game({ timestamp: hoursAgo(24), result: 'Win' })];
     expect(sessionRecap(ungraded, NOW)!.targetHitRate).toBeUndefined();
+  });
+
+  it('excludes the hidden Notion-import bookkeeping grade from target hit-rate (spec B2)', () => {
+    // A match reviewed in-app (one authored target, hit) that ALSO carries the
+    // hidden bookkeeping grade from a Notion import (missed) — the bookkeeping
+    // grade must not count as an attempt or a hit.
+    const mixed = [
+      game({
+        timestamp: hoursAgo(24), result: 'Win',
+        review: { at: NOW, grades: { a: 'hit', [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} },
+      }),
+    ];
+    expect(sessionRecap(mixed, NOW)!.targetHitRate).toBe(1); // 1/1, not 1/2
+
+    // A match with ONLY the bookkeeping grade (pure Notion import, no in-app
+    // review) contributes no attempts at all — targetHitRate stays absent.
+    const onlyBookkeeping = [
+      game({
+        timestamp: hoursAgo(24), result: 'Win',
+        review: { at: NOW, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'hit' }, flags: {} },
+      }),
+    ];
+    expect(sessionRecap(onlyBookkeeping, NOW)!.targetHitRate).toBeUndefined();
   });
 });

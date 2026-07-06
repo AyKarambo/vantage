@@ -1,7 +1,8 @@
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
-import { heroDetail } from '../../core/analytics';
+import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
+import { isCompetitive } from '../../core/matchFilter';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSettings } from '../../core/readiness';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
@@ -11,6 +12,17 @@ import type {
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
+
+/**
+ * Vantage is competitive-only (spec D1): scope a games list down to
+ * competitive rows. `computeDashboard` already does this internally for the
+ * main dashboard payload; every *other* feed that reads `provider.games()`
+ * directly (export, hero drilldown, match detail) must apply the same gate
+ * so a non-competitive row already in the DB never surfaces there either.
+ */
+function competitiveOnly(games: GameRecord[]): GameRecord[] {
+  return games.filter((g) => isCompetitive(g.gameType));
+}
 
 /**
  * IPC registration for the dashboard: each typed contract channel maps onto a
@@ -62,15 +74,16 @@ export function registerDashboardIpc(provider: DataProvider): void {
   );
   handle(ch.exportNotion, async (_e, filters: DashboardFilters) => {
     if (!provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
-    return provider.exportToNotion(applyFilters(provider.games(), filters ?? {}));
+    return provider.exportToNotion(applyFilters(competitiveOnly(provider.games()), filters ?? {}));
   });
   handle(ch.heroDetail, (_e, hero: string, filters: DashboardFilters) =>
-    heroDetail(applyFilters(provider.games(), filters ?? {}), hero),
+    heroDetail(applyFilters(competitiveOnly(provider.games()), filters ?? {}), hero),
   );
-  // Looked up in the full history (a row must open even after filters move
-  // on); the competitive estimate is scoped to the current filter set.
+  // Looked up in the full (competitive-only) history (a row must open even
+  // after filters move on); the competitive-estimate CONTEXT is scoped to
+  // the current filter set, on top of the same competitive-only gate.
   handle(ch.matchDetail, (_e, matchId: string, filters: DashboardFilters) => {
-    const games = provider.games();
+    const games = competitiveOnly(provider.games());
     return matchDetail(games, matchId, applyFilters(games, filters ?? {}), provider.rankAnchorMap());
   });
 
@@ -152,8 +165,15 @@ export function registerDashboardIpc(provider: DataProvider): void {
     provider.setAppSettings(patch),
   );
   handle(ch.getAppInfo, () => provider.getAppInfo());
-  handle(ch.getDatabaseLocation, () => provider.getDatabaseLocation());
-  handle(ch.chooseDatabaseFolder, () => provider.chooseDatabaseFolder());
+
+  // Data-location (Settings "Data storage" card + first-run folder prompt).
+  handle(ch.getDataLocation, () => provider.getDataLocation());
+  handle(ch.chooseDataFolder, () => provider.chooseDataFolder());
+  handle(ch.setDataFolder, (_e, input: { folder: string; adopt?: boolean }) =>
+    provider.setDataFolder(input),
+  );
+  handle(ch.chooseFirstRunDataFolder, () => provider.chooseFirstRunDataFolder());
+
   handle(ch.clearReview, (_e, matchId: string) => {
     provider.clearReview(matchId);
   });

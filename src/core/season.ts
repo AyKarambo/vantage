@@ -76,3 +76,143 @@ export function currentSeason(now: number): { start: number; end: number } {
   const next = SEASON_STARTS.find((s) => s > start) as number;
   return { start, end: next };
 }
+
+/**
+ * A single addressable competitive season window, used by the time filter's
+ * season options (spec D2). `id` is derived from the start instant so it is
+ * stable across app restarts and survives future label/calendar changes.
+ */
+export interface SeasonWindow {
+  /** Stable addressing key — the season start as an ISO date, e.g. `'S:2026-06-16'`. */
+  id: string;
+  /** Inclusive start instant (ms, matches {@link seasonStart}/{@link currentSeason}). */
+  start: number;
+  /** Exclusive end instant (ms). */
+  end: number;
+  /** Human label — `'2026 Season 3'`, or a date range for pre-2026 seasons. */
+  label: string;
+  /** Calendar year the season starts in. */
+  year: number;
+  /** 1-based season number within {@link SeasonWindow.year}; resets every year. */
+  seasonOfYear: number;
+}
+
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** `'Feb 10'` from a UTC instant — used to build the pre-2026 date-range label. */
+function shortDate(ms: number): string {
+  const d = new Date(ms);
+  return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/** Year-numbering label: `'<year> Season N'`, N resetting to 1 every calendar year. */
+function numberedLabel(year: number, seasonOfYear: number): string {
+  return `${year} Season ${seasonOfYear}`;
+}
+
+/**
+ * Builds the ascending list of season start instants from the first known
+ * season through (and including) the season containing `now`, extrapolating
+ * past {@link LAST} by whole {@link SEASON_CADENCE_MS} steps as needed. This
+ * is the single walk that both {@link currentSeasonWindow} and
+ * {@link seasonsForData} use to derive `year`/`seasonOfYear` consistently.
+ */
+function seasonStartsThrough(now: number): number[] {
+  const starts = [...SEASON_STARTS];
+  const containing = seasonStart(now);
+  while (starts[starts.length - 1] < containing) {
+    starts.push(starts[starts.length - 1] + SEASON_CADENCE_MS);
+  }
+  return starts;
+}
+
+/**
+ * The `[start, end)` + year/label metadata for the season start at `starts[i]`.
+ * `starts` must be ascending and cover at least `i`; used internally so the
+ * per-year counter and pre-2026 date-range fallback are computed once, in one
+ * place, for both {@link currentSeasonWindow} and {@link seasonsForData}.
+ */
+function windowFor(starts: readonly number[], i: number): SeasonWindow {
+  const start = starts[i];
+  const end = i + 1 < starts.length ? starts[i + 1] : start + SEASON_CADENCE_MS;
+  const year = new Date(start).getUTCFullYear();
+  let seasonOfYear = 1;
+  for (let j = i - 1; j >= 0; j--) {
+    if (new Date(starts[j]).getUTCFullYear() !== year) break;
+    seasonOfYear++;
+  }
+  const endYear = new Date(end).getUTCFullYear();
+  // A year-spanning window (e.g. S20: Dec 2025 – Feb 2026) must show both years —
+  // otherwise the label reads as if it ends in the start year.
+  const label = year < 2026
+    ? endYear !== year
+      ? `${shortDate(start)}, ${year} – ${shortDate(end)}, ${endYear}`
+      : `${shortDate(start)} – ${shortDate(end)}, ${year}`
+    : numberedLabel(year, seasonOfYear);
+  return { id: `S:${new Date(start).toISOString().slice(0, 10)}`, start, end, label, year, seasonOfYear };
+}
+
+/**
+ * The season window containing `now`, always addressable (spec D2 "current
+ * season always listed"). Total — never throws: a `now` that precedes the
+ * first known season (e.g. a reset system clock) clamps to that first season
+ * rather than looking up an index that isn't in the table.
+ */
+export function currentSeasonWindow(now: number): SeasonWindow {
+  const starts = seasonStartsThrough(now);
+  const containing = seasonStart(now);
+  const i = starts.indexOf(containing);
+  return windowFor(starts, i === -1 ? 0 : i);
+}
+
+/**
+ * Translates the legacy `days: 'season'` sentinel (pre-D2) into an addressable
+ * `{ season: id }` for the current named season — the one place this
+ * migration is implemented so every persisted-filter reader (renderer
+ * `store.ts`'s `vantageFilters` load, `prefs.ts`'s saved-preset migration)
+ * shares the exact same fallback instead of each re-deriving it.
+ */
+export function migrateLegacySeasonDays(now: number): { season: string } {
+  return { season: currentSeasonWindow(now).id };
+}
+
+/**
+ * All season windows that contain at least one of `timestamps`, plus the
+ * current season (always included even with zero matching timestamps —
+ * fresh-install case), newest first. The list purposefully ignores the
+ * account switcher — callers pass competitive-match timestamps across every
+ * account (spec D2 / Resolved Q13).
+ */
+export function seasonsForData(timestamps: readonly number[], now: number): SeasonWindow[] {
+  const current = currentSeasonWindow(now);
+  const oldest = timestamps.length > 0 ? Math.min(...timestamps) : now;
+  const starts = seasonStartsThrough(Math.max(now, oldest));
+  const windows: SeasonWindow[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    if (starts[i] > now) break;
+    const w = windowFor(starts, i);
+    if (w.id === current.id) continue; // added once, below
+    if (timestamps.some((t) => t >= w.start && t < w.end)) windows.push(w);
+  }
+  windows.push(current);
+  windows.sort((a, b) => b.start - a.start);
+  return windows;
+}
+
+/**
+ * The window for a given season `id` (as produced by {@link currentSeasonWindow}
+ * or {@link seasonsForData}), or `undefined` if `id` isn't addressable —
+ * callers (`applyFilters`) fall back to a default window in that case.
+ */
+export function seasonWindowById(id: string, now: number): SeasonWindow | undefined {
+  const match = /^S:(\d{4}-\d{2}-\d{2})$/.exec(id);
+  if (!match) return undefined;
+  const start = Date.parse(match[1]);
+  if (Number.isNaN(start)) return undefined;
+  const starts = seasonStartsThrough(Math.max(now, start));
+  const i = starts.indexOf(start);
+  if (i === -1) return undefined;
+  return windowFor(starts, i);
+}

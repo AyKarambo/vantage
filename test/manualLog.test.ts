@@ -4,6 +4,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { ManualStore } from '../src/store/manualLog';
 import type { AuthoredTarget } from '../src/core/targets';
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
+import { HistoryStore } from '../src/store/history';
+import type { GameRecord } from '../src/core/analytics';
 
 let dir: string;
 
@@ -95,5 +98,83 @@ describe('ManualStore', () => {
     const store = new ManualStore(dir);
     expect(store.targets()[0].isActive).toBe(true);
     expect(store.targets()[0].archivedAt).toBeUndefined();
+  });
+
+  it('relocate re-points and reloads from the new dir', () => {
+    const store = new ManualStore(dir);
+    store.addTarget(target('t1'));
+
+    const newDir = fs.mkdtempSync(path.join(os.tmpdir(), 'owsync-manual-new-'));
+    try {
+      fs.copyFileSync(path.join(dir, 'manual.json'), path.join(newDir, 'manual.json'));
+      store.relocate(newDir);
+
+      expect(store.targets().map((t) => t.id)).toEqual(['t1']);
+      store.addTarget(target('t2'));
+      expect(new ManualStore(newDir).targets().map((t) => t.id).sort()).toEqual(['t1', 't2']);
+      // The old dir's file is untouched by relocate itself (copy/delete is the
+      // migration executor's job, not the store's).
+      expect(new ManualStore(dir).targets().map((t) => t.id)).toEqual(['t1']);
+    } finally {
+      fs.rmSync(newDir, { recursive: true, force: true });
+    }
+  });
+
+  // Migration (spec B3 / plan Decision B.3): existing installs had a *visible*
+  // synthetic "Improvement Target" seeded under the internal bookkeeping id.
+  // `removeTarget` is id-based, so it must delete only that synthetic target —
+  // never a user-authored target that merely shares the display name — and
+  // must never touch grades stored on matches (HistoryStore).
+  it('migration: removeTarget(internal id) deletes only the seeded synthetic target', () => {
+    const store = new ManualStore(dir);
+    store.addTarget(target(NOTION_IMPROVEMENT_TARGET_ID, 'Improvement Target'));
+    store.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
+    expect(store.targets()).toHaveLength(0);
+    // Idempotent: running the migration again (e.g. next launch) is a no-op.
+    expect(() => store.removeTarget(NOTION_IMPROVEMENT_TARGET_ID)).not.toThrow();
+    expect(new ManualStore(dir).targets()).toHaveLength(0);
+  });
+
+  it('migration: a user-authored target sharing the seeded name survives (different id)', () => {
+    const store = new ManualStore(dir);
+    store.addTarget(target(NOTION_IMPROVEMENT_TARGET_ID, 'Improvement Target'));
+    store.addTarget(target('t-1700000000000', 'Improvement Target'));
+    store.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
+    const remaining = new ManualStore(dir).targets();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe('t-1700000000000');
+    expect(remaining[0].name).toBe('Improvement Target');
+  });
+
+  it('migration: stored grades on matches are untouched by target removal', () => {
+    const manual = new ManualStore(dir);
+    manual.addTarget(target(NOTION_IMPROVEMENT_TARGET_ID, 'Improvement Target'));
+    manual.addTarget(target('t-1700000000000', 'Improvement Target'));
+
+    const historyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'owsync-manual-history-'));
+    const history = new HistoryStore(historyDir);
+    try {
+      const bookkeepingGame: GameRecord = {
+        matchId: 'm1', timestamp: 0, account: 'Main', role: 'damage', map: 'Ilios',
+        result: 'Win', gameType: 'Competitive', heroes: [],
+        review: { at: 1, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'hit' }, flags: {} },
+      };
+      const userGradedGame: GameRecord = {
+        matchId: 'm2', timestamp: 0, account: 'Main', role: 'damage', map: 'Nepal',
+        result: 'Loss', gameType: 'Competitive', heroes: [],
+        review: { at: 1, grades: { 't-1700000000000': 'missed' }, flags: {} },
+      };
+      history.addMany([bookkeepingGame, userGradedGame]);
+
+      manual.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
+
+      const games = history.all();
+      expect(games.find((g) => g.matchId === 'm1')?.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('hit');
+      expect(games.find((g) => g.matchId === 'm2')?.review?.grades['t-1700000000000']).toBe('missed');
+      expect(new ManualStore(dir).targets().map((t) => t.id)).toEqual(['t-1700000000000']);
+    } finally {
+      history.close();
+      fs.rmSync(historyDir, { recursive: true, force: true });
+    }
   });
 });

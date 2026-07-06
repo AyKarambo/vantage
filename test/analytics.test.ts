@@ -4,6 +4,8 @@ import {
 } from '../src/core/analytics';
 import { generateSampleGames } from '../src/core/sampleData';
 import type { Result, Role } from '../src/core/model';
+import { computeDashboard } from '../src/core/dashboardData';
+import { buildTargets, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 
 function game(p: Partial<GameRecord> & { result: Result; map: string; role: Role }): GameRecord {
   return {
@@ -110,5 +112,48 @@ describe('sample dataset', () => {
     expect(byMap(a).length).toBeGreaterThan(3);
     expect(heroStats(a).length).toBeGreaterThan(3);
     expect(focusBy(a, (g) => g.map).every((f) => typeof f.net === 'number')).toBe(true);
+  });
+});
+
+describe('competitive-only scoping (spec D1)', () => {
+  it('makes non-competitive rows invisible in counts/stats', () => {
+    const comp = [
+      game({ result: 'Win', map: 'A', role: 'damage' }),
+      game({ result: 'Loss', map: 'A', role: 'damage' }),
+    ];
+    const nonComp = [
+      game({ result: 'Win', map: 'A', role: 'damage', gameType: 'Quick Play' }),
+      game({ result: 'Win', map: 'A', role: 'damage', gameType: 'Arcade' }),
+    ];
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard([...comp, ...nonComp], { days: 'all' }, demo);
+    expect(d.overall.games).toBe(comp.length);
+    expect(d.totalGamesAllTime).toBe(comp.length);
+    expect(d.options.accounts).toEqual(['Karambo']);
+    expect(d.byAccount.reduce((n, g) => n + g.games, 0)).toBe(comp.length);
+  });
+});
+
+describe('buildTargets excludes the Notion bookkeeping id (spec B2)', () => {
+  it('never lists or scores the internal id, even if present in authored targets', () => {
+    const visibleTarget: AuthoredTarget = {
+      id: 'my-target', name: 'Play off cooldowns', mode: 'self', rule: '', createdAt: 1, isActive: true,
+    };
+    const bookkeepingTarget: AuthoredTarget = {
+      id: NOTION_IMPROVEMENT_TARGET_ID, name: 'Improvement Target', mode: 'self', rule: '', createdAt: 2, isActive: true,
+    };
+    const games: GameRecord[] = [
+      game({
+        result: 'Win', map: 'A', role: 'damage',
+        review: { at: 1, grades: { 'my-target': 'hit', [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} },
+      }),
+    ];
+    const summaries = buildTargets(games, false, [visibleTarget, bookkeepingTarget]);
+    expect(summaries.map((s) => s.id)).toEqual(['my-target']);
+    expect(summaries.find((s) => s.id === NOTION_IMPROVEMENT_TARGET_ID)).toBeUndefined();
+    // The visible target's own stats are unaffected by the bookkeeping grade.
+    const [visible] = summaries;
+    expect(visible.hitRate).toBe(1);
+    expect(visible.attempts).toBe(1);
   });
 });

@@ -1,7 +1,7 @@
 # Screen spec: Application shell (cross-screen behaviors)
 
-**Source:** `renderer/src/app/shell.ts`, `renderer/src/app/palette.ts`, `renderer/src/fuzzy.ts`, `renderer/src/shortcuts.ts`, `renderer/src/gepStatus.ts`, `src/core/gepHealth.ts`, `src/main/gepStatusMonitor.ts`, `renderer/src/components/toast.ts`, `renderer/src/components/popover.ts`, `renderer/src/components/skeleton.ts`, `renderer/src/app/log-match.ts`, `renderer/src/store.ts`, `renderer/src/prefs.ts`, `renderer/src/main.ts` · reverse-engineered 2026-07-04 after the ui-qol / live-status / debug-log batch (PR #8)
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [spec] intent from the 2026-07-04 feature specs (`ui-qol.spec.md`, `live-status.spec.md`, `debug-log.spec.md`)
+**Source:** `renderer/src/app/shell.ts`, `renderer/src/app/palette.ts`, `renderer/src/fuzzy.ts`, `renderer/src/shortcuts.ts`, `renderer/src/gepStatus.ts`, `src/core/gepHealth.ts`, `src/main/gepStatusMonitor.ts`, `renderer/src/components/toast.ts`, `renderer/src/components/popover.ts`, `renderer/src/components/skeleton.ts`, `renderer/src/app/log-match.ts`, `renderer/src/store.ts`, `renderer/src/prefs.ts`, `renderer/src/main.ts`, `renderer/styles/components.css` (`.cheatsheet`, `.cheatsheet-row`) · reverse-engineered 2026-07-04 after the ui-qol / live-status / debug-log batch (PR #8) · updated 2026-07-06 after the `feedback-batch-2026-07` fix (Area E per-view filter-bar suppression, Area G cheatsheet spacing)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [spec] intent from the 2026-07-04 feature specs (`ui-qol.spec.md`, `live-status.spec.md`, `debug-log.spec.md`) · [batch 2026-07-06] shipped in `feedback-batch-2026-07` (intent: `feedback-batch-2026-07.spec.md` Areas E, G)
 
 **Shared context:** The shell owns everything that is not a screen: the frameless titlebar, the sidebar (nav groups, Review pending badge, "Today's session" card), the global filter-bar host, the content host with the refresh model, and the status bar. Screens render from a `DashboardData` snapshot via `ViewContext` and never own global chrome. This spec is the referenced home for the shell-level behaviors the per-screen specs point at.
 
@@ -23,6 +23,12 @@
 - [explicit] Declarative bindings (`combo`, `description`, `group`, optional `when` / `allowInInput` / `hidden`) dispatched by a single window `keydown` listener. Guards on every binding: never fires while an input/textarea/select/contenteditable has focus, and never while an overlay or popover is open — except bindings marked `allowInInput` (Ctrl+K).
 - [explicit] The `?` cheatsheet overlay renders itself from the registrations, grouped, in registration order.
 - Registered by the shell: `Ctrl+K` (palette), `?` (cheatsheet), `Ctrl+1…9` (sidebar order, first nine entries), `Escape` (back to Matches, only on a match detail), `←`/`→` (older/newer match, only on a match detail). The Review screen registers `H`/`P`/`M`/`S` (see `screen-review.spec.md`).
+- [batch 2026-07-06] **Cheatsheet spacing pass (Area G).** The `?` cheatsheet modal's inner
+  content has ≥ 20px padding on all sides (key badges and text never touch the modal border);
+  group-header top spacing is ≥ 2× the inter-row gap; row gaps are uniform (±1px); key badges
+  are aligned in a fixed-width column that never touches the modal border
+  (`renderer/styles/components.css` `.cheatsheet`, `.cheatsheet-row`). Verified with
+  before/after screenshots from the browser preview harness.
 
 **Status-bar connection indicator** (the renderer surface of `live-status.spec.md`):
 - [explicit] Dot + label rendering the four-state model from `src/core/gepHealth.ts` (`no-game` · `connected` · `live` · `stale`), with deliberately truthful labels: "No game" · "Connected — waiting for events" · "Receiving data" · "⚠ No data for Ns" (stale, with live seconds-of-silence). A non-GEP sensor (`counterwatch`, demo/no-live-feed runs) always renders the no-game dot with "No live feed" — it can never claim Connected or Live.
@@ -38,9 +44,24 @@
 - [explicit] Window focus triggers a background refetch (stale-while-revalidate for newly tracked games).
 
 **Global filter bar** (`views/view.ts` `filterBar` — rendered by the shell above every screen):
-- [explicit] Account · Role · Mode · Season selects, persisted across launches (`vantageFilters` localStorage).
-- [explicit] **Reset chip:** when any filter differs from the defaults (all/all/all/30d), a "Reset (N)" chip shows the active-change count and restores the defaults in one click.
-- [explicit] **Presets:** up to 2 saved filter combinations as one-click chips (auto-named from their settings, e.g. "Competitive · Support · 30d"); a "+ save preset" affordance appears while the current combination is non-default and unsaved; right-click removes a preset; the chip highlights while its combination is active. Persisted via `prefs.filterPresets`.
+- [batch 2026-07-06] Role · Season selects — the **Mode** filter is removed (the app is
+  competitive-only everywhere; see `dashboard-filter-fixes.spec.md` Area D) and the **Account**
+  filter is removed from the bar (account selection lives solely in the sidebar account switcher
+  — `account` stays in filter state/IPC, just not as a filter-bar control). Persisted across
+  launches (`vantageFilters` localStorage); old persisted `mode` keys are ignored on load and
+  dropped on next persist.
+- [batch 2026-07-06] **Season entries.** The Season select offers `Last 7 days`, `Last 30 days`,
+  one entry per season with ≥1 competitive match (across all accounts, current season always
+  included), newest first, then `All time` — see `dashboard-filter-fixes.spec.md` Area D and
+  `src/core/season.ts` for the enumeration/labeling API.
+- [explicit] **Reset chip:** when any filter differs from the defaults (role=all, days=30), a "Reset (N)" chip shows the active-change count and restores the defaults in one click (the active account is left untouched by Reset — that's the switcher's job).
+- [explicit] **Presets:** up to 2 saved filter combinations as one-click chips (auto-named from their settings, e.g. "Support · 30d"); a "+ save preset" affordance appears while the current combination is non-default and unsaved; right-click removes a preset; the chip highlights while its combination is active. Persisted via `prefs.filterPresets`. [batch 2026-07-06] A preset saved under the old shape (carrying `mode`/`account`) has those keys stripped on load/apply — applying it leaves the active account unchanged — and is rewritten to the new shape on next persist.
+- [batch 2026-07-06] **Per-view suppression.** The shell can hide the filter bar entirely for a
+  given view: a `FILTERLESS_VIEWS: ReadonlySet<ViewId>` in `shell.ts` (currently just
+  `readiness`) toggles the existing filter-host `hidden` class in `renderFilters` — no new
+  per-view API, just a set to extend later. Used because the Readiness view's data is
+  intentionally unscoped by any filter or the account switcher (fatigue is a property of the
+  person, not the current selection) — see `supercompensation-detection.spec.md` Area E.
 
 **View restore & scroll memory:**
 - [explicit] The active top-level view persists (`prefs.view`) and is restored on launch; a match detail persists as `matches` (the app never reopens on `matchDetail`).
@@ -49,7 +70,7 @@
 **Status text:** [explicit] "N games · updated Xm ago" is re-derived every 60s while idle, so the relative time never lies.
 
 **Quick-log modal** (`app/log-match.ts` — opened from the Overview CTA or the palette's Log match action):
-- [explicit] Prefills **role and mode** from the last logged match (`prefs.logPrefill`); result/map/hero always start fresh; mental flags start **empty** (no pre-checked "Positive comms" bias).
+- [explicit] Prefills **role** from the last logged match (`prefs.logPrefill`); result/map/hero always start fresh; mental flags start **empty** (no pre-checked "Positive comms" bias). [batch 2026-07-06] The **mode picker is removed** (`dashboard-filter-fixes.spec.md` Area D — the app is competitive-only everywhere): every quick-logged match is sent as `gameType: 'Competitive'`, and `LogPrefillPref.mode` is no longer written (an old stored value is simply ignored).
 - [explicit] The hero field is a typeahead over the canonical hero list (`src/core/heroes.ts`) plus any hero already present in the player's data; free text stays allowed.
 - [explicit] "Save ⏎" and "Save & next" (reopens the modal for the next game); saving shows a confirmation toast and refreshes the dashboard.
 
@@ -84,13 +105,15 @@
 - Given filters differ from the defaults, then the filter bar shows a "Reset (N)" chip that restores them; given a non-default, unsaved combination and fewer than 2 presets, then "+ save preset" saves it as a named one-click chip (right-click removes it).
 - Given I quit on Heroes, when I relaunch, then Heroes is active; given I quit on a match detail, then Matches is active.
 - Given I scroll the Matches list, open a match detail, and press Esc, then the list is restored at the same scroll position (same session).
-- Given my last logged match was Support/Competitive, when I open Log match, then role=Support and mode=Competitive are prefilled, no mental flag is pre-checked, and typing "zar" in the hero field suggests Zarya, selectable by keyboard.
+- Given my last logged match was Support, when I open Log match, then role=Support is prefilled (there is no mode to prefill — the mode picker is removed, manual logs are always competitive), no mental flag is pre-checked, and typing "zar" in the hero field suggests Zarya, selectable by keyboard.
 - Given the renderer throws an uncaught error, then it appears in the main-process log with a `renderer` scope.
+- **(added 2026-07-06, batch Area E)** Given the active view is Readiness, then no filter bar renders above it, and switching the active account (including "All accounts") leaves the view's content unchanged; given any other view, the filter bar renders as usual with Role · Season only (no Mode, no Account control).
+- **(added 2026-07-06, batch Area G)** Given the `?` cheatsheet modal is open at default window size, then the bounding box of every key badge and text is ≥ 20px from the modal border, group headers have at least twice the vertical space of the row gap above them, and row gaps are uniform.
 
 ## Known gaps (intent ≠ code)
 
 - [spec] **Palette actions are a subset of the ui-qol spec's list.** `ui-qol.spec.md` #1 names "sync Notion, toggle break reminder, open log viewer" as palette actions; the shipped actions are Log match, Keyboard shortcuts, and Replay the intro tour. The Notion, Settings, and Logs *screens* are reachable as Screen entries (so "open log viewer" is one fuzzy match away), but there is no direct sync-Notion or toggle-break-reminder action.
-- [spec] **Quick-log prefill omits the account.** `ui-qol.spec.md` #2 promises role, mode, **and account** prefill; the modal has no account field at all, so only role and mode are remembered (`prefs.logPrefill`). Nothing exists for an account prefill to act on.
+- [spec] **Quick-log prefill omits the account.** `ui-qol.spec.md` #2 promises role, mode, **and account** prefill; the modal has no account field at all, so only role was remembered (`prefs.logPrefill`). Nothing exists for an account prefill to act on. **(updated 2026-07-06)** The "mode" half of this gap is now moot — the mode picker itself is removed (`dashboard-filter-fixes.spec.md` Area D), so only the account-prefill gap remains open.
 
 ## Open Questions
 

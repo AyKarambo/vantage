@@ -93,6 +93,56 @@ export function presentSubjectiveColumns(
     .map(([name]) => name);
 }
 
+/** Notion property type, keyed by the property name, as returned by `dataSources.retrieve`. */
+export type SubjectiveColumnStatus = 'available' | 'wrong-type' | 'near-miss' | 'missing';
+
+/** Diagnostic for one subjective column, from live Gametracker schema discovery. */
+export interface SubjectiveColumnDiag {
+  /** Canonical column name, e.g. 'Comms'. */
+  column: string;
+  status: SubjectiveColumnStatus;
+  /** The live property's actual type, when `status` is 'wrong-type'. */
+  actualType?: string;
+  /** The live property's actual name, when `status` is 'near-miss'. */
+  actualName?: string;
+}
+
+/**
+ * Classify each of the 5 optional subjective columns purely from schema
+ * discovery (no writes, no per-match data): `available` (present with the
+ * right type, so it *can* be written), `wrong-type` (present but the wrong
+ * Notion type), `near-miss` (absent under the canonical name, but a live
+ * property name matches after trimming whitespace and case-folding), or
+ * `missing` (absent, no near-miss). This is deliberately schema-level only —
+ * per-match "no value" is a separate, sync-time skip reason (spec A3's third
+ * reason), not something this function can or should report.
+ */
+export function diagnoseSubjectiveColumns(
+  properties: Record<string, { type?: string } | undefined>,
+): SubjectiveColumnDiag[] {
+  const foldedLive = new Map<string, string>();
+  for (const name of Object.keys(properties)) {
+    foldedLive.set(name.trim().toLowerCase(), name);
+  }
+
+  return Object.entries(OPTIONAL_SUBJECTIVE_PROPERTIES).map(([column, expectedType]) => {
+    const actual = properties[column];
+    if (actual) {
+      if (actual.type === expectedType) {
+        return { column, status: 'available' as const };
+      }
+      return { column, status: 'wrong-type' as const, actualType: actual.type };
+    }
+
+    const nearMissName = foldedLive.get(column.trim().toLowerCase());
+    if (nearMissName && nearMissName !== column) {
+      return { column, status: 'near-miss' as const, actualName: nearMissName };
+    }
+
+    return { column, status: 'missing' as const };
+  });
+}
+
 /**
  * The data source a `Map` relation column points at, if present — lets the exporter
  * resolve maps without a separately configured `mapsDatabaseId` (mirrors the

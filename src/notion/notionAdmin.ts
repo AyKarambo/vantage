@@ -1,10 +1,10 @@
 import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
 import {
-  buildGametrackerProperties, hasPlayedAtColumn, hasSrDeltaColumn, mapRelationSourceId,
-  presentSubjectiveColumns, validateGametrackerShape, type ShapeValidation,
+  buildGametrackerProperties, diagnoseSubjectiveColumns, hasPlayedAtColumn, hasSrDeltaColumn,
+  mapRelationSourceId, presentSubjectiveColumns, validateGametrackerShape, type ShapeValidation,
 } from './gametrackerSchema';
-import type { NotionDatabaseSummary, NotionPageSummary } from '../shared/contract';
+import type { NotionDatabaseSummary, NotionPageSummary, SubjectiveColumnDiag } from '../shared/contract';
 export type { NotionDatabaseSummary, NotionPageSummary };
 
 /** Result of `createGametracker` — ids/urls for the two databases it provisions. */
@@ -24,6 +24,8 @@ export interface ValidateResult extends ShapeValidation {
   hasSrDelta: boolean;
   /** Subjective columns present on the database, so the writer may set them (Comms, Leaver, …). */
   subjectiveColumns: string[];
+  /** Per-column schema diagnostics for all 5 optional subjective columns (available/wrong-type/near-miss/missing). */
+  subjectiveColumnDiagnostics: SubjectiveColumnDiag[];
   /** The database the `Map` relation points at — lets the exporter resolve maps without a configured mapsDatabaseId. */
   mapRelationDbId?: string;
   /** The validated database's first data source id, so the writer can parent new rows on it directly. */
@@ -126,6 +128,7 @@ export class NotionAdmin {
       hasPlayedAt: hasPlayedAtColumn(properties),
       hasSrDelta: hasSrDeltaColumn(properties),
       subjectiveColumns: presentSubjectiveColumns(properties),
+      subjectiveColumnDiagnostics: diagnoseSubjectiveColumns(properties),
       mapRelationDbId: mapRelationSourceId(properties),
       dataSourceId,
     };

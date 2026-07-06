@@ -2,7 +2,6 @@ import type { DataProvider } from './dashboard';
 import type { HistoryStore } from '../store/history';
 import type { ManualStore } from '../store/manualLog';
 import type { NotionRuntime } from './notionRuntime';
-import { NOTION_IMPROVEMENT_TARGET_ID, notionImprovementTarget } from '../notion/notionImporter';
 import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
@@ -13,7 +12,7 @@ import { currentRank, type RankAnchorMap } from '../core/rank';
 import { sourceOf } from '../core/source';
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type {
-  AccountSummary, AppInfo, AppUiSettings, DatabaseLocation, DatabaseLocationResult,
+  AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
   GepStatusPayload, MatchEditInput, RankSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
@@ -28,15 +27,17 @@ import type { GameRecord } from '../core/analytics';
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'relabelAccount' | 'removeImported'>;
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'removeImported'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
   rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel'>;
-  /** The Notion edge: export/import, status, token lifecycle, and the database picker. */
+  /** The Notion edge: export/import, status, token lifecycle, the database picker, and the
+   *  export-ledger clear (so a deleted imported match starts fresh on re-import/re-export). */
   notion: Pick<
     NotionRuntime,
-    'export' | 'import' | 'status' | 'setToken' | 'clearToken' | 'listDatabases' | 'listPages' | 'selectDatabase' | 'createDatabase'
+    | 'export' | 'import' | 'status' | 'setToken' | 'clearToken'
+    | 'listDatabases' | 'listPages' | 'selectDatabase' | 'createDatabase' | 'clearExports'
   >;
   /** Live app config — re-read on every use (accounts, breakReminder), never cached. */
   getConfig(): AppConfig;
@@ -63,10 +64,14 @@ export interface DataProviderDeps {
   };
   /** Version + support contact for the About card. */
   appInfo(): AppInfo;
-  /** History-database location: current value + folder-picker/relocate (owned by the composition root). */
-  database: {
-    location(): DatabaseLocation;
-    choose(): Promise<DatabaseLocationResult>;
+  /** Data-folder location: current value, Settings folder-picker/migrate, and the
+   *  first-run picker (owned by the composition root — it holds the mutable data
+   *  dir and the live store handles the migration executor repoints). */
+  dataLocation: {
+    get(): DataLocation;
+    choose(): Promise<DataLocationResult>;
+    set(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
+    chooseFirstRun(): Promise<DataLocationResult>;
   };
 }
 
@@ -195,29 +200,38 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const res = await deps.notion.import();
       if (res.unavailable) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
       if (res.error) return { imported: 0, skipped: 0, failed: res.failed, error: res.error };
-      // Did an earlier import already bring in improvement grades? Checked
-      // before addMany so it reflects the pre-import state.
-      const seededBefore = deps.history.all().some((g) => g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID] !== undefined);
-      // Stamp every imported game so it can be wiped for a clean re-import
-      // (removeImported) without touching live-tracked or hand-logged matches.
+      // Split the imported rows: brand-new matchIds go through `addMany` (they
+      // arrive already reviewed when Notion carried a grade — that's fine, a
+      // fresh row has no local state to protect); matchIds already tracked
+      // locally go through `mergeImported`, which never overwrites an existing
+      // review or mental record (local always wins) but fills in a bookkeeping
+      // grade / adopts mental flags when the local match has none at all. No
+      // `AuthoredTarget` is ever seeded for the imported grade — B2 keeps it a
+      // hidden bookkeeping value on the match review only.
+      const known = new Set(deps.history.all().map((g) => g.matchId));
+      const fresh = res.games.filter((g) => !known.has(g.matchId));
+      const existing = res.games.filter((g) => known.has(g.matchId));
+      // Stamp every brand-new imported game so it can be wiped for a clean
+      // re-import (removeImported) without touching live-tracked or
+      // hand-logged matches. A merged row keeps its existing provenance.
       const importedAt = Date.now();
-      const { imported, skipped } = deps.history.addMany(res.games.map((g) => ({ ...g, importedAt })));
-      // Imported "Improvement Target" grades are keyed to one generic target;
-      // seed it on the FIRST import that carries them so they surface on the
-      // dashboard. `seededBefore` keeps a re-import from resurrecting a target
-      // the user has since deleted.
-      const importingGrades = res.games.some((g) => g.review?.grades[NOTION_IMPROVEMENT_TARGET_ID] !== undefined);
-      const targetExists = deps.manual.targets().some((t) => t.id === NOTION_IMPROVEMENT_TARGET_ID);
-      if (importingGrades && !targetExists && !seededBefore) {
-        deps.manual.addTarget(notionImprovementTarget(Date.now()));
-      }
+      const { imported } = deps.history.addMany(fresh.map((g) => ({ ...g, importedAt })));
+      const { merged, skipped } = deps.history.mergeImported(existing);
       // Surface the imported accounts so they appear in the account manager, the
       // filters and the rank UI — Notion only stores the account *label*, not the
       // battleTag, so each becomes a name-only entry that live play reconnects to.
       const accountsAdded = seedImportedAccounts(deps, res.games);
-      return { imported, skipped, failed: res.failed, ...(accountsAdded ? { accountsAdded } : {}) };
+      return {
+        imported, skipped, failed: res.failed,
+        ...(merged ? { merged } : {}),
+        ...(accountsAdded ? { accountsAdded } : {}),
+      };
     },
-    deleteImportedMatches: () => ({ deleted: deps.history.removeImported().length }),
+    deleteImportedMatches: () => {
+      const removed = deps.history.removeImported();
+      deps.notion.clearExports(removed.map((g) => g.matchId));
+      return { deleted: removed.length };
+    },
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {
       const config = deps.getConfig();
@@ -253,8 +267,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     getAppSettings: () => deps.appSettings.get(),
     setAppSettings: (patch) => deps.appSettings.apply(patch),
     getAppInfo: () => deps.appInfo(),
-    getDatabaseLocation: () => deps.database.location(),
-    chooseDatabaseFolder: () => deps.database.choose(),
+    getDataLocation: () => deps.dataLocation.get(),
+    chooseDataFolder: () => deps.dataLocation.choose(),
+    setDataFolder: (input) => deps.dataLocation.set(input),
+    chooseFirstRunDataFolder: () => deps.dataLocation.chooseFirstRun(),
     clearReview: (matchId) => {
       deps.history.clearReview(matchId);
     },

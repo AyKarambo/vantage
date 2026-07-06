@@ -104,19 +104,8 @@ export class NotionWriter {
     // The subjective self-report + improvement grade the user filled in inside
     // Vantage — written into the matching columns (mirroring NotionImporter's
     // readers) so the round-trip is symmetric instead of dropping them into the
-    // page title. Each is guarded by column presence and by having a value.
-    const mental = m.mental;
-    if (this.writableColumns.has('Comms') && mental?.positiveComms) props['Comms'] = select('positive');
-    if (this.writableColumns.has('Improvement Target') && m.improvementGrade) {
-      props['Improvement Target'] = select(GRADE_TO_NOTION[m.improvementGrade]);
-    }
-    if (this.writableColumns.has('Leaver')) {
-      const leaver = leaverFlags(mental);
-      if (leaver.myTeam) props['Leaver'] = select('team');
-      else if (leaver.enemyTeam) props['Leaver'] = select('enemy');
-    }
-    if (this.writableColumns.has('Tilt') && mental?.tilt) props['Tilt'] = { checkbox: true };
-    if (this.writableColumns.has('Toxic Mates') && mental?.toxicMates) props['Toxic Mates'] = { checkbox: true };
+    // page title. Create omits columns with no value (see `subjectiveProps`).
+    Object.assign(props, this.subjectiveProps(m, { forUpdate: false }));
 
     const parent = this.dataSourceId
       ? { data_source_id: this.dataSourceId }
@@ -125,10 +114,55 @@ export class NotionWriter {
     return res.id as string;
   }
 
+  /**
+   * Updates an already-exported Gametracker row in place. Unlike
+   * {@link createMatchPage}, a present-but-now-empty subjective column is sent
+   * its explicit empty form (`select: null` / `checkbox: false`) so clearing a
+   * flag or grade locally clears the corresponding Notion cell on next sync.
+   */
+  async updateMatchPage(pageId: string, m: ResolvedMatch): Promise<void> {
+    const props = this.subjectiveProps(m, { forUpdate: true });
+    await this.client.pages.update({ page_id: pageId, properties: props });
+  }
+
   private titleFor(m: ResolvedMatch): string {
     const who = m.account ?? m.record.battleTag ?? 'Match';
     const parts = [who, m.role, m.record.mapName, m.result].filter(Boolean);
     return parts.join(' · ');
+  }
+
+  /**
+   * Builds the subjective-column properties (Comms/Improvement Target/Leaver/
+   * Tilt/Toxic Mates), guarded by column presence. `forUpdate: false` (create)
+   * omits any column with no value, leaving it blank for the user to fill in.
+   * `forUpdate: true` (update) actively blanks a present-but-now-empty column
+   * so a locally-cleared flag/grade clears the Notion cell too.
+   */
+  private subjectiveProps(m: ResolvedMatch, opts: { forUpdate: boolean }): Record<string, any> {
+    const props: Record<string, any> = {};
+    const mental = m.mental;
+
+    if (this.writableColumns.has('Comms')) {
+      if (mental?.positiveComms) props['Comms'] = select('positive');
+      else if (opts.forUpdate) props['Comms'] = { select: null };
+    }
+    if (this.writableColumns.has('Improvement Target')) {
+      if (m.improvementGrade) props['Improvement Target'] = select(GRADE_TO_NOTION[m.improvementGrade]);
+      else if (opts.forUpdate) props['Improvement Target'] = { select: null };
+    }
+    if (this.writableColumns.has('Leaver')) {
+      const leaver = leaverFlags(mental);
+      if (leaver.myTeam) props['Leaver'] = select('team');
+      else if (leaver.enemyTeam) props['Leaver'] = select('enemy');
+      else if (opts.forUpdate) props['Leaver'] = { select: null };
+    }
+    if (this.writableColumns.has('Tilt') && (mental?.tilt || opts.forUpdate)) {
+      props['Tilt'] = { checkbox: Boolean(mental?.tilt) };
+    }
+    if (this.writableColumns.has('Toxic Mates') && (mental?.toxicMates || opts.forUpdate)) {
+      props['Toxic Mates'] = { checkbox: Boolean(mental?.toxicMates) };
+    }
+    return props;
   }
 }
 
