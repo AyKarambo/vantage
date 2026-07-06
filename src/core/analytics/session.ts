@@ -6,6 +6,7 @@
 import type { GameRecord, Streak } from './types';
 import { byMap, dayKey, winLoss } from './grouping';
 import { heroStats } from './heroStats';
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets';
 
 /** Current win/loss streak from the most recent decided games. */
 export function streak(games: GameRecord[]): Streak {
@@ -119,7 +120,11 @@ export function sessionRecap(games: GameRecord[], now: number = Date.now()): Ses
   let hits = 0;
   let attempts = 0;
   for (const g of day) {
-    for (const grade of Object.values(g.review?.grades ?? {})) {
+    for (const [targetId, grade] of Object.entries(g.review?.grades ?? {})) {
+      // Exclude the hidden Notion-import bookkeeping grade (spec B2: imported
+      // grades must not move target stats) — only visible authored-target
+      // grades count toward the hit-rate.
+      if (targetId === NOTION_IMPROVEMENT_TARGET_ID) continue;
       attempts++;
       if (grade === 'hit') hits++;
     }

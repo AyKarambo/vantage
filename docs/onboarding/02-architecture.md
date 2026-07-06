@@ -185,9 +185,13 @@ in JSON or git.
 
 [`appConfig.ts`](../../src/main/config/appConfig.ts) merges, in order:
 built-in `DEFAULTS` ← bundled [`appsettings.json`](../../appsettings.json) ← user
-`userData/config.local.json` ← env overrides (`OW_SYNC_FILTER`, `OW_SYNC_SENSOR`).
-Notable keys: `sensor`, `logFilter`, `accounts` (BattleTag → display name),
-`mapAliases`, `notion.*`, `breakReminder`.
+`userData/config.local.json` ← env overrides (`OW_SYNC_SENSOR`).
+Notable keys: `sensor`, `accounts` (BattleTag → display name), `mapAliases`,
+`notion.*`, `breakReminder`. Vantage tracks competitive games only: a capture
+gate in the match pipeline (`isCompetitive`,
+[`matchFilter.ts`](../../src/core/matchFilter.ts)) drops non-competitive GEP
+matches before they ever reach history, so there is no capture-filter config
+key to set — a `logFilter` entry left over in an old config is simply ignored.
 
 ## The guardrails, and why
 

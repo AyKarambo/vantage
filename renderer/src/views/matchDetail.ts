@@ -264,7 +264,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
   const editable = d.source === 'manual';
   const isComp = classifyGameType(d.gameType) === 'competitive';
-  const state = { result: d.result, role: d.role, map: d.map, hero: d.heroes[0] ?? '', gameType: d.gameType };
+  const state = { result: d.result, role: d.role, map: d.map, hero: d.heroes[0] ?? '' };
   let srDelta: number | undefined = d.srDelta;
 
   openModal((close) => {
@@ -280,11 +280,8 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
           })),
           editField('Map', select(MAP_OPTS, state.map, (v) => (state.map = v))),
           editField('Hero', heroInput(state.hero, (v) => (state.hero = v))),
-          editField('Mode', segmented({
-            options: [{ value: 'Competitive', label: 'Competitive' }, { value: 'Quick Play', label: 'Quick Play' }],
-            value: state.gameType === 'Quick Play' ? 'Quick Play' : 'Competitive', fill: true,
-            onChange: (v) => (state.gameType = v),
-          })),
+          // No Mode control — Vantage is competitive-only (spec D1); matches stay
+          // competitive, mirroring the quick-log's removed mode picker.
         )
       : h('div', { class: 'hint' },
           `Auto-tracked from the game feed — result, map and heroes are locked. ${d.map} · ${roleLabel(d.role)}`);
@@ -296,7 +293,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
     const save = (): void => {
       void bridge.editMatch({
         matchId: d.matchId,
-        ...(editable ? { result: state.result, role: state.role, map: state.map, hero: state.hero.trim(), gameType: state.gameType } : {}),
+        ...(editable ? { result: state.result, role: state.role, map: state.map, hero: state.hero.trim() } : {}),
         mental: flags,
         // number sets, null clears (blanked field), field omitted for non-comp.
         ...(isComp ? { srDelta: srDelta ?? null } : {}),

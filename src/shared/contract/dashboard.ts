@@ -16,8 +16,8 @@ import type { DemoPreference } from '../../core/demoPreference';
 export interface DashboardFilters {
   account?: string; // 'all' or account name
   role?: string; // 'all' | tank | damage | support | openQ
-  mode?: string; // 'all' or game type (Competitive, Quick Play, …)
-  days?: number | 'all' | 'season'; // N-day window | all time | the current OW2 season
+  /** N-day window | all time | a specific season (addressed by its stable id). */
+  days?: number | 'all' | { season: string };
 }
 
 /** One day's recap (the sidebar "today" card + Overview session). */
@@ -49,6 +49,10 @@ export interface MatchRow {
   gameType: string;
   heroes: string[];
   durationMinutes?: number;
+  /** Signed SR change for this match, when known. */
+  srDelta?: number;
+  /** Final score as recorded (e.g. '3–1'), when known. */
+  finalScore?: string;
   /** Merged mental flags (quick-log OR review source) — only true keys are present. */
   flags?: Partial<Record<MatchFlagKey, true>>;
 }
@@ -62,11 +66,12 @@ export interface DashboardData {
   /** Whether the user has any real tracked matches (independent of the demo season). */
   hasRealHistory: boolean;
   generatedAt: number;
-  filters: Required<DashboardFilters>;
+  filters: { account: string; role: string; days: number | 'all' | { season: string } };
   options: {
     accounts: string[];
     roles: Role[];
-    modes: string[];
+    /** Season filter options, newest first; the current season is always included. */
+    seasons: Array<{ id: string; label: string }>;
   };
   greetingName: string;
   overall: WinLoss;
@@ -91,7 +96,6 @@ export interface DashboardData {
   session: Session | null;
   byRole: Group[];
   byAccount: Group[];
-  byMode: Group[];
   byMap: Group[];
   byMapType: Group[];
   byHero: Group[];

@@ -34,7 +34,10 @@ export type {
 export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';
 
 // Notion export/import payloads
-export type { ExportResult, ImportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress } from './notion';
+export type {
+  ExportResult, ImportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress,
+  SubjectiveColumnStatus, SubjectiveColumnDiag,
+} from './notion';
 
 // Manual-entry inputs
 export type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
@@ -49,7 +52,7 @@ export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 export type { GepHealthState, GepStatusPayload } from './gepStatus';
 
 // App-behavior settings + metadata (Settings screen)
-export type { AppInfo, AppUiSettings, DatabaseLocation, DatabaseLocationResult } from './appSettings';
+export type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
 
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';

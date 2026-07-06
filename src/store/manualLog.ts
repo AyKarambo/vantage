@@ -17,8 +17,8 @@ interface ManualState {
  * dir-injected and Electron-free so it stays unit-testable.
  */
 export class ManualStore {
-  private readonly file: string;
-  private readonly tmp: string;
+  private file: string;
+  private tmp: string;
   private state: ManualState;
 
   constructor(dir: string) {
@@ -75,6 +75,19 @@ export class ManualStore {
     if (archived) t.archivedAt = Date.now();
     else delete t.archivedAt;
     this.save();
+  }
+
+  /**
+   * Re-point this store at a new directory and reload its targets from there —
+   * the backing for the user-configurable data location (spec Area C). Plain
+   * JSON file, no handle to close: the migration executor copies `manual.json`
+   * before calling this; `relocate` just repoints and re-reads.
+   */
+  relocate(newDir: string): void {
+    fs.mkdirSync(newDir, { recursive: true });
+    this.file = path.join(newDir, 'manual.json');
+    this.tmp = path.join(newDir, 'manual.tmp.json');
+    this.state = this.load();
   }
 
   private load(): ManualState {

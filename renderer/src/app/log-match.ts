@@ -2,10 +2,11 @@
  * The quick-log card — opens after a game, ~5 taps. Captures the fields the app
  * can't auto-detect and persists a real match to history via the bridge, so it
  * flows into every dashboard stat (including the mental composite, from the
- * flags below). Account / result / role / map are chosen here; hero and mode are
- * optional. For competitive matches it also captures the skill-rating % (and, the
- * first time for an account+role, the current rank anchor) and grades any active
- * improvement targets inline.
+ * flags below). Account / result / role / map are chosen here; hero is
+ * optional. Vantage is competitive-only (spec D1), so every manual log is sent
+ * as competitive — it also captures the skill-rating % (and, the first time for
+ * an account+role, the current rank anchor) and grades any active improvement
+ * targets inline.
  */
 import { h, render } from '../dom';
 import { time, roleLabel } from '../format';
@@ -25,7 +26,6 @@ import type { ViewContext } from '../views/view';
 
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy', 'Positive comms'];
 const ALL_MAPS = Object.keys(MAP_MODES).sort();
-const MODES = ['Competitive', 'Quick Play'];
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support' };
 const DIVISIONS = [5, 4, 3, 2, 1];
 /** "Played" backfill choices — end-of-game time relative to now, in minutes. */
@@ -41,7 +41,6 @@ interface LogState {
   role: Role;
   map: string;
   hero: string;
-  mode: string;
   account: string;
   flags: Set<string>;
   srDelta: string;
@@ -93,7 +92,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   // Prefill Account/Role from the active dashboard filter when it names a specific
   // value — logging while scoped to an account/role should target it — otherwise
   // fall back to the last-logged values. Role only when the log form can represent
-  // it (Tank/Damage/Support; Open Queue isn't a log option). Mode stays on prefs.
+  // it (Tank/Damage/Support; Open Queue isn't a log option).
   const { account: filterAccount, role: filterRole } = ctx.data.filters;
   const seededAccount = filterAccount !== 'all' ? accountOptions.find((o) => o.value === filterAccount)?.value : undefined;
   const defaultAccount = seededAccount ?? accountOptions.find((o) => o.value === prefill?.account)?.value ?? accountOptions[0].value;
@@ -104,7 +103,6 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     role: seededRole ?? (prefill?.role as Role) ?? 'damage',
     map: '',
     hero: carry?.hero ?? '',
-    mode: prefill?.mode ?? 'Competitive',
     account: defaultAccount,
     flags: new Set<string>(),
     srDelta: '',
@@ -147,14 +145,14 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     state.map = map;
     saving = true;
     try {
-      const isComp = state.mode === 'Competitive';
-      const srDelta = isComp && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
+      // Vantage is competitive-only (spec D1) — manual logs always report as such.
+      const srDelta = state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
       await bridge.logMatch({
         result: state.result,
         role: state.role,
         map,
         hero: state.hero.trim() || undefined,
-        gameType: state.mode,
+        gameType: 'Competitive',
         mental: mentalFrom(state.flags),
         account: state.account,
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
@@ -162,7 +160,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
       // First competitive match for this account+role → persist the rank anchor.
-      if (isComp && !hasAnchor(state.account, state.role) && state.anchorTier) {
+      if (!hasAnchor(state.account, state.role) && state.anchorTier) {
         await bridge.setRankAnchor({
           account: state.account,
           role: state.role,
@@ -177,7 +175,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     } finally {
       saving = false;
     }
-    prefs.set('logPrefill', { role: state.role, mode: state.mode, account: state.account });
+    prefs.set('logPrefill', { role: state.role, account: state.account });
     toast(`Match logged — ${state.result} · ${map}`);
     ctx.refresh();
     return true;
@@ -223,10 +221,6 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     choiceSegment(Object.keys(ROLE_LABELS), roleLabelInitial, (v) => { state.role = ROLE_LABELS[v]; paintRank(); }),
   );
 
-  const modeField = field('Mode',
-    choiceSegment(MODES, MODES.includes(state.mode) ? state.mode : 'Competitive', (v) => { state.mode = v; paintRank(); }),
-  );
-
   const playedField = field(
     optionalLabel('Played', '— backfill a game you forgot to log'),
     choiceSegment(PLAYED_OFFSETS.map((o) => o.label), PLAYED_OFFSETS[0].label, (v) => {
@@ -250,14 +244,11 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     }),
   );
 
-  // Competitive rank block: SR % every match, plus the one-time anchor. Re-paints
-  // when account / role / mode change, since those decide anchor existence.
+  // Rank block: SR % every match, plus the one-time anchor. Everything is
+  // competitive now (spec D1), so this always shows — it re-paints when
+  // account/role change, since those decide anchor existence.
   const rankHost = h('div');
   const paintRank = (): void => {
-    if (state.mode !== 'Competitive') {
-      render(rankHost);
-      return;
-    }
     const srField = field(
       optionalLabel('Skill rating change (%)'),
       numInput(state.srDelta, 'e.g. +22 or -19', (v) => (state.srDelta = v)),
@@ -326,7 +317,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   // part of the natural Tab order.
   const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
-      field('Result', resultRow), accountField, mapField, roleField, modeField, playedField, heroField,
+      field('Result', resultRow), accountField, mapField, roleField, playedField, heroField,
       rankHost, flagsBlock, targetsBlock, actions),
   );
 

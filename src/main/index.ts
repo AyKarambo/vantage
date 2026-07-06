@@ -1,13 +1,15 @@
 import { app, shell, dialog } from 'electron';
+import * as fs from 'fs';
 import * as path from 'path';
 import {
   loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath, type AppConfig,
 } from './config';
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
-import { HistoryStore } from '../store/history';
+import { HistoryStore, DB_FILE } from '../store/history';
 import { migrateJsonHistory } from '../store/historyMigration';
-import { resolveHistoryDir } from '../store/historyLocation';
+import { resolveDataDir } from '../store/historyLocation';
+import { migrateDataFolder, type DataMigrationStores } from '../store/dataMigration';
 import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
 import { GepService, type GepStatus } from './gep';
@@ -16,14 +18,15 @@ import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
 import { safeReadiness } from '../core/readiness';
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
 import { createDataProvider } from './dataProvider';
-import { createLogger } from './logger';
+import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type GepStatusPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GepStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -68,24 +71,38 @@ function main(): void {
     });
   });
 
-  const dataDir = path.join(app.getPath('userData'), 'data');
+  const defaultDataDir = path.join(app.getPath('userData'), 'data');
+
+  // The data folder is user-configurable (default <userData>/data) so it can
+  // sit in a cloud-synced folder for backup. `dataDir` is mutable: a Settings
+  // change or a first-run choice repoints it (and every store below) without
+  // restarting the process. If a configured folder can't be opened, fail loud
+  // rather than silently creating a second, empty database.
+  let dataDir = resolveDataDir(config.dataFolder, defaultDataDir);
+
+  // Backfill for installs that used the legacy `historyDbFolder` ("move
+  // history DB" feature): that setting only ever relocated history.db, so its
+  // manual.json/outbox.json/rankAnchors.json/screenshots/history.json still
+  // sit in the default userData/data dir. Once `dataFolder`/`historyDbFolder`
+  // resolves every store (including the side-stores) to that legacy folder,
+  // those files would silently look empty/missing there. One-time, idempotent,
+  // per-file: move whatever's missing at `dataDir` but present at
+  // `defaultDataDir` over, before any store constructs and reads/creates them.
+  if (dataDir !== defaultDataDir) backfillLegacySideStores(defaultDataDir, dataDir, log);
+
   const outbox = new OutboxStore(dataDir);
 
-  // History lives in a user-configurable folder (default <userData>/data) so it
-  // can sit in a cloud-synced folder for backup. If a configured folder can't be
-  // opened, fail loud rather than silently creating a second, empty database.
-  let historyDir = resolveHistoryDir(config.historyDbFolder, dataDir);
   let history: HistoryStore;
   try {
-    history = new HistoryStore(historyDir);
+    history = new HistoryStore(dataDir);
   } catch (err) {
-    log.error('store', 'failed to open history database', { dir: historyDir, error: String(err) });
-    if (historyDir !== dataDir) {
+    log.error('store', 'failed to open history database', { dir: dataDir, error: String(err) });
+    if (dataDir !== defaultDataDir) {
       dialog.showMessageBoxSync({
         type: 'error',
         title: 'Vantage — history database unavailable',
         message: 'Your Vantage match-history folder is unavailable.',
-        detail: `Could not open the database in:\n${historyDir}\n\nIf this is a synced folder (OneDrive/Dropbox), reconnect it and restart Vantage. Vantage won't start, to avoid creating a second empty database and appearing to lose your history.`,
+        detail: `Could not open the database in:\n${dataDir}\n\nIf this is a synced folder (OneDrive/Dropbox), reconnect it and restart Vantage. Vantage won't start, to avoid creating a second empty database and appearing to lose your history.`,
       });
       app.quit();
       return;
@@ -96,12 +113,97 @@ function main(): void {
   // legacy file always lived in the default data dir, wherever the DB is now.
   migrateJsonHistory(history, path.join(dataDir, 'history.json'));
 
+  // First-run detection is config-driven, not file-existence: HistoryStore's
+  // constructor above already created history.db in dataDir, so a "does
+  // history.db exist" check would always be true and the prompt would never
+  // fire. `dataFolder`/legacy `historyDbFolder` is only ever persisted once the
+  // user has made (or accepted) a choice, so its absence plus an empty store is
+  // the correct, self-clearing signal (Decision C.5). Mutable: the first-run
+  // picker clears it explicitly once a choice is persisted, even when the
+  // choice is "keep the default" — so it never re-triggers.
+  let firstRunNeedsDataChoice =
+    config.dataFolder === undefined && config.historyDbFolder === undefined && history.count() === 0;
+
   const manual = new ManualStore(dataDir);
+  // One-time, idempotent migration (Decision B.3): the pre-batch importer used
+  // to seed a *visible* "Improvement Target" authored target so Notion-imported
+  // grades had somewhere to render. That's gone (B2 keeps it hidden bookkeeping
+  // only) — remove the stale seeded target by id. Matching by id (not name)
+  // means a user-authored target that merely shares the name survives, along
+  // with its grades; `removeTarget` is a no-op once the seeded target is gone.
+  manual.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
   const rankAnchors = new RankAnchorStore(dataDir);
   const aggregator = new MatchAggregator();
   const screenshots = new ScreenshotService(path.join(dataDir, 'screenshots'), log.adapter('shots'));
   screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
+
+  // The migration executor repoints every store at once; `ScreenshotService`
+  // is constructed against `<dataDir>/screenshots` (not the bare data dir), so
+  // its `Relocatable` wraps the join the same way the constructor above did.
+  const migrationStores = (): DataMigrationStores => ({
+    history,
+    manualLog: manual,
+    outbox,
+    rankAnchors,
+    screenshots: { relocate: (newDir) => screenshots.relocate(path.join(newDir, 'screenshots')) },
+  });
+
+  /** True iff `dir` already holds a Vantage history database. */
+  function hasExistingData(dir: string): boolean {
+    try {
+      return fs.existsSync(path.join(dir, DB_FILE));
+    } catch {
+      return false;
+    }
+  }
+
+  /** Run (or plan) a data-folder change and, on success, repoint `dataDir`. */
+  function applyDataFolder(folder: string, adopt: boolean): DataLocationResult {
+    const target = path.resolve(folder);
+    const result = migrateDataFolder({
+      fromDir: dataDir,
+      toDir: target,
+      stores: migrationStores(),
+      adopt,
+      persistFolder: (dir) => saveLocalConfig({ dataFolder: dir }),
+    });
+    if (!result.ok) return { ok: false, error: result.error ?? 'Data folder change failed.' };
+    config = loadConfig();
+    dataDir = target;
+    firstRunNeedsDataChoice = false;
+    log.info('store', result.adopted ? 'data folder adopted' : 'data folder migrated', { dir: dataDir });
+    return {
+      ok: true,
+      changed: true,
+      location: currentDataLocation(),
+      ...(result.leftovers ? { leftovers: result.leftovers } : {}),
+    };
+  }
+
+  /** First-run "keep the default folder" choice: nothing to move, but the
+   *  choice must still be persisted explicitly so the first-run flag
+   *  self-clears (Decision C.5) and never re-prompts on a later launch. */
+  function keepDefaultDataFolder(): DataLocationResult {
+    saveLocalConfig({ dataFolder: dataDir });
+    config = loadConfig();
+    firstRunNeedsDataChoice = false;
+    return { ok: true, changed: false, location: currentDataLocation() };
+  }
+
+  function currentDataLocation(): DataLocation {
+    return { folder: dataDir, isDefault: dataDir === defaultDataDir };
+  }
+
+  /** Native folder picker shared by the Settings "Change…" flow and first run. */
+  async function pickDataFolder(): Promise<string | undefined> {
+    const res = await dialog.showOpenDialog({
+      title: 'Choose the Vantage data folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (res.canceled || !res.filePaths.length) return undefined;
+    return res.filePaths[0];
+  }
 
   let pushSyncProgress: (done: number, total: number) => void = () => {};
   const notion = new NotionRuntime({
@@ -116,6 +218,14 @@ function main(): void {
       tray.notifyError(title, body);
     },
     onSyncProgress: (done, total) => pushSyncProgress(done, total),
+    // Read live on every export: the user's own authored targets, active AND
+    // archived — same "visible in-app" semantics `buildTargets` uses for the
+    // dashboard's Targets library (everything except the hidden Notion
+    // bookkeeping id). Archived targets still count because they keep their
+    // accrued grades and still render (behind Restore) — only the bookkeeping
+    // id is never a real, user-facing target.
+    authoredTargetIds: () =>
+      new Set(manual.targets().filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID).map((t) => t.id)),
   });
 
   const pipeline = createMatchPipeline({
@@ -186,28 +296,29 @@ function main(): void {
       },
     },
     appInfo: () => ({ version: app.getVersion(), supportEmail: 'timo.seikel@gmail.com' }),
-    database: {
-      location: () => ({ folder: historyDir, isDefault: historyDir === dataDir }),
-      choose: async () => {
-        const res = await dialog.showOpenDialog({
-          title: 'Choose the Vantage database folder',
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        const current = { folder: historyDir, isDefault: historyDir === dataDir };
-        if (res.canceled || !res.filePaths.length) return { ok: true as const, location: current, changed: false };
-        const chosen = res.filePaths[0];
-        try {
-          history.relocate(chosen);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          log.error('store', 'history database relocate failed', { dir: chosen, error: message });
-          return { ok: false as const, error: message };
+    dataLocation: {
+      get: () => ({ ...currentDataLocation(), ...(firstRunNeedsDataChoice ? { needsFirstRunChoice: true } : {}) }),
+      choose: async (): Promise<DataLocationResult> => {
+        const chosen = await pickDataFolder();
+        if (!chosen) return { ok: true, location: currentDataLocation(), changed: false };
+        const target = path.resolve(chosen);
+        if (target === dataDir) return { ok: true, location: currentDataLocation(), changed: false };
+        if (hasExistingData(target)) {
+          // Surface the PICKED folder, not the still-current one — the renderer's
+          // confirm-adopt flow (settings.ts / dataLocationPrompt.ts) targets
+          // whatever `location.folder` says, so returning the current folder here
+          // made "adopt" a silent no-op that re-adopted the folder already in use.
+          return { ok: true, location: { folder: target, isDefault: target === defaultDataDir }, changed: false, requiresAdopt: true };
         }
-        saveLocalConfig({ historyDbFolder: chosen });
-        config = loadConfig();
-        historyDir = resolveHistoryDir(config.historyDbFolder, dataDir);
-        log.info('store', 'history database relocated', { dir: historyDir });
-        return { ok: true as const, location: { folder: historyDir, isDefault: historyDir === dataDir }, changed: true };
+        return applyDataFolder(target, false);
+      },
+      set: async (input) => applyDataFolder(input.folder, input.adopt ?? false),
+      chooseFirstRun: async (): Promise<DataLocationResult> => {
+        const chosen = await pickDataFolder();
+        if (!chosen) return keepDefaultDataFolder();
+        const target = path.resolve(chosen);
+        if (target === dataDir) return keepDefaultDataFolder();
+        return applyDataFolder(target, hasExistingData(target));
       },
     },
   });
@@ -329,6 +440,50 @@ function main(): void {
         log.error('replay', 'failed to read recording', { file: replayFile, error: String(err) });
       }
     }, 1500);
+  }
+}
+
+/**
+ * Legacy-`historyDbFolder` backfill (finding: side-stores silently orphaned).
+ * That old setting only ever relocated `history.db`; every other data file
+ * (`manual.json`, `outbox.json`, `rankAnchors.json`, `screenshots/`, and the
+ * frozen `history.json` backup) still lives in `defaultDir`. Now that
+ * `dataFolder`/`historyDbFolder` resolves every store to `targetDir`, those
+ * files must move over too — but only per-file, only when the file is
+ * genuinely missing at `targetDir` (never overwrite something already there),
+ * and only when it's actually present at `defaultDir` (nothing to do
+ * otherwise). Runs before any store constructs, so every store sees its file
+ * already in place. Best-effort and non-fatal: a failed move is logged, not
+ * thrown — Vantage should still start rather than block on backfill trouble.
+ */
+function backfillLegacySideStores(defaultDir: string, targetDir: string, log: Pick<Logger, 'info' | 'error'>): void {
+  const fileNames = ['manual.json', 'outbox.json', 'rankAnchors.json', 'history.json'];
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+  } catch (err) {
+    log.error('store', 'legacy side-store backfill: could not create data dir', { targetDir, error: String(err) });
+    return;
+  }
+  for (const name of fileNames) {
+    const from = path.join(defaultDir, name);
+    const to = path.join(targetDir, name);
+    try {
+      if (fs.existsSync(to) || !fs.existsSync(from)) continue;
+      fs.renameSync(from, to);
+      log.info('store', 'legacy side-store backfilled', { file: name, from, to });
+    } catch (err) {
+      log.error('store', 'legacy side-store backfill failed', { file: name, from, to, error: String(err) });
+    }
+  }
+  const shotsFrom = path.join(defaultDir, 'screenshots');
+  const shotsTo = path.join(targetDir, 'screenshots');
+  try {
+    if (!fs.existsSync(shotsTo) && fs.existsSync(shotsFrom)) {
+      fs.renameSync(shotsFrom, shotsTo);
+      log.info('store', 'legacy side-store backfilled', { file: 'screenshots', from: shotsFrom, to: shotsTo });
+    }
+  } catch (err) {
+    log.error('store', 'legacy side-store backfill failed', { file: 'screenshots', from: shotsFrom, to: shotsTo, error: String(err) });
   }
 }
 

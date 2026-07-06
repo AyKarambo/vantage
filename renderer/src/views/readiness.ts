@@ -7,7 +7,8 @@
 import { h } from '../dom';
 import type { ReadinessBand, ReadinessSignal, ReadinessSummary } from '../../../src/shared/contract';
 import { PALETTE } from '../theme';
-import { card, statBox } from '../components/primitives';
+import { button, card, statBox } from '../components/primitives';
+import { openModal } from '../components/overlay';
 import { readinessChart, supercompensationSchematic } from '../charts/plots';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
 import { viewHead, type ViewContext } from './view';
@@ -65,7 +66,77 @@ function verdictCard(ctx: ViewContext): HTMLElement {
       : null,
     BREAK_REMINDER_BANDS.includes(r.band) ? breakReminderHint(ctx) : null,
     h('div', { class: 'hint', style: { marginTop: '10px' } },
-      `Confidence: ${r.confidence}${r.confidence === 'low' ? ' — log your mental state after games to sharpen this' : ''}`),
+      `Confidence: ${r.confidence}${r.confidence === 'low' ? ' — log your mental state after games to sharpen this' : ''} · `,
+      h('button', {
+        class: 'inline-link',
+        title: 'How the readiness verdict is calculated',
+        on: { click: () => openModal((close) => readinessMethodology(close)) },
+      }, 'How is this calculated?'),
+    ),
+  );
+}
+
+/**
+ * The full methodology behind the readiness verdict — verdict bands, signals,
+ * the training-load model, the supercompensation model (including the
+ * schematic moved out of the main view), confidence levels, and the honesty
+ * disclaimer. Opened from `verdictCard`'s "How is this calculated?" link.
+ */
+function readinessMethodology(close: () => void): HTMLElement {
+  return h('div', { class: 'stack', style: { gap: '16px', padding: '20px', width: '520px', maxWidth: '92vw' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+      h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, 'How readiness is calculated'),
+      h('button', { class: 'overlay-close', title: 'Close', 'aria-label': 'Close', style: { marginLeft: 'auto' }, on: { click: close } }, '✕'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Verdict bands'),
+      h('div', { class: 'stack', style: { gap: '6px' } },
+        ...(Object.keys(BAND) as ReadinessBand[]).map((band) =>
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+            h('span', { style: { width: '10px', height: '10px', borderRadius: '50%', background: BAND[band].color, flex: '0 0 auto' } }),
+            h('span', { style: { fontSize: '12.5px' } }, BAND[band].label),
+          ),
+        ),
+      ),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Contributing signals'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Each signal watches one facet of load or mental state — game volume, session length, ' +
+        'consecutive days played, layoffs, and self-reported mental state after games. A signal ' +
+        'turns "watch" or "high" severity when it crosses a threshold tuned from training theory.'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Training-load model'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Acute load (recent games/day) is compared against your longer-run baseline as a ratio. ' +
+        'A ratio well above 1× means you’re playing much more than usual — the classic overtraining ' +
+        'shape; a ratio well below it, alongside a long layoff, flags rust instead.'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'The supercompensation model'),
+      h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' } },
+        supercompensationSchematic(),
+        h('div', { class: 'hint', style: { flex: '1', minWidth: '190px', lineHeight: '1.5' } },
+          'Training tires you (dip), then rest lifts you above your old baseline (rebound). Grinding ' +
+          'without recovery keeps you stuck in the dip — and resting past the rebound decays it back ' +
+          'down (rust). Greyed columns on the trend chart are days you didn’t play.'),
+      ),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Confidence levels'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Confidence reflects how much history and mental-state logging back the read. At low ' +
+        'confidence the crisp score is hidden so it never reads as more certain than it is — log ' +
+        'your mental state after games to sharpen it.'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Honesty note'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Readiness is an evidence-informed wellness heuristic borrowed from sports training theory — ' +
+        'not a medical or diagnostic tool. Treat it as a nudge, and trust your own read.'),
+    ),
+    h('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, button('Close', { variant: 'ghost', onClick: close })),
   );
 }
 
@@ -121,11 +192,6 @@ function loadCard(r: ReadinessSummary): HTMLElement {
 function chartCard(r: ReadinessSummary): HTMLElement {
   return card({ title: 'Readiness trend', sub: 'last 3 weeks · higher = fresher' },
     readinessChart(r.trend),
-    h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' } },
-      supercompensationSchematic(),
-      h('div', { class: 'hint', style: { flex: '1', minWidth: '190px', lineHeight: '1.5' } },
-        'The supercompensation idea: training tires you (dip), then rest lifts you above your old baseline (rebound). Grinding without recovery keeps you stuck in the dip — and resting past the rebound decays it back down (rust). Greyed columns above are days you didn’t play.'),
-    ),
   );
 }
 

@@ -18,15 +18,25 @@ export interface AppInfo {
   supportEmail: string;
 }
 
-/** Where the SQLite match-history database currently lives (Settings screen). */
-export interface DatabaseLocation {
-  /** Absolute folder the database file lives in. */
+/** Where Vantage's data folder (DB + manual data + screenshots) currently lives (Settings screen). */
+export interface DataLocation {
+  /** Absolute folder the data files live in. */
   folder: string;
   /** True when it's the default `<userData>/data` location (no user override). */
   isDefault: boolean;
+  /** True when first-run has never asked the user to choose (and the store is empty). */
+  needsFirstRunChoice?: boolean;
 }
 
-/** Outcome of a "choose database folder" action — cancelled/applied, or rejected. */
-export type DatabaseLocationResult =
-  | { ok: true; location: DatabaseLocation; changed: boolean }
+/** Outcome of a data-folder change — cancelled/applied, adopt-required, or rejected. */
+export type DataLocationResult =
+  | {
+      ok: true;
+      location: DataLocation;
+      changed: boolean;
+      /** The target folder already holds Vantage data; caller must confirm adopt (no migration). */
+      requiresAdopt?: boolean;
+      /** Count of original files that couldn't be deleted from the old folder after migration. */
+      leftovers?: number;
+    }
   | { ok: false; error: string };

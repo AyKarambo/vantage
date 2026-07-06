@@ -6,7 +6,8 @@ import { mentalSummary } from '../src/core/mental';
 import { progression, winrateToSr, tierOf } from '../src/core/progression';
 import { sampleTargets } from '../src/core/targets';
 import { computeDashboard, applyFilters } from '../src/core/dashboardData';
-import { seasonStart } from '../src/core/season';
+import { currentSeasonWindow } from '../src/core/season';
+import { isCompetitive } from '../src/core/matchFilter';
 import { generateSampleGames } from '../src/core/sampleData';
 import { DEFAULT_BREAK_REMINDER } from '../src/core/breakReminder';
 
@@ -148,7 +149,9 @@ describe('computeDashboard', () => {
     expect(d.isSample).toBe(true);
     expect(d.demoPreference).toBe('on');
     expect(d.hasRealHistory).toBe(false);
-    expect(d.overall.games).toBe(180);
+    // Competitive-only scoping (D1): the sample dataset mixes game types, so
+    // the visible count is the competitive subset, not the raw 180.
+    expect(d.overall.games).toBe(all.filter((g) => isCompetitive(g.gameType)).length);
     expect(d.matches.length).toBeGreaterThan(0);
     expect(d.matches.length).toBeLessThanOrEqual(150);
     expect(d.matches[0].mapType).toBeTypeOf('string');
@@ -225,15 +228,16 @@ describe('computeDashboard', () => {
     expect(computeDashboard(games, { days: 'all', role: 'damage' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank' });
   });
 
-  it('applyFilters narrows by account, role and mode', () => {
+  it('applyFilters narrows by account and role (competitive-only scoping, no mode filter)', () => {
     const byAccount = applyFilters(all, { account: 'Main' });
     expect(byAccount.every((g) => g.account === 'Main')).toBe(true);
 
     const byRole = applyFilters(all, { role: 'tank' });
     expect(byRole.every((g) => g.role === 'tank')).toBe(true);
 
-    const byMode = applyFilters(all, { mode: 'Competitive' });
-    expect(byMode.every((g) => g.gameType === 'Competitive')).toBe(true);
+    // `mode` is no longer a recognized DashboardFilters key (D1) — applyFilters
+    // ignores any extra property and returns the input unfiltered.
+    expect(applyFilters(all, {} as never)).toHaveLength(all.length);
   });
 
   it('respects the day window', () => {
@@ -243,12 +247,80 @@ describe('computeDashboard', () => {
     expect(recent.length).toBeLessThanOrEqual(all.length);
   });
 
-  it('narrows to the current OW2 season with days: season', () => {
-    const start = seasonStart(Date.now());
-    const inSeason = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: start });
-    const prevSeason = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: start - 1 });
-    const res = applyFilters([inSeason, prevSeason], { days: 'season' });
+  it('narrows to a specific season via { season: id } ([start, end) boundary)', () => {
+    const now = Date.now();
+    const w = currentSeasonWindow(now);
+    const inSeason = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: w.start });
+    const justBefore = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: w.start - 1 });
+    const justAtEnd = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: w.end });
+    const res = applyFilters([inSeason, justBefore, justAtEnd], { days: { season: w.id } });
     expect(res).toContain(inSeason);
-    expect(res).not.toContain(prevSeason);
+    expect(res).not.toContain(justBefore);
+    expect(res).not.toContain(justAtEnd); // end is exclusive
+  });
+
+  it('falls back to a 30-day window when the season id is unknown/unlistable', () => {
+    const now = Date.now();
+    const recentGame = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now - 5 * 86400000 });
+    const oldGame = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: now - 45 * 86400000 });
+    const res = applyFilters([recentGame, oldGame], { days: { season: 'S:not-a-real-id' } });
+    expect(res).toContain(recentGame);
+    expect(res).not.toContain(oldGame);
+  });
+
+  it('buckets the trend daily for a season window, weekly only for all-time/>90d (D2)', () => {
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const now = Date.now();
+    const w = currentSeasonWindow(now);
+    // Two games in the same season but different calendar days/ISO weeks so
+    // daily vs weekly bucketing produces a different number of trend points.
+    const seasonGames = [
+      game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: w.start }),
+      game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: w.start + 20 * 86400000 }),
+    ];
+    const seasonTrend = computeDashboard(seasonGames, { days: { season: w.id } }, demo).trend;
+    expect(seasonTrend.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.key))).toBe(true); // daily keys, not ISO weeks
+
+    const allTimeTrend = computeDashboard(seasonGames, { days: 'all' }, demo).trend;
+    expect(allTimeTrend.every((p) => /^\d{4}-W\d{2}$/.test(p.key))).toBe(true); // weekly keys
+
+    const longWindowTrend = computeDashboard(seasonGames, { days: 120 }, demo).trend;
+    expect(longWindowTrend.every((p) => /^\d{4}-W\d{2}$/.test(p.key))).toBe(true); // >90d stays weekly
+  });
+
+  it('computeDashboard scopes counts/stats to competitive games only (D1)', () => {
+    const comp1 = game({ result: 'Win', map: 'Ilios', role: 'damage', gameType: 'Competitive' });
+    const comp2 = game({ result: 'Loss', map: 'Ilios', role: 'damage', gameType: 'Competitive' });
+    const quickPlay = game({ result: 'Win', map: 'Ilios', role: 'damage', gameType: 'Quick Play' });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard([comp1, comp2, quickPlay], { days: 'all' }, demo);
+    expect(d.overall.games).toBe(2);
+    expect(d.totalGamesAllTime).toBe(2);
+    expect(d.pendingReviews).toBe(2);
+    expect(d.matches.every((m) => m.gameType === 'Competitive')).toBe(true);
+  });
+
+  it('emits options.seasons via seasonsForData and no options.modes/filters.mode', () => {
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard(all, { days: 'all' }, demo);
+    expect(d.options.seasons.length).toBeGreaterThan(0);
+    expect(d.options).not.toHaveProperty('modes');
+    expect(d.filters).not.toHaveProperty('mode');
+    expect(d).not.toHaveProperty('byMode');
+  });
+
+  it('toMatchRow carries srDelta/finalScore when present and omits them when absent', () => {
+    const withBoth = game({
+      result: 'Win', map: 'Ilios', role: 'damage', srDelta: 25, finalScore: '3–1',
+    });
+    const withNeither = game({ result: 'Loss', map: 'Ilios', role: 'damage' });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard([withBoth, withNeither], { days: 'all' }, demo);
+    const rowWithBoth = d.matches.find((m) => m.matchId === withBoth.matchId)!;
+    const rowWithNeither = d.matches.find((m) => m.matchId === withNeither.matchId)!;
+    expect(rowWithBoth.srDelta).toBe(25);
+    expect(rowWithBoth.finalScore).toBe('3–1');
+    expect(rowWithNeither).not.toHaveProperty('srDelta');
+    expect(rowWithNeither).not.toHaveProperty('finalScore');
   });
 });

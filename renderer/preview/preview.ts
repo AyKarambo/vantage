@@ -9,7 +9,7 @@
  */
 import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
-  DashboardFilters, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
+  DashboardFilters, DataLocationResult, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
   RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
@@ -208,6 +208,18 @@ const syncListeners = new Set<(p: SyncProgress) => void>();
 
 // Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
 let previewImportedMatches = 0;
+
+// In-memory data-folder mock (Area C): the browser preview has no real
+// filesystem to migrate, so "choosing a folder" just relabels the mock
+// location instead of moving anything. `?firstRunData=1` shows the first-run
+// data-location prompt (default: already-chosen, matching an existing install
+// per spec C5) so the prompt itself stays reachable without a fresh Electron
+// profile.
+const DEFAULT_DATA_FOLDER = '(browser preview — in-memory)';
+let previewDataFolder = DEFAULT_DATA_FOLDER;
+let previewDataFolderIsDefault = true;
+let previewNeedsFirstRunChoice = new URLSearchParams(location.search).get('firstRunData') === '1';
+let previewFolderPickCount = 0;
 
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
@@ -464,12 +476,39 @@ const mock: OwStatsApi = {
     return appSettings;
   },
   getAppInfo: async () => ({ version: 'preview', supportEmail: 'timo.seikel@gmail.com' }),
-  getDatabaseLocation: async () => ({ folder: '(browser preview — in-memory)', isDefault: true }),
-  chooseDatabaseFolder: async () => ({
-    ok: true as const,
-    location: { folder: '(browser preview — in-memory)', isDefault: true },
-    changed: false,
+  getDataLocation: async () => ({
+    folder: previewDataFolder,
+    isDefault: previewDataFolderIsDefault,
+    ...(previewNeedsFirstRunChoice ? { needsFirstRunChoice: true } : {}),
   }),
+  // No real filesystem in the browser preview: each "pick" just cycles through
+  // a couple of canned folder names. The first pick simulates an ordinary new
+  // folder (migrate); every third simulates one that already holds Vantage
+  // data (requiresAdopt), so the adopt-or-cancel flow stays exercisable here.
+  chooseDataFolder: async (): Promise<DataLocationResult> => {
+    previewFolderPickCount++;
+    const target = `C:\\Users\\preview\\OneDrive\\Vantage-data-${previewFolderPickCount}`;
+    if (previewFolderPickCount % 3 === 0) {
+      return { ok: true, location: { folder: target, isDefault: false }, changed: false, requiresAdopt: true };
+    }
+    previewDataFolder = target;
+    previewDataFolderIsDefault = false;
+    return { ok: true, location: { folder: previewDataFolder, isDefault: false }, changed: true };
+  },
+  setDataFolder: async (input: { folder: string; adopt?: boolean }): Promise<DataLocationResult> => {
+    previewDataFolder = input.folder;
+    previewDataFolderIsDefault = input.folder === DEFAULT_DATA_FOLDER;
+    previewNeedsFirstRunChoice = false;
+    return { ok: true, location: { folder: previewDataFolder, isDefault: previewDataFolderIsDefault }, changed: true };
+  },
+  chooseFirstRunDataFolder: async (): Promise<DataLocationResult> => {
+    previewFolderPickCount++;
+    const target = `C:\\Users\\preview\\OneDrive\\Vantage-data-${previewFolderPickCount}`;
+    previewDataFolder = target;
+    previewDataFolderIsDefault = false;
+    previewNeedsFirstRunChoice = false;
+    return { ok: true, location: { folder: previewDataFolder, isDefault: false }, changed: true };
+  },
   clearReview: async (matchId: string) => {
     delete previewReviews[matchId];
     save(REVIEWS_KEY, previewReviews);

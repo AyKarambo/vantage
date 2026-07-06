@@ -10,8 +10,9 @@ import {
   type AppConfig,
 } from './config';
 import type { GameRecord } from '../core/analytics';
+import { aggregateImprovementGrade, matchExportSignature, NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import type {
-  ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
+  ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SubjectiveColumnDiag,
 } from '../shared/contract';
 
 /**
@@ -39,6 +40,13 @@ export interface NotionRuntimeDeps {
   onError: (title: string, body: string) => void;
   /** Live per-game export progress (pushed to the sync card). */
   onSyncProgress?: (done: number, total: number) => void;
+  /**
+   * Ids of the user's visible, in-app authored targets — so the exporter's
+   * aggregate-grade rule (A.4) can tell them apart from the hidden Notion
+   * bookkeeping id. Re-read live on every export, never cached. Defaults to
+   * an empty set so callers that don't yet wire targets still compile.
+   */
+  authoredTargetIds?: () => ReadonlySet<string>;
 }
 
 /**
@@ -65,6 +73,10 @@ export class NotionRuntime {
   // Subjective columns the configured database defines (Comms, Improvement Target,
   // Leaver, …), so the writer may set them. Same presence guard as hasPlayedAt.
   private writableColumns: ReadonlySet<string> = new Set();
+  // Per-column schema diagnostics for the 5 optional subjective columns (A.7),
+  // cached from the last `validate()` so `status()` can surface them without
+  // re-checking the network. Undefined = not yet validated (or nothing configured).
+  private subjectiveDiagnostics?: SubjectiveColumnDiag[];
   // The Maps database the Gametracker's `Map` relation points at, discovered from
   // the schema — so export resolves maps even when mapsDatabaseId was never set.
   private mapsRelationDbId?: string;
@@ -81,6 +93,7 @@ export class NotionRuntime {
     this.hasPlayedAt = false;
     this.hasSrDelta = false;
     this.writableColumns = new Set();
+    this.subjectiveDiagnostics = undefined;
     this.mapsRelationDbId = undefined;
     this.gametrackerSourceId = undefined;
     if (!token) {
@@ -113,6 +126,7 @@ export class NotionRuntime {
       shapeIssues: this.shapeCheck?.issues,
       lastSyncedAt: notion.lastSyncedAt,
       importedMatches: this.deps.importedMatches(),
+      subjectiveColumns: this.subjectiveDiagnostics,
     };
   }
 
@@ -137,10 +151,21 @@ export class NotionRuntime {
     try {
       const importer = new NotionImporter(this.client, notion.gametrackerDatabaseId, notion.mapsDatabaseId || undefined);
       const result = await importer.import();
-      // Imported rows already live in Notion, so mark them exported: a later
-      // "Sync to Notion" then skips them instead of writing duplicate rows back
-      // into the same database (the outbox is the export dedupe key).
-      this.deps.outbox.markManyProcessed(result.games.map((g) => g.matchId));
+      // Imported rows already live in Notion, so ledger them as exported with the
+      // signature the exporter would compute: the next "Sync to Notion" skips them
+      // unless their local content changes, in which case it updates in place.
+      const authoredTargetIds = this.deps.authoredTargetIds?.() ?? new Set<string>();
+      for (const g of result.games) {
+        const grade = aggregateImprovementGrade(g.review, {
+          visibleTargetIds: authoredTargetIds,
+          bookkeepingId: NOTION_IMPROVEMENT_TARGET_ID,
+        });
+        this.deps.outbox.recordImported(g.matchId, {
+          pageId: g.pageId,
+          signature: matchExportSignature(g, grade),
+          databaseId: notion.gametrackerDatabaseId,
+        });
+      }
       return result;
     } catch (err) {
       return { games: [], failed: 0, error: String(err) };
@@ -219,6 +244,7 @@ export class NotionRuntime {
       this.hasPlayedAt = result.hasPlayedAt;
       this.hasSrDelta = result.hasSrDelta;
       this.writableColumns = new Set(result.subjectiveColumns);
+      this.subjectiveDiagnostics = result.subjectiveColumnDiagnostics;
       this.mapsRelationDbId = result.mapRelationDbId;
       this.gametrackerSourceId = result.dataSourceId;
     } catch (err) {
@@ -226,6 +252,7 @@ export class NotionRuntime {
       this.hasPlayedAt = false;
       this.hasSrDelta = false;
       this.writableColumns = new Set();
+      this.subjectiveDiagnostics = undefined;
       this.mapsRelationDbId = undefined;
       this.gametrackerSourceId = undefined;
     }
@@ -245,7 +272,28 @@ export class NotionRuntime {
     // ever picked their Gametracker database (mapsDatabaseId left blank).
     const mapsDbId = cfg.notion.mapsDatabaseId || this.mapsRelationDbId || '';
     const maps = new MapsCache(this.client, mapsDbId, cfg.mapAliases);
-    this.exporter = new NotionExporter(writer, maps, this.deps.outbox, shapeIssues);
+    // Pass the getter itself (not a snapshot) — the exporter re-reads it on every
+    // export() call so a target authored after rebuild/validate is still visible.
+    const authoredTargetIds = () => this.deps.authoredTargetIds?.() ?? new Set<string>();
+    this.exporter = new NotionExporter(
+      writer, maps, this.deps.outbox, shapeIssues, authoredTargetIds,
+      cfg.notion.gametrackerDatabaseId
+        ? { client: this.client, gametrackerDatabaseId: cfg.notion.gametrackerDatabaseId, dataSourceId: this.gametrackerSourceId }
+        : undefined,
+      cfg.notion.gametrackerDatabaseId || undefined,
+    );
     return maps;
+  }
+
+  /**
+   * Drop the ledger record for each matchId — the wiring behind
+   * `deleteImportedMatches` (Decision A.2's "cleared by deleteImportedMatches"
+   * invariant): once a locally-imported match is deleted, its export/import
+   * ledger entry must go with it so a later re-import or re-export starts fresh
+   * instead of skipping (stale signature) or updating a page that no longer
+   * corresponds to any local match.
+   */
+  clearExports(matchIds: string[]): void {
+    for (const id of matchIds) this.deps.outbox.clearExport(id);
   }
 }

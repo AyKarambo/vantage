@@ -19,9 +19,23 @@ export interface ViewContext {
 
 export type ViewRender = (ctx: ViewContext) => HTMLElement;
 
+/** Encode a `DashboardFilters['days']` value as the `<select>`'s string value. */
+function daysToValue(days: DashboardData['filters']['days']): string {
+  if (days === 'all') return 'all';
+  if (typeof days === 'object') return `season:${days.season}`;
+  return String(days);
+}
+
+/** Decode the `<select>`'s string value back into a `DashboardFilters['days']`. */
+function valueToDays(v: string): DashboardData['filters']['days'] {
+  if (v === 'all') return 'all';
+  if (v.startsWith('season:')) return { season: v.slice('season:'.length) };
+  return Number(v);
+}
+
 /**
- * Account · Role · Season filter bar. The store filters are global, so this
- * re-scopes every view — it just happens to live wherever it is rendered.
+ * Role · Season filter bar. No Account field (the switcher owns account) and no
+ * Mode field (Vantage is competitive-only) — see spec D1/D3.
  */
 export function filterBar(
   d: DashboardData,
@@ -31,28 +45,24 @@ export function filterBar(
   const presets = prefs.get('filterPresets') ?? [];
 
   return h('div', { class: 'filter-bar' },
-    filterField('Account', d.filters.account,
-      [{ value: 'all', label: 'All accounts' }, ...d.options.accounts.map((a) => ({ value: a, label: a }))],
-      (v) => setFilter({ account: v })),
     filterField('Role', d.filters.role,
       [{ value: 'all', label: 'All roles' }, ...d.options.roles.map((r) => ({ value: r, label: roleLabel(r) }))],
       (v) => setFilter({ role: v })),
-    filterField('Mode', d.filters.mode,
-      [{ value: 'all', label: 'All modes' }, ...d.options.modes.map((m) => ({ value: m, label: m }))],
-      (v) => setFilter({ mode: v })),
-    filterField('Season', String(d.filters.days),
+    filterField('Season', daysToValue(d.filters.days),
       [
         { value: '7', label: 'Last 7 days' },
         { value: '30', label: 'Last 30 days' },
-        { value: 'season', label: 'This season' },
+        ...d.options.seasons.map((s) => ({ value: `season:${s.id}`, label: s.label })),
         { value: 'all', label: 'All time' },
       ],
-      (v) => setFilter({ days: v === 'all' || v === 'season' ? v : Number(v) })),
+      (v) => setFilter({ days: valueToDays(v) })),
     changed
       ? h('button', {
           class: 'filter-reset',
           title: 'Back to the default filters',
-          on: { click: () => setFilter({ ...FILTER_DEFAULTS }) },
+          // Account is switcher-driven — reset restores role+days only and
+          // leaves the active account untouched (spec D4).
+          on: { click: () => setFilter({ role: FILTER_DEFAULTS.role, days: FILTER_DEFAULTS.days }) },
         }, `Reset (${changed})`)
       : null,
     h('span', { class: 'filter-presets' },
@@ -89,21 +99,26 @@ function presetChip(
   return el;
 }
 
+// Account is switcher-driven (not part of the filter bar) so it's excluded from
+// reset/preset equality/summaries below — only role+days are "the filters" now.
+// `days` is compared via `daysToValue`'s canonical string key, not `String()` —
+// every `{ season }` object stringifies to the same `'[object Object]'`, which
+// would make different seasons compare equal.
 function activeFilterCount(f: Required<DashboardFilters>): number {
-  return (['account', 'role', 'mode', 'days'] as const)
-    .filter((k) => String(f[k]) !== String(FILTER_DEFAULTS[k])).length;
+  let n = 0;
+  if (f.role !== FILTER_DEFAULTS.role) n++;
+  if (daysToValue(f.days) !== daysToValue(FILTER_DEFAULTS.days)) n++;
+  return n;
 }
 
 function sameFilters(a: Required<DashboardFilters>, b: Required<DashboardFilters>): boolean {
-  return a.account === b.account && a.role === b.role && a.mode === b.mode && String(a.days) === String(b.days);
+  return a.role === b.role && daysToValue(a.days) === daysToValue(b.days);
 }
 
 function summarizeFilters(f: Required<DashboardFilters>): string {
   const parts: string[] = [];
-  if (f.mode !== 'all') parts.push(f.mode);
   if (f.role !== 'all') parts.push(roleLabel(f.role));
-  if (f.account !== 'all') parts.push(f.account);
-  parts.push(f.days === 'all' ? 'all time' : f.days === 'season' ? 'this season' : `${f.days}d`);
+  parts.push(f.days === 'all' ? 'all time' : typeof f.days === 'object' ? 'season' : `${f.days}d`);
   return parts.join(' · ');
 }
 

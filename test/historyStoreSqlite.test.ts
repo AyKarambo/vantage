@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { HistoryStore, DB_FILE } from '../src/store/history';
 import type { GameRecord } from '../src/core/analytics';
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
 
 // SQLite keeps the file open (and locked, on Windows), so every store instance
 // and temp dir created here is tracked and torn down after each test.
@@ -134,5 +135,75 @@ describe('HistoryStore (SQLite) — relocate', () => {
     expect(() => s.relocate(b)).toThrow(/already exists/);
     // Original still usable and intact after the refused move.
     expect(s.count()).toBe(1);
+  });
+});
+
+describe('HistoryStore (SQLite) — mergeImported', () => {
+  it('applies the bookkeeping grade onto a local match with no review, and does not stamp importedAt', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'a' }));
+    const imported = g({
+      matchId: 'a',
+      review: { at: 2000, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} },
+    });
+    const { merged, skipped } = h.mergeImported([imported]);
+    expect(merged).toBe(1);
+    expect(skipped).toBe(0);
+    const stored = h.all()[0];
+    expect(stored.review).toEqual({ at: 2000, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} });
+    expect(stored.importedAt).toBeUndefined();
+  });
+
+  it('adopts the imported mental record wholesale when the local match has none', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'a' }));
+    const imported = g({ matchId: 'a', mental: { tilt: true, positiveComms: true } });
+    const { merged } = h.mergeImported([imported]);
+    expect(merged).toBe(1);
+    expect(h.all()[0].mental).toEqual({ tilt: true, positiveComms: true });
+  });
+
+  it('leaves an existing local review and mental untouched (local wins wholesale) — counts as skipped', () => {
+    const h = open(tmp());
+    h.add(g({
+      matchId: 'a',
+      review: { at: 500, grades: { 't-1': 'hit' }, flags: {} },
+      mental: { tilt: false },
+    }));
+    const imported = g({
+      matchId: 'a',
+      review: { at: 2000, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} },
+      mental: { tilt: true },
+    });
+    const { merged, skipped } = h.mergeImported([imported]);
+    expect(merged).toBe(0);
+    expect(skipped).toBe(1);
+    const stored = h.all()[0];
+    expect(stored.review).toEqual({ at: 500, grades: { 't-1': 'hit' }, flags: {} });
+    expect(stored.mental).toEqual({ tilt: false });
+  });
+
+  it('skips unknown matchIds without throwing', () => {
+    const h = open(tmp());
+    const { merged, skipped } = h.mergeImported([g({ matchId: 'ghost', mental: { tilt: true } })]);
+    expect(merged).toBe(0);
+    expect(skipped).toBe(1);
+    expect(h.count()).toBe(0);
+  });
+
+  it('runs as one transaction over multiple entries, applying only the eligible ones', () => {
+    const h = open(tmp());
+    h.addMany([
+      g({ matchId: 'a' }), // will gain a grade
+      g({ matchId: 'b', review: { at: 1, grades: { 't-1': 'hit' }, flags: {} } }), // local wins, skipped
+    ]);
+    const { merged, skipped } = h.mergeImported([
+      g({ matchId: 'a', review: { at: 2000, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'hit' }, flags: {} } }),
+      g({ matchId: 'b', review: { at: 2000, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} } }),
+    ]);
+    expect(merged).toBe(1);
+    expect(skipped).toBe(1);
+    expect(h.all().find((x) => x.matchId === 'a')?.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('hit');
+    expect(h.all().find((x) => x.matchId === 'b')?.review?.grades).toEqual({ 't-1': 'hit' });
   });
 });

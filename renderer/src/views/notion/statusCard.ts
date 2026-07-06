@@ -5,6 +5,7 @@
 import { h } from '../../dom';
 import type { NotionStatus } from '../../../../src/shared/contract';
 import { card } from '../../components/primitives';
+import { subjectiveColumnsSection } from './subjectiveColumnsCard';
 
 /** Top-of-screen status readout; `s === null` means the initial fetch hasn't resolved yet. */
 export function statusCard(s: NotionStatus | null): HTMLElement {
@@ -38,6 +39,7 @@ export function statusCard(s: NotionStatus | null): HTMLElement {
               : `${s.trackedGames} tracked game${s.trackedGames === 1 ? '' : 's'} ready to sync`),
         ),
       ),
+      subjectiveColumnsSection(s.subjectiveColumns),
     );
   }
   const reason = !s.tokenSet

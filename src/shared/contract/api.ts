@@ -13,7 +13,7 @@ import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditI
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
-import type { AppInfo, AppUiSettings, DatabaseLocation, DatabaseLocationResult } from './appSettings';
+import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -89,10 +89,14 @@ export interface OwStatsApi {
   setAppSettings(patch: Partial<AppUiSettings>): Promise<AppUiSettings>;
   /** Version + support contact (Settings screen's About card). */
   getAppInfo(): Promise<AppInfo>;
-  /** Where the match-history database currently lives (Settings screen). */
-  getDatabaseLocation(): Promise<DatabaseLocation>;
-  /** Open a folder picker and, if a folder is chosen, relocate the database there. */
-  chooseDatabaseFolder(): Promise<DatabaseLocationResult>;
+  /** Where Vantage's data folder currently lives (Settings screen + first run). */
+  getDataLocation(): Promise<DataLocation>;
+  /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder. */
+  chooseDataFolder(): Promise<DataLocationResult>;
+  /** Commit a chosen data folder — migrates (default) or adopts in place (existing Vantage data). */
+  setDataFolder(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
+  /** First-run folder picker; validates + adopts existing Vantage data automatically. */
+  chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
   /** Subscribe to new log entries; returns an unsubscribe function. */
@@ -166,8 +170,10 @@ export const IPC_CHANNELS = {
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',
   getAppInfo: 'app:info',
-  getDatabaseLocation: 'settings:get-db-location',
-  chooseDatabaseFolder: 'settings:choose-db-folder',
+  getDataLocation: 'settings:get-data-location',
+  chooseDataFolder: 'settings:choose-data-folder',
+  setDataFolder: 'settings:set-data-folder',
+  chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
   clearReview: 'manual:clear-review',
 } as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 

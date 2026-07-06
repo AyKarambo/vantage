@@ -1043,18 +1043,6 @@ table.data tbody tr:hover {
   font-size: 11px;
 }
 
-/* Shortcut cheatsheet ------------------------------------------------------------ */
-.cheatsheet-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 3px 0;
-}
-.cheatsheet-row .kbd {
-  min-width: 64px;
-  text-align: center;
-}
-
 /* Typeahead ------------------------------------------------------------------- */
 .typeahead {
   position: relative;
@@ -1121,6 +1109,47 @@ table.data tbody tr:hover {
 }
 .inline-link--strong {
   font-weight: inherit;
+}
+
+/* Matches — configurable column fields ----------------------------------------- */
+.match-col {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.match-col--role,
+.match-col--heroes,
+.match-col--account {
+  width: 84px;
+}
+.match-col--srDelta,
+.match-col--duration,
+.match-col--finalScore {
+  width: 52px;
+}
+
+/* Shortcut cheatsheet ------------------------------------------------------------ */
+.cheatsheet {
+  padding: 22px 24px;
+}
+.cheatsheet .nav-group {
+  margin-top: 18px;
+}
+.cheatsheet > div:first-child .nav-group {
+  margin-top: 0;
+}
+.cheatsheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+.cheatsheet-row .kbd {
+  min-width: 72px;
+  text-align: center;
 }
 
 /* Cross-link highlight flash ---------------------------------------------------- */

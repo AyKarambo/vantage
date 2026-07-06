@@ -1,7 +1,6 @@
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { LogFilter } from '../../core/model';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/breakReminder';
 import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
 import type { DemoPreference } from '../../core/demoPreference';
@@ -43,7 +42,6 @@ export interface UiConfig {
 
 export interface AppConfig {
   overwatchGameId: number;
-  logFilter: LogFilter;
   runAtLogin: boolean;
   /** Where match data comes from. 'counterwatch' reads Counterwatch's local DB. */
   sensor: Sensor;
@@ -57,18 +55,24 @@ export interface AppConfig {
   /** Readiness / training-load coach settings (feature toggle + opt-in launch toast). */
   readiness: ReadinessSettings;
   /**
-   * Folder holding the SQLite match-history database. Absent ⇒ the default
+   * Folder holding all Vantage data files (SQLite match history, manual log,
+   * outbox ledger, rank anchors, screenshots). Absent ⇒ the default
    * `<userData>/data`. Point it at a cloud-synced folder (OneDrive/Dropbox) for
    * off-machine backup. Single-machine use only — simultaneous multi-machine
-   * access to the synced file can corrupt SQLite.
+   * access to the synced files can corrupt SQLite.
+   *
+   * Renamed from `historyDbFolder` (which only ever moved the DB). A config
+   * still carrying the legacy key is honored on read via {@link loadConfig}
+   * and rewritten under `dataFolder` on next persist.
    */
+  dataFolder?: string;
+  /** @deprecated legacy alias for {@link dataFolder}; read-only back-compat. */
   historyDbFolder?: string;
   ui: UiConfig;
 }
 
 const DEFAULTS: AppConfig = {
   overwatchGameId: 10844, // kGepSupportedGameIds.Overwatch (Overwatch 2)
-  logFilter: 'Competitive',
   runAtLogin: false,
   sensor: 'counterwatch',
   notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
@@ -116,8 +120,14 @@ export function loadConfig(): AppConfig {
     readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };
+  // `dataFolder` (new key) falls back to the legacy `historyDbFolder` (old key)
+  // when absent, so a config written before the rename is still honored.
+  // Persisting always writes `dataFolder` going forward (see saveLocalConfig
+  // callers), so this fallback only ever fires for untouched legacy configs.
+  if (merged.dataFolder === undefined && merged.historyDbFolder !== undefined) {
+    merged.dataFolder = merged.historyDbFolder;
+  }
   // Env overrides (handy for one-off testing without editing files).
-  if (process.env.OW_SYNC_FILTER) merged.logFilter = process.env.OW_SYNC_FILTER as LogFilter;
   if (process.env.OW_SYNC_SENSOR) merged.sensor = process.env.OW_SYNC_SENSOR as Sensor;
   return merged;
 }

@@ -1,5 +1,10 @@
 # Spec — notion-import
 
+**Updated 2026-07-06** after the `feedback-batch-2026-07` Area B fix (import-merge, hidden
+bookkeeping grade, no synthetic target) — see `feedback-batch-2026-07.spec.md` Area B for the
+originating problem/requirements and its own acceptance criteria; this file is amended so the two
+never diverge on shipped behavior.
+
 ## Intent (WHAT & WHY)
 Vantage can push match history *to* Notion but never pull it *back*. That leaves users
 unable to restore their history on a new machine, or seed Vantage from a log they already
@@ -12,9 +17,33 @@ history — closing the round-trip while staying local-first and opt-in.
 - Read **all rows** in the Gametracker DB (including rows hand-added directly in Notion)
   and map Notion properties back to `GameRecord` fields (inverse of the export mapping in
   `notionWriter.ts`).
-- **De-duplication by Match ID**: rows whose Match ID already exists locally are skipped;
-  rows with no Vantage Match ID get a fresh local `manual-notion-*` id and are treated as
-  manual.
+- **De-duplication by Match ID, with merge** (updated 2026-07-06 — supersedes the original
+  skip-only behavior): a row whose Match ID already exists locally is no longer skipped
+  outright.
+  - If the local match has **no review**, an `Improvement Target` grade recorded in Notion is
+    merged in as a **hidden bookkeeping review** (`src/core/notionMerge.ts`,
+    `mergeImportedIntoLocal`): the grade is stored under the internal id
+    `notion-improvement-target` (`NOTION_IMPROVEMENT_TARGET_ID`,
+    `src/core/targets/notionBookkeeping.ts`) — never as a visible `AuthoredTarget`. The match
+    now counts as reviewed, not pending.
+  - If the local match **already has a review**, the local review is left untouched — local
+    wins, always.
+  - Mental flags (`Comms`, `Tilt`, `Toxic Mates`, `Leaver`) merge only when the local match has
+    **no mental record at all**; an existing local mental record wins wholesale, even for
+    individually unchecked flags.
+  - Rows with no Vantage Match ID still get a fresh local `manual-notion-*` id and are treated
+    as manual; a grade present on such a row arrives **already reviewed** the same way.
+- **No visible synthetic target** (updated 2026-07-06): the importer no longer seeds a visible
+  `AuthoredTarget` named "Improvement Target" on any path (merge or brand-new row). The Targets
+  and Review screens never display or count the internal bookkeeping id; target scoring and
+  progression exclude it (`src/core/targets/scoring.ts`).
+- **One-time migration**: existing installs have the previously seeded synthetic target
+  (matched **by id**, not by name) removed from the manual store on update; stored grades on
+  matches are untouched, and the existing `seededBefore` guard prevents re-seeding. A
+  user-authored target that merely shares the name "Improvement Target" is unaffected.
+- **Round trip stays symmetric**: a bookkeeping grade created by import exports back to the
+  Notion `Improvement Target` column like any other grade (see `notion-import.spec.md`'s sibling
+  export spec, `feedback-batch-2026-07.spec.md` Area A's aggregate-grade rule).
 - Clear import summary (imported / skipped / failed / accounts-added counts).
 - **Wipe-for-re-import**: every imported record is flagged (`importedAt`), and a "Delete
   imported matches" action (behind a confirm) removes *only* those records — leaving
@@ -22,7 +51,9 @@ history — closing the round-trip while staying local-first and opt-in.
   Notion and re-run cleanly. The Notion status reports how many imported matches exist.
 
 ## Out-of-Scope
-- Ongoing/continuous two-way sync or conflict resolution beyond dedup.
+- Ongoing/continuous two-way sync or conflict resolution beyond the grade/mental merge above.
+- Overwriting a local review or a fully-populated local mental record from Notion — local
+  always wins.
 - Deleting local matches to match Notion.
 - Changes to the manual-tracking model itself (that's the overhaul spec).
 
@@ -35,12 +66,31 @@ history — closing the round-trip while staying local-first and opt-in.
   (per-row failure isolation).
 - **Depends on the overhaul spec** for any new fields (SR %, leaver-team) to round-trip;
   sequence after it. v1 imports the fields the current schema carries.
+- Merge logic (`mergeImportedIntoLocal`) lives in `src/core/notionMerge.ts` — pure,
+  Electron-free, unit-tested (guardrail 3).
 
 ## Acceptance Criteria
 - Given a configured token + Gametracker DB, When I click Import, Then Vantage reads the
   rows and adds new matches to local history, reporting imported/skipped/failed counts.
-- Given a row whose Match ID already exists locally, When importing, Then it is not
-  duplicated.
+- Given a local match without a review whose Notion row has `Improvement Target = missed`,
+  When the user imports, Then the local match gets a hidden bookkeeping review with grade
+  `missed`, no longer counts as pending, and no duplicate is created.
+- Given a Notion row with `Improvement Target = hit` and no local counterpart, When the user
+  imports, Then a new local match exists, already reviewed (grade `hit`), not in the pending
+  queue.
+- Given a local match the user already reviewed in the app, When an import runs with a
+  different grade in Notion, Then the local review is unchanged (local wins).
+- Given a local match with a mental record where `tilt` is unchecked, When the Notion row has
+  `Tilt` checked and an import runs, Then the local flag stays unchecked.
+- Given any completed import, When the user opens the Targets or Review screens, Then no
+  "Improvement Target"/imported target is listed anywhere, and target success-rate stats are
+  unaffected by imported grades.
+- Given an existing install with the old synthetic target **and** a user-authored target also
+  named "Improvement Target", When the app starts after the update, Then only the synthetic one
+  is gone; the user's target and all its grades are untouched, and previously imported grades
+  remain on their matches.
+- Given a match whose only review was created by import, When it is exported or its row
+  updated, Then the Notion `Improvement Target` cell carries that grade.
 - Given a row hand-added in Notion with no Vantage Match ID, When imported, Then it becomes
   a local manual match with a new id.
 - Given a malformed/partial row, When importing, Then that row is skipped with a reported
@@ -50,7 +100,14 @@ history — closing the round-trip while staying local-first and opt-in.
 
 ## Resolved questions
 - **Goal** → on-demand pull for restore/migrate (not continuous sync).
-- **Row scope** → import all rows, dedup by Match ID.
+- **Row scope** → import all rows, dedup by Match ID; an existing row is no longer skipped
+  outright — see **"On a Match ID that already exists locally"** below (resolved 2026-07-06).
+- **On a Match ID that already exists locally** (resolved 2026-07-06, was Open Question) →
+  **merge, not skip.** A reviewless local match adopts the Notion `Improvement Target` grade as
+  a hidden bookkeeping review (`notion-improvement-target`, never a visible target); a mental
+  record merges only when the local match has none at all. A local match that already has a
+  review or a mental record is left untouched — local wins unconditionally. See
+  `feedback-batch-2026-07.spec.md` Area B and `src/core/notionMerge.ts`.
 - **Match time round-trip** (resolved 2026-07-05) → the export schema now carries a `Played At`
   **date** property. `NotionWriter` writes the match's `endedAt` into it, and the importer prefers
   it over Notion's `created_time`. This is what makes restore lossless in time: without it, imported
@@ -81,6 +138,5 @@ history — closing the round-trip while staying local-first and opt-in.
   many accounts were added.
 
 ## Open Questions
-- On a Match ID that already exists locally: skip (v1) vs. update-in-place (later).
-- SR%/`srDelta` still does not round-trip (the schema carries no SR column), so calculated rank over
-  purely-imported history stays near its anchor — deferred to the tracking overhaul.
+- SR%/`srDelta` round-trip is covered by `sqlite-storage-notion-sync.spec.md` (an additive
+  Notion `SR Delta` column) — no longer an open question in *this* spec.

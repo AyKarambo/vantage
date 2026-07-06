@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseSync, type StatementSync, type SQLInputValue } from 'node:sqlite';
 import type { GameRecord, MatchReview } from '../core/analytics';
+import { mergeImportedIntoLocal } from '../core/notionMerge';
 
 /** Basename of the SQLite database inside the store's directory. */
 export const DB_FILE = 'history.db';
@@ -236,14 +237,58 @@ export class HistoryStore {
   }
 
   /**
+   * Bulk-merge freshly-imported Notion rows onto their already-stored local
+   * counterparts (one transaction) — the re-import path, as opposed to
+   * {@link addMany} which only inserts brand-new matchIds. For each entry whose
+   * `matchId` is already stored, applies {@link mergeImportedIntoLocal}'s pure
+   * decision (local always wins for both review and mental) via the same
+   * patch semantics as {@link editManual}. Unlike `addMany`, this never stamps
+   * `importedAt` — a merged row was already tracked or hand-logged, so its
+   * existing provenance is left alone (`removeImported` must not delete it).
+   * Unknown matchIds and entries with nothing to change are both no-ops,
+   * counted as skipped.
+   */
+  mergeImported(entries: GameRecord[]): { merged: number; skipped: number } {
+    let merged = 0;
+    let skipped = 0;
+    this.tx(() => {
+      for (const imported of entries) {
+        const local = this.getOne(imported.matchId);
+        const patch = local ? mergeImportedIntoLocal(local, imported) : null;
+        if (!local || !patch) {
+          skipped++;
+          continue;
+        }
+        if (patch.review !== undefined) local.review = patch.review;
+        if (patch.mental !== undefined) local.mental = patch.mental;
+        this.updateStmt.run(...updateValues(local));
+        merged++;
+      }
+    });
+    return { merged, skipped };
+  }
+
+  /**
    * Move the database file to a new directory and reopen it there — the backing
    * for the user-configurable location. Throws if the target already holds a
    * database (never silently overwrites another dataset).
+   *
+   * By default the original file is deleted (best-effort) before returning, to
+   * match every existing caller/test. Pass `{ deferDelete: true }` when the
+   * caller needs the crash guarantee "persist the new pointer before deleting
+   * the original" (spec Area C / Decision C.6): the original is left in place
+   * and a cleanup thunk is returned instead — call it only after the new
+   * pointer has been durably persisted. The returned thunk itself reports
+   * whether the delete actually succeeded (not swallowed silently), so the
+   * caller can account for leftovers the same way it does for the JSON
+   * side-stores.
    */
-  relocate(newDir: string): void {
+  relocate(newDir: string, opts: { deferDelete: true }): () => boolean;
+  relocate(newDir: string, opts?: { deferDelete?: false }): void;
+  relocate(newDir: string, opts?: { deferDelete?: boolean }): (() => boolean) | void {
     fs.mkdirSync(newDir, { recursive: true });
     const target = path.join(newDir, DB_FILE);
-    if (path.resolve(target) === path.resolve(this.dbPath)) return;
+    if (path.resolve(target) === path.resolve(this.dbPath)) return opts?.deferDelete ? () => true : undefined;
     if (fs.existsSync(target)) {
       throw new Error(`A history database already exists at ${target}`);
     }
@@ -267,8 +312,37 @@ export class HistoryStore {
       this.open();
       throw err;
     }
-    // The new location is live; drop the original copy (a leftover is harmless).
-    try { fs.unlinkSync(fromPath); } catch { /* best effort */ }
+    const cleanup = (): boolean => {
+      try {
+        fs.unlinkSync(fromPath);
+        return true;
+      } catch {
+        return !fs.existsSync(fromPath);
+      }
+    };
+    if (opts?.deferDelete) return cleanup;
+    // The new location is live; drop the original copy now (a leftover is harmless).
+    cleanup();
+  }
+
+  /**
+   * Point this store at a directory that already holds its own `history.db`
+   * (no copy, no delete of either side) — the backing for adopting a folder
+   * a user picks that already has Vantage data (spec Area C, Decision C.6).
+   * Unlike {@link relocate}, this refuses a target that does NOT already have
+   * a database: adoption means "start using the data that's already there",
+   * not "create one".
+   */
+  adopt(targetDir: string): void {
+    const target = path.join(targetDir, DB_FILE);
+    if (path.resolve(target) === path.resolve(this.dbPath)) return;
+    if (!fs.existsSync(target)) {
+      throw new Error(`No history database exists at ${target} to adopt`);
+    }
+    this.db.close();
+    this.dir = targetDir;
+    this.dbPath = target;
+    this.open();
   }
 
   /** Close the database handle. Required before deleting the file (Windows locks it open). */

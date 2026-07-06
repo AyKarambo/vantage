@@ -8,7 +8,6 @@ import type { MatchRecord, Result } from '../src/core/model';
 function appConfig(p: Partial<AppConfig> = {}): AppConfig {
   return {
     overwatchGameId: 10844,
-    logFilter: 'Competitive',
     runAtLogin: false,
     sensor: 'gep',
     notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
@@ -146,6 +145,36 @@ describe('createMatchPipeline — break reminder', () => {
     pipeline.recordGame(game({ matchId: 'l-2', result: 'Loss', timestamp: 2_000 }));
     pipeline.recordGame(game({ matchId: 'l-3', result: 'Loss', timestamp: 3_000 }));
     expect(notifications).toHaveLength(0);
+  });
+});
+
+describe('createMatchPipeline — competitive capture gate', () => {
+  it('drops a quick-play or arcade GEP match before it reaches history', () => {
+    const { pipeline, history, notifications } = harness();
+    expect(pipeline.recordGame(game({ matchId: 'qp-1', result: 'Win', gameType: 'Unranked' }))).toBe(false);
+    expect(pipeline.recordGame(game({ matchId: 'ar-1', result: 'Win', gameType: 'Arcade' }))).toBe(false);
+    expect(history.games).toHaveLength(0);
+    expect(notifications).toHaveLength(0); // dropped before the break-reminder streak check
+  });
+
+  it('writes a competitive GEP match', () => {
+    const { pipeline, history } = harness();
+    expect(pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', gameType: 'Competitive' }))).toBe(true);
+    expect(history.games).toHaveLength(1);
+    expect(history.games[0].matchId).toBe('c-1');
+  });
+
+  it('always writes a manual log, which is forced competitive', () => {
+    const { pipeline, history } = harness();
+    expect(pipeline.recordGame(game({ matchId: 'manual-1', result: 'Win', gameType: 'Competitive' }))).toBe(true);
+    expect(history.games).toHaveLength(1);
+  });
+
+  it('drops a non-competitive match delivered through addMatch (feed path)', () => {
+    const { pipeline, history, captures } = harness();
+    pipeline.addMatch({ ...capturedMatch('gep-qp'), gameType: 'quickplay' });
+    expect(history.games).toHaveLength(0);
+    expect(captures).toHaveLength(0); // no screenshot capture scheduled for a dropped game
   });
 });
 

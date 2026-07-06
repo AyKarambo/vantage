@@ -1,5 +1,3 @@
-import type { LogFilter, MatchRecord } from './model';
-
 export type GameTypeCategory =
   | 'competitive'
   | 'quickplay'
@@ -38,16 +36,7 @@ export function gameTypeLabel(gameType: string | undefined): string {
   }
 }
 
-/** Decide whether a completed match should be written to Notion. */
-export function shouldLog(record: MatchRecord, filter: LogFilter): boolean {
-  const category = classifyGameType(record.gameType);
-  switch (filter) {
-    case 'Everything':
-      return true;
-    case 'CompetitiveAndQuickPlay':
-      return category === 'competitive' || category === 'quickplay';
-    case 'Competitive':
-    default:
-      return category === 'competitive';
-  }
+/** True iff the raw GEP game type classifies as competitive. Vantage is competitive-only. */
+export function isCompetitive(gameType: string | undefined): boolean {
+  return classifyGameType(gameType) === 'competitive';
 }

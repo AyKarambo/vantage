@@ -5,6 +5,7 @@ import type { AppConfig } from './config';
 import type { GepMessage, MatchRecord } from '../core/model';
 import { matchToGame } from '../core/gameRecord';
 import { streak, type GameRecord } from '../core/analytics';
+import { isCompetitive } from '../core/matchFilter';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
 } from '../core/breakReminder';
@@ -49,9 +50,14 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
    * Persist a finished game and, on success, evaluate the break reminder against
    * the unfiltered history — a manually logged loss counts the same as a live one.
    * Reminder state is in-memory only: a restart re-arms it (accepted trade-off).
-   * Returns whether the game was newly added (false = duplicate matchId).
+   * Non-competitive games (quick play, arcade, etc.) are dropped before ever
+   * reaching history — Vantage is competitive-only. Manual logs always carry
+   * `gameType: 'Competitive'`, so this gate never blocks a manual entry.
+   * Returns whether the game was newly added (false = duplicate matchId or
+   * non-competitive).
    */
   function recordGame(game: GameRecord): boolean {
+    if (!isCompetitive(game.gameType)) return false;
     if (!deps.history.add(game)) return false;
     const s = streak(deps.history.all());
     const { fire, state } = nextBreakReminder(s, deps.getConfig().breakReminder, reminderState);

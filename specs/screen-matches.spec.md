@@ -1,7 +1,7 @@
 # Screen spec: Matches (`matches`)
 
-**Source:** `renderer/src/views/matches.ts`, `renderer/src/views/matchDetail.ts`, `renderer/src/components/scoreboard.ts`, `src/core/matchDetail.ts`, `src/core/playerIndex.ts`, `src/core/analytics/session.ts` (`groupByDay`), `src/main/screenshots.ts` · reverse-engineered 2026-07-04 · detail-page design from user screenshot (2026-07-04 spec review) · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8)
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
+**Source:** `renderer/src/views/matches.ts`, `renderer/src/views/matchDetail.ts`, `renderer/src/components/scoreboard.ts`, `src/core/matchDetail.ts`, `src/core/playerIndex.ts`, `src/core/analytics/session.ts` (`groupByDay`), `src/main/screenshots.ts`, `renderer/src/prefs.ts` (`MatchColumnsPref`) · reverse-engineered 2026-07-04 · detail-page design from user screenshot (2026-07-04 spec review) · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8) · updated 2026-07-06 after the `feedback-batch-2026-07` Area F fix (configurable per-field display + clean meta line)
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`) · [batch 2026-07-06] shipped in `feedback-batch-2026-07` Area F (intent: `feedback-batch-2026-07.spec.md`)
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes the list. The match detail page is a parameterized view (`matchDetail`, opened with `{ matchId }`) registered in the view router but outside the sidebar nav list — the sidebar keeps **Matches** highlighted while a detail page is open. Shell-level behaviors that touch this screen — the palette's Match/Map/Hero entries, per-route scroll memory (Matches ↔ matchDetail), and the Esc/←/→ hotkeys — are specified in `screen-shell.spec.md`.
 
@@ -12,12 +12,20 @@
 ## In-Scope
 
 **List:**
-- Newest-first list of matches in the filtered range: result letter (W/L/D, colour-coded), map, role · heroes (or "—") · account, map-type pill, game type, relative time.
+- Newest-first list of matches in the filtered range: result letter (W/L/D, colour-coded), map, map-type pill, relative time — always visible — plus a per-field-configurable set described below. [batch 2026-07-06] The per-row game-type label is **removed** (constant noise once the filter bar is competitive-only — see `dashboard-filter-fixes.spec.md` Area D); map-type pill and result stay.
 - Match count in the header (`"N games in range · newest first · click a match for details"`).
 - [implemented 2026-07-04] Every row is clickable (`.match-row.is-clickable`) and navigates to `matchDetail` with that row's `matchId`.
 - [qol 2026-07-04] **Day grouping:** rows sit under day headers — "Today" / "Yesterday" for the two most recent calendar days, otherwise a friendly date ("Wed, Jul 2") — each header showing that day's `W–L` tally and signed net. Backed by the pure `groupByDay` helper (`src/core/analytics/session.ts`), newest day first, rows newest-first within a day.
 - [qol 2026-07-04] **Cross-links inside a row** (clicks `stopPropagation` so the row's detail click stays intact): the map name links to the Maps view with `{ highlight: map }` (scrolled to and flashed there); each hero name links to that hero's drill-down drawer (`openHeroDrawer`).
 - [qol 2026-07-04] **Actionable empty state:** an empty range shows "No matches in this range yet." plus next steps instead of a dead end — a "Show all time (N games)" button when unfiltered history has games and the range isn't already all-time (`DashboardData.totalGamesAllTime`), and a "Log a match" button opening the quick-log modal.
+- [batch 2026-07-06] **Per-field configurable info ("Customize view").** A "Customize view" affordance (`renderer/src/views/matches.ts`) lets the user set each of six fields — **role, heroes, account, SR delta, duration, final score** — independently to `hidden`, `inline`, or `column` (`MatchColumnMode`/`MatchColumnsPref`, `renderer/src/prefs.ts`):
+  - `inline` renders the field as a segment of the row's meta line.
+  - `column` renders it as its own vertically aligned column across every row, in which case it does **not** also appear inline.
+  - Canonical order (both inline segments and columns follow this): role · heroes · account · SR delta · duration · final score.
+  - Defaults (`MATCH_COLUMNS_DEFAULT`): heroes, account, SR delta = `inline`; role, duration, final score = `hidden`.
+  - The configuration persists across sessions via renderer prefs (`prefs.get('matchColumns')` / localStorage) — restarting the app keeps the chosen layout.
+- [batch 2026-07-06] **Clean meta line (no placeholders).** The meta line joins only the segments whose field is `inline` **and** has a non-empty value, separated by `·` — no `—` placeholder for an absent value, no leading/trailing/doubled separators. If zero segments are renderable (e.g. all fields hidden, or all inline fields empty for this row), the meta-line element is omitted entirely rather than rendered empty. A `column`-mode field with no value for a given row renders a blank cell so the column stays aligned.
+- [batch 2026-07-06] **Field formatting:** SR delta renders signed and colour-coded (e.g. `+25` green / `−18` red); duration renders in minutes; final score renders as recorded (e.g. `3–1`). Both fields are carried on the `MatchRow` contract (`src/shared/contract/dashboard.ts`): `srDelta?: number` (signed SR change) and `finalScore?: string`, populated by `toMatchRow` (`src/core/dashboardData.ts`).
 
 **Match detail page** ([implemented 2026-07-04] `renderer/src/views/matchDetail.ts`, backed by `src/core/matchDetail.ts`; every section renders only when its data exists, so the page degrades tier-by-tier):
 - **Header** (always renders — the only section every record, however old, can fill): result text (Victory/Defeat/Draw, colour-coded), map name, a meta line (map-type pill · game type · role · account · relative time), mental flag pills when the game has them (Tilt, Toxic mates, Leaver, Positive comms), and a side column with round score (`finalScore`, when captured), duration in minutes (when known), and hero pills for every hero played (when any).
@@ -53,7 +61,11 @@
 ## Acceptance Criteria
 
 **List:**
-- Given matches in the filtered range, when Matches renders, then each row shows result, map, role, heroes (or "—"), account, map type, game type, and relative time, newest first, and is clickable.
+- Given matches in the filtered range, when Matches renders, then each row shows result, map, map type, and relative time (always visible), plus whichever of role/heroes/account/SR delta/duration/final score are configured `inline` or `column` — newest first, and every row is clickable.
+- Given default settings and a match with no recorded heroes, when the list renders, then its meta line joins only the non-empty inline segments (e.g. `MyAccount · +25`) with no `—` placeholder and no dangling separators.
+- Given account set to `column` and role set to `inline`, when the list renders and the app is restarted, then account appears as an aligned column (not in the meta line) and role appears inline — in both sessions (persisted via renderer prefs).
+- Given all six configurable fields set to `hidden`, when the list renders, then rows show only the always-visible fields (result, map, map type, relative time) with no empty meta line or spacer.
+- Given a match without SR delta while SR delta is `inline`, when the list renders, then that row omits the SR segment; with SR delta as `column`, the cell is blank but the column stays aligned.
 - Given matches from today and yesterday, then rows sit under "Today" / "Yesterday" headers (older days get a friendly date), each header showing that day's W–L tally and signed net.
 - Given a click on a hero name in a row, then that hero's drill-down drawer opens (no navigation to the detail page); given a click on the map name, then the Maps view opens with that map's bar scrolled into view and flashed.
 - Given no matches in range but games outside it, then "No matches in this range yet." is shown with a "Show all time (N games)" button that resets the range filter, plus a "Log a match" button; given no games at all, only "Log a match" is offered.

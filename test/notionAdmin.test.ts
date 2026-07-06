@@ -253,6 +253,37 @@ describe('NotionAdmin.validate', () => {
     expect(result.mapRelationDbId).toBe('maps-ds-99');
   });
 
+  it('returns per-column subjective diagnostics: wrong-type (actualType), near-miss (actualName), missing, available', async () => {
+    const client = mockClient();
+    client.databases.retrieve.mockResolvedValue({
+      title: [{ plain_text: 'Gametracker' }],
+      data_sources: [{ id: 'ds-id' }],
+    });
+    client.dataSources.retrieve.mockResolvedValue({
+      properties: {
+        Comms: { type: 'rich_text' }, // wrong-type
+        'improvement target': { type: 'select' }, // near-miss (wrong case) for Improvement Target
+        // Leaver: absent, no near-miss → missing
+        Tilt: { type: 'checkbox' }, // available
+        // Toxic Mates: absent, no near-miss → missing
+      },
+    });
+
+    const admin = new NotionAdmin(client);
+    const result = await admin.validate('db-id');
+
+    expect(result.subjectiveColumnDiagnostics).toEqual(
+      expect.arrayContaining([
+        { column: 'Comms', status: 'wrong-type', actualType: 'rich_text' },
+        { column: 'Improvement Target', status: 'near-miss', actualName: 'improvement target' },
+        { column: 'Leaver', status: 'missing' },
+        { column: 'Tilt', status: 'available' },
+        { column: 'Toxic Mates', status: 'missing' },
+      ]),
+    );
+    expect(result.subjectiveColumnDiagnostics).toHaveLength(5);
+  });
+
   it('skips dataSources.retrieve and returns empty properties when the database has no data sources', async () => {
     const client = mockClient();
     client.databases.retrieve.mockResolvedValue({ title: [{ plain_text: 'Empty' }], data_sources: [] });

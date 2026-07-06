@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldLog, classifyGameType, gameTypeLabel } from '../src/core/matchFilter';
-import { emptyMatch, type MatchRecord } from '../src/core/model';
-
-function rec(gameType?: string): MatchRecord {
-  return { ...emptyMatch('m1'), gameType };
-}
+import { isCompetitive, classifyGameType, gameTypeLabel } from '../src/core/matchFilter';
 
 describe('classifyGameType', () => {
   it('classifies the common modes', () => {
@@ -30,19 +25,19 @@ describe('gameTypeLabel', () => {
   });
 });
 
-describe('shouldLog', () => {
-  it('Competitive filter keeps only competitive', () => {
-    expect(shouldLog(rec('Competitive'), 'Competitive')).toBe(true);
-    expect(shouldLog(rec('Quick Play'), 'Competitive')).toBe(false);
-    expect(shouldLog(rec('Arcade'), 'Competitive')).toBe(false);
+describe('isCompetitive', () => {
+  it('is true for competitive game types', () => {
+    expect(isCompetitive('Competitive')).toBe(true);
+    expect(isCompetitive('ranked')).toBe(true);
+    expect(isCompetitive('Ranked')).toBe(true);
   });
-  it('CompetitiveAndQuickPlay keeps both', () => {
-    expect(shouldLog(rec('Competitive'), 'CompetitiveAndQuickPlay')).toBe(true);
-    expect(shouldLog(rec('Quick Play'), 'CompetitiveAndQuickPlay')).toBe(true);
-    expect(shouldLog(rec('Arcade'), 'CompetitiveAndQuickPlay')).toBe(false);
-  });
-  it('Everything keeps all', () => {
-    expect(shouldLog(rec('Arcade'), 'Everything')).toBe(true);
-    expect(shouldLog(rec(undefined), 'Everything')).toBe(true);
+  it('is false for quick-play, arcade, stadium, custom, other, and undefined', () => {
+    expect(isCompetitive('Quick Play')).toBe(false);
+    expect(isCompetitive('Unranked')).toBe(false);
+    expect(isCompetitive('Arcade')).toBe(false);
+    expect(isCompetitive('Stadium')).toBe(false);
+    expect(isCompetitive('custom game')).toBe(false);
+    expect(isCompetitive('Mystery Heroes')).toBe(false);
+    expect(isCompetitive(undefined)).toBe(false);
   });
 });
