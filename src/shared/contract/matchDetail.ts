@@ -73,7 +73,9 @@ export interface MatchDetail {
    * Competitive progress. 'calculated' = derived from the user's rank anchor +
    * logged SR deltas (the real path once an anchor exists); 'estimate' = the
    * winrate heuristic fallback; 'reported' is reserved for a future GEP upgrade.
-   * `progressPct` is 0–100 within the division; `delta` is signed %-points.
+   * `progressPct` is 0–100 within the division, except it can go negative while
+   * `protected` is true — the rank-protection buffer's carry (calculated), matching the
+   * live client's own negative display. `delta` is signed %-points.
    * `protected`/`needsReanchor` describe the rank-protection state (calculated).
    */
   competitive?: {

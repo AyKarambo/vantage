@@ -57,23 +57,42 @@ describe('rank engine — promotion (division decreases toward 1)', () => {
 });
 
 describe('rank engine — rank protection', () => {
-  it('a loss that would drop below 0% holds the division at 0% and protects it', () => {
+  it('a loss that would drop below 0% holds the division and keeps the negative carry', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20)]);
-    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 0 });
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -10 });
     expect(s.protected).toBe(true);
     expect(s.needsReanchor).toBe(false);
   });
 
-  it('a win while protected clears protection and climbs from 0%', () => {
+  it('a win while protected pays down the negative carry before climbing', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), win(25)]);
-    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 25 });
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 15 }); // -10 + 25
     expect(s.protected).toBe(false);
   });
 
-  it('a draw counts as "not losing" — it keeps the rank and clears protection', () => {
+  it('a win that does not fully clear the carry stays protected', () => {
+    const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), win(6)]);
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -4 }); // -10 + 6
+    expect(s.protected).toBe(true);
+    expect(s.needsReanchor).toBe(false);
+  });
+
+  it('regression: a protected loss\'s negative carry offsets the next win\'s gain', () => {
+    // Reported bug: game showed -19% while protected; next match won +26%, and the
+    // app added the full +26% on top of 0 instead of the -19% carry (should land at 7%).
+    const afterLoss = computeRank(anchorAt('Gold', 3, 1), [loss(-20)]);
+    expect(pos(afterLoss)).toEqual({ tier: 'Gold', division: 3, progressPct: -19 });
+    expect(afterLoss.protected).toBe(true);
+
+    const afterWin = computeRank(anchorAt('Gold', 3, 1), [loss(-20), win(26)]);
+    expect(pos(afterWin)).toEqual({ tier: 'Gold', division: 3, progressPct: 7 }); // -19 + 26
+    expect(afterWin.protected).toBe(false);
+  });
+
+  it('a draw does not fabricate a climb — it neither clears protection nor loses ground', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), draw(0)]);
-    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 0 });
-    expect(s.protected).toBe(false);
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -10 });
+    expect(s.protected).toBe(true);
   });
 
   it('a second loss while protected demotes one division and flags a re-anchor', () => {
