@@ -2,6 +2,7 @@ import { APIResponseError, APIErrorCode, Client } from '@notionhq/client';
 import { emptyMatch, type MatchRecord, type Result } from '../core/model';
 import type { GameRecord, MatchMental } from '../core/analytics';
 import { leaverFlags, mergeLeaver } from '../core/leaver';
+import { commsTone } from '../core/comms';
 import { aggregateImprovementGrade, matchExportSignature, NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { NotionWriter } from './notionWriter';
 import { queryAllPages, queryDataSourcePages } from './pageScan';
@@ -408,7 +409,8 @@ export function exportMental(game: GameRecord): MatchMental | undefined {
   const mental: MatchMental = {};
   if (a?.tilt || b?.tilt) mental.tilt = true;
   if (a?.toxicMates || b?.toxicMates) mental.toxicMates = true;
-  if (a?.positiveComms || b?.positiveComms) mental.positiveComms = true;
+  const tone = commsTone(a) ?? commsTone(b);
+  if (tone) mental.comms = tone;
   if (leaver.myTeam) mental.leaverMyTeam = true;
   if (leaver.enemyTeam) mental.leaverEnemyTeam = true;
   return Object.keys(mental).length ? mental : undefined;

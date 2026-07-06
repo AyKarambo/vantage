@@ -93,13 +93,20 @@ export function applyMatch(state: RankState, match: RankMatchInput): RankState {
   return { ...applyGain(state, next), protected: false, needsReanchor: false };
 }
 
-/** Start a fresh live state from an anchor position. */
+/**
+ * Start a fresh live state from an anchor position. A negative `progressPct` is
+ * a rank-protection carry (the buffer OW2 shows as e.g. "-19%") — it is kept as
+ * the true negative value and marks the state `protected`, so the next match's
+ * delta pays it down exactly as a live protected loss does. Non-negative values
+ * clamp into `[0,100]` and stay unprotected, as before.
+ */
 export function stateFromAnchor(anchor: RankAnchor): RankState {
+  const p = clamp(anchor.progressPct, -100, 100);
   return {
     tier: anchor.tier,
     division: clamp(anchor.division, 1, 5),
-    progressPct: clamp(anchor.progressPct, 0, 100),
-    protected: false,
+    progressPct: p,
+    protected: p < 0,
     needsReanchor: false,
   };
 }

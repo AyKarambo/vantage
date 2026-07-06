@@ -141,7 +141,7 @@ describe('mentalSummary — review-flag merge', () => {
       game({ result: 'Loss', review: review({}, { tilt: true, leaver: true }) }),
     ];
     const m = mentalSummary(games);
-    expect(m.flags).toEqual({ tilt: 2, toxicMates: 1, leaver: 1, leaverMyTeam: 1, leaverEnemyTeam: 0, positiveComms: 1 });
+    expect(m.flags).toEqual({ tilt: 2, toxicMates: 1, leaver: 1, leaverMyTeam: 1, leaverEnemyTeam: 0, positiveComms: 1, abusive: 0 });
     expect(m.winWhenTilted).toBe(0);
     expect(m.winWhenCalm).toBe(1);
   });
@@ -165,7 +165,7 @@ describe('mentalSummary — review-flag merge', () => {
       }),
     ];
     const m = mentalSummary(games);
-    expect(m.flags).toEqual({ tilt: 1, toxicMates: 1, leaver: 1, leaverMyTeam: 1, leaverEnemyTeam: 0, positiveComms: 0 });
+    expect(m.flags).toEqual({ tilt: 1, toxicMates: 1, leaver: 1, leaverMyTeam: 1, leaverEnemyTeam: 0, positiveComms: 0, abusive: 0 });
   });
 
   it('includes games tilted via either source in winWhenTilted', () => {

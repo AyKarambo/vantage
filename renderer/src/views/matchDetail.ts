@@ -12,10 +12,12 @@ import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
 import { button, card, pill, RESULT_STATE, segmented, select, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { paintHeroChips } from '../components/heroPicker';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
 import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
+import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { MAP_MODES } from '../../../src/core/maps';
 import { PALETTE } from '../theme';
@@ -133,7 +135,10 @@ function mentalFlags(d: MatchDetail): HTMLElement | null {
   if (m.toxicMates) flags.push(pill('Toxic mates', 'loss'));
   if (lv.myTeam) flags.push(pill('Leaver — my team', 'draw'));
   if (lv.enemyTeam) flags.push(pill('Leaver — enemy', 'draw'));
-  if (m.positiveComms) flags.push(pill('Positive comms', 'win'));
+  const tone = commsTone(m);
+  if (tone === 'positive') flags.push(pill('Positive comms', 'win'));
+  else if (tone === 'banter') flags.push(pill('Banter', 'draw'));
+  else if (tone === 'abusive') flags.push(pill('Abusive comms', 'loss'));
   return flags.length ? h('div', { class: 'detail-flags' }, ...flags) : null;
 }
 
@@ -209,9 +214,14 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
       c.needsReanchor
         ? h('div', { class: 'hint', style: { color: 'var(--loss-text)' } },
             'Demoted after a protected loss — set your new rank on the Settings › Accounts panel to resume tracking.')
-        : withinDivision != null
-          ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
-          : null,
+        : c.protected
+          // Protected = a negative carry; a clamped division bar labelled "-19%"
+          // reads as broken, so show the buffer state as a hint instead.
+          ? h('div', { class: 'hint' },
+              `Holding the division — ${Math.round(c.progressPct ?? 0)}% into the rank-protection buffer.`)
+          : withinDivision != null
+            ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
+            : null,
       // The SR change logged for this specific match (calculated path).
       c.note === 'calculated' && srDelta != null
         ? h('span', {
@@ -238,7 +248,11 @@ function editorSection(label: string, body: Node): HTMLElement {
   );
 }
 
-/** Fold a legacy `leaver` boolean into the my-team flag so its chip pre-selects. */
+/**
+ * Fold a legacy `leaver` boolean into the my-team flag so its chip pre-selects.
+ * The comms tone is left untouched — the "Good comms" chip reads/writes it
+ * directly (see reviewControls), so banter/abusive survive an unrelated edit.
+ */
 function normalizeFlags(m: MatchMental): MatchMental {
   const out: MatchMental = { ...m };
   if (out.leaver && !out.leaverMyTeam) out.leaverMyTeam = true;
@@ -264,11 +278,18 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
   const editable = d.source === 'manual';
   const isComp = classifyGameType(d.gameType) === 'competitive';
-  const state = { result: d.result, role: d.role, map: d.map, hero: d.heroes[0] ?? '' };
+  const state = { result: d.result, role: d.role, map: d.map };
+  // Full hero set (a hand-logged match can have several) — a role-filtered chip
+  // grid, so editing never collapses the list to just the first hero.
+  const heroes = new Set<string>(d.heroes);
   let srDelta: number | undefined = d.srDelta;
 
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
+
+    const heroEditHost = h('div');
+    const paintEditorHeroes = (): void => paintHeroChips(heroEditHost, heroes, state.role);
+    paintEditorHeroes();
 
     const factsBlock = editable
       ? h('div', { class: 'stack', style: { gap: '12px' } },
@@ -276,10 +297,11 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
             options: RESULT_OPTS, value: state.result, fill: true, onChange: (v) => (state.result = v),
           })),
           editField('Role', segmented({
-            options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => (state.role = v),
+            // Role filters the hero grid — repaint it when the role changes.
+            options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => { state.role = v; paintEditorHeroes(); },
           })),
           editField('Map', select(MAP_OPTS, state.map, (v) => (state.map = v))),
-          editField('Hero', heroInput(state.hero, (v) => (state.hero = v))),
+          editField('Heroes', heroEditHost),
           // No Mode control — Vantage is competitive-only (spec D1); matches stay
           // competitive, mirroring the quick-log's removed mode picker.
         )
@@ -293,7 +315,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
     const save = (): void => {
       void bridge.editMatch({
         matchId: d.matchId,
-        ...(editable ? { result: state.result, role: state.role, map: state.map, hero: state.hero.trim() } : {}),
+        ...(editable ? { result: state.result, role: state.role, map: state.map, heroes: [...heroes] } : {}),
         mental: flags,
         // number sets, null clears (blanked field), field omitted for non-comp.
         ...(isComp ? { srDelta: srDelta ?? null } : {}),
@@ -334,15 +356,6 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
       ),
     );
   });
-}
-
-/** A plain text input for the (optional) hero name. */
-function heroInput(value: string, onChange: (v: string) => void): HTMLInputElement {
-  const el = h('input', {
-    class: 'vt-input', type: 'text', value, placeholder: 'e.g. Tracer',
-    on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
-  }) as HTMLInputElement;
-  return el;
 }
 
 /** A signed number input for the per-match skill-rating %; blank → undefined. */

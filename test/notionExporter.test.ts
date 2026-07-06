@@ -987,7 +987,7 @@ describe('exportMental', () => {
       mental: { positiveComms: true },
       review: { at: 1, grades: {}, flags: { tilt: true, leaver: true } },
     } as GameRecord;
-    expect(exportMental(g)).toEqual({ tilt: true, positiveComms: true, leaverMyTeam: true });
+    expect(exportMental(g)).toEqual({ tilt: true, comms: 'positive', leaverMyTeam: true });
   });
 
   it('is undefined when nothing was flagged', () => {
@@ -1034,7 +1034,7 @@ describe('export → import round-trip', () => {
     expect(back.map).toBe('Ilios');
     expect(back.result).toBe('Win');
     expect(back.role).toBe('damage');
-    expect(back.mental).toMatchObject({ positiveComms: true, tilt: true, leaverMyTeam: true });
+    expect(back.mental).toMatchObject({ comms: 'positive', tilt: true, leaverMyTeam: true });
     expect(back.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('partial');
   });
 

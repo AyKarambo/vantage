@@ -298,7 +298,7 @@ const mock: OwStatsApi = {
       result: input.result,
       gameType: input.gameType,
       source: 'manual',
-      heroes: input.hero ? [input.hero] : [],
+      heroes: input.heroes ?? (input.hero ? [input.hero] : []),
       mental: input.mental,
       ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
     });
@@ -318,7 +318,8 @@ const mock: OwStatsApi = {
       if (input.role !== undefined) patch.role = input.role;
       if (input.map !== undefined) patch.map = input.map;
       if (input.gameType !== undefined) patch.gameType = input.gameType;
-      if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
+      if (input.heroes !== undefined) patch.heroes = input.heroes;
+      else if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
     }
     if (input.mental !== undefined) patch.mental = input.mental;
     if (input.srDelta !== undefined) {
