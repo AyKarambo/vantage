@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
+import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSettings } from '../../core/readiness';
@@ -9,6 +10,7 @@ import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
   MatchEditInput, RankAnchorInput, RendererErrorInput, ReviewInput, TargetEditInput,
+  HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
@@ -65,26 +67,41 @@ function on(
 export function registerDashboardIpc(provider: DataProvider): void {
   const ch = IPC_CHANNELS;
   handle(ch.getDashboard, (_e, filters: DashboardFilters) =>
-    computeDashboard(provider.games(), filters ?? {}, provider.demoContext(), {
-      targets: provider.manualTargets(),
-      breakReminder: provider.getBreakReminder(),
-      readiness: provider.getReadiness(),
-      rankAnchors: provider.rankAnchorMap(),
-    }),
+    computeDashboard(
+      provider.games(),
+      filters ?? {},
+      provider.demoContext(),
+      {
+        targets: provider.manualTargets(),
+        breakReminder: provider.getBreakReminder(),
+        readiness: provider.getReadiness(),
+        rankAnchors: provider.rankAnchorMap(),
+      },
+      provider.effectiveMasterData(),
+    ),
   );
+  // Every filter-scoped read must resolve a `{ season: id }` filter against the
+  // SAME effective season starts computeDashboard uses (so a user-added,
+  // off-cadence season resolves to its window instead of silently falling back
+  // to the 30-day default). `seasonStarts()` pulls them from the effective
+  // master data, exactly as the dashboard payload does.
+  const seasonStarts = (): number[] => provider.effectiveMasterData().seasons.map((s) => s.start);
   handle(ch.exportNotion, async (_e, filters: DashboardFilters) => {
     if (!provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
-    return provider.exportToNotion(applyFilters(competitiveOnly(provider.games()), filters ?? {}));
+    return provider.exportToNotion(applyFilters(competitiveOnly(provider.games()), filters ?? {}, seasonStarts()));
   });
   handle(ch.heroDetail, (_e, hero: string, filters: DashboardFilters) =>
-    heroDetail(applyFilters(competitiveOnly(provider.games()), filters ?? {}), hero),
+    heroDetail(applyFilters(competitiveOnly(provider.games()), filters ?? {}, seasonStarts()), hero),
   );
   // Looked up in the full (competitive-only) history (a row must open even
   // after filters move on); the competitive-estimate CONTEXT is scoped to
   // the current filter set, on top of the same competitive-only gate.
   handle(ch.matchDetail, (_e, matchId: string, filters: DashboardFilters) => {
     const games = competitiveOnly(provider.games());
-    return matchDetail(games, matchId, applyFilters(games, filters ?? {}), provider.rankAnchorMap());
+    const master = provider.effectiveMasterData();
+    const mapModeOf = makeMapMode(master.maps);
+    const filtered = applyFilters(games, filters ?? {}, master.seasons.map((s) => s.start));
+    return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf);
   });
 
   // Notion sync screen.
@@ -178,6 +195,17 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.clearReview, (_e, matchId: string) => {
     provider.clearReview(matchId);
   });
+
+  // Editable master data (heroes/maps/seasons) + the Update fetch.
+  handle(ch.masterDataGet, () => provider.effectiveMasterData());
+  handle(ch.masterDataUpsertHero, (_e, entry: HeroEntry) => provider.masterDataUpsertHero(entry));
+  handle(ch.masterDataRemoveHero, (_e, name: string) => provider.masterDataRemoveHero(name));
+  handle(ch.masterDataUpsertMap, (_e, entry: MapEntry) => provider.masterDataUpsertMap(entry));
+  handle(ch.masterDataRemoveMap, (_e, name: string) => provider.masterDataRemoveMap(name));
+  handle(ch.masterDataUpsertSeason, (_e, entry: SeasonEntry) => provider.masterDataUpsertSeason(entry));
+  handle(ch.masterDataRemoveSeason, (_e, id: string) => provider.masterDataRemoveSeason(id));
+  handle(ch.masterDataFetchUpdate, () => provider.masterDataFetchUpdate());
+  handle(ch.masterDataApplyUpdate, (_e, accepted: AcceptedUpdate) => provider.masterDataApplyUpdate(accepted));
 }
 
 /** Window actions the title-bar channels drive, provided as closures over the owning window. */

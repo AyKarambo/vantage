@@ -11,6 +11,7 @@ import type { TargetSummary } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { DemoPreference } from '../../core/demoPreference';
+import type { MasterData } from './masterData';
 
 /** The filters every view is scoped by, chosen in the app shell. */
 export interface DashboardFilters {
@@ -114,6 +115,13 @@ export interface DashboardData {
   reviewInbox: MatchRow[];
   /** Total ungraded count (the badge) — unfiltered and uncapped. */
   pendingReviews: number;
+  /**
+   * The effective editable master data (heroes/maps/seasons) — bundled defaults
+   * ⊕ the user's overrides. Rides on the dashboard payload so renderer views
+   * (log-match typeahead, match-detail dropdown, overview scatter) read the
+   * live catalog from `ctx.data.masterData` instead of static imports.
+   */
+  masterData: MasterData;
   /** The effective break-reminder settings, so views render synchronously. */
   breakReminder: BreakReminderSettings;
   /** Readiness / training-load verdict — computed over the UNFILTERED history (fatigue is per-person). */

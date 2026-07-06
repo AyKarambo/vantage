@@ -1,7 +1,7 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h } from '../dom';
 import type { DashboardData, Group, SessionRecap } from '../../../src/shared/contract';
-import { mapMode } from '../../../src/core/maps';
+import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, rankLabel, signed, streakText } from '../format';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
@@ -128,7 +128,7 @@ function rankKpi(d: DashboardData): HTMLElement {
 
 function scatterCard(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
-  const points = toScatter(d.byMap);
+  const points = toScatter(d.byMap, makeMapMode(d.masterData.maps));
   const focus = d.focusMaps.filter((f) => f.net > 0).slice(0, 3);
 
   const callouts = h('div', { class: 'scatter-callouts' },
@@ -236,7 +236,7 @@ function readinessCard(ctx: ViewContext): HTMLElement | null {
 
 // --- helpers ----------------------------------------------------------------
 
-function toScatter(byMap: Group[]): ScatterPoint[] {
+function toScatter(byMap: Group[], mapModeOf: (name: string) => string): ScatterPoint[] {
   // Most-played first, so the legend leads with the relevant maps and each map
   // gets a stable colour shared by its dot and its legend swatch.
   return [...byMap]
@@ -246,7 +246,7 @@ function toScatter(byMap: Group[]): ScatterPoint[] {
       return {
         name: m.key,
         short: shorten(m.key),
-        mode: mapMode(m.key),
+        mode: mapModeOf(m.key),
         color: CATEGORICAL[i % CATEGORICAL.length],
         winrate: m.winrate,
         volume: m.games,

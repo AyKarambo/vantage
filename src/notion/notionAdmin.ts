@@ -40,7 +40,16 @@ export interface ValidateResult extends ShapeValidation {
  * mock (see `test/notionAdmin.test.ts`) without ever touching the network.
  */
 export class NotionAdmin {
-  constructor(private readonly client: Client) {}
+  /**
+   * `mapNames` is the effective map catalog to seed the Maps DB with — ALL maps,
+   * active and inactive (spec AC 32), so historical matches on a now-inactive map
+   * still relate to a Maps page. Defaults to the built-in table for callers (and
+   * tests) that don't inject effective master data.
+   */
+  constructor(
+    private readonly client: Client,
+    private readonly mapNames: readonly string[] = Object.keys(MAP_MODES),
+  ) {}
 
   /**
    * Databases the integration has been shared with. v5's search only returns data
@@ -90,7 +99,7 @@ export class NotionAdmin {
     });
     const mapsSourceId = firstDataSourceId(mapsDb, 'Maps');
 
-    for (const name of Object.keys(MAP_MODES)) {
+    for (const name of this.mapNames) {
       await this.client.pages.create({
         parent: { type: 'data_source_id', data_source_id: mapsSourceId },
         properties: { Name: { title: [{ text: { content: name } }] } },

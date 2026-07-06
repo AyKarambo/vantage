@@ -50,6 +50,12 @@ export interface NotionRuntimeDeps {
    * an empty set so callers that don't yet wire targets still compile.
    */
   authoredTargetIds?: () => ReadonlySet<string>;
+  /**
+   * The effective map names (active + inactive) to seed a freshly auto-created
+   * Maps database with, so historical matches on any map still relate to a page
+   * (spec AC 32). Defaults to the built-in table when unset.
+   */
+  mapNames?: () => readonly string[];
 }
 
 /**
@@ -105,7 +111,7 @@ export class NotionRuntime {
       return;
     }
     this.client = new Client({ auth: token, notionVersion: NOTION_API_VERSION });
-    this.admin = new NotionAdmin(this.client);
+    this.admin = new NotionAdmin(this.client, this.deps.mapNames?.());
     const maps = this.buildExporter();
     this.deps.onTokenState(true);
     maps?.load().catch((err) => this.deps.onError('Maps load failed', String(err)));

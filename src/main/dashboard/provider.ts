@@ -9,6 +9,7 @@ import type {
   DataLocation, DataLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
   RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
+  MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
 } from '../../shared/contract';
 
 /**
@@ -110,4 +111,22 @@ export interface DataProvider {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
+  /** The effective master data (defaults ⊕ overrides) — feeds the dashboard read + the editor. */
+  effectiveMasterData(): MasterData;
+  /** Add/edit a hero; persists the delta and returns the new effective master data. */
+  masterDataUpsertHero(entry: HeroEntry): MasterData;
+  /** Remove a hero (tombstone a built-in, or drop a user addition). */
+  masterDataRemoveHero(name: string): MasterData;
+  /** Add/edit a map (name/mode/isActive). */
+  masterDataUpsertMap(entry: MapEntry): MasterData;
+  /** Remove a map (history unaffected; suggestions/generator exclude it). */
+  masterDataRemoveMap(name: string): MasterData;
+  /** Add/edit a season (start + label). */
+  masterDataUpsertSeason(entry: SeasonEntry): MasterData;
+  /** Remove a season by its `S:<iso>` id. */
+  masterDataRemoveSeason(id: string): MasterData;
+  /** Fetch the online catalog and diff vs current — the Update preview (no persist). */
+  masterDataFetchUpdate(): Promise<UpdatePreview>;
+  /** Persist the accepted subset of an Update preview; returns the new effective master data. */
+  masterDataApplyUpdate(accepted: AcceptedUpdate): MasterData;
 }
