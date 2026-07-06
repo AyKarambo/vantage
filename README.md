@@ -89,11 +89,21 @@ comms · toxicity · leavers · your improvement target).
   graded in Notion (`Improvement Target`) now **merges into the existing local match**
   instead of leaving it stuck in the pending queue — as hidden bookkeeping, so it never
   shows up as an extra target on the Targets or Review screens; a local review or mental
-  record you already entered always wins over what's in Notion. Opening the Notion
-  screen also shows a **per-column status** for the five optional subjective columns
-  (Comms, Improvement Target, Leaver, Tilt, Toxic Mates): available, or skipped with a
-  reason (missing, wrong type, or a near-miss name like `comms ` you probably meant).
-  Only the manual **Sync** button ever sends data outbound — no automatic traffic.
+  record you already entered always wins over what's in Notion. Sync and import are
+  **duplicate-proof by construction**: importing a hand-added row (one with an empty
+  `Match ID` cell) **writes the generated match id back onto the row**, so the row itself
+  carries the link from then on; and before ever creating a row, Sync **scans the
+  database for an existing match** (by `Match ID` cell, or — for hand-added rows — by the
+  id derived from the page itself) and updates it in place instead of re-creating it,
+  even after a reinstall or on a new machine. If duplicates already crept in, the import
+  summary reports them and a **"Clean up duplicate rows"** action (explicit, behind a
+  confirm) keeps one row per match and moves the redundant copies to Notion's trash
+  (restorable for ~30 days) — nothing in Notion is ever archived without that click.
+  Opening the Notion screen also shows a **per-column status** for the five optional
+  subjective columns (Comms, Improvement Target, Leaver, Tilt, Toxic Mates): available,
+  or skipped with a reason (missing, wrong type, or a near-miss name like `comms ` you
+  probably meant). Only the manual **Sync**, **Import** and **Clean up** buttons ever
+  send data outbound — no automatic traffic.
 
 Vantage tracks **competitive matches only** — quick play and arcade games are never recorded,
 live or manually logged, so every stat, count, and export is competitive by construction (existing

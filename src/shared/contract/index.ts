@@ -36,7 +36,7 @@ export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetai
 // Notion export/import payloads
 export type {
   ExportResult, ImportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus, SyncProgress,
-  SubjectiveColumnStatus, SubjectiveColumnDiag,
+  SubjectiveColumnStatus, SubjectiveColumnDiag, CleanupDuplicatesResult,
 } from './notion';
 
 // Manual-entry inputs

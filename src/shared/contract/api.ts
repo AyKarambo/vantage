@@ -8,7 +8,10 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
-import type { ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress } from './notion';
+import type {
+  ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress,
+  CleanupDuplicatesResult,
+} from './notion';
 import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
@@ -43,6 +46,12 @@ export interface OwStatsApi {
   importNotion(): Promise<ImportResult>;
   /** Delete every match that came from a Notion import (for a clean re-import); returns how many were removed. */
   deleteImportedMatches(): Promise<{ deleted: number }>;
+  /**
+   * Explicit action: archives redundant duplicate rows (Notion trash,
+   * restorable) in the configured Gametracker database, keeping one canonical
+   * row per match. Never run implicitly by import or export.
+   */
+  cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
   /** Persist a new authored improvement target. */
   saveTarget(input: AuthoredTargetInput): Promise<void>;
   /** Persist the manual review (grades + flags) onto a tracked match. */
@@ -147,6 +156,7 @@ export const IPC_CHANNELS = {
   setRankAnchor: 'rank:set-anchor',
   importNotion: 'notion:import',
   deleteImportedMatches: 'notion:delete-imported',
+  cleanupNotionDuplicates: 'notion:cleanup-duplicates',
   saveTarget: 'manual:save-target',
   saveReview: 'manual:save-review',
   importReviews: 'manual:import-reviews',

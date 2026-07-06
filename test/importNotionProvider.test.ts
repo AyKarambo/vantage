@@ -24,7 +24,9 @@ function plainGame(matchId: string): GameRecord {
  * real state and both counters are real. `import` returns the same rows each
  * call — imports are full re-scans.
  */
-function harness(games: GameRecord[], failed = 0, initialAccounts: Record<string, string> = { You: 'You' }) {
+function harness(
+  games: GameRecord[], failed = 0, initialAccounts: Record<string, string> = { You: 'You' }, duplicates = 0,
+) {
   const stored: GameRecord[] = [];
   const targets: AuthoredTarget[] = [];
   let accounts: Record<string, string> = { ...initialAccounts };
@@ -36,7 +38,7 @@ function harness(games: GameRecord[], failed = 0, initialAccounts: Record<string
   const persistAccounts = vi.fn((a: Record<string, string>) => { accounts = a; });
   const clearExports = vi.fn();
   const deps = {
-    notion: { import: async () => ({ games, failed }), clearExports },
+    notion: { import: async () => ({ games, failed, duplicates }), clearExports },
     history: {
       all: () => [...stored],
       addMany: (gs: GameRecord[]) => {
@@ -181,6 +183,20 @@ describe('importNotion — merge on re-import (B1)', () => {
     await provider.importNotion();
     await provider.importNotion();
     expect(getStored()).toHaveLength(1);
+  });
+});
+
+describe('importNotion — duplicates passthrough', () => {
+  it('surfaces the runtime-reported duplicate count on the result', async () => {
+    const { provider } = harness([gradedGame('m1')], 0, { You: 'You' }, 2);
+    const res = await provider.importNotion();
+    expect(res.duplicates).toBe(2);
+  });
+
+  it('omits duplicates from the result when the runtime reports none', async () => {
+    const { provider } = harness([gradedGame('m1')], 0, { You: 'You' }, 0);
+    const res = await provider.importNotion();
+    expect(res.duplicates).toBeUndefined();
   });
 });
 

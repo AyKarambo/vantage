@@ -4,23 +4,43 @@ import type { Result, Role } from '../core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { gameTypeLabel } from '../core/matchFilter';
 import { resolveDataSourceId } from './dataSourceResolver';
+import { queryDataSourcePages } from './pageScan';
+import { effectiveMatchId, groupByEffectiveMatchId, pickCanonicalRow, rowRefOf } from './dedup';
 
 /**
  * Reads rows from a Notion Gametracker database back into local {@link GameRecord}s
  * — the inverse of {@link NotionWriter}. Best-effort and per-row isolated: a row
- * that can't be mapped is counted as failed, not fatal. Rows are keyed by their
- * stored Match ID for de-duplication upstream; a hand-added row (no Match ID)
- * becomes a manual (◎) record with a fresh `manual-notion-*` id, while a row
- * carrying a real GEP Match ID restores as an auto-tracked (⚡) record.
+ * that can't be mapped is counted as failed, not fatal. A hand-added row (no
+ * Match ID) becomes a manual (◎) record keyed by the derived
+ * `manual-notion-<page id>` id ({@link effectiveMatchId}); a row carrying a real
+ * GEP Match ID restores as an auto-tracked (⚡) record.
  *
  * Each game also carries the Notion `pageId` it was read from (`page.id`), so
  * callers can thread it into `OutboxStore.recordImported` — an imported-then-
  * edited row updates its existing page in place instead of being re-created by
  * a later export.
+ *
+ * Two duplicate-handling passes run after the row-by-row mapping
+ * (`specs/notion-sync-dedup.spec.md`):
+ *  - **Canonical dedupe.** When several rows share an effective match id (the
+ *    shape existing duplicates have: an original hand row + a re-created copy
+ *    whose `Match ID` cell embeds the hand row's derived id), only the
+ *    canonical row's game is returned — picked via {@link pickCanonicalRow},
+ *    preferring whichever page the local ledger already points at
+ *    (`ledgeredPageIdFor`) when the embedded-id rule doesn't resolve it. The
+ *    rest are dropped from `games` and counted in `duplicates`, never stamped.
+ *  - **Match ID write-back.** Each *returned* game whose row had no `Match ID`
+ *    text gets that cell stamped with its derived id via `pages.update`, so a
+ *    future ledger loss can still find the row (AC1). Per-row try/catch: a
+ *    failed stamp changes nothing else about the row's import (AC2) — it is
+ *    not counted in `failed`.
  */
 export interface ImportOutcome {
   games: Array<GameRecord & { pageId: string }>;
   failed: number;
+  /** Redundant copies collapsed into their canonical row across all groups —
+   *  see the canonical-dedupe pass above. 0 when no row shared a match id. */
+  duplicates: number;
 }
 
 const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
@@ -49,6 +69,14 @@ export class NotionImporter {
     private readonly client: Client,
     private readonly gametrackerDatabaseId: string,
     private readonly mapsDatabaseId?: string,
+    /**
+     * Ledger lookup consulted for canonical-row selection when a duplicate
+     * group's embedded-id rule doesn't resolve it (`pickCanonicalRow`'s second
+     * precedence tier) — `NotionRuntime` passes `outbox.pageIdFor(id, dbId)`.
+     * Optional so existing call sites (and tests) that don't care about the
+     * ledger-preference tiebreak keep compiling unchanged.
+     */
+    private readonly ledgeredPageIdFor?: (matchId: string) => string | undefined,
   ) {}
 
   async import(): Promise<ImportOutcome> {
@@ -65,35 +93,80 @@ export class NotionImporter {
     // `NotionRuntime.import` already try/catches this into `{ error }`, which the
     // sync card renders red, restoring the pre-migration surfaced-failure behavior.
     const pages = await this.queryAll(this.gametrackerDatabaseId);
-    const games: Array<GameRecord & { pageId: string }> = [];
+    // Keyed by pageId so the canonical-dedupe pass below can map a picked
+    // RowRef (built straight off the raw page, like the exporter/cleanup do)
+    // back to its already-mapped game without re-mapping the page.
+    const mapped = new Map<string, { game: GameRecord; hadMatchIdText: boolean }>();
+    const rows: ReturnType<typeof rowRefOf>[] = [];
     let failed = 0;
     for (const page of pages) {
       try {
-        const game = toGame(page, mapsById);
-        if (game) games.push({ ...game, pageId: String(page.id) });
-        else failed++;
+        const { game, hadMatchIdText } = toGame(page, mapsById);
+        if (game) {
+          mapped.set(String(page.id), { game, hadMatchIdText });
+          rows.push(rowRefOf(page));
+        } else failed++;
       } catch {
         failed++;
       }
     }
-    return { games, failed };
+
+    // Canonical dedupe: several rows can share an effective match id (an
+    // original hand row + a re-created copy). Keep only the canonical row's
+    // game per group; count the rest as duplicates instead of importing them.
+    const games: Array<GameRecord & { pageId: string }> = [];
+    let duplicates = 0;
+    for (const [matchId, group] of groupByEffectiveMatchId(rows)) {
+      const canonical =
+        group.length === 1
+          ? group[0]
+          : pickCanonicalRow(group, { ledgeredPageId: this.ledgeredPageIdFor?.(matchId) });
+      duplicates += group.length - 1;
+      const entry = mapped.get(canonical.pageId)!;
+      games.push({ ...entry.game, pageId: canonical.pageId });
+    }
+
+    await this.stampMatchIds(games, mapped);
+
+    return { games, failed, duplicates };
   }
 
-  /** Resolve `id` (database or already-a-data-source id, memoized) then page through `dataSources.query`. */
+  /**
+   * Best-effort write-back (AC1/AC2): stamps the derived `manual-notion-*` id
+   * into a returned row's `Match ID` cell when it had none. Per-row try/catch
+   * — a failed stamp must not fail the row's import or be counted in
+   * `failed` (the row already imported successfully; only the write-back is
+   * skipped). Never called for rows dropped as duplicates or rows whose cell
+   * already carried text.
+   */
+  private async stampMatchIds(
+    games: Array<GameRecord & { pageId: string }>,
+    mapped: Map<string, { game: GameRecord; hadMatchIdText: boolean }>,
+  ): Promise<void> {
+    for (const g of games) {
+      const entry = mapped.get(g.pageId);
+      if (!entry || entry.hadMatchIdText) continue;
+      try {
+        await this.client.pages.update({
+          page_id: g.pageId,
+          properties: { 'Match ID': { rich_text: [{ text: { content: g.matchId } }] } },
+        } as any);
+      } catch {
+        // Best-effort: a stamp failure never affects the row's import outcome.
+      }
+    }
+  }
+
+  /**
+   * Resolve `id` via the per-instance memo, then page through the shared
+   * {@link queryDataSourcePages} loop with the already-resolved data source
+   * id — the memo-free `queryAllPages` would re-resolve on every call,
+   * defeating the "one `databases.retrieve` per configured id" guarantee
+   * (see `resolvedIds`).
+   */
   private async queryAll(id: string): Promise<any[]> {
     const dataSourceId = await this.resolve(id);
-    const results: any[] = [];
-    let cursor: string | undefined;
-    do {
-      const res: any = await this.client.dataSources.query({
-        data_source_id: dataSourceId,
-        start_cursor: cursor,
-        page_size: 100,
-      });
-      results.push(...(res.results ?? []));
-      cursor = res.has_more ? res.next_cursor ?? undefined : undefined;
-    } while (cursor);
-    return results;
+    return queryDataSourcePages(this.client, dataSourceId);
   }
 
   /** `resolveDataSourceId`, memoized per configured id so it only runs once per import. */
@@ -134,12 +207,18 @@ export class NotionImporter {
   }
 }
 
-/** Map one Gametracker page to a GameRecord; null when it can't be mapped meaningfully. */
-function toGame(page: any, mapsById: Record<string, string>): GameRecord | null {
+/**
+ * Map one Gametracker page to a GameRecord; null when it can't be mapped
+ * meaningfully. Also reports `hadMatchIdText` — whether the row's `Match ID`
+ * cell carried non-blank text BEFORE this import — so the caller can decide
+ * whether the row needs its id stamped back (write-back never touches a row
+ * that already had one, and never touches a row dropped as a duplicate).
+ */
+function toGame(page: any, mapsById: Record<string, string>): { game: GameRecord | null; hadMatchIdText: boolean } {
   const props = page?.properties ?? {};
 
   const result = RESULTS.find((r) => r === pickSelect(props['Result']));
-  if (!result) return null; // Result is essential — a row without it is not a match.
+  if (!result) return { game: null, hadMatchIdText: false }; // Result is essential — a row without it is not a match.
 
   const roleSel = (pickSelect(props['Role']) ?? '').toLowerCase();
   const role = ROLES.find((r) => r.toLowerCase() === roleSel) ?? 'damage';
@@ -149,7 +228,9 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
   const gameType = gameTypeSel ? gameTypeLabel(gameTypeSel) : 'Competitive';
   const mapRel = pickRelationId(props['Map']);
   const map = (mapRel && mapsById[mapRel]) || mapFromTitle(props['Name']) || 'Unknown';
-  const matchId = pickText(props['Match ID']) || `manual-notion-${String(page.id).replace(/-/g, '')}`;
+  const matchIdText = pickText(props['Match ID']);
+  const hadMatchIdText = matchIdText.length > 0;
+  const matchId = effectiveMatchId(String(page.id), matchIdText);
   // Prefer the real match-end time from `Played At` (written by the exporter, or
   // filled in by hand). Only when it's absent does the row's Notion creation time
   // stand in — which is minute-truncated and really means "when this row was
@@ -198,7 +279,7 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
   // game-derived facts stay locked in the editor (matching `sourceOf`).
   const source: 'manual' | 'gep' = matchId.startsWith('manual') ? 'manual' : 'gep';
 
-  return {
+  const game: GameRecord = {
     matchId,
     timestamp,
     account,
@@ -215,6 +296,7 @@ function toGame(page: any, mapsById: Record<string, string>): GameRecord | null 
     ...(mental ? { mental } : {}),
     ...(review ? { review } : {}),
   };
+  return { game, hadMatchIdText };
 }
 
 // --- Notion property readers (inverse of notionWriter's builders) -------------

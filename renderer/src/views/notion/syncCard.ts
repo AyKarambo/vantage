@@ -3,7 +3,7 @@
  * Disabled until connected with at least one tracked game.
  */
 import { h, render } from '../../dom';
-import type { ExportResult, ImportResult, NotionStatus } from '../../../../src/shared/contract';
+import type { CleanupDuplicatesResult, ExportResult, ImportResult, NotionStatus } from '../../../../src/shared/contract';
 import { relTime } from '../../format';
 import { bridge } from '../../bridge';
 import { store } from '../../store';
@@ -81,6 +81,11 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
           if (res.skipped) bits.push(`${res.skipped} skipped`);
           if (res.failed) bits.push(`${res.failed} failed`);
           if (res.accountsAdded) bits.push(`${res.accountsAdded} account${res.accountsAdded === 1 ? '' : 's'} added`);
+          // The duplicates count must ride the toast too: the refresh below is
+          // what tears down the in-card chip, and on a first import (imported
+          // > 0) that happens almost immediately — the toast is the only
+          // surface that durably tells the user to run the cleanup action.
+          if (res.duplicates) bits.push(`${res.duplicates} duplicate row${res.duplicates === 1 ? '' : 's'} in Notion`);
           toast(`Notion import — ${bits.join(' · ')}`);
         }
         // New matches, merged updates, or accounts landed — re-pull so
@@ -96,6 +101,16 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
     },
   });
 
+  // Clean up duplicates — opt-in, explicit-confirm action for the redundant
+  // rows import can detect (hand row + re-created copy) but never deletes
+  // itself. Same gating as import: needs a connected database.
+  const cleanupOut = h('div', { style: { marginTop: '8px', minHeight: '18px' } });
+  const cleanupBtn = button('Clean up duplicate rows…', {
+    variant: 'ghost',
+    disabled: !canImport,
+    onClick: () => confirmCleanupDuplicates(cleanupBtn, cleanupOut),
+  });
+
   return card({ variant: 'raised', title: 'Sync now', sub: 'push tracked games · pull them back' },
     h('div', { class: 'hint', style: { lineHeight: '1.5' } }, note),
     s?.lastSyncedAt
@@ -108,6 +123,10 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
           'Import reads every Gametracker row into local history; matches already stored are skipped.')
       : null,
     importOut,
+    canImport
+      ? h('div', { style: { marginTop: '10px' } }, cleanupBtn)
+      : null,
+    cleanupOut,
     deleteImportedSection(s?.importedMatches ?? 0),
   );
 }
@@ -157,13 +176,76 @@ function confirmDeleteImported(count: number): void {
   );
 }
 
+/**
+ * Ask for confirmation before archiving duplicate Notion rows, mirroring
+ * {@link confirmDeleteImported}'s modal → spin → toast → refresh flow. Nothing
+ * local is touched; the archived copies live in Notion's trash (~30 days).
+ */
+function confirmCleanupDuplicates(cleanupBtn: HTMLButtonElement, cleanupOut: HTMLElement): void {
+  openModal((close) =>
+    h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '440px' } },
+      h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, 'Clean up duplicate Notion rows?'),
+      h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+        'Keeps one row per match and moves redundant copies to Notion’s trash — restorable there for about 30 days. Nothing local is deleted.'),
+      h('div', { style: { display: 'flex', gap: '10px' } },
+        button('Clean up', {
+          variant: 'primary',
+          onClick: async () => {
+            close();
+            cleanupBtn.disabled = true;
+            render(cleanupOut, h('span', { class: 'u-muted' }, 'Cleaning up…'));
+            try {
+              const res = await bridge.cleanupNotionDuplicates();
+              render(
+                cleanupOut,
+                res.unavailable
+                  ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
+                  : res.error
+                    ? h('span', { class: 'is-loss' }, res.error)
+                    : null,
+              );
+              if (!res.unavailable && !res.error) {
+                toast(cleanupToastMessage(res));
+                void store.refresh();
+              }
+            } catch (err) {
+              render(cleanupOut, h('span', { class: 'is-loss' }, `Cleanup failed — ${String(err)}`));
+              toast(`Cleanup failed — ${String(err)}`);
+            }
+            cleanupBtn.disabled = false;
+          },
+        }),
+        button('Cancel', { variant: 'ghost', onClick: close }),
+      ),
+    ),
+  );
+}
+
+/** Phrases the cleanup toast, singular/plural-correct, noting failures and the no-op case. */
+function cleanupToastMessage(res: CleanupDuplicatesResult): string {
+  // "No duplicates found" only when the run truly had nothing to do — with
+  // archived: 0 but failures, duplicates WERE found and the archives failed;
+  // claiming a clean database would talk the user out of the retry they need.
+  if (res.archived === 0 && res.failed === 0) return 'No duplicate rows found';
+  let msg = `Archived ${res.archived} duplicate row${res.archived === 1 ? '' : 's'}`;
+  if (res.failed) msg += `, ${res.failed} failed`;
+  return msg;
+}
+
 function importResult(res: ImportResult): HTMLElement {
   const parts = [chipText(`${res.imported} imported`, 'win')];
   if (res.merged) parts.push(chipText(`${res.merged} updated`, 'win'));
   if (res.skipped) parts.push(chipText(`${res.skipped} skipped`, 'muted'));
   if (res.failed) parts.push(chipText(`${res.failed} failed`, 'loss'));
   if (res.accountsAdded) parts.push(chipText(`${res.accountsAdded} account${res.accountsAdded === 1 ? '' : 's'} added`, 'win'));
-  return h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...parts);
+  if (res.duplicates) parts.push(chipText(`${res.duplicates} duplicate row${res.duplicates === 1 ? '' : 's'} in Notion`, 'loss'));
+  return h('div', null,
+    h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...parts),
+    res.duplicates
+      ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } },
+          'Duplicate rows detected — use "Clean up duplicate rows" below.')
+      : null,
+  );
 }
 
 function syncResult(res: ExportResult): HTMLElement {

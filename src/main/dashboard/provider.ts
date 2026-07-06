@@ -5,10 +5,10 @@ import type { ReadinessSettings } from '../../core/readiness';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
-  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, DataLocation,
-  DataLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel, ManualMatchInput,
-  MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, RankAnchorInput,
-  RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
+  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
+  DataLocation, DataLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel,
+  ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
+  RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
 } from '../../shared/contract';
 
 /**
@@ -54,6 +54,8 @@ export interface DataProvider {
   importNotion(): Promise<ImportResult>;
   /** Delete every Notion-imported match from history (for a clean re-import); returns how many were removed. */
   deleteImportedMatches(): { deleted: number };
+  /** Explicit action: archive redundant duplicate rows (Notion trash) in the configured Gametracker database. */
+  cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
   /** Attach a Review-screen read (grades + flags) to a tracked match. */
   saveReview(input: ReviewInput): void;
   /** Bulk legacy-review import; skips unknown ids and already-reviewed games. */

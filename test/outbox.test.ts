@@ -72,6 +72,28 @@ describe('OutboxStore', () => {
     expect(store.legacyProcessed()).toEqual([]);
   });
 
+  it('repointExport moves pageId while preserving the signature', () => {
+    const store = new OutboxStore(dir);
+    store.recordExport('m1', { pageId: 'page-1', signature: 'sig-1' });
+    store.repointExport('m1', { pageId: 'page-2' });
+    expect(store.pageIdFor('m1')).toBe('page-2');
+    expect(store.signatureFor('m1')).toBe('sig-1');
+  });
+
+  it('repointExport is a no-op when the match has no record', () => {
+    const store = new OutboxStore(dir);
+    store.repointExport('nope', { pageId: 'page-1' });
+    expect(store.pageIdFor('nope')).toBeUndefined();
+  });
+
+  it('repointExport stamps databaseId when provided', () => {
+    const store = new OutboxStore(dir);
+    store.recordExport('m1', { pageId: 'page-1', signature: 'sig-1', databaseId: 'db-old' });
+    store.repointExport('m1', { pageId: 'page-2', databaseId: 'db-new' });
+    expect(store.pageIdFor('m1', 'db-new')).toBe('page-2');
+    expect(store.pageIdFor('m1', 'db-old')).toBeUndefined();
+  });
+
   it('relocate re-points and reloads from the new dir', () => {
     const store = new OutboxStore(dir);
     store.recordExport('m1', { pageId: 'page-1', signature: 'sig-1' });

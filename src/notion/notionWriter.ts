@@ -119,9 +119,32 @@ export class NotionWriter {
    * {@link createMatchPage}, a present-but-now-empty subjective column is sent
    * its explicit empty form (`select: null` / `checkbox: false`) so clearing a
    * flag or grade locally clears the corresponding Notion cell on next sync.
+   *
+   * `opts.stampMatchId` additionally writes `Match ID` into the update payload —
+   * used only to heal a row the export create-guard *adopted* (a hand-added row
+   * whose `Match ID` cell was empty, or a legacy-backfilled row): not a normal
+   * part of this method's signature, and never set for an ordinary update of an
+   * already-ledgered match (that would re-send `Match ID` on every sync for no
+   * reason). Stamping is not part of `matchExportSignature`, so it must never be
+   * the only reason a call to this method happens for an otherwise-unchanged match.
    */
-  async updateMatchPage(pageId: string, m: ResolvedMatch): Promise<void> {
+  async updateMatchPage(pageId: string, m: ResolvedMatch, opts?: { stampMatchId?: boolean }): Promise<void> {
     const props = this.subjectiveProps(m, { forUpdate: true });
+    if (opts?.stampMatchId) putText(props, 'Match ID', m.record.matchId);
+    await this.client.pages.update({ page_id: pageId, properties: props });
+  }
+
+  /**
+   * Writes ONLY the `Match ID` cell of an existing row — nothing else. Used when
+   * adopting a found row that has nothing to push (empty export signature):
+   * {@link updateMatchPage} would actively blank the subjective columns
+   * (`select: null` / `checkbox: false`), destroying values the user filled in by
+   * hand on a row the app has never written to. Stamping alone must never touch
+   * any other cell.
+   */
+  async stampMatchId(pageId: string, matchId: string): Promise<void> {
+    const props: Record<string, any> = {};
+    putText(props, 'Match ID', matchId);
     await this.client.pages.update({ page_id: pageId, properties: props });
   }
 

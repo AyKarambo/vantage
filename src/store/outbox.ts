@@ -93,6 +93,30 @@ export class OutboxStore {
     this.save();
   }
 
+  /**
+   * Re-point an EXISTING ledger record at a different Notion page — the cleanup
+   * action's counterpart to adopting a canonical row: after archiving a
+   * duplicate, the ledger must follow the match to whichever page survives.
+   * Preserves `signature` so an otherwise-unchanged match still reads as
+   * unchanged on the next sync (AC12); refreshes `exportedAt` since a re-point
+   * is itself a write. Stamps `databaseId` when given, else leaves the
+   * record's existing one untouched. Strict no-op when the match has no
+   * record at all: this method only *moves* an existing link, it never
+   * creates one — a match with no ledger record is left for the exporter's
+   * create-guard to resolve (adopt-or-create) on the next sync.
+   */
+  repointExport(matchId: string, record: { pageId: string; databaseId?: string }): void {
+    const rec = this.state.records[matchId];
+    if (!rec) return;
+    this.state.records[matchId] = {
+      ...rec,
+      pageId: record.pageId,
+      databaseId: record.databaseId ?? rec.databaseId,
+      exportedAt: Date.now(),
+    };
+    this.save();
+  }
+
   /** Drop a match's ledger record, e.g. after its imported row is deleted locally
    *  (`deleteImportedMatches`) so a re-import or re-export starts fresh. */
   clearExport(matchId: string): void {
