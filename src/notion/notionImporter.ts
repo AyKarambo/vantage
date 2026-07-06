@@ -3,6 +3,7 @@ import type { GameRecord, MatchMental, MatchReview, TargetGrade } from '../core/
 import type { Result, Role } from '../core/model';
 import type { AuthoredTarget } from '../core/targets';
 import { gameTypeLabel } from '../core/matchFilter';
+import { resolveDataSourceId } from './dataSourceResolver';
 
 /**
  * Reads rows from a Notion Gametracker database back into local {@link GameRecord}s
@@ -44,6 +45,12 @@ export function notionImprovementTarget(createdAt: number): AuthoredTarget {
 }
 
 export class NotionImporter {
+  // Per-instance memo of resolveDataSourceId results, keyed by the configured id.
+  // Both `discoverMapsSourceId` and `queryAll` need the Gametracker id resolved
+  // (schema discovery reads the Map relation off it; the row query pages it), so
+  // without this an import would call `databases.retrieve` for the same id twice.
+  private readonly resolvedIds = new Map<string, string>();
+
   constructor(
     private readonly client: Client,
     private readonly gametrackerDatabaseId: string,
@@ -51,13 +58,18 @@ export class NotionImporter {
   ) {}
 
   async import(): Promise<ImportOutcome> {
-    // The Map column is a relation into the Maps database; resolving it to a name
-    // needs that database's id. Prefer an explicitly configured one, but fall back
-    // to reading it off the Gametracker schema — most users only ever pick their
-    // Gametracker database, leaving mapsDatabaseId unset, in which case every map
-    // would otherwise import as "Unknown".
-    const mapsDbId = this.mapsDatabaseId || (await this.discoverMapsDbId());
-    const mapsById = mapsDbId ? await this.loadMapNames(mapsDbId) : {};
+    // The Map column is a relation into the Maps data source; resolving it to a
+    // name needs that data source's id. Prefer an explicitly configured one, but
+    // fall back to reading it off the Gametracker schema — most users only ever
+    // pick their Gametracker database, leaving mapsDatabaseId unset, in which case
+    // every map would otherwise import as "Unknown". Best-effort: a missing or
+    // undiscoverable Maps relation was never fatal to the import.
+    const mapsSourceId = this.mapsDatabaseId || (await this.discoverMapsSourceId());
+    const mapsById = mapsSourceId ? await this.loadMapNames(mapsSourceId) : {};
+    // Unlike map discovery, a Gametracker resolution failure (bad token,
+    // unshared/deleted database, network outage) must PROPAGATE out of import() —
+    // `NotionRuntime.import` already try/catches this into `{ error }`, which the
+    // sync card renders red, restoring the pre-migration surfaced-failure behavior.
     const pages = await this.queryAll(this.gametrackerDatabaseId);
     const games: GameRecord[] = [];
     let failed = 0;
@@ -73,12 +85,14 @@ export class NotionImporter {
     return { games, failed };
   }
 
-  private async queryAll(databaseId: string): Promise<any[]> {
+  /** Resolve `id` (database or already-a-data-source id, memoized) then page through `dataSources.query`. */
+  private async queryAll(id: string): Promise<any[]> {
+    const dataSourceId = await this.resolve(id);
     const results: any[] = [];
     let cursor: string | undefined;
     do {
-      const res: any = await this.client.databases.query({
-        database_id: databaseId,
+      const res: any = await this.client.dataSources.query({
+        data_source_id: dataSourceId,
         start_cursor: cursor,
         page_size: 100,
       });
@@ -88,23 +102,38 @@ export class NotionImporter {
     return results;
   }
 
-  private async loadMapNames(mapsDatabaseId: string): Promise<Record<string, string>> {
+  /** `resolveDataSourceId`, memoized per configured id so it only runs once per import. */
+  private async resolve(id: string): Promise<string> {
+    const cached = this.resolvedIds.get(id);
+    if (cached) return cached;
+    const resolved = await resolveDataSourceId(this.client, id);
+    this.resolvedIds.set(id, resolved);
+    return resolved;
+  }
+
+  private async loadMapNames(mapsSourceId: string): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
-    for (const page of await this.queryAll(mapsDatabaseId)) out[page.id] = titleOf(page);
+    for (const page of await this.queryAll(mapsSourceId)) out[page.id] = titleOf(page);
     return out;
   }
 
   /**
-   * The database the Gametracker's `Map` relation points at, read straight off
+   * The data source the Gametracker's `Map` relation points at, read straight off
    * the Gametracker schema. Lets map resolution work without a separately
    * configured mapsDatabaseId. Best-effort: undefined if the column is missing,
-   * isn't a relation, or the retrieve fails.
+   * isn't a relation, or the retrieve fails (unlike `queryAll`, this must NOT
+   * propagate — a missing/undiscoverable Maps relation was never fatal). Prefers
+   * `data_source_id` (v5), falls back to `database_id` — `resolveDataSourceId`
+   * (via `queryAll`) accepts either.
    */
-  private async discoverMapsDbId(): Promise<string | undefined> {
+  private async discoverMapsSourceId(): Promise<string | undefined> {
     try {
-      const db: any = await this.client.databases.retrieve({ database_id: this.gametrackerDatabaseId });
-      const mapProp = db?.properties?.['Map'];
-      return mapProp?.type === 'relation' ? mapProp.relation?.database_id ?? undefined : undefined;
+      const sourceId = await this.resolve(this.gametrackerDatabaseId);
+      const source: any = await this.client.dataSources.retrieve({ data_source_id: sourceId });
+      const mapProp = source?.properties?.['Map'];
+      return mapProp?.type === 'relation'
+        ? (mapProp.relation?.data_source_id ?? mapProp.relation?.database_id ?? undefined)
+        : undefined;
     } catch {
       return undefined;
     }

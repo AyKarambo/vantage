@@ -94,15 +94,17 @@ export function presentSubjectiveColumns(
 }
 
 /**
- * The database a `Map` relation column points at, if present — lets the exporter
+ * The data source a `Map` relation column points at, if present — lets the exporter
  * resolve maps without a separately configured `mapsDatabaseId` (mirrors the
- * importer's `discoverMapsDbId`). Undefined when Map is absent or not a relation.
+ * importer's `discoverMapsSourceId`). Undefined when Map is absent or not a relation.
+ * Prefers `data_source_id` (the v5 field); falls back to `database_id` for shapes
+ * that only carry the legacy field — `resolveDataSourceId` accepts either kind of id.
  */
-export function mapRelationDatabaseId(
-  properties: Record<string, { type?: string; relation?: { database_id?: string } } | undefined>,
+export function mapRelationSourceId(
+  properties: Record<string, { type?: string; relation?: { data_source_id?: string; database_id?: string } } | undefined>,
 ): string | undefined {
   const map = properties['Map'];
-  return map?.type === 'relation' ? map.relation?.database_id ?? undefined : undefined;
+  return map?.type === 'relation' ? (map.relation?.data_source_id ?? map.relation?.database_id ?? undefined) : undefined;
 }
 
 function selectOptions(names: string[]): { options: Array<{ name: string }> } {
@@ -110,12 +112,12 @@ function selectOptions(names: string[]): { options: Array<{ name: string }> } {
 }
 
 /**
- * Build the `properties` payload for `databases.create`, pre-seeding the select
- * options the app writes so a fresh database matches the export schema exactly.
- * The `Map` relation is included only when a Maps database id is supplied —
- * `databases.create` has no concept of an "optional" relation target.
+ * Build the `properties` payload for `initial_data_source.properties`, pre-seeding
+ * the select options the app writes so a fresh database matches the export schema
+ * exactly. The `Map` relation is included only when a Maps data source id is
+ * supplied — `databases.create` has no concept of an "optional" relation target.
  */
-export function buildGametrackerProperties(mapsDatabaseId?: string): Record<string, unknown> {
+export function buildGametrackerProperties(mapsDataSourceId?: string): Record<string, unknown> {
   const props: Record<string, unknown> = {
     Name: { title: {} },
     Source: { select: selectOptions(SOURCE_OPTIONS) },
@@ -139,8 +141,8 @@ export function buildGametrackerProperties(mapsDatabaseId?: string): Record<stri
     [PLAYED_AT_PROPERTY]: { date: {} },
     [SR_DELTA_PROPERTY]: { number: {} },
   };
-  if (mapsDatabaseId) {
-    props['Map'] = { relation: { database_id: mapsDatabaseId, single_property: {} } };
+  if (mapsDataSourceId) {
+    props['Map'] = { relation: { data_source_id: mapsDataSourceId, single_property: {} } };
   }
   return props;
 }

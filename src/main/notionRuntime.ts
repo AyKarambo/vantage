@@ -14,6 +14,16 @@ import type {
   ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
 } from '../shared/contract';
 
+/**
+ * The Notion API version every request pins (the `Notion-Version` header).
+ * 2026-03-11 is the latest per developers.notion.com/reference/versioning;
+ * SDK 5.12+ supports it but still DEFAULTS to 2025-09-03, so it must be opted
+ * into explicitly. Safe for Vantage's surface: the 2026-03-11 breaking changes
+ * (archived→in_trash, block `after`→`position`, transcription→meeting_notes)
+ * touch fields/endpoints this app never reads or calls.
+ */
+const NOTION_API_VERSION = '2026-03-11';
+
 export interface NotionRuntimeDeps {
   outbox: OutboxStore;
   /** Live app config — re-read through this on every use, never cached. */
@@ -58,6 +68,9 @@ export class NotionRuntime {
   // The Maps database the Gametracker's `Map` relation points at, discovered from
   // the schema — so export resolves maps even when mapsDatabaseId was never set.
   private mapsRelationDbId?: string;
+  // The configured Gametracker database's validated data source id — so the writer
+  // can parent new rows on it directly instead of resolving on every export.
+  private gametrackerSourceId?: string;
 
   constructor(private readonly deps: NotionRuntimeDeps) {}
 
@@ -69,12 +82,13 @@ export class NotionRuntime {
     this.hasSrDelta = false;
     this.writableColumns = new Set();
     this.mapsRelationDbId = undefined;
+    this.gametrackerSourceId = undefined;
     if (!token) {
       this.client = this.exporter = this.admin = undefined;
       this.deps.onTokenState(false);
       return;
     }
-    this.client = new Client({ auth: token });
+    this.client = new Client({ auth: token, notionVersion: NOTION_API_VERSION });
     this.admin = new NotionAdmin(this.client);
     const maps = this.buildExporter();
     this.deps.onTokenState(true);
@@ -206,12 +220,14 @@ export class NotionRuntime {
       this.hasSrDelta = result.hasSrDelta;
       this.writableColumns = new Set(result.subjectiveColumns);
       this.mapsRelationDbId = result.mapRelationDbId;
+      this.gametrackerSourceId = result.dataSourceId;
     } catch (err) {
       this.shapeCheck = { valid: false, issues: [String(err)] };
       this.hasPlayedAt = false;
       this.hasSrDelta = false;
       this.writableColumns = new Set();
       this.mapsRelationDbId = undefined;
+      this.gametrackerSourceId = undefined;
     }
     this.buildExporter(this.shapeCheck.valid ? undefined : this.shapeCheck.issues);
   }
@@ -220,7 +236,10 @@ export class NotionRuntime {
   private buildExporter(shapeIssues?: string[]): MapsCache | undefined {
     if (!this.client) return undefined;
     const cfg = this.deps.config();
-    const writer = new NotionWriter(this.client, cfg.notion.gametrackerDatabaseId, this.hasPlayedAt, this.writableColumns, this.hasSrDelta);
+    const writer = new NotionWriter(
+      this.client, cfg.notion.gametrackerDatabaseId, this.hasPlayedAt, this.writableColumns, this.hasSrDelta,
+      this.gametrackerSourceId,
+    );
     // Prefer an explicitly configured Maps database, else the one discovered off
     // the Gametracker's `Map` relation — so maps resolve even when the user only
     // ever picked their Gametracker database (mapsDatabaseId left blank).

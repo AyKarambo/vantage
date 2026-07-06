@@ -10,6 +10,9 @@ function mockClient(overrides: Partial<Record<string, any>> = {}) {
       create: vi.fn(),
       retrieve: vi.fn(),
     },
+    dataSources: {
+      retrieve: vi.fn(),
+    },
     pages: {
       create: vi.fn(),
     },
@@ -18,16 +21,22 @@ function mockClient(overrides: Partial<Record<string, any>> = {}) {
 }
 
 describe('NotionAdmin.listDatabases', () => {
-  it('follows has_more/next_cursor pagination', async () => {
+  it('follows has_more/next_cursor pagination, searching data_source', async () => {
     const client = mockClient();
     client.search
       .mockResolvedValueOnce({
-        results: [{ id: 'db-1', title: [{ plain_text: 'Gametracker' }], url: 'https://notion.so/db-1' }],
+        results: [{
+          id: 'ds-1', title: [{ plain_text: 'Gametracker' }], url: 'https://notion.so/db-1',
+          parent: { type: 'database_id', database_id: 'db-1' },
+        }],
         has_more: true,
         next_cursor: 'cursor-1',
       })
       .mockResolvedValueOnce({
-        results: [{ id: 'db-2', title: [{ plain_text: 'Archive' }], url: 'https://notion.so/db-2' }],
+        results: [{
+          id: 'ds-2', title: [{ plain_text: 'Archive' }], url: 'https://notion.so/db-2',
+          parent: { type: 'database_id', database_id: 'db-2' },
+        }],
         has_more: false,
         next_cursor: null,
       });
@@ -37,7 +46,7 @@ describe('NotionAdmin.listDatabases', () => {
 
     expect(client.search).toHaveBeenCalledTimes(2);
     expect(client.search).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      filter: { property: 'object', value: 'database' },
+      filter: { property: 'object', value: 'data_source' },
       start_cursor: undefined,
     }));
     expect(client.search).toHaveBeenNthCalledWith(2, expect.objectContaining({
@@ -47,6 +56,49 @@ describe('NotionAdmin.listDatabases', () => {
       { id: 'db-1', title: 'Gametracker', url: 'https://notion.so/db-1' },
       { id: 'db-2', title: 'Archive', url: 'https://notion.so/db-2' },
     ]);
+  });
+
+  it('dedupes multiple data sources under the same parent database, first wins', async () => {
+    const client = mockClient();
+    client.search.mockResolvedValue({
+      results: [
+        {
+          id: 'ds-1', title: [{ plain_text: 'Gametracker (first source)' }], url: 'https://notion.so/db-1',
+          parent: { type: 'database_id', database_id: 'db-1' },
+        },
+        {
+          id: 'ds-2', title: [{ plain_text: 'Gametracker (second source)' }], url: 'https://notion.so/db-1-alt',
+          parent: { type: 'database_id', database_id: 'db-1' },
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+
+    const admin = new NotionAdmin(client);
+    const databases = await admin.listDatabases();
+
+    expect(databases).toEqual([{ id: 'db-1', title: 'Gametracker (first source)', url: 'https://notion.so/db-1' }]);
+  });
+
+  it('skips a result with no parent.database_id (partial response from a restricted token)', async () => {
+    const client = mockClient();
+    client.search.mockResolvedValue({
+      results: [
+        { id: 'ds-orphan', title: [{ plain_text: 'Orphan' }], url: 'https://notion.so/orphan' },
+        {
+          id: 'ds-2', title: [{ plain_text: 'Gametracker' }], url: 'https://notion.so/db-2',
+          parent: { type: 'database_id', database_id: 'db-2' },
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+
+    const admin = new NotionAdmin(client);
+    const databases = await admin.listDatabases();
+
+    expect(databases).toEqual([{ id: 'db-2', title: 'Gametracker', url: 'https://notion.so/db-2' }]);
   });
 });
 
@@ -81,8 +133,8 @@ describe('NotionAdmin.createGametracker', () => {
       const isMaps = args.title[0].text.content === 'Maps';
       callOrder.push(isMaps ? 'create-maps-db' : 'create-gametracker-db');
       return isMaps
-        ? { id: 'maps-db-id', url: 'https://notion.so/maps-db' }
-        : { id: 'gametracker-db-id', url: 'https://notion.so/gametracker-db' };
+        ? { id: 'maps-db-id', url: 'https://notion.so/maps-db', data_sources: [{ id: 'maps-ds-id' }] }
+        : { id: 'gametracker-db-id', url: 'https://notion.so/gametracker-db', data_sources: [{ id: 'gametracker-ds-id' }] };
     });
     client.pages.create.mockImplementation(async () => {
       callOrder.push('create-map-page');
@@ -101,10 +153,20 @@ describe('NotionAdmin.createGametracker', () => {
     expect(callOrder[callOrder.length - 1]).toBe('create-gametracker-db');
     expect(callOrder.slice(1, -1).every((c) => c === 'create-map-page')).toBe(true);
 
-    // The Gametracker DB's relation points at the Maps DB id.
-    const gametrackerCreateArgs = client.databases.create.mock.calls[1][0];
-    expect(gametrackerCreateArgs.properties.Map.relation.database_id).toBe('maps-db-id');
+    // Map pages are parented on the Maps data source, not the database.
+    const mapPageArgs = client.pages.create.mock.calls[0][0];
+    expect(mapPageArgs.parent).toEqual({ type: 'data_source_id', data_source_id: 'maps-ds-id' });
 
+    // Properties nest under initial_data_source; the Gametracker's relation points
+    // at the Maps data source id (not the database id).
+    const mapsCreateArgs = client.databases.create.mock.calls[0][0];
+    expect(mapsCreateArgs.initial_data_source.properties).toEqual({ Name: { title: {} } });
+    const gametrackerCreateArgs = client.databases.create.mock.calls[1][0];
+    expect(gametrackerCreateArgs.initial_data_source.properties.Map.relation).toEqual({
+      data_source_id: 'maps-ds-id', single_property: {},
+    });
+
+    // Returned ids/urls stay database-level — config semantics unchanged.
     expect(result).toEqual({
       gametrackerDatabaseId: 'gametracker-db-id',
       gametrackerUrl: 'https://notion.so/gametracker-db',
@@ -112,13 +174,27 @@ describe('NotionAdmin.createGametracker', () => {
       mapsUrl: 'https://notion.so/maps-db',
     });
   });
+
+  it('throws before creating any Map pages or the Gametracker db when the Maps create response has no data sources', async () => {
+    const client = mockClient();
+    client.databases.create.mockResolvedValue({ id: 'maps-db-id', url: 'https://notion.so/maps-db', data_sources: [] });
+
+    const admin = new NotionAdmin(client);
+    await expect(admin.createGametracker('parent-page-id')).rejects.toThrow(/no visible data sources/);
+
+    expect(client.pages.create).not.toHaveBeenCalled();
+    expect(client.databases.create).toHaveBeenCalledTimes(1); // only the Maps create, not Gametracker
+  });
 });
 
 describe('NotionAdmin.validate', () => {
-  it('maps a retrieve payload through the schema module', async () => {
+  it('two-steps databases.retrieve → dataSources.retrieve and maps the payload through the schema module', async () => {
     const client = mockClient();
     client.databases.retrieve.mockResolvedValue({
       title: [{ plain_text: 'Gametracker' }],
+      data_sources: [{ id: 'ds-id' }],
+    });
+    client.dataSources.retrieve.mockResolvedValue({
       properties: {
         Name: { type: 'title' },
         Source: { type: 'select' },
@@ -147,18 +223,23 @@ describe('NotionAdmin.validate', () => {
     const result = await admin.validate('db-id', { requireMapRelation: true });
 
     expect(client.databases.retrieve).toHaveBeenCalledWith({ database_id: 'db-id' });
+    expect(client.dataSources.retrieve).toHaveBeenCalledWith({ data_source_id: 'ds-id' });
     expect(result.title).toBe('Gametracker');
+    expect(result.dataSourceId).toBe('ds-id');
     expect(result.ok).toBe(false);
     expect(result.missing).toContain('Result');
     expect(result.mismatched).toContain('Eliminations');
   });
 
-  it('surfaces the present subjective columns and the Map relation target', async () => {
+  it('surfaces the present subjective columns and the Map relation target (data_source_id)', async () => {
     const client = mockClient();
     client.databases.retrieve.mockResolvedValue({
       title: [{ plain_text: 'Gametracker' }],
+      data_sources: [{ id: 'ds-id' }],
+    });
+    client.dataSources.retrieve.mockResolvedValue({
       properties: {
-        Map: { type: 'relation', relation: { database_id: 'maps-db-99' } },
+        Map: { type: 'relation', relation: { data_source_id: 'maps-ds-99', database_id: 'maps-db-99' } },
         Comms: { type: 'select' },
         Tilt: { type: 'checkbox' },
         Leaver: { type: 'rich_text' }, // wrong type → not writable, excluded
@@ -169,6 +250,18 @@ describe('NotionAdmin.validate', () => {
     const result = await admin.validate('db-id');
 
     expect(result.subjectiveColumns.sort()).toEqual(['Comms', 'Tilt']);
-    expect(result.mapRelationDbId).toBe('maps-db-99');
+    expect(result.mapRelationDbId).toBe('maps-ds-99');
+  });
+
+  it('skips dataSources.retrieve and returns empty properties when the database has no data sources', async () => {
+    const client = mockClient();
+    client.databases.retrieve.mockResolvedValue({ title: [{ plain_text: 'Empty' }], data_sources: [] });
+
+    const admin = new NotionAdmin(client);
+    const result = await admin.validate('db-id', { requireMapRelation: false });
+
+    expect(client.dataSources.retrieve).not.toHaveBeenCalled();
+    expect(result.dataSourceId).toBeUndefined();
+    expect(result.ok).toBe(false); // required properties are all missing
   });
 });

@@ -95,6 +95,24 @@ describe('NotionWriter — Played At round-trip', () => {
   });
 });
 
+describe('NotionWriter — page parent', () => {
+  it('parents on the database id when no data source id is known (pre-validation fallback)', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'page-id' });
+    const client = { pages: { create } } as any;
+    const writer = new NotionWriter(client, 'db');
+    await writer.createMatchPage({ record: gameToMatchRecord(game('m1')) });
+    expect(create.mock.calls[0][0].parent).toEqual({ database_id: 'db' });
+  });
+
+  it('parents on the resolved data source id once validation has run', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'page-id' });
+    const client = { pages: { create } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set(), false, 'ds-id');
+    await writer.createMatchPage({ record: gameToMatchRecord(game('m1')) });
+    expect(create.mock.calls[0][0].parent).toEqual({ data_source_id: 'ds-id' });
+  });
+});
+
 const SUBJECTIVE = new Set(['Comms', 'Improvement Target', 'Leaver', 'Tilt', 'Toxic Mates']);
 function captureCreate() {
   const create = vi.fn().mockResolvedValue({ id: 'page-id' });
@@ -178,15 +196,20 @@ describe('export → import round-trip', () => {
     });
     const properties = create.mock.calls[0][0].properties;
 
-    // Import: feed that created page straight back through the importer.
+    // Import: feed that created page straight back through the importer. `gt-db`
+    // and `maps-db` are database ids; `databases.retrieve` resolves each to its
+    // (same-named) data source id, and `dataSources.query` dispatches on that.
     const page = { id: 'created-page', created_time: '2026-05-01T12:00:00.000Z', properties };
     const mapsPage = { id: 'map-ilios', properties: { Name: { type: 'title', title: [{ plain_text: 'Ilios' }] } } };
-    const query = vi.fn(async ({ database_id }: any) => ({
-      results: database_id === 'gt-db' ? [page] : [mapsPage],
+    const retrieve = vi.fn(async ({ database_id }: any) => ({ data_sources: [{ id: `${database_id}-ds` }] }));
+    const query = vi.fn(async ({ data_source_id }: any) => ({
+      results: data_source_id === 'gt-db-ds' ? [page] : [mapsPage],
       has_more: false,
       next_cursor: null,
     }));
-    const importer = new NotionImporter({ databases: { query } } as any, 'gt-db', 'maps-db');
+    const importer = new NotionImporter(
+      { databases: { retrieve }, dataSources: { query } } as any, 'gt-db', 'maps-db',
+    );
     const { games } = await importer.import();
 
     expect(games).toHaveLength(1);
@@ -221,11 +244,14 @@ describe('export → import round-trip', () => {
 
     const page = { id: 'created-page', created_time: '2026-05-02T09:00:00.000Z', properties };
     const mapsPage = { id: 'map-ilios', properties: { Name: { type: 'title', title: [{ plain_text: 'Ilios' }] } } };
-    const query = vi.fn(async ({ database_id }: any) => ({
-      results: database_id === 'gt-db' ? [page] : [mapsPage],
+    const retrieve = vi.fn(async ({ database_id }: any) => ({ data_sources: [{ id: `${database_id}-ds` }] }));
+    const query = vi.fn(async ({ data_source_id }: any) => ({
+      results: data_source_id === 'gt-db-ds' ? [page] : [mapsPage],
       has_more: false, next_cursor: null,
     }));
-    const importer = new NotionImporter({ databases: { query } } as any, 'gt-db', 'maps-db');
+    const importer = new NotionImporter(
+      { databases: { retrieve }, dataSources: { query } } as any, 'gt-db', 'maps-db',
+    );
     const { games } = await importer.import();
 
     const back = games[0];
