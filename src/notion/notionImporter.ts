@@ -6,6 +6,17 @@ import { gameTypeLabel } from '../core/matchFilter';
 import { resolveDataSourceId } from './dataSourceResolver';
 import { queryDataSourcePages } from './pageScan';
 import { effectiveMatchId, groupByEffectiveMatchId, pickCanonicalRow, rowRefOf } from './dedup';
+import { mapWithConcurrency } from './concurrency';
+
+/**
+ * How many `stampMatchIds` writes run at once. Notion's API budget is an
+ * *average* of ~3 requests/second per integration; this stays at that
+ * average rather than the fully-serial 1-at-a-time a plain loop would give,
+ * which turned a several-hundred-row backlog of unstamped hand-added rows
+ * into a multi-minute import. The client's own retry-after backoff (see
+ * `@notionhq/client`) absorbs any transient 429 this still triggers.
+ */
+const STAMP_WRITE_CONCURRENCY = 3;
 
 /**
  * Reads rows from a Notion Gametracker database back into local {@link GameRecord}s
@@ -137,15 +148,19 @@ export class NotionImporter {
    * — a failed stamp must not fail the row's import or be counted in
    * `failed` (the row already imported successfully; only the write-back is
    * skipped). Never called for rows dropped as duplicates or rows whose cell
-   * already carried text.
+   * already carried text. Runs up to `STAMP_WRITE_CONCURRENCY` writes at
+   * once rather than one at a time — a workspace with hundreds of unstamped
+   * hand-added rows made a fully-serial loop here the dominant cost of import.
    */
   private async stampMatchIds(
     games: Array<GameRecord & { pageId: string }>,
     mapped: Map<string, { game: GameRecord; hadMatchIdText: boolean }>,
   ): Promise<void> {
-    for (const g of games) {
+    const toStamp = games.filter((g) => {
       const entry = mapped.get(g.pageId);
-      if (!entry || entry.hadMatchIdText) continue;
+      return entry && !entry.hadMatchIdText;
+    });
+    await mapWithConcurrency(toStamp, STAMP_WRITE_CONCURRENCY, async (g) => {
       try {
         await this.client.pages.update({
           page_id: g.pageId,
@@ -154,7 +169,7 @@ export class NotionImporter {
       } catch {
         // Best-effort: a stamp failure never affects the row's import outcome.
       }
-    }
+    });
   }
 
   /**
