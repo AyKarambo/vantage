@@ -351,6 +351,29 @@ describe('NotionImporter — Match ID write-back (AC1/AC2)', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('stamps multiple unstamped rows concurrently rather than one at a time', async () => {
+    const ids = Array.from({ length: 6 }, (_, i) => `row-${i}`);
+    const { client } = mockClient({ gametracker: ids.map((id) => row({ id })), maps: [] });
+    let active = 0;
+    let peak = 0;
+    const update = vi.fn(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      return {};
+    });
+    (client as any).pages = { update };
+
+    const { games } = await new NotionImporter(client, GT).import();
+
+    expect(games).toHaveLength(6);
+    expect(update).toHaveBeenCalledTimes(6);
+    // Bounded by STAMP_WRITE_CONCURRENCY (3): never unbounded, never serial.
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(3);
+  });
+
   it('imports the row normally even when the stamp write rejects (best-effort)', async () => {
     const pageId = '22222222-2222-2222-2222-222222222222';
     const { client } = mockClient({ gametracker: [row({ id: pageId })], maps: [] });
