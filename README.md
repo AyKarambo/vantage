@@ -116,6 +116,15 @@ comms · toxicity · leavers · your improvement target).
   summary reports them and a **"Clean up duplicate rows"** action (explicit, behind a
   confirm) keeps one row per match and moves the redundant copies to Notion's trash
   (restorable for ~30 days) — nothing in Notion is ever archived without that click.
+  The schema also **stays in step with the app**: on connect, Vantage detects the
+  columns it owns and expects but that your database is missing (e.g. an `SR Delta`
+  or `Comms` column a later version added) and **creates them in place** — additively,
+  so your own columns and data are never touched — then writes them on the very next
+  sync. A column that used to hard-stop the sync ("Database is missing …") now
+  self-heals instead; the status card notes what it added. A column present with the
+  wrong type, or under a near-miss name, is **never overwritten** — it's surfaced for
+  you to fix. If the integration token can't edit the schema, the sync still runs for
+  the columns that already exist, and the reason is shown.
   Opening the Notion screen also shows a **per-column status** for the five optional
   subjective columns (Comms, Improvement Target, Leaver, Tilt, Toxic Mates): available,
   or skipped with a reason (missing, wrong type, or a near-miss name like `comms ` you
@@ -251,8 +260,11 @@ already see, or have Vantage **create one for you** (a Maps database plus a matc
 Gametracker database, correctly shaped, under a page you pick). Then hit **Sync**. Match
 IDs are deduped, so re-syncing never creates a duplicate row — but it does **update** an
 already-exported match's row when its review or mental flags changed since the last sync
-(and recreates it if you deleted it in Notion). (The tray's **Set Notion token** still
-works too; a hand-edited `appsettings.json` database id is still supported as a fallback.)
+(and recreates it if you deleted it in Notion). When Vantage adds a stats column in a new
+version, it's **created in your existing database automatically** on connect (additively —
+your own columns are left alone), so exports never silently drop a field or refuse to run.
+(The tray's **Set Notion token** still works too; a hand-edited `appsettings.json`
+database id is still supported as a fallback.)
 
 ## Architecture
 

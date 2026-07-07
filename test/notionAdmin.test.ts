@@ -12,6 +12,7 @@ function mockClient(overrides: Partial<Record<string, any>> = {}) {
     },
     dataSources: {
       retrieve: vi.fn(),
+      update: vi.fn(),
     },
     pages: {
       create: vi.fn(),
@@ -294,5 +295,55 @@ describe('NotionAdmin.validate', () => {
     expect(client.dataSources.retrieve).not.toHaveBeenCalled();
     expect(result.dataSourceId).toBeUndefined();
     expect(result.ok).toBe(false); // required properties are all missing
+  });
+
+  it('returns a provisionPlan listing the Vantage columns missing from the live schema', async () => {
+    const client = mockClient();
+    client.databases.retrieve.mockResolvedValue({ title: [{ plain_text: 'Sparse' }], data_sources: [{ id: 'ds-id' }] });
+    // Only a title column exists — every other Vantage column is missing.
+    client.dataSources.retrieve.mockResolvedValue({ properties: { Name: { type: 'title' } } });
+
+    const admin = new NotionAdmin(client);
+    const result = await admin.validate('db-id', { requireMapRelation: false });
+
+    // The plan proposes creating the scalar/subjective columns (never Name/Map).
+    expect(result.provisionPlan.toCreate).toHaveProperty('SR Delta');
+    expect(result.provisionPlan.toCreate).toHaveProperty('Comms');
+    expect(result.provisionPlan.toCreate).not.toHaveProperty('Name');
+    expect(result.provisionPlan.toCreate).not.toHaveProperty('Map');
+    expect(result.provisionPlan.blocked).toEqual([]);
+  });
+});
+
+describe('NotionAdmin.ensureColumns', () => {
+  it('makes no network call and returns [] when there is nothing to create (idempotent)', async () => {
+    const client = mockClient();
+    const admin = new NotionAdmin(client);
+
+    const created = await admin.ensureColumns('ds-id', {});
+
+    expect(client.dataSources.update).not.toHaveBeenCalled();
+    expect(created).toEqual([]);
+  });
+
+  it('issues one additive dataSources.update with the given payload and returns the created names', async () => {
+    const client = mockClient();
+    client.dataSources.update.mockResolvedValue({});
+    const admin = new NotionAdmin(client);
+
+    const toCreate = { 'SR Delta': { number: {} }, Tilt: { checkbox: {} } };
+    const created = await admin.ensureColumns('ds-id', toCreate);
+
+    expect(client.dataSources.update).toHaveBeenCalledTimes(1);
+    expect(client.dataSources.update).toHaveBeenCalledWith({ data_source_id: 'ds-id', properties: toCreate });
+    expect(created.sort()).toEqual(['SR Delta', 'Tilt']);
+  });
+
+  it('propagates a schema-edit failure to the caller (runtime decides the fallback)', async () => {
+    const client = mockClient();
+    client.dataSources.update.mockRejectedValue(new Error('insufficient permissions'));
+    const admin = new NotionAdmin(client);
+
+    await expect(admin.ensureColumns('ds-id', { 'SR Delta': { number: {} } })).rejects.toThrow(/insufficient permissions/);
   });
 });

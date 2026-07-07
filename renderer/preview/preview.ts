@@ -263,6 +263,9 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
     shapeIssues: undefined,
     lastSyncedAt: db ? Date.now() - 3_600_000 : undefined,
     importedMatches: previewImportedMatches,
+    // Demo the schema auto-provisioning note: on connect, Vantage added the
+    // columns this database was missing so its schema stays in step with the app.
+    schemaProvision: db ? { created: ['SR Delta', 'Comms', 'Tilt'] } : undefined,
   };
 }
 

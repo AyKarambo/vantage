@@ -2,7 +2,8 @@ import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
 import {
   buildGametrackerProperties, diagnoseSubjectiveColumns, hasPlayedAtColumn, hasSrDeltaColumn,
-  mapRelationSourceId, presentSubjectiveColumns, validateGametrackerShape, type ShapeValidation,
+  mapRelationSourceId, planColumnProvision, presentSubjectiveColumns, validateGametrackerShape,
+  type ColumnProvisionPlan, type ShapeValidation,
 } from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary, SubjectiveColumnDiag } from '../shared/contract';
 export type { NotionDatabaseSummary, NotionPageSummary };
@@ -30,6 +31,13 @@ export interface ValidateResult extends ShapeValidation {
   mapRelationDbId?: string;
   /** The validated database's first data source id, so the writer can parent new rows on it directly. */
   dataSourceId?: string;
+  /**
+   * The Vantage-owned columns missing from (→ `toCreate`) or conflicting with
+   * (→ `blocked`) the live schema, from {@link planColumnProvision}. The runtime
+   * feeds `toCreate` to {@link NotionAdmin.ensureColumns} to self-heal the schema
+   * on validate; `blocked` (wrong-type/near-miss) is surfaced, never created over.
+   */
+  provisionPlan: ColumnProvisionPlan;
 }
 
 /**
@@ -140,7 +148,24 @@ export class NotionAdmin {
       subjectiveColumnDiagnostics: diagnoseSubjectiveColumns(properties),
       mapRelationDbId: mapRelationSourceId(properties),
       dataSourceId,
+      provisionPlan: planColumnProvision(properties),
     };
+  }
+
+  /**
+   * Additively create the given Vantage-owned columns on an EXISTING data source
+   * (the self-healing schema step) via one `dataSources.update`. Additive ONLY —
+   * never sends a rename, retype, or removal, so user columns and data are never
+   * touched. A no-op (no network call) when `toCreate` is empty, keeping a
+   * complete schema idempotent. Returns the names actually created (empty when
+   * nothing to do). Errors (e.g. a token without schema-edit permission) propagate
+   * to the caller, which surfaces them and still runs the sync for existing columns.
+   */
+  async ensureColumns(dataSourceId: string, toCreate: Record<string, unknown>): Promise<string[]> {
+    const names = Object.keys(toCreate);
+    if (names.length === 0) return [];
+    await this.client.dataSources.update({ data_source_id: dataSourceId, properties: toCreate as any });
+    return names;
   }
 
   /** Paginated `client.search`, following `has_more`/`next_cursor`. */

@@ -15,7 +15,7 @@ import type { GameRecord } from '../core/analytics';
 import { matchExportSignature, effectiveImprovementGrade, type AuthoredTarget } from '../core/targets';
 import type {
   CleanupDuplicatesResult, ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
-  SubjectiveColumnDiag,
+  SchemaProvisionStatus, SubjectiveColumnDiag,
 } from '../shared/contract';
 
 /**
@@ -98,6 +98,10 @@ export class NotionRuntime {
   // The configured Gametracker database's validated data source id — so the writer
   // can parent new rows on it directly instead of resolving on every export.
   private gametrackerSourceId?: string;
+  // Outcome of the last validate's schema auto-provisioning pass (columns Vantage
+  // created to keep the database in step, or a provisioning error) — cached so
+  // `status()` can surface it. Undefined = nothing created and nothing failed.
+  private schemaProvision?: SchemaProvisionStatus;
 
   constructor(private readonly deps: NotionRuntimeDeps) {}
 
@@ -111,6 +115,7 @@ export class NotionRuntime {
     this.subjectiveDiagnostics = undefined;
     this.mapsRelationDbId = undefined;
     this.gametrackerSourceId = undefined;
+    this.schemaProvision = undefined;
     if (!token) {
       this.client = this.exporter = this.admin = undefined;
       this.deps.onTokenState(false);
@@ -142,6 +147,7 @@ export class NotionRuntime {
       lastSyncedAt: notion.lastSyncedAt,
       importedMatches: this.deps.importedMatches(),
       subjectiveColumns: this.subjectiveDiagnostics,
+      schemaProvision: this.schemaProvision,
     };
   }
 
@@ -334,16 +340,38 @@ export class NotionRuntime {
 
   /**
    * Async shape validation of the configured database, cached for `status()`.
-   * The exporter is rebuilt with the found issues so a later `export()`
-   * short-circuits instead of failing once per game.
+   * Self-heals the schema first: any Vantage-owned column the database is missing
+   * is created in place (additively), then the database is re-validated ONCE so a
+   * freshly-created column flips into the writer's capabilities and is written in
+   * this same session's sync. The exporter is (re)built with the found issues so a
+   * later `export()` short-circuits instead of failing once per game.
    */
   private async validateConfigured(): Promise<void> {
     const { notion } = this.deps.config();
     if (!this.admin || !notion.gametrackerDatabaseId) return;
+    const opts = { requireMapRelation: Boolean(notion.mapsDatabaseId) };
     try {
-      const result = await this.admin.validate(notion.gametrackerDatabaseId, {
-        requireMapRelation: Boolean(notion.mapsDatabaseId),
-      });
+      let result = await this.admin.validate(notion.gametrackerDatabaseId, opts);
+      // Provision the columns Vantage owns and expects but the database lacks,
+      // then re-validate so they land in `writableColumns`/`hasPlayedAt`/`hasSrDelta`
+      // for this session. Additive only; wrong-type/near-miss columns stay in
+      // `blocked` and are never touched. Bounded to one attempt + one re-validate.
+      // Best-effort: a failure (e.g. a token without schema-edit permission) is
+      // surfaced in `schemaProvision.error` and the export still runs for the
+      // columns that already exist (a still-missing required column keeps the
+      // "Database is missing" short-circuit below — no crash, no partial write).
+      const { toCreate } = result.provisionPlan;
+      if (result.dataSourceId && Object.keys(toCreate).length) {
+        try {
+          const created = await this.admin.ensureColumns(result.dataSourceId, toCreate);
+          result = await this.admin.validate(notion.gametrackerDatabaseId, opts);
+          this.schemaProvision = created.length ? { created } : undefined;
+        } catch (err) {
+          this.schemaProvision = { created: [], error: String(err) };
+        }
+      } else {
+        this.schemaProvision = undefined;
+      }
       this.shapeCheck = { title: result.title, valid: result.ok, issues: [...result.missing, ...result.mismatched] };
       this.hasPlayedAt = result.hasPlayedAt;
       this.hasSrDelta = result.hasSrDelta;
@@ -359,6 +387,7 @@ export class NotionRuntime {
       this.subjectiveDiagnostics = undefined;
       this.mapsRelationDbId = undefined;
       this.gametrackerSourceId = undefined;
+      this.schemaProvision = undefined;
     }
     this.buildExporter(this.shapeCheck.valid ? undefined : this.shapeCheck.issues);
   }
