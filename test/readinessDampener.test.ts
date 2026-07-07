@@ -90,6 +90,20 @@ describe('target-focus dampener', () => {
     expect(ten.delta).toBe(one.delta);
   });
 
+  it('archiving a target AFTER the reference day does not retroactively strip its dampening', () => {
+    // Review finding: `!archivedAt` alone re-scored history on archival. A target
+    // hit through the acute window, then archived on day 40, must still dampen
+    // the day-35 evaluation exactly like the never-archived twin.
+    const withGrades = gradeAcute(decliningHistory(), 29, { t1: 'hit' }, 8);
+    const active = perfWith(withGrades, { targets: [target('t1', 3)] });
+    const archivedLater = perfWith(withGrades, { targets: [target('t1', 3, { archivedAt: ts(40) })] });
+    expect(archivedLater.dampened).toBe(true);
+    expect(archivedLater.delta).toBe(active.delta);
+    // ...while an archival BEFORE the window still excludes it:
+    const archivedEarly = perfWith(withGrades, { targets: [target('t1', 3, { archivedAt: ts(20) })] });
+    expect(archivedEarly.targetEvidence).toBe(false);
+  });
+
   it('inactive, archived, Notion-sentinel, and not-yet-created targets never count', () => {
     const dead: ReadinessContext = {
       targets: [

@@ -7,7 +7,7 @@
 import { h } from '../dom';
 import type { ReadinessBand, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
 import { PALETTE } from '../theme';
-import { button, card, statBar, statBox } from '../components/primitives';
+import { button, card, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { readinessChart, supercompensationSchematic } from '../charts/plots';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
@@ -44,14 +44,18 @@ export function readiness(ctx: ViewContext): HTMLElement {
   );
 }
 
-/** One family's pull on the composite: signed delta + a small magnitude bar. */
+/** One family's pull on the composite: signed delta + a small magnitude bar.
+ *  A bare track (not statBar) — statBar reserves fixed label/value gutters that
+ *  would leave ~35% of the tile blank here (review finding). */
 function subscoreTile(label: string, sub: ReadinessSubscore, maxAbs: number, note?: string): HTMLElement {
   const delta = sub.delta;
   const value = !sub.available ? '—' : `${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}`;
   const color = !sub.available || Math.abs(delta) < 1 ? PALETTE.muted : delta < 0 ? (delta <= -maxAbs / 2 ? PALETTE.loss : PALETTE.mid) : PALETTE.win;
+  const frac = sub.available ? Math.min(1, Math.abs(delta) / maxAbs) : 0;
   return h('div', null,
     statBox(value, label),
-    statBar({ label: '', frac: sub.available ? Math.min(1, Math.abs(delta) / maxAbs) : 0, color, valueText: '', slim: true }),
+    h('div', { class: 'track', style: { marginTop: '6px' } },
+      h('div', { class: 'track-fill', style: { width: `${Math.round(frac * 100)}%`, background: color } })),
     h('div', { class: 'hint', style: { marginTop: '4px', fontSize: '11px' } },
       !sub.available ? (note ?? 'no usable data yet') : note ?? ''),
   );

@@ -201,10 +201,14 @@ export function perfState(
       : 0;
 
   // --- target-focus dampener (deliberate-practice exemption) ---
+  // Day-gated on BOTH ends: a target only counts from its creation day, and an
+  // archival only stops it from the archival day onward — archiving a finished
+  // target today must never retroactively strip past trend days' dampening
+  // (review finding: `!archivedAt` alone re-scored history on archival).
   const activeTargets = ctx.targets.filter(
     (t) =>
       t.isActive &&
-      !t.archivedAt &&
+      (!t.archivedAt || dayOrdinal(t.archivedAt) > refOrdinal) &&
       t.id !== NOTION_IMPROVEMENT_TARGET_ID &&
       dayOrdinal(t.createdAt) <= refOrdinal,
   );
