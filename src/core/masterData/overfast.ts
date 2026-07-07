@@ -10,6 +10,7 @@
  */
 import type { HeroEntry, HeroRole, MapEntry } from './types';
 import { classifyGamemodes } from './modeMap';
+import { isStadiumOnlyMap } from '../maps';
 
 function normalizeRole(raw: unknown): HeroRole | null {
   if (typeof raw !== 'string') return null;
@@ -53,6 +54,9 @@ export function parseOverfastMaps(raw: unknown): MapEntry[] {
   for (const m of raw) {
     const name = typeof (m as any)?.name === 'string' ? (m as any).name.trim() : '';
     if (!name || seen.has(name)) continue;
+    // Stadium-only maps are never part of the competitive pool; drop them so the
+    // Update can't re-introduce them as additions (see STADIUM_ONLY_MAPS).
+    if (isStadiumOnlyMap(name)) continue;
     const gamemodes = Array.isArray((m as any)?.gamemodes)
       ? ((m as any).gamemodes as unknown[]).filter((g): g is string => typeof g === 'string')
       : [];

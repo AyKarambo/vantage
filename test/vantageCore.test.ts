@@ -33,10 +33,12 @@ describe('mapMode', () => {
   it('resolves the newer maps so imports do not bucket them as Unknown', () => {
     expect(mapMode('Neon Junktion')).toBe('Hybrid');
     expect(mapMode('Redwood Dam')).toBe('Push');
-    expect(mapMode('Place Lacroix')).toBe('Push');
-    expect(mapMode('Wuxing University')).toBe('Control');
-    expect(mapMode('Gogadoro')).toBe('Control');
-    expect(mapMode('Arena Victoriae')).toBe('Control');
+  });
+
+  it('leaves Stadium-only maps unmodelled (they are not in the competitive pool)', () => {
+    for (const name of ['Place Lacroix', 'Wuxing University', 'Gogadoro', 'Arena Victoriae']) {
+      expect(mapMode(name), name).toBe('Unknown');
+    }
   });
 });
 

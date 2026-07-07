@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_MASTER_DATA, defaultMasterData } from '../src/core/masterData';
 import { HEROES_BY_ROLE } from '../src/core/heroes';
-import { MAP_MODES } from '../src/core/maps';
+import { MAP_MODES, STADIUM_ONLY_MAPS } from '../src/core/maps';
 import { SEASON_STARTS } from '../src/core/season';
 
 describe('default master-data snapshot', () => {
@@ -11,6 +11,14 @@ describe('default master-data snapshot', () => {
       expect(entry, name).toBeDefined();
       expect(entry?.isActive, name).toBe(true);
     }
+  });
+
+  it('excludes Stadium-only maps from the pool entirely', () => {
+    for (const name of STADIUM_ONLY_MAPS) {
+      expect(DEFAULT_MASTER_DATA.maps.find((m) => m.name === name), name).toBeUndefined();
+    }
+    // Neon Junktion is a normal Hybrid map and must stay.
+    expect(DEFAULT_MASTER_DATA.maps.find((m) => m.name === 'Neon Junktion')).toBeDefined();
   });
 
   it('ships known-withheld maps inactive (AC 31)', () => {
