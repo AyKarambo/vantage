@@ -60,12 +60,26 @@ export class ManualStore {
     this.save();
   }
 
-  /** Toggle whether the target is graded on the Review screen. */
+  /** Toggle whether the target is graded on the Review screen. Activating (re)stamps
+   *  `activatedAt` so the staleness clock restarts on each rotation into the active set. */
   setActive(id: string, active: boolean): void {
     const t = this.state.targets.find((x) => x.id === id);
     if (!t || t.isActive === active) return;
     t.isActive = active;
+    if (active) t.activatedAt = Date.now();
     this.save();
+  }
+
+  /** Deactivate every active target in a single write — the "start a fresh focus" reset. */
+  deactivateAll(): void {
+    let changed = false;
+    for (const t of this.state.targets) {
+      if (t.isActive) {
+        t.isActive = false;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
   }
 
   /** Archive (soft-remove, restorable) or restore a target. */
@@ -94,8 +108,15 @@ export class ManualStore {
     try {
       const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<ManualState>;
       const targets = Array.isArray(parsed.targets) ? parsed.targets : [];
-      // Legacy records predate the active flag — they all become active.
-      return { targets: targets.map((t) => ({ ...t, isActive: t.isActive ?? true })) };
+      // Legacy records predate the active flag (→ active) and the activatedAt
+      // stamp (→ their creation time, so the staleness clock has a starting point).
+      return {
+        targets: targets.map((t) => ({
+          ...t,
+          isActive: t.isActive ?? true,
+          activatedAt: t.activatedAt ?? t.createdAt,
+        })),
+      };
     } catch {
       return { targets: [] };
     }

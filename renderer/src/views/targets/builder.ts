@@ -4,9 +4,10 @@
  */
 import { h, render } from '../../dom';
 import type { TargetMode, TargetSummary } from '../../../../src/shared/contract';
-import { TARGET_TEMPLATES } from '../../../../src/core/targets';
+import { TARGET_TEMPLATES, stepFor, parseMeasuredRule } from '../../../../src/core/targets';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
+import { attachStepper } from '../../app/wheelStepper';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
@@ -33,9 +34,10 @@ export interface BuilderHandle {
   prefill: (t: { name: string; mode: TargetMode; rule: string }) => void;
 }
 
-// NOTE: save()'s rule template (`${stat} ${op} ${value}`) and edit()'s parse regex
-// below are two halves of one round-trip — keep them in this file together so the
-// rule string format cannot drift between writing and reading it.
+// NOTE: save()'s rule template (`${stat} ${op} ${value}`) and loadRule()'s
+// `parseMeasuredRule` (shared with core scoring/auto-grading) are the two halves
+// of one round-trip — the format is owned by `src/core/targets/measured.ts` so it
+// cannot drift between writing, reading, and auto-grading.
 export function builderCard(ctx: ViewContext): BuilderHandle {
   const state: BuilderState = {
     editingId: null,
@@ -47,6 +49,12 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     value: '4',
   };
   const host = h('div');
+
+  // Templates help you start; once you have your own set (≥3 live authored
+  // targets) they collapse behind a "Show templates" toggle. Sample/demo rows
+  // aren't "your set", so they don't count.
+  const liveAuthored = ctx.data.isSample ? 0 : ctx.data.targets.filter((t) => !t.archivedAt).length;
+  let templatesOpen = liveAuthored < 3;
 
   const save = (): void => {
     const name = state.name.trim() || 'Untitled target';
@@ -87,16 +95,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
         title: state.editingId ? 'Edit target' : 'Define a target',
         sub: state.editingId ? 'stats keep accruing across edits' : 'Make it yours',
       },
-      h('div', { class: 'field-label' }, 'Start from a template'),
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '7px', marginBottom: '16px' } },
-        ...TARGET_TEMPLATES.map((t) =>
-          h('button', {
-            class: 'chip',
-            title: t.blurb,
-            on: { click: () => prefill(t) },
-          }, t.name),
-        ),
-      ),
+      templatesRegion(),
       h('div', { class: 'field-label' }, 'Name your focus'),
       h('input', {
         class: 'target-name-input',
@@ -118,16 +117,17 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
 
   // Shared by edit() and prefill(): loads name/mode and, for measured rules,
   // parses the `${stat} ${op} ${value}` string back into the stat/op/value
-  // controls. Keep this regex identical to save()'s template (see note above).
+  // controls via the shared core parser (`parseMeasuredRule`), the inverse of
+  // save()'s template — one round-trip, one source of truth.
   const loadRule = (t: { name: string; mode: TargetMode; rule: string }): void => {
     state.name = t.name;
     state.mode = t.mode;
     state.saved = false;
-    const rule = t.rule.match(/^(.+) (≤|≥|=) (.+)$/);
+    const rule = parseMeasuredRule(t.rule);
     if (t.mode === 'measured' && rule) {
-      state.stat = rule[1];
-      state.op = rule[2];
-      state.value = rule[3].replace(/,/g, '');
+      state.stat = rule.stat;
+      state.op = rule.op;
+      state.value = String(rule.value);
     }
   };
 
@@ -146,6 +146,35 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // The "Start from a template" section: expanded until the player has their own
+  // set, then collapsed behind a toggle (local state only, no store round-trip).
+  const templatesRegion = (): HTMLElement => {
+    if (!templatesOpen) {
+      return h('div', { style: { marginBottom: '16px' } },
+        h('button', {
+          class: 'chip',
+          title: 'Browse the starter templates again',
+          on: { click: () => { templatesOpen = true; draw(); } },
+        }, 'Show templates'));
+    }
+    return h('div', { style: { marginBottom: '16px' } },
+      h('div', { class: 'field-label' }, 'Start from a template'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '7px' } },
+        ...TARGET_TEMPLATES.map((t) =>
+          h('button', { class: 'chip', title: t.blurb, on: { click: () => prefill(t) } }, t.name),
+        ),
+        // A hide affordance only makes sense once there's a set to fall back on.
+        liveAuthored >= 3
+          ? h('button', {
+              class: 'chip u-dim',
+              title: 'Hide the starter templates',
+              on: { click: () => { templatesOpen = false; draw(); } },
+            }, 'Hide')
+          : null,
+      ),
+    );
+  };
+
   draw();
   return { el: host, edit, prefill };
 }
@@ -158,25 +187,43 @@ export function selfBlock(): HTMLElement {
   );
 }
 
-export const previewText = (s: BuilderState): string => `Hit when ${s.stat} ${s.op} ${s.value}`;
+export const previewText = (s: BuilderState): string => `Hit when ${s.stat} ${s.op} ${formatThreshold(s.value)}`;
+
+/** Thousands-separate the threshold for the preview (e.g. 9250 → "9,250"); leave partial input as typed. */
+function formatThreshold(value: string): string {
+  const n = Number(value);
+  return value !== '' && Number.isFinite(n) ? n.toLocaleString('en-US') : value;
+}
 
 export function measuredBlock(state: BuilderState, onChange: () => void): HTMLElement {
   const preview = badge(previewText(state), 'auto');
   const update = (): void => { preview.textContent = previewText(state); onChange(); };
+
+  const numInput = h('input', {
+    class: 'vt-num', type: 'number', min: '0', step: String(stepFor(state.stat)),
+    value: state.value, 'aria-label': 'threshold',
+    on: { input: (e) => { state.value = (e.target as HTMLInputElement).value; update(); } },
+  }) as HTMLInputElement;
+  // Wheel + Shift-coarse adjust; the step is read live so it tracks the stat.
+  attachStepper(numInput, { step: () => stepFor(state.stat), onChange: (v) => { state.value = v; update(); } });
+
+  const statSelect = select(STATS.map((s) => ({ value: s, label: s })), state.stat, (v) => {
+    state.stat = v;
+    numInput.step = String(stepFor(v)); // keep arrow-key/spinner step in sync with the stat
+    update();
+  });
+
   return h('div', { class: 'card' },
     h('div', { style: { fontSize: '12.5px', color: 'var(--text-2)', marginBottom: '10px' } }, 'Bind it to a stat and auto-grade:'),
     h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
-      select(STATS.map((s) => ({ value: s, label: s })), state.stat, (v) => { state.stat = v; update(); }),
+      statSelect,
       select(OPS.map((o) => ({ value: o, label: o })), state.op, (v) => { state.op = v; update(); }),
-      h('input', {
-        class: 'vt-num', type: 'number', value: state.value, 'aria-label': 'threshold',
-        on: { input: (e) => { state.value = (e.target as HTMLInputElement).value; update(); } },
-      }),
+      numInput,
       h('span', { class: 'u-muted' }, '→'),
       preview,
     ),
     h('div', { class: 'hint', style: { lineHeight: '1.5', marginTop: '10px' } },
-      'Reads end-of-match stats when Overwatch exposes them — otherwise type the number yourself. Works for anyone, even if they never look at stats.'),
+      'Auto-graded from your end-of-match stats — Damage, Healing and Mitigation are read per 10 minutes. Scroll the number to adjust (hold Shift for bigger steps); matches the game does not report the stat for are skipped.'),
   );
 }
 

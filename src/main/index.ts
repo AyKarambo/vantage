@@ -238,6 +238,11 @@ function main(): void {
     // id is never a real, user-facing target.
     authoredTargetIds: () =>
       new Set(manual.targets().filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID).map((t) => t.id)),
+    // The same visible authored targets WITH their rules, so measured (⚡) targets
+    // can be auto-graded from each match's stats and folded into the exported
+    // Improvement Target aggregate — matching the in-app numbers.
+    authoredTargets: () =>
+      manual.targets().filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID),
     // Seed a freshly auto-created Maps DB with ALL effective maps (active + inactive)
     // so historical matches on any map still relate to a page (spec AC 32).
     mapNames: allMapNames,
@@ -274,6 +279,7 @@ function main(): void {
       config = loadConfig();
     },
     persistBreakReminder: (breakReminder) => saveLocalConfig({ breakReminder }),
+    persistStaleness: (staleness) => saveLocalConfig({ staleness }),
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
     recordGame: (game) => pipeline.recordGame(game),
     notify: (title, body) => tray.notify(title, body),

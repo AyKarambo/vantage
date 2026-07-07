@@ -4,10 +4,11 @@
  * renderer bundle can all share it.
  */
 import type { Role, Result } from '../../core/model';
-import type { WinLoss, Group, FocusItem, HeroSummary, SessionRecap, Streak } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, HeroSummary, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
+import type { StalenessSettings } from '../../core/staleness';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { DemoPreference } from '../../core/demoPreference';
@@ -56,6 +57,13 @@ export interface MatchRow {
   finalScore?: string;
   /** Merged mental flags (quick-log OR review source) — only true keys are present. */
   flags?: Partial<Record<MatchFlagKey, true>>;
+  /**
+   * Auto-graded measured (⚡) targets for this match, shown read-only on the
+   * Review screen: target id → the derived grade + underlying per-10/ratio value,
+   * or `'no-stat'` when the match can't measure it. Only populated for the
+   * currently-active measured targets on the review inbox rows.
+   */
+  measuredGrades?: Record<string, { grade: TargetGrade; value: number } | 'no-stat'>;
 }
 
 /** Everything the dashboard needs for the current filter set. */
@@ -124,6 +132,8 @@ export interface DashboardData {
   masterData: MasterData;
   /** The effective break-reminder settings, so views render synchronously. */
   breakReminder: BreakReminderSettings;
+  /** Effective staleness thresholds for the active-target rotation cue, so the Targets view renders synchronously. */
+  staleness: StalenessSettings;
   /** Readiness / training-load verdict — computed over the UNFILTERED history (fatigue is per-person). */
   readiness: ReadinessSummary;
   /** The effective readiness feature settings, so views render synchronously. */

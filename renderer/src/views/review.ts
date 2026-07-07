@@ -10,6 +10,7 @@
  */
 import { h, render } from '../dom';
 import type { MatchMental, MatchRow, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import { parseMeasuredRule } from '../../../src/core/targets';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
@@ -103,7 +104,12 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   const flags: MatchMental = {};
   let performance: number | undefined;
 
-  const rows = active.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
+  // Self-rated targets are hand-graded here; measured targets are auto-graded
+  // from stats and shown read-only (keyboard grading cycles the self-rated only).
+  const selfTargets = active.filter((t) => t.mode !== 'measured');
+  const measuredTargets = active.filter((t) => t.mode === 'measured');
+  const rows = selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
+  const targetEls = [...rows.map((r) => r.el), ...measuredTargets.map((t) => measuredResultRow(t, m.measuredGrades?.[t.id]))];
   let focusIdx = 0;
   const markFocus = (): void => {
     rows.forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
@@ -136,9 +142,9 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
       h('span', { class: 'u-dim', style: { fontSize: '12px' } },
         `· ${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
     ),
-    section('◎ Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
-      ...(rows.length
-        ? rows.map((r) => r.el)
+    section('Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
+      ...(targetEls.length
+        ? targetEls
         : [h('div', { class: 'hint' }, 'No active targets yet — add some on the Targets page to grade them here.')]),
     )),
     section('◎ How it felt', mentalFlagsRow(flags)),
@@ -169,4 +175,27 @@ function section(label: string, body: Node): HTMLElement {
     h('div', { class: 'review-section-label' }, label),
     body,
   );
+}
+
+/** A measured (⚡) target's auto-grade for this match, shown read-only — no manual control. */
+function measuredResultRow(
+  t: TargetSummary,
+  res: { grade: TargetGrade; value: number } | 'no-stat' | undefined,
+): HTMLElement {
+  const parsed = parseMeasuredRule(t.rule);
+  const unit = parsed ? (parsed.stat === 'KDA' ? 'KDA' : `${parsed.stat}/10`) : '';
+  const body = res && res !== 'no-stat'
+    ? `⚡ ${gradeLabel(res.grade)} — ${unit} = ${res.value.toLocaleString('en-US')}`
+    : '⚡ no stat this match';
+  return h('div', { class: 'review-target' },
+    h('div', { class: 'row-main', style: { minWidth: '0' } },
+      h('div', { style: { fontSize: '13px' } }, t.name),
+      h('div', { class: 'mono u-dim', style: { fontSize: '10.5px', marginTop: '2px' } }, t.rule),
+    ),
+    h('div', { class: 'u-muted', style: { fontSize: '12px', whiteSpace: 'nowrap' } }, body),
+  );
+}
+
+function gradeLabel(g: TargetGrade): string {
+  return g === 'hit' ? 'Hit' : g === 'partial' ? 'Partial' : 'Missed';
 }

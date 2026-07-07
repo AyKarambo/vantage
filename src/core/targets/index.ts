@@ -20,6 +20,16 @@ export { buildTargets } from './scoring';
 export type { TargetTemplate } from './templates';
 export { TARGET_TEMPLATES } from './templates';
 
+// Automatic grading of measured (⚡) targets from match stats
+export type { MeasuredOp, ParsedRule } from './measured';
+export {
+  parseMeasuredRule, formatMeasuredRule, matchStatValue, evaluateMeasured, foldMeasuredGradesForExport,
+  effectiveImprovementGrade,
+} from './measured';
+
+// Wheel/stepper step sizes for the measured threshold field
+export { stepFor, COARSE_FACTOR } from './stepSizes';
+
 // Notion export bookkeeping: the hidden internal-id constant + the export
 // content signature that drives changed-since-last-export detection.
 export { NOTION_IMPROVEMENT_TARGET_ID, matchExportSignature } from './notionBookkeeping';
