@@ -29,6 +29,7 @@ import {
   type QualifyingGame,
 } from './baselines';
 import { clamp, winsorizedZ } from './stats';
+import { blendFor } from './regime';
 
 /** The pure inputs the readiness engine needs beyond the games themselves. */
 export interface ReadinessContext {
@@ -65,6 +66,10 @@ export interface PerfState {
   metricMeans: Partial<Record<MetricKey, number>>;
   /** Objective decline detected — gates the subjective agree/disagree split. */
   objectiveAdverse: boolean;
+  /** Regime blend b ∈ [0,1]: share of the acute window with comparable per-10 coverage (1 = full stats, 0 = manual). */
+  blend: number;
+  /** Sum of per-game trust weights behind `blend` (the continuous coverage numerator). */
+  blendCoverage: number;
   /** Final perfDelta ∈ [perfDeltaMin, perfDeltaMax]. */
   delta: number;
 }
@@ -72,7 +77,7 @@ export interface PerfState {
 export const EMPTY_PERF: PerfState = {
   available: false, statCoverage: 0, maxAccountShare: 1, declineFired: false, cusumMax: 0,
   countedGames: 0, statPenalty: 0, wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false,
-  dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, delta: 0,
+  dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
 
 const GRADE_CREDIT: Record<TargetGrade, number> = { hit: 1, partial: 0.5, missed: 0 };
@@ -116,6 +121,7 @@ export function perfState(
   let cusum = 0;
   let cusumMax = 0;
   let countedGames = 0;
+  let blendCoverage = 0;
   let gameScoreSum = 0;
   const stillLearning = new Set<string>();
   const metricSums: Partial<Record<MetricKey, { sum: number; n: number }>> = {};
@@ -155,6 +161,11 @@ export function perfState(
 
     const g = (weighted / weightSum) * trust;
     countedGames += 1;
+    // Blend numerator: the game's own trust weight (not a binary +1), so a hero crossing the
+    // baseline trust floor bleeds coverage in gradually instead of reclassifying its whole cohort
+    // at once — keeps b continuous in the day index (R1). At full coverage trust=1 ⇒ this equals
+    // countedGames ⇒ b is unchanged, preserving the b=1 bit-identity.
+    blendCoverage += trust;
     gameScoreSum += g;
     cusum = Math.max(0, cusum + (-g - T.cusumSlack));
     cusumMax = Math.max(cusumMax, cusum);
@@ -164,6 +175,7 @@ export function perfState(
   // learning window) — not merely stat-carrying. A flex player whose buckets
   // never fill must read as low-coverage, not high-confidence.
   const statCoverage = countedGames / acuteGames.length;
+  const blend = blendFor(blendCoverage, acuteGames.length);
 
   const declineFired = cusumMax >= T.cusumThreshold && countedGames >= T.evidenceMinGames;
   const statPenalty = declineFired
@@ -263,6 +275,8 @@ export function perfState(
     stillLearning: [...stillLearning],
     metricMeans,
     objectiveAdverse: declineFired || wrPenalty > 0,
+    blend,
+    blendCoverage,
     delta,
   };
 }
