@@ -104,7 +104,9 @@ export function openLogMatch(ctx: ViewContext, carry?: LogCarry): void {
   // All fetched before building the form.
   void Promise.all([bridge.listAccounts(), bridge.getRanks(), bridge.mostPlayedHeroes()]).then(
     ([accounts, ranks, mostPlayed]) => {
-      openModal((close) => buildForm(ctx, close, accounts, ranks, mostPlayed, carry));
+      openModal((close) => buildForm(ctx, close, accounts, ranks, mostPlayed, carry), {
+        panelClass: 'modal-card--wide',
+      });
     },
   );
 }
@@ -130,15 +132,23 @@ function buildForm(
   const defaultAccount = seededAccount ?? accountOptions.find((o) => o.value === prefill?.account)?.value ?? accountOptions[0].value;
   const seededRole = filterRole !== 'all' && Object.values(ROLE_LABELS).includes(filterRole as Role) ? (filterRole as Role) : undefined;
 
+  const initialRole: Role = seededRole ?? (prefill?.role as Role) ?? 'damage';
+
+  const hasAnchor = (account: string, role: Role): boolean =>
+    ranks.some((r) => r.account === account && r.role === role);
+
   const state: LogState = {
     result: 'Win',
-    role: seededRole ?? (prefill?.role as Role) ?? 'damage',
+    role: initialRole,
     map: '',
     heroes: new Set<string>(carry?.heroes ?? []),
     account: defaultAccount,
     flags: new Set<string>(),
     comms: null,
-    srMode: 'change',
+    // No anchor yet for this account+role → open in "Set current rank" so the
+    // starting rank gets established there (replacing the old one-time-setup
+    // block); otherwise default to nudging the change.
+    srMode: hasAnchor(defaultAccount, initialRole) ? 'change' : 'set-current',
     srDelta: presetFor('Win'),
     srEdited: false,
     anchorTier: 'Gold',
@@ -147,9 +157,6 @@ function buildForm(
     playedAt: null,
     performance: undefined,
   };
-
-  const hasAnchor = (account: string, role: Role): boolean =>
-    ranks.some((r) => r.account === account && r.role === role);
 
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
@@ -213,10 +220,10 @@ function buildForm(
         ...(Object.keys(grades).length ? { grades } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
-      // Set-current re-anchors on every save; otherwise the anchor is only set
-      // the first competitive match for this account+role. Either way a negative
-      // % is preserved as a rank-protection carry.
-      if (setCurrent || (!hasAnchor(state.account, state.role) && state.anchorTier)) {
+      // Only "Set current rank" re-anchors — it's the single path for
+      // establishing/correcting the rank now (a negative % is preserved as a
+      // rank-protection carry). Change mode only ever records the srDelta above.
+      if (setCurrent) {
         await bridge.setRankAnchor({
           account: state.account,
           role: state.role,
@@ -333,7 +340,7 @@ function buildForm(
     return el;
   };
 
-  // Tier / division / % picker — shared by the first-match anchor and "set current".
+  // Tier / division / % picker — the "Set current rank" mode's input.
   const rankPicker = (): HTMLElement => {
     const pctInput = numInput(state.anchorPct, 'e.g. 40, or -19 if protected', (v) => (state.anchorPct = v));
     attachWheelNudge(pctInput, () => state.anchorPct, (v) => (state.anchorPct = v));
@@ -387,22 +394,11 @@ function buildForm(
     }
 
     const srField = field(optionalLabel('Skill rating change (%)'), srDeltaInput());
-    if (hasAnchor(state.account, state.role)) {
-      render(rankHost, toggleRow, srField,
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          `Rank tracked for ${roleLabel(state.role)} on ${state.account} — the % above moves it.`));
-      return;
-    }
-    // A first-time-anchor callout, not a second mode: visually separated (top
-    // border) from the Change-mode SR field above so it doesn't read as the
-    // "Set current rank" toggle state bleeding into "Change".
+    const hint = hasAnchor(state.account, state.role)
+      ? `Rank tracked for ${roleLabel(state.role)} on ${state.account} — the % above moves it.`
+      : `No rank tracked for ${roleLabel(state.role)} on ${state.account} yet — switch to “Set current rank” to set your starting rank.`;
     render(rankHost, toggleRow, srField,
-      h('div', { style: { borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '2px' } },
-        h('div', { class: 'hint', style: { marginBottom: '8px' } },
-          `First competitive ${roleLabel(state.role)} match on ${state.account} — set your current rank once so it can be tracked from here.`),
-        field(optionalLabel('Current rank — one-time setup'), rankPicker()),
-      ),
-    );
+      h('div', { class: 'hint', style: { marginTop: '6px' } }, hint));
   };
   paintRank();
 
@@ -466,12 +462,21 @@ function buildForm(
     performanceSlider(state.performance, (v) => { state.performance = v; }),
   );
 
+  // Two columns: the match facts (what happened) on the left, the manual
+  // self-report (how it felt / how you played) on the right — keeps the card
+  // short. Collapses to one column on a narrow viewport (see .log-grid CSS).
   // tabindex -1: focusable via script (for the mount-time focus below) but not
   // part of the natural Tab order.
   const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
-      field('Result', resultRow), accountField, mapField, roleField, playedField, heroField,
-      rankHost, flagsBlock, commsBlock, performanceBlock, targetsBlock, actions),
+      h('div', { class: 'log-grid' },
+        h('div', { class: 'log-col' },
+          field('Result', resultRow), accountField, mapField, roleField, playedField, heroField, rankHost),
+        h('div', { class: 'log-col' },
+          performanceBlock, commsBlock, flagsBlock, targetsBlock),
+      ),
+      actions,
+    ),
   );
 
   // Keyboard flow: W/L/D pick the result when not typing; Enter saves from

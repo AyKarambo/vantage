@@ -706,6 +706,30 @@ table.data tbody tr:hover {
   box-shadow: var(--shadow-lg);
   animation: rise-in 180ms var(--ease);
 }
+/* Wide variant — the Log Match card lays its fields out in two columns. */
+.modal-card--wide {
+  width: 760px;
+}
+
+/* Log Match two-column body: match facts left, self-report right. Collapses to
+   a single column when the modal can't be wide enough (narrow viewport). */
+.log-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 26px;
+  align-items: start;
+}
+.log-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+@media (max-width: 680px) {
+  .log-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .drawer-panel {
   width: 440px;
   max-width: 92vw;

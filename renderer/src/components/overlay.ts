@@ -29,8 +29,11 @@ function mountOverlay(overlay: HTMLElement, panel: HTMLElement, onClose?: () => 
 }
 
 /** Open a centered modal. `body(close)` builds the card contents. */
-export function openModal(build: (close: () => void) => Node): OverlayHandle {
-  const panel = h('div', { class: 'modal-card' });
+export function openModal(
+  build: (close: () => void) => Node,
+  opts?: { panelClass?: string },
+): OverlayHandle {
+  const panel = h('div', { class: `modal-card${opts?.panelClass ? ' ' + opts.panelClass : ''}` });
   const overlay = h('div', { class: 'overlay overlay--center' }, panel);
   const handle = mountOverlay(overlay, panel);
   panel.append(build(handle.close));

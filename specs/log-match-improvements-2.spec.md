@@ -219,3 +219,29 @@ touched — without slowing the card down or weakening account safety (still 100
 *None outstanding — ready to plan.* Fine-grained details (exact locked-combobox keyboard semantics,
 whether the slider shows a numeric readout alongside the track, the precise clamp bounds for the
 suggested-hero-count setting) are left for the techplan to settle with tests.
+
+## Post-implementation refinements (2026-07-07)
+
+Two follow-up changes made after the first implementation landed, from live use of the card:
+
+1. **One-time rank setup removed; first-timers default to "Set current rank".** The Change-mode SR
+   field used to render a *separate* "Current rank — set once" tier/division/% picker whenever no
+   anchor existed for the (account, role). With the Change ↔ Set-current toggle already covering
+   both intents, that duplicate block was confusing (it read as if both modes were active at once).
+   It's removed: instead, when the card opens for an (account, role) with **no** anchor yet, it now
+   **opens in "Set current rank" mode** so the starting rank is established there. Change mode with
+   no anchor shows a hint pointing at the toggle, and only "Set current rank" ever writes an anchor
+   on save (Change mode records the `srDelta` only).
+2. **Two-column card layout.** The card grew long enough to scroll. It's now a two-column grid — the
+   **match facts** (result, account, map, role, played, heroes, skill rating) on the left and the
+   **manual self-report** (performance, comms, flags, target grades) on the right — in a wider
+   modal, collapsing back to one column on a narrow viewport. Save actions span full width below.
+
+**Note on the accounts/log-match mismatch that prompted #1:** the top-left account switcher (and the
+filter bar) list accounts *derived from the games in view* (`DashboardData.options.accounts =
+distinct(games.map(g => g.account))`), whereas Settings › Accounts and the log-match account picker
+list *configured* accounts (`config.accounts`, via `listAccounts()`). In demo mode the sample games
+carry account labels that were never configured, so the switcher shows them but Settings is empty and
+the log form falls back to `You` — which (having no anchor) is what triggered the one-time setup.
+This is expected for demo data (and for any history whose accounts aren't in config); not changed
+here — seeding configured accounts from history is a separate concern.
