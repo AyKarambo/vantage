@@ -324,11 +324,15 @@ export class App {
     // navigation (not a data refresh on the same route) returns here.
     if (last) this.scrollMemory.set(routeKey(last.view, last.matchId), this.contentHost.scrollTop);
     const navigated = !last || last.view !== key.view || last.matchId !== key.matchId;
+    // A same-route re-render (e.g. a master-data edit round-tripping through
+    // store.refresh()) replaces the DOM, which resets scrollTop to 0. Capture
+    // it first so we can put the user back where they were.
+    const priorScroll = this.contentHost.scrollTop;
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
-    if (navigated) {
-      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId)) ?? 0;
-    }
+    this.contentHost.scrollTop = navigated
+      ? this.scrollMemory.get(routeKey(key.view, key.matchId)) ?? 0
+      : priorScroll;
   }
 
   /** Cold-start failure: nothing to show — offer an explicit retry. */
