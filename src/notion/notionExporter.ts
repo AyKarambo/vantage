@@ -3,7 +3,7 @@ import { emptyMatch, type MatchRecord, type Result } from '../core/model';
 import type { GameRecord, MatchMental } from '../core/analytics';
 import { leaverFlags, mergeLeaver } from '../core/leaver';
 import { commsTone } from '../core/comms';
-import { aggregateImprovementGrade, matchExportSignature, NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
+import { aggregateImprovementGrade, matchExportSignature, effectiveImprovementGrade, type AuthoredTarget } from '../core/targets';
 import { NotionWriter } from './notionWriter';
 import { queryAllPages, queryDataSourcePages } from './pageScan';
 import { groupByEffectiveMatchId, pickCanonicalRow, rowRefOf, type RowRef } from './dedup';
@@ -64,6 +64,14 @@ export class NotionExporter {
      * entirely — every ledger record matches, as before this existed.
      */
     private readonly configuredDatabaseId?: string,
+    /**
+     * Getter for the user's visible authored targets WITH their rules, so
+     * measured (⚡) targets can be auto-graded from each match's stats and folded
+     * into the exported Improvement Target grade (via `effectiveImprovementGrade`).
+     * Re-read on every `export()` call, never cached. Defaults to none, so callers
+     * that don't thread targets keep today's self-rated-only behavior.
+     */
+    private readonly authoredTargets: () => readonly AuthoredTarget[] = () => [],
   ) {}
 
   /**
@@ -182,10 +190,7 @@ export class NotionExporter {
       // the returned buckets.
       if (backfilled.has(game.matchId)) continue;
       try {
-        const grade = aggregateImprovementGrade(game.review, {
-          visibleTargetIds: this.authoredTargetIds(),
-          bookkeepingId: NOTION_IMPROVEMENT_TARGET_ID,
-        });
+        const grade = effectiveImprovementGrade(game, this.authoredTargets(), this.authoredTargetIds());
         const signature = matchExportSignature(game, grade);
         const pageId = this.outbox.pageIdFor(game.matchId, this.configuredDatabaseId);
 
@@ -290,10 +295,7 @@ export class NotionExporter {
    * duplicate bug — AC3), update or recreate + adopt the ledger baseline.
    */
   private async backfillLegacy(game: GameRecord): Promise<'updated' | 'recreated' | 'ok'> {
-    const grade = aggregateImprovementGrade(game.review, {
-      visibleTargetIds: this.authoredTargetIds(),
-      bookkeepingId: NOTION_IMPROVEMENT_TARGET_ID,
-    });
+    const grade = effectiveImprovementGrade(game, this.authoredTargets(), this.authoredTargetIds());
     const signature = matchExportSignature(game, grade);
     const found = await this.lookupExistingRow(game.matchId);
 

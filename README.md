@@ -53,14 +53,19 @@ comms · toxicity · leavers · your improvement target).
   verdict card opens a modal with the full methodology (verdict bands, signals, the training-load
   model, the supercompensation model and its schematic, confidence levels, and the honesty
   disclaimer).
-- **Review** — grade your active improvement targets (Hit / Partial / Missed), flag
-  how each tracked game felt, and rate your own **performance** on a 0-100 slider; an
+- **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
+  how each tracked game felt, and rate your own **performance** on a 0-100 slider; **measured
+  (⚡) targets are auto-graded from that match's stats and shown read-only**. An
   always-visible inbox of ungraded games, independent of the global filters.
-- **Improvement Target** — build a target (self-rated ◎ or measured ⚡), or start from a
-  **curated template** (trade discipline, ult economy, comms, warm-up, replay review); choose
-  which targets are active (graded on Review), edit or archive/delete them, and track a
-  library that shows whether hitting it actually moves your winrate. The **Focus** screen can
-  create a map-practice target for a losing map in one click (**＋ target**).
+- **Improvement Target** — build a target (self-rated ◎, or measured ⚡ which **auto-grades
+  from your per-10-minute stats** — no manual read), or start from a **curated, coaching-grounded
+  template** (positioning, ult economy, cooldown value, target selection, plus per-role stat
+  floors). Measured thresholds take **scroll-to-adjust** (per-stat steps, hold Shift for bigger
+  jumps). Rotate your focus with the **Active focus** panel (quick add/remove + "start a fresh
+  focus"); active targets that go stale (past a configurable days/matches threshold) get a
+  rotate nudge. Edit or archive/delete targets, and track a library that shows whether hitting
+  a target actually moves your winrate. The **Focus** screen can create a map-practice target
+  for a losing map in one click (**＋ target**).
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still

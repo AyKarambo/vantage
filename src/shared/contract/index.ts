@@ -18,6 +18,7 @@ export type {
 export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
 export type { TargetSummary, TargetMode } from '../../core/targets';
+export type { StalenessSettings } from '../../core/staleness';
 export type { BreakReminderSettings } from '../../core/breakReminder';
 export type {
   ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,

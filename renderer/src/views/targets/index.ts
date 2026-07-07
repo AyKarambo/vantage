@@ -8,6 +8,7 @@ import { h } from '../../dom';
 import { card, emptyState } from '../../components/primitives';
 import { viewHead, type ViewContext } from '../view';
 import { builderCard } from './builder';
+import { activeSetCard } from './activeSet';
 import { libraryCard } from './library';
 
 export function targets(ctx: ViewContext): HTMLElement {
@@ -23,6 +24,7 @@ export function targets(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view', style: { maxWidth: '760px' } },
     viewHead('Improvement Target', 'Self-rated by default, measurable if you want — pick per target'),
     builder.el,
+    activeSetCard(ctx),
     noTargets
       ? card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
           emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true))

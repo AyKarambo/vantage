@@ -2,6 +2,7 @@ import type { GameRecord } from '../../core/analytics';
 import type { Role } from '../../core/model';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
@@ -72,6 +73,12 @@ export interface DataProvider {
   setTargetArchived(id: string, archived: boolean): void;
   /** Permanently remove a target. */
   deleteTarget(id: string): void;
+  /** Deactivate every active target at once (the "start a fresh focus" rotation reset). */
+  deactivateAllTargets(): void;
+  /** Current target-staleness thresholds. */
+  getStaleness(): StalenessSettings;
+  /** Persist new target-staleness thresholds; returns the persisted (clamped) value. */
+  setStaleness(input: StalenessSettings): StalenessSettings;
   /** Current break-reminder settings. */
   getBreakReminder(): BreakReminderSettings;
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */

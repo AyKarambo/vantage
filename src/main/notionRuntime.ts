@@ -12,7 +12,7 @@ import {
   type AppConfig,
 } from './config';
 import type { GameRecord } from '../core/analytics';
-import { aggregateImprovementGrade, matchExportSignature, NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
+import { matchExportSignature, effectiveImprovementGrade, type AuthoredTarget } from '../core/targets';
 import type {
   CleanupDuplicatesResult, ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
   SubjectiveColumnDiag,
@@ -50,6 +50,12 @@ export interface NotionRuntimeDeps {
    * an empty set so callers that don't yet wire targets still compile.
    */
   authoredTargetIds?: () => ReadonlySet<string>;
+  /**
+   * The same visible authored targets WITH their rules, so measured (⚡) targets
+   * can be auto-graded from each match's stats and folded into the exported
+   * Improvement Target grade. Re-read live per export; defaults to none.
+   */
+  authoredTargets?: () => readonly AuthoredTarget[];
   /**
    * The effective map names (active + inactive) to seed a freshly auto-created
    * Maps database with, so historical matches on any map still relate to a page
@@ -172,11 +178,12 @@ export class NotionRuntime {
       // signature the exporter would compute: the next "Sync to Notion" skips them
       // unless their local content changes, in which case it updates in place.
       const authoredTargetIds = this.deps.authoredTargetIds?.() ?? new Set<string>();
+      const authoredTargets = this.deps.authoredTargets?.() ?? [];
       for (const g of result.games) {
-        const grade = aggregateImprovementGrade(g.review, {
-          visibleTargetIds: authoredTargetIds,
-          bookkeepingId: NOTION_IMPROVEMENT_TARGET_ID,
-        });
+        // Fold measured grades in exactly as the exporter does, so the ledger
+        // baseline signature matches what the next export computes (no spurious
+        // first-sync update).
+        const grade = effectiveImprovementGrade(g, authoredTargets, authoredTargetIds);
         this.deps.outbox.recordImported(g.matchId, {
           pageId: g.pageId,
           signature: matchExportSignature(g, grade),
@@ -372,12 +379,14 @@ export class NotionRuntime {
     // Pass the getter itself (not a snapshot) — the exporter re-reads it on every
     // export() call so a target authored after rebuild/validate is still visible.
     const authoredTargetIds = () => this.deps.authoredTargetIds?.() ?? new Set<string>();
+    const authoredTargets = () => this.deps.authoredTargets?.() ?? [];
     this.exporter = new NotionExporter(
       writer, maps, this.deps.outbox, shapeIssues, authoredTargetIds,
       cfg.notion.gametrackerDatabaseId
         ? { client: this.client, gametrackerDatabaseId: cfg.notion.gametrackerDatabaseId, dataSourceId: this.gametrackerSourceId }
         : undefined,
       cfg.notion.gametrackerDatabaseId || undefined,
+      authoredTargets,
     );
     return maps;
   }

@@ -52,11 +52,16 @@
 - Given a click on Delete (live or archived) and confirmation, then the target is permanently removed from the library; grades already stored on past match reviews remain in the review record but no longer count toward any displayed target.
 - Given the measured builder, then the preview badge always reads "Hit when `<stat>` `<op>` `<value>`" for the currently selected stat/operator/value.
 
+## Update 2026-07-07 (`targets-rework`)
+
+- **Measured targets now auto-grade from stats** (the former Known gap, closed). A ⚡ target's grade is computed per match from its bound stat — Damage/Healing/Mitigation/Eliminations/Assists/Deaths as **per-10-minute** rates (`sum(perHero) × 10 / durationMinutes`), KDA as the match ratio — against the rule's operator/threshold with a 10% partial band. No manual read; matches missing the stat are skipped (not attempts). Scoring lives in `src/core/targets/measured.ts` + `scoring.ts`; stored `review.grades` for a measured target are ignored (no double-count).
+- **Threshold field + scroll:** the measured threshold field is widened to show 5 digits (per-10 damage). Scroll-wheel adjusts by a per-stat step (counts ±1, KDA ±0.1, Damage/Healing/Mitigation ±250; Shift ×10), clamped at 0, with arrow-key/spinner parity.
+- **Templates** replaced with a 9-entry coaching-grounded flat list; the "Start from a template" row collapses behind a **Show templates** toggle once the player has ≥3 live authored targets.
+- **Active-set rotation:** an **Active focus** panel (quick add/remove + **Start a fresh focus**) sits above the library; active targets past the staleness thresholds (default 14 days OR 30 matches, configurable in Settings → Coaching) show a rotate nudge. `AuthoredTarget.activatedAt` records when a target last became active.
+
 ## Known gaps (intent ≠ code)
 
-None identified — behavior matches intent. One deliberate, documented limitation remains:
-
-- [confirmed] **Measured targets are still graded manually on Review.** A "measured" (⚡) target's rule is descriptive today — the app does not read the live stat and auto-grade it; the human still picks Hit/Partial/Missed on the Review screen for every target, self-rated or measured alike. Auto-grading measured targets directly from GEP/manual stats is a future step, not part of this pass.
+None identified — behavior matches intent.
 
 ## Open Questions
 

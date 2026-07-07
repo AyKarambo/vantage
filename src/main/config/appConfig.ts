@@ -2,6 +2,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/breakReminder';
+import { DEFAULT_STALENESS, type StalenessSettings } from '../../core/staleness';
 import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
 import type { DemoPreference } from '../../core/demoPreference';
 
@@ -58,6 +59,8 @@ export interface AppConfig {
   mapAliases: Record<string, string>;
   /** "Time for a break?" tray notification after N consecutive losses. */
   breakReminder: BreakReminderSettings;
+  /** Active-target staleness thresholds (days / matches) for the rotation cue. */
+  staleness: StalenessSettings;
   /** Readiness / training-load coach settings (feature toggle + opt-in launch toast). */
   readiness: ReadinessSettings;
   /** Editable-master-data source config (the Update action's endpoint). */
@@ -87,6 +90,7 @@ const DEFAULTS: AppConfig = {
   accounts: {},
   mapAliases: {},
   breakReminder: { ...DEFAULT_BREAK_REMINDER },
+  staleness: { ...DEFAULT_STALENESS },
   readiness: { ...DEFAULT_READINESS },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: { closeToTray: true, demoPreference: 'unset' },
@@ -126,6 +130,7 @@ export function loadConfig(): AppConfig {
     accounts: { ...(bundled.accounts ?? {}), ...(local.accounts ?? {}) },
     mapAliases: { ...(bundled.mapAliases ?? {}), ...(local.mapAliases ?? {}) },
     breakReminder: { ...DEFAULTS.breakReminder, ...(bundled.breakReminder ?? {}), ...(local.breakReminder ?? {}) },
+    staleness: { ...DEFAULTS.staleness, ...(bundled.staleness ?? {}), ...(local.staleness ?? {}) },
     readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
     masterData: { ...DEFAULTS.masterData, ...(bundled.masterData ?? {}), ...(local.masterData ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },

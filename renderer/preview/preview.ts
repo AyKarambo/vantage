@@ -11,7 +11,7 @@ import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
   DashboardFilters, DataLocationResult, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
-  RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SyncProgress, TargetEditInput,
+  RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -30,6 +30,7 @@ import {
 import { sourceOf } from '../../src/core/source';
 import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
+import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
@@ -38,6 +39,7 @@ const LOGGED_KEY = 'vantagePreviewLogged';
 const TARGETS_KEY = 'vantagePreviewTargets';
 const REVIEWS_KEY = 'vantagePreviewReviews';
 const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
+const STALENESS_KEY = 'vantagePreviewStaleness';
 const READINESS_KEY = 'vantagePreviewReadiness';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
@@ -87,9 +89,9 @@ const save = (key: string, value: unknown): void => {
 
 const season = generateSampleGames(220, 42);
 const logged: GameRecord[] = load<GameRecord>(LOGGED_KEY);
-// Older preview targets predate the active flag — backfill like ManualStore does.
+// Older preview targets predate the active flag / activatedAt stamp — backfill like ManualStore does.
 const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
-  .map((t) => ({ ...t, isActive: t.isActive ?? true }));
+  .map((t) => ({ ...t, isActive: t.isActive ?? true, activatedAt: t.activatedAt ?? t.createdAt }));
 const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
 // Manual-layer edits from the Matches drill-down, overlaid onto any match.
 const previewEdits: Record<string, Partial<GameRecord>> = loadMap<Partial<GameRecord>>(EDITS_KEY);
@@ -128,6 +130,10 @@ const savedBreakReminder = loadMap<unknown>(BREAK_REMINDER_KEY) as Partial<Break
 let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).length
   ? normalizeBreakReminder(savedBreakReminder)
   : { ...DEFAULT_BREAK_REMINDER };
+const savedStaleness = loadMap<unknown>(STALENESS_KEY) as Partial<StalenessSettings>;
+let staleness: StalenessSettings = Object.keys(savedStaleness).length
+  ? normalizeStaleness(savedStaleness)
+  : { ...DEFAULT_STALENESS };
 const savedReadiness = loadMap<unknown>(READINESS_KEY) as Partial<ReadinessSettings>;
 let readiness: ReadinessSettings = Object.keys(savedReadiness).length
   ? normalizeReadiness(savedReadiness)
@@ -261,7 +267,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, readiness, rankAnchors: anchorMap() }, effectiveMasterData()),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, rankAnchors: anchorMap() }, effectiveMasterData()),
   heroDetail: async (hero: string, f: DashboardFilters) =>
     heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
@@ -480,7 +486,8 @@ const mock: OwStatsApi = {
     return { archived: 2, kept: 1, failed: 0 };
   },
   saveTarget: async (input: AuthoredTargetInput) => {
-    targets.push({ id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input });
+    const now = Date.now();
+    targets.push({ id: `t-${now}`, createdAt: now, isActive: true, activatedAt: now, scope: 'season', ...input });
     save(TARGETS_KEY, targets);
   },
   saveReview: async (input: ReviewInput) => {
@@ -518,6 +525,11 @@ const mock: OwStatsApi = {
     const t = findTarget(id);
     if (!t) return;
     t.isActive = active;
+    if (active) t.activatedAt = Date.now();
+    save(TARGETS_KEY, targets);
+  },
+  deactivateAllTargets: async () => {
+    for (const t of targets) t.isActive = false;
     save(TARGETS_KEY, targets);
   },
   setTargetArchived: async (id: string, archived: boolean) => {
@@ -538,6 +550,12 @@ const mock: OwStatsApi = {
     breakReminder = normalizeBreakReminder(input);
     save(BREAK_REMINDER_KEY, breakReminder);
     return breakReminder;
+  },
+  getStaleness: async () => staleness,
+  setStaleness: async (input: StalenessSettings) => {
+    staleness = normalizeStaleness(input);
+    save(STALENESS_KEY, staleness);
+    return staleness;
   },
   getReadiness: async () => readiness,
   setReadiness: async (input: ReadinessSettings) => {

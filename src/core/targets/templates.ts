@@ -16,40 +16,62 @@ export interface TargetTemplate {
 }
 
 export const TARGET_TEMPLATES: TargetTemplate[] = [
+  // Process fundamentals (self-rated) — the coaching hierarchy: patience →
+  // positioning → ult economy → cooldown value → target selection.
   {
-    name: 'Trade before you die',
+    name: 'Wait for the fifth',
+    mode: 'self',
+    rule: 'You grade it',
+    blurb: "Don't open fights 4v5 — staggered entries lose won fights.",
+  },
+  {
+    name: 'Improve cover usage',
+    mode: 'self',
+    rule: 'You grade it',
+    blurb: "Use cover between engagements and before you commit — don't fight in the open.",
+  },
+  {
+    name: 'Track one enemy ult',
+    mode: 'self',
+    rule: 'You grade it',
+    blurb: 'Each fight, know one key enemy ult — ult economy wins "unwinnable" fights.',
+  },
+  {
+    name: 'Value every cooldown',
+    mode: 'self',
+    rule: 'You grade it',
+    blurb: 'Spend big cooldowns for a clear payoff, not on reflex.',
+  },
+  {
+    name: 'Target the right one',
+    mode: 'self',
+    rule: 'You grade it',
+    blurb: 'Commit to the highest-value reachable target, not the closest.',
+  },
+  // Measured stat floors (auto-graded from per-10-minute stats) — role tagged
+  // in the name since a raw stat floor only makes sense for one role.
+  {
+    name: 'Cut the feeding',
     mode: 'measured',
-    rule: 'Deaths ≤ 4',
-    blurb: 'Cheap deaths bleed ult economy — die less, trade more.',
+    rule: 'Deaths ≤ 3',
+    blurb: 'A death floor (per 10) — uptime, not frags, drives ult charge.',
   },
   {
-    name: 'Hold ult until first pick',
-    mode: 'self',
-    rule: 'You grade it',
-    blurb: 'Banking ult for the opening pick swings fights before they start.',
-  },
-  {
-    name: 'Callouts only — no tilt talk',
-    mode: 'self',
-    rule: 'You grade it',
-    blurb: 'Keep comms information-only; tilt talk costs focus, not just vibes.',
-  },
-  {
-    name: 'Warm up before ranked',
-    mode: 'self',
-    rule: 'You grade it',
-    blurb: 'A few minutes of aim/movement warm-up before queueing pays off all session.',
-  },
-  {
-    name: 'Review one loss per session',
-    mode: 'self',
-    rule: 'You grade it',
-    blurb: 'One replayed loss beats ten unreviewed ones — find the repeatable mistake.',
-  },
-  {
-    name: '9k damage per 10',
+    name: 'DPS: 9k damage floor',
     mode: 'measured',
     rule: 'Damage ≥ 9000',
-    blurb: 'A damage floor keeps you contributing even on a rough fight night.',
+    blurb: 'Keep pressure up on a rough night — ~9k/10 is a solid DPS floor at most ranks.',
+  },
+  {
+    name: 'Support: healing floor',
+    mode: 'measured',
+    rule: 'Healing ≥ 8000',
+    blurb: "A healing baseline so you're contributing, not just self-pocketing.",
+  },
+  {
+    name: 'Tank: mitigation floor',
+    mode: 'measured',
+    rule: 'Mitigation ≥ 7000',
+    blurb: "Eat the damage your team would've taken — mitigation is your scoreboard.",
   },
 ];

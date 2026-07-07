@@ -185,6 +185,12 @@
   border-color: rgba(124, 108, 245, 0.45);
   color: var(--accent-text);
 }
+/* An active target overdue for rotation — nudges the player to swap it out. */
+.chip--stale.is-on {
+  background: rgba(188, 169, 118, 0.14);
+  border-color: rgba(188, 169, 118, 0.5);
+  color: var(--mid-text);
+}
 
 /* Badge --------------------------------------------------------------------- */
 .badge {
@@ -819,7 +825,9 @@ table.data tbody tr:hover {
   box-sizing: border-box;
 }
 .vt-num {
-  width: 64px;
+  /* Wide enough to show a 5-digit per-10-minute threshold (e.g. damage 12500)
+     plus the number stepper without clipping or inner scroll. */
+  width: 96px;
 }
 .vt-select option {
   background: #17171d;

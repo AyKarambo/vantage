@@ -5,6 +5,7 @@ import type { NotionRuntime } from './notionRuntime';
 import type { AppConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
+import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
 import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { effectiveDemo } from '../core/demoPreference';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
@@ -37,7 +38,7 @@ export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes. */
   history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'removeImported'>;
   /** Authored-target (◎ manual) persistence. */
-  manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
+  manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
   rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel'>;
   /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
@@ -58,6 +59,8 @@ export interface DataProviderDeps {
   persistAccounts(accounts: Record<string, string>): void;
   /** Persist new break-reminder settings into the user's local config file. */
   persistBreakReminder(s: BreakReminderSettings): void;
+  /** Persist new target-staleness thresholds into the user's local config file. */
+  persistStaleness(s: StalenessSettings): void;
   /** Persist new readiness feature settings into the user's local config file. */
   persistReadiness(s: ReadinessSettings): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
@@ -108,8 +111,9 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     clearNotionToken: () => deps.notion.clearToken(),
     manualTargets: () => deps.manual.targets(),
     saveTarget: (input) => {
+      const now = Date.now();
       deps.manual.addTarget({
-        id: `t-${Date.now()}`, createdAt: Date.now(), isActive: true, scope: 'season', ...input,
+        id: `t-${now}`, createdAt: now, isActive: true, activatedAt: now, scope: 'season', ...input,
       });
     },
     saveReview: (input) => {
@@ -125,6 +129,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       deps.manual.updateTarget(input.id, { name: input.name, mode: input.mode, rule: input.rule });
     },
     setTargetActive: (id, active) => deps.manual.setActive(id, active),
+    deactivateAllTargets: () => deps.manual.deactivateAll(),
     setTargetArchived: (id, archived) => deps.manual.setArchived(id, archived),
     deleteTarget: (id) => deps.manual.removeTarget(id),
     logMatch: (input) => {
@@ -268,6 +273,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       config.readiness = normalizeReadiness(input);
       deps.persistReadiness(config.readiness);
       return config.readiness;
+    },
+    getStaleness: () => deps.getConfig().staleness,
+    setStaleness: (input) => {
+      const config = deps.getConfig();
+      config.staleness = normalizeStaleness(input);
+      deps.persistStaleness(config.staleness);
+      return config.staleness;
     },
     listNotionDatabases: () => deps.notion.listDatabases(),
     listNotionPages: () => deps.notion.listPages(),

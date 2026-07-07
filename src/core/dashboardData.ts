@@ -12,7 +12,8 @@ import { isCompetitive } from './matchFilter';
 import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
 import { progression } from './progression';
-import { buildTargets, type AuthoredTarget } from './targets';
+import { buildTargets, evaluateMeasured, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget, type TargetSummary } from './targets';
+import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { currentRank, rankKey, type RankAnchorMap } from './rank';
@@ -26,6 +27,8 @@ export interface ManualData {
   targets?: AuthoredTarget[];
   /** Effective break-reminder settings; defaults when absent. */
   breakReminder?: BreakReminderSettings;
+  /** Effective target-staleness thresholds; defaults when absent. */
+  staleness?: StalenessSettings;
   /** Effective readiness feature settings; defaults when absent. */
   readiness?: ReadinessSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
@@ -64,6 +67,12 @@ export function computeDashboard(
   // The review inbox is deliberately unfiltered: an ungraded game must stay
   // visible (and counted in the badge) no matter how the range is narrowed.
   const ungraded = all.filter((g) => !g.review).sort((a, b) => b.timestamp - a.timestamp);
+  // Active measured targets auto-grade every inbox row (shown read-only on Review);
+  // the same active set drives the staleness cue, counted over unfiltered history.
+  const authoredTargets = manual?.targets ?? [];
+  const activeMeasured = authoredTargets.filter(
+    (t) => t.mode === 'measured' && t.isActive && !t.archivedAt && t.id !== NOTION_IMPROVEMENT_TARGET_ID,
+  );
 
   return {
     isSample: demo.active,
@@ -102,10 +111,11 @@ export function computeDashboard(
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
     matches: recentMatches(games, mapModeOf),
     mental: mentalSummary(games),
-    targets: buildTargets(games, demo.active, manual?.targets),
-    reviewInbox: ungraded.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf)),
+    targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
+    reviewInbox: ungraded.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),
     pendingReviews: ungraded.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
+    staleness: manual?.staleness ?? DEFAULT_STALENESS,
     // Readiness is a per-person verdict → computed over the UNFILTERED
     // (but now competitive-only, plan D1) history, like reviewInbox/recap.
     // safeReadiness never throws, so a readiness bug can never blank the
@@ -163,8 +173,9 @@ function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver): MatchRo
     .map((g) => toMatchRow(g, mapModeOf));
 }
 
-function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver): MatchRow {
+function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow {
   const flags = rowFlags(g);
+  const measuredGrades = measuredGradesFor(g, activeMeasured);
   return {
     matchId: g.matchId,
     timestamp: g.timestamp,
@@ -179,7 +190,42 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver): MatchRow {
     ...(g.srDelta !== undefined ? { srDelta: g.srDelta } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(flags ? { flags } : {}),
+    ...(measuredGrades ? { measuredGrades } : {}),
   };
+}
+
+/** Read-only auto-grades for the active measured targets on one match (Review display). */
+function measuredGradesFor(g: GameRecord, targets: AuthoredTarget[]): MatchRow['measuredGrades'] {
+  if (!targets.length) return undefined;
+  const out: NonNullable<MatchRow['measuredGrades']> = {};
+  for (const t of targets) {
+    const res = evaluateMeasured(g, t);
+    out[t.id] = res ? { grade: res.grade, value: res.value } : 'no-stat';
+  }
+  return out;
+}
+
+/**
+ * Enrich active, non-archived authored targets with the staleness inputs the
+ * renderer needs: when they became active (`activatedAt`, defaulting to
+ * `createdAt`) and how many matches have been played since — counted over
+ * UNFILTERED competitive history so a narrow dashboard range can't suppress the
+ * "getting stale" nudge. Inactive/archived/sample targets pass through untouched.
+ */
+function withStaleness(
+  summaries: TargetSummary[],
+  authored: AuthoredTarget[],
+  all: GameRecord[],
+): TargetSummary[] {
+  if (!authored.length) return summaries;
+  const byId = new Map(authored.map((t) => [t.id, t]));
+  return summaries.map((s) => {
+    const t = byId.get(s.id);
+    if (!t || !s.isActive || s.archivedAt) return s;
+    const activatedAt = t.activatedAt ?? t.createdAt;
+    const matchesSinceActive = all.reduce((n, g) => (g.timestamp >= activatedAt ? n + 1 : n), 0);
+    return { ...s, activatedAt, matchesSinceActive };
+  });
 }
 
 /** Most-played account name — used for the Overview greeting. */

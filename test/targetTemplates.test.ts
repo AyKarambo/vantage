@@ -11,7 +11,7 @@ const BUILDER_RULE_RE = /^(.+) (≤|≥|=) (.+)$/;
 describe('TARGET_TEMPLATES', () => {
   it('has a handful of curated entries', () => {
     expect(TARGET_TEMPLATES.length).toBeGreaterThanOrEqual(5);
-    expect(TARGET_TEMPLATES.length).toBeLessThanOrEqual(8);
+    expect(TARGET_TEMPLATES.length).toBeLessThanOrEqual(9);
   });
 
   it('every template has a non-empty name and blurb', () => {

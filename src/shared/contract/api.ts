@@ -5,6 +5,7 @@
  * share it.
  */
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
@@ -70,6 +71,12 @@ export interface OwStatsApi {
   setTargetArchived(id: string, archived: boolean): Promise<void>;
   /** Permanently remove a target; grades stored in saved reviews stay inert. */
   deleteTarget(id: string): Promise<void>;
+  /** Deactivate every active target at once — the "start a fresh focus" rotation reset. */
+  deactivateAllTargets(): Promise<void>;
+  /** The currently persisted target-staleness thresholds. */
+  getStaleness(): Promise<StalenessSettings>;
+  /** Persist new target-staleness thresholds; returns the persisted (clamped) value. */
+  setStaleness(input: StalenessSettings): Promise<StalenessSettings>;
   /** The currently persisted break-reminder settings. */
   getBreakReminder(): Promise<BreakReminderSettings>;
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */
@@ -187,6 +194,9 @@ export const IPC_CHANNELS = {
   setTargetActive: 'manual:set-target-active',
   setTargetArchived: 'manual:set-target-archived',
   deleteTarget: 'manual:delete-target',
+  deactivateAllTargets: 'manual:deactivate-all-targets',
+  getStaleness: 'settings:get-staleness',
+  setStaleness: 'settings:set-staleness',
   getBreakReminder: 'settings:get-break-reminder',
   setBreakReminder: 'settings:set-break-reminder',
   getReadiness: 'settings:get-readiness',

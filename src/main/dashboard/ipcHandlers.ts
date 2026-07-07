@@ -5,6 +5,7 @@ import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
@@ -74,6 +75,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
       {
         targets: provider.manualTargets(),
         breakReminder: provider.getBreakReminder(),
+        staleness: provider.getStaleness(),
         readiness: provider.getReadiness(),
         rankAnchors: provider.rankAnchorMap(),
       },
@@ -156,6 +158,13 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.deleteTarget, (_e, id: string) => {
     provider.deleteTarget(id);
   });
+  handle(ch.deactivateAllTargets, () => {
+    provider.deactivateAllTargets();
+  });
+
+  // Target-staleness thresholds (active-target rotation cue).
+  handle(ch.getStaleness, () => provider.getStaleness());
+  handle(ch.setStaleness, (_e, input: StalenessSettings) => provider.setStaleness(input));
 
   // Break-reminder settings.
   handle(ch.getBreakReminder, () => provider.getBreakReminder());

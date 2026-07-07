@@ -17,6 +17,9 @@ export interface AuthoredTarget {
   createdAt: number;
   /** Active targets are the ones graded on the Review screen. */
   isActive: boolean;
+  /** When the target last became active — drives the staleness cue. Absent on
+   *  legacy rows written before rotation; readers fall back to `createdAt`. */
+  activatedAt?: number;
   /** Set = hidden from the library and the active set, restorable. */
   archivedAt?: number;
 }
@@ -34,6 +37,10 @@ export interface TargetSummary {
   spark: number[];
   isActive: boolean;
   archivedAt?: number;
+  /** When the target last became active (active, non-archived targets only). */
+  activatedAt?: number;
+  /** Matches played since activation, over unfiltered history (active only) — the staleness match count. */
+  matchesSinceActive?: number;
 }
 
 /** Clamp a ratio into the valid 0..1 winrate/hitrate range. */
