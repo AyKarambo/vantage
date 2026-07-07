@@ -14,6 +14,10 @@ export {
 // Per-hero stat rollups
 export { heroStats } from './heroStats';
 
+// Self-rated performance rollups (0–100 slider; issue #44)
+export { performanceStats } from './performanceStats';
+export type { PerformanceStats, PerformanceBucket, PerformanceTrendPoint } from './performanceStats';
+
 // Most-played-heroes ranking (Log Match hero-picker shortlist)
 export { mostPlayedHeroes } from './heroSuggestions';
 

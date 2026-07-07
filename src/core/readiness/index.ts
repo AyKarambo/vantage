@@ -1,11 +1,13 @@
 /**
  * Readiness & training-load coach — public API.
  *
- * `computeReadiness(games, now?)` turns a player's whole match history plus their
- * self-reported mental flags into a single, honest readiness verdict: a band, a
- * score, the top contributing signals, a rest recommendation, and a trend for the
- * chart. It is a heuristic wellness nudge, NOT a diagnosis (see the spec's
- * evidence base). Pure and provably total — degenerate inputs never throw.
+ * `computeReadiness(games, now?, ctx?)` turns a player's whole match history,
+ * their self-reported mental flags, and their active improvement targets into a
+ * single, honest readiness verdict: a composite score, a band derived from it,
+ * the three subscore pulls, the top contributing signals, a rest
+ * recommendation, and a trend for the chart. It is a heuristic wellness nudge,
+ * NOT a diagnosis (see the spec's evidence base). Pure and provably total —
+ * degenerate inputs never throw.
  */
 
 import type { GameRecord } from '../analytics';
@@ -13,12 +15,15 @@ import { READINESS_TUNING as T, DEFAULT_READINESS, normalizeReadiness } from './
 import { dayOrdinal, ordinalToKey } from './day';
 import { gamesByDay } from './sessions';
 import { bandForState, computeStateAt, scoreAt, scoreFromState, type StateAt } from './score';
+import { EMPTY_CONTEXT, type ReadinessContext } from './performance';
 import type {
   ReadinessBand,
   ReadinessConfidence,
+  ReadinessDriver,
   ReadinessLoad,
   ReadinessRecommendation,
   ReadinessSignal,
+  ReadinessSubscores,
   ReadinessSummary,
   ReadinessTrendPoint,
 } from './types';
@@ -26,16 +31,21 @@ import type {
 export type {
   ReadinessBand,
   ReadinessConfidence,
+  ReadinessDriver,
   ReadinessLoad,
   ReadinessRecommendation,
   ReadinessSignal,
   ReadinessSettings,
+  ReadinessSubscore,
+  ReadinessSubscores,
   ReadinessSummary,
   ReadinessTrendPoint,
 } from './types';
 export { DEFAULT_READINESS, normalizeReadiness, READINESS_TUNING } from './constants';
 export { detectSessions } from './sessions';
 export { localDayKey, dayOrdinal } from './day';
+export { EMPTY_CONTEXT } from './performance';
+export type { ReadinessContext } from './performance';
 
 function pct(frac: number): string {
   return `${Math.round(frac * 100)}%`;
@@ -54,6 +64,14 @@ function emptyLoad(restDays = 0): ReadinessLoad {
   };
 }
 
+function emptySubscores(): ReadinessSubscores {
+  return {
+    load: { delta: 0, available: false },
+    performance: { delta: 0, available: false, coverage: 0 },
+    subjective: { delta: 0, available: false, coverage: 0 },
+  };
+}
+
 function toLoad(state: StateAt): ReadinessLoad {
   return {
     acutePerDay: state.load.acutePerDay,
@@ -67,10 +85,34 @@ function toLoad(state: StateAt): ReadinessLoad {
   };
 }
 
+function toSubscores(state: StateAt): ReadinessSubscores {
+  return {
+    load: { delta: round1(state.deltas.load), available: true },
+    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.perf.statCoverage) },
+    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.mental.coverage },
+  };
+}
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/**
+ * Confidence now reflects the coverage of the OBJECTIVE inputs first — a
+ * stats-rich GEP history reaches high confidence without any mental logging;
+ * a heavily account-mixed acute window caps it at medium.
+ */
 function confidenceFor(state: StateAt): ReadinessConfidence {
-  if (state.mental.coverage < T.mentalMinCoverage) return 'low';
-  if (state.load.chronicActiveDays >= T.confidenceActiveDays && state.mental.coverage >= T.mentalHighCoverage) {
+  const statCoverage = state.perf.statCoverage;
+  if (
+    state.load.chronicActiveDays >= T.confidenceActiveDays &&
+    statCoverage >= T.statCoverageHigh &&
+    state.perf.wrDip !== null &&
+    state.perf.maxAccountShare >= T.accountMixBar
+  ) {
     return 'high';
+  }
+  if (statCoverage < T.statCoverageLow && state.mental.coverage < T.mentalMinCoverage && state.subj.sliderDiff === null) {
+    return 'low';
   }
   return 'medium';
 }
@@ -87,7 +129,7 @@ function adviceFor(band: ReadinessBand, state: StateAt): Advice {
       return {
         recommendation: 'rest-1-2-days',
         recommendationText:
-          'Take 1–2 full days off. Your load is high and your mental signals are trending down — rest should let your form rebound.',
+          'Take 1–2 full days off. Your load is high and your results are trending below your own baseline — rest should let your form rebound.',
         headline: "You're grinding into the hole.",
       };
     case 'loaded':
@@ -120,13 +162,30 @@ function adviceFor(band: ReadinessBand, state: StateAt): Advice {
 
 const SEVERITY_RANK: Record<ReadinessSignal['severity'], number> = { high: 0, watch: 1, ok: 2 };
 
+/** Human-readable direction words for the decline signal, from mean aligned z per metric. */
+function declineLabel(state: StateAt): string {
+  const names: Record<string, [string, string]> = {
+    deaths: ['deaths up', 'deaths down'],
+    damage: ['damage down', 'damage up'],
+    eliminations: ['elims down', 'elims up'],
+    healing: ['healing down', 'healing up'],
+  };
+  const parts = Object.entries(state.perf.metricMeans)
+    .filter(([, mean]) => (mean as number) <= -0.3)
+    .sort((a, b) => (a[1] as number) - (b[1] as number))
+    .slice(0, 2)
+    .map(([m]) => names[m][0]);
+  const what = parts.length ? parts.join(', ') : 'output below your usual';
+  return `${what} vs your own baseline — sustained across your recent games`;
+}
+
 function buildSignals(state: StateAt): ReadinessSignal[] {
-  const { load, mental, outcome } = state;
+  const { load, mental, outcome, perf, subj } = state;
   const out: ReadinessSignal[] = [];
 
-  // Load state is evaluated as-of the last active day. Once the layoff has
-  // passed the rust threshold that load has long been rested off — surfacing
-  // "22 days in a row" under a Rusty verdict would read as its opposite.
+  // Load/performance state is evaluated as-of the last active day. Once the
+  // layoff has passed the rust threshold that state has long been rested off —
+  // surfacing "22 days in a row" under a Rusty verdict would read as its opposite.
   const loadCurrent = state.restDays < T.rustDays;
 
   if (loadCurrent && load.consecutiveDays >= T.loadedDays) {
@@ -154,10 +213,50 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
     out.push({ key: 'long-session', label: 'a session over 2.5h recently', severity: 'watch' });
   }
 
+  // Objective performance vs the player's own baselines (the new primary family).
+  if (loadCurrent && perf.declineFired) {
+    out.push({ key: 'perf-decline', label: declineLabel(state), severity: 'high' });
+  }
+  if (loadCurrent && perf.wrPenalty > 0 && perf.wrDip !== null) {
+    out.push({
+      key: 'winrate-dip',
+      label: `winrate ${Math.round(perf.wrDip * 100)} points below your usual recently`,
+      severity: 'watch',
+    });
+  }
+  if (loadCurrent && perf.dampened && perf.statPenalty + perf.wrPenalty > 0) {
+    out.push({
+      key: 'target-focus',
+      label: "dip softened — you're hitting your active improvement targets",
+      severity: 'ok',
+    });
+  }
+  if (loadCurrent && perf.stillLearning.length > 0) {
+    out.push({
+      key: 'still-learning',
+      label: `still learning ${perf.stillLearning.slice(0, 3).join(', ')} — early games there don't count against you`,
+      severity: 'ok',
+    });
+  }
+  if (loadCurrent && perf.maxAccountShare < T.accountMixBar) {
+    out.push({
+      key: 'mixed-accounts',
+      label: 'recent games span multiple accounts — the read is less precise',
+      severity: 'ok',
+    });
+  }
+
   if (mental.coverage < T.mentalMinCoverage) {
     out.push({ key: 'low-coverage', label: 'log your mental state to sharpen this read', severity: 'ok' });
   } else if (loadCurrent && mental.fatigued) {
     out.push({ key: 'tilt', label: `tilt on ${pct(mental.acuteTilt)} of your recent logged games`, severity: 'high' });
+  }
+  if (loadCurrent && subj.sliderPen > 0 && subj.sliderDiff !== null) {
+    out.push({
+      key: 'slider-low',
+      label: `you've rated your own play ~${Math.round(subj.sliderDiff)} points below your usual`,
+      severity: 'watch',
+    });
   }
 
   // Outcomes are a weak, corroborating signal — capped at 'watch' so a losing
@@ -189,11 +288,14 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]).slice(0, 5);
 }
 
-function buildTrend(games: GameRecord[], nowOrdinal: number): ReadinessTrendPoint[] {
+function buildTrend(games: GameRecord[], nowOrdinal: number, ctx: ReadinessContext): ReadinessTrendPoint[] {
   const byDay = gamesByDay(games);
   const points: ReadinessTrendPoint[] = [];
   for (let d = nowOrdinal - T.trendDays + 1; d <= nowOrdinal; d += 1) {
-    points.push({ date: ordinalToKey(d), score: scoreAt(games, d), games: byDay.get(d) ?? 0 });
+    // ctx passes through verbatim: perfState filters targets by createdAt ≤ each
+    // day's ordinal, and grade evidence only exists on games ≤ that day — so the
+    // dampener never applies to trend days before the target/grades existed.
+    points.push({ date: ordinalToKey(d), score: scoreAt(games, d, ctx), games: byDay.get(d) ?? 0 });
   }
   return points;
 }
@@ -208,6 +310,8 @@ function insufficientSummary(headline: string, trend: ReadinessTrendPoint[]): Re
     recommendationText: '',
     signals: [],
     load: emptyLoad(),
+    subscores: emptySubscores(),
+    driver: 'neutral',
     trend,
   };
 }
@@ -229,12 +333,22 @@ function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): Readiness
       { key: 'rust-gap', label: `${restDays} days since your last game — sharpness decays after ~4`, severity: 'high' },
     ],
     load: emptyLoad(restDays),
+    subscores: emptySubscores(),
+    driver: 'rust',
     trend,
   };
 }
 
-/** Compute a player's readiness verdict from their whole history. `now` is injectable for tests. */
-export function computeReadiness(input: GameRecord[], now: number = Date.now()): ReadinessSummary {
+/**
+ * Compute a player's readiness verdict from their whole history. `now` is
+ * injectable for tests; `ctx` carries the improvement targets the dampener
+ * needs (not derivable from `GameRecord` alone).
+ */
+export function computeReadiness(
+  input: GameRecord[],
+  now: number = Date.now(),
+  ctx: ReadinessContext = EMPTY_CONTEXT,
+): ReadinessSummary {
   // Input cleaning: drop future-stamped games, de-dupe by matchId, sort ascending.
   const seen = new Set<string>();
   const games = input
@@ -249,7 +363,7 @@ export function computeReadiness(input: GameRecord[], now: number = Date.now()):
   const nowOrdinal = dayOrdinal(now);
   if (games.length === 0) return insufficientSummary('Log a few games to unlock readiness.', []);
 
-  const trend = buildTrend(games, nowOrdinal);
+  const trend = buildTrend(games, nowOrdinal, ctx);
   const firstOrdinal = dayOrdinal(games[0].timestamp);
   const lastOrdinal = dayOrdinal(games[games.length - 1].timestamp);
   const spanDays = lastOrdinal - firstOrdinal;
@@ -262,7 +376,7 @@ export function computeReadiness(input: GameRecord[], now: number = Date.now()):
     return staleSummary(restDaysNow, trend);
   }
 
-  const state = computeStateAt(games, nowOrdinal);
+  const state = computeStateAt(games, nowOrdinal, ctx);
   const band = bandForState(state);
   const advice = adviceFor(band, state);
 
@@ -275,6 +389,8 @@ export function computeReadiness(input: GameRecord[], now: number = Date.now()):
     recommendationText: advice.recommendationText,
     signals: buildSignals(state),
     load: toLoad(state),
+    subscores: toSubscores(state),
+    driver: state.driver,
     trend,
   };
 }
@@ -283,9 +399,13 @@ export function computeReadiness(input: GameRecord[], now: number = Date.now()):
 export const readinessSummary = computeReadiness;
 
 /** Defensive wrapper for edge callers (dashboard read-model, launch toast) — never throws. */
-export function safeReadiness(input: GameRecord[], now: number = Date.now()): ReadinessSummary {
+export function safeReadiness(
+  input: GameRecord[],
+  now: number = Date.now(),
+  ctx: ReadinessContext = EMPTY_CONTEXT,
+): ReadinessSummary {
   try {
-    return computeReadiness(input, now);
+    return computeReadiness(input, now, ctx);
   } catch {
     return insufficientSummary('Readiness unavailable.', []);
   }

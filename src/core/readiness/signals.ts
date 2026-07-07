@@ -6,7 +6,7 @@
  */
 
 import type { GameRecord } from '../analytics';
-import { streak, winLoss } from '../analytics';
+import { streak } from '../analytics';
 import { isPositiveComms } from '../comms';
 import { READINESS_TUNING as T } from './constants';
 import { dayOrdinal } from './day';
@@ -155,27 +155,19 @@ export function mentalState(games: GameRecord[], refOrdinal: number): MentalStat
 
 export interface OutcomeState {
   lossStreak: number;
-  winrateDip: number;
-  srTrend: number | null;
 }
 
+/**
+ * Weak corroboration only: the loss streak feeds a capped `watch` signal and
+ * nothing else. Winrate-vs-baseline moved into the objective-performance
+ * subscore (per-account, sample-gated — see `performance.ts`).
+ */
 export function outcomeState(games: GameRecord[], refOrdinal: number): OutcomeState {
   const acute = games.filter((g) => dayOrdinal(g.timestamp) >= refOrdinal - T.acuteMentalDays + 1);
-  const base = games.filter((g) => dayOrdinal(g.timestamp) >= refOrdinal - T.chronicDays + 1);
 
   // Window the streak to the acute range so we never label a stale run of losses
   // (buried behind more-recent wins/draws) as a "recent" losing streak. streak()
   // strips draws, so an unwindowed call can reach losses from days ago.
   const s = streak(acute);
-  const lossStreak = s.type === 'L' ? s.count : 0;
-  const acuteWl = winLoss(acute);
-  const baseWl = winLoss(base);
-  const winrateDip =
-    acuteWl.games > 0 && baseWl.games > 0 ? round2(baseWl.winrate - acuteWl.winrate) : 0;
-
-  const withSr = acute.filter((g) => typeof g.srDelta === 'number');
-  const srTrend =
-    withSr.length > 0 ? round2(withSr.reduce((a, g) => a + (g.srDelta ?? 0), 0) / withSr.length) : null;
-
-  return { lossStreak, winrateDip, srTrend };
+  return { lossStreak: s.type === 'L' ? s.count : 0 };
 }

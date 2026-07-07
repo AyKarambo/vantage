@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar,
-  focusBy, heroStats, latestSession, sessionRecap, streak, trend, winLoss, groupBy,
+  focusBy, heroStats, latestSession, performanceStats, sessionRecap, streak, trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
@@ -111,6 +111,7 @@ export function computeDashboard(
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
     matches: recentMatches(games, mapModeOf),
     mental: mentalSummary(games),
+    performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
     reviewInbox: ungraded.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),
     pendingReviews: ungraded.length,
@@ -118,9 +119,10 @@ export function computeDashboard(
     staleness: manual?.staleness ?? DEFAULT_STALENESS,
     // Readiness is a per-person verdict → computed over the UNFILTERED
     // (but now competitive-only, plan D1) history, like reviewInbox/recap.
-    // safeReadiness never throws, so a readiness bug can never blank the
-    // whole dashboard.
-    readiness: safeReadiness(all),
+    // The target context feeds the target-focus dampener (active targets are
+    // not derivable from GameRecord alone). safeReadiness never throws, so a
+    // readiness bug can never blank the whole dashboard.
+    readiness: safeReadiness(all, Date.now(), { targets: manual?.targets ?? [] }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     totalGamesAllTime: all.length,
     masterData,

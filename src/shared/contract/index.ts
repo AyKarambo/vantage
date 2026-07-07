@@ -13,7 +13,7 @@
 export type { Role, Result, HeroStat } from '../../core/model';
 export type {
   WinLoss, Group, FocusItem, HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak,
-  DayGroup, SessionRecap,
+  DayGroup, SessionRecap, PerformanceStats, PerformanceBucket, PerformanceTrendPoint,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
@@ -23,6 +23,7 @@ export type { BreakReminderSettings } from '../../core/breakReminder';
 export type {
   ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,
   ReadinessConfidence, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
+  ReadinessDriver, ReadinessSubscore, ReadinessSubscores,
 } from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
 

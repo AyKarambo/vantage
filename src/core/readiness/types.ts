@@ -53,6 +53,26 @@ export interface ReadinessTrendPoint {
   games: number;
 }
 
+/** What dominates a sub-100 score: grinding (overload) or a layoff (rust). Bands read differently per driver. */
+export type ReadinessDriver = 'overload' | 'rust' | 'neutral';
+
+/** One signal family's pull on the composite score. */
+export interface ReadinessSubscore {
+  /** Signed contribution to the score (0 = neutral). Bounds double as the family's weight. */
+  delta: number;
+  /** False when the family had no usable data (nothing was fabricated). */
+  available: boolean;
+  /** 0..1 data coverage behind the read, where meaningful (stats/mental). */
+  coverage?: number;
+}
+
+/** The three signal families behind the composite (exposed so the UI can show WHY). */
+export interface ReadinessSubscores {
+  load: ReadinessSubscore;
+  performance: ReadinessSubscore;
+  subjective: ReadinessSubscore;
+}
+
 /** The full readiness read for one player, computed from their whole history. */
 export interface ReadinessSummary {
   band: ReadinessBand;
@@ -67,6 +87,10 @@ export interface ReadinessSummary {
   /** Top contributors, most-severe first. */
   signals: ReadinessSignal[];
   load: ReadinessLoad;
+  /** The three families' pulls on the score (subscore breakdown UI). */
+  subscores: ReadinessSubscores;
+  /** Dominant driver behind a sub-neutral score (overload vs rust). */
+  driver: ReadinessDriver;
   trend: ReadinessTrendPoint[];
 }
 

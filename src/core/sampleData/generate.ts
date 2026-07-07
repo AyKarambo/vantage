@@ -92,6 +92,14 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
     else if (commsRoll < 0.72) mental.comms = 'banter';
     else if (commsRoll < 0.8) mental.comms = 'abusive';
 
+    // Self-rated 0–100 performance slider on ~55% of games (players rate
+    // sporadically) — loosely correlated with the result plus seeded noise, so
+    // the Trends/Heroes/Maps performance surfaces render with believable data.
+    const performance =
+      rnd() < 0.55
+        ? Math.round(clamp(55 + (result === 'Win' ? 8 : result === 'Loss' ? -6 : 0) + between(-18, 18), 5, 95))
+        : undefined;
+
     games.push({
       matchId: `sample-${i}`,
       timestamp,
@@ -106,6 +114,7 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
       finalScore,
       roster,
       mental,
+      ...(performance !== undefined ? { performance } : {}),
     });
   }
   return games.sort((a, b) => a.timestamp - b.timestamp);
