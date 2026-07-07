@@ -1,5 +1,11 @@
 # Feature spec: Readiness & training-load coach (`supercompensation-detection`)
 
+> **⚠ Partially superseded (2026-07-07):** the score/band relationship and the scoring model
+> described here are replaced by the **score-first composite** in
+> `readiness-score-rework.spec.md` (objective performance signals, per-account baselines,
+> target-focus dampener, subscore breakdown). The band vocabulary, screen surfaces, honesty
+> framing, settings, and launch-toast behavior described below carry over unchanged.
+
 **Source:** Spec interview + `/deep-research` synthesis (supercompensation, overtraining/overreaching, esports fatigue), 2026-07-05. **Approved 2026-07-05.**
 **Related specs:** `screen-mental.spec.md` (mental self-report + break reminder this builds on), `screen-overview.spec.md` (secondary surface), `screen-settings.spec.md` (enable/disable), `screen-shell.spec.md` (per-view filter-bar suppression, added 2026-07-06).
 **Extends, does not replace:** the short-horizon loss-streak break reminder in `src/core/breakReminder.ts`.

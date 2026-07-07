@@ -14,6 +14,9 @@ import { viewHead, type ViewContext } from './view';
 const MIN_GAMES_STEPS = [1, 5, 10] as const;
 
 export function heroes(ctx: ViewContext): HTMLElement {
+  // Self-rating averages join by hero key (a multi-hero match's single rating
+  // counts toward each hero, same convention as the winrate/per-10 columns).
+  const ratingByHero = new Map(ctx.data.performance.byHero.map((b) => [b.key, b.avg]));
   // Column order is the display order; `get` drives sort, `render` is optional display formatting.
   const columns: Array<Column<HeroSummary>> = [
     { key: 'hero', label: 'Hero', get: (r) => r.hero },
@@ -27,6 +30,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
     { key: 'damage', label: 'DMG/10', get: (r) => r.per10?.damage ?? null, render: (r) => fmt(r.per10?.damage) },
     { key: 'healing', label: 'HEAL/10', get: (r) => r.per10?.healing ?? null, render: (r) => fmt(r.per10?.healing) },
     { key: 'mitigation', label: 'MIT/10', get: (r) => r.per10?.mitigation ?? null, render: (r) => fmt(r.per10?.mitigation) },
+    { key: 'rating', label: 'RTG', get: (r) => ratingByHero.get(r.hero) ?? null, render: (r) => fmt(ratingByHero.get(r.hero)) },
   ];
 
   const minGames = prefs.get('minGames') ?? 1;

@@ -1,10 +1,10 @@
 /** Trends — winrate over time, splits by role/mode/account, when you play, and activity. */
 import { h } from '../dom';
-import type { Group } from '../../../src/shared/contract';
+import type { Group, PerformanceStats } from '../../../src/shared/contract';
 import { sessionFade } from '../../../src/core/analytics';
 import { roleLabel } from '../format';
-import { horizontalBars, lineChart, type WrPoint } from '../charts/plots';
-import { calendarHeatmap, card } from '../components/primitives';
+import { horizontalBars, lineChart, ratingChart, type WrPoint } from '../charts/plots';
+import { calendarHeatmap, card, emptyState, statBox } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { pct } from '../format';
 import { viewHead, type ViewContext } from './view';
@@ -33,6 +33,7 @@ export function trends(ctx: ViewContext): HTMLElement {
       timeOfDayCard(d.timeOfDay),
       sessionPositionCard(d.sessionPosition),
     ),
+    performanceCard(d.performance),
     card({ title: 'Activity', sub: 'games/day · colour = winrate · click a day to open its matches' },
       calendarHeatmap(d.calendar, (date) => ctx.navigate('matches', { day: date }))),
   );
@@ -75,6 +76,44 @@ function breakdownOrdered(groups: Group[]): HTMLElement {
 }
 
 const toPoint = (g: Group): WrPoint => ({ label: g.key, winrate: g.winrate, games: g.games });
+
+/**
+ * Self-rated performance over time (issue #44): the rating trend with a rolling
+ * average, plus the "does your self-read track results?" win/loss split.
+ */
+function performanceCard(p: PerformanceStats): HTMLElement {
+  if (p.ratedGames === 0) {
+    return card({ title: 'Your self-rating', sub: 'rate matches when logging or reviewing to unlock this' },
+      emptyState('No rated games in this range yet — the 0–100 performance slider lives on Log Match and Review.'));
+  }
+  const gap = p.winAvg !== null && p.lossAvg !== null ? Math.round((p.winAvg - p.lossAvg) * 10) / 10 : null;
+  return chartCard({
+    title: 'Your self-rating',
+    sub: `0–100 per match · ${p.ratedGames} rated game${p.ratedGames === 1 ? '' : 's'} · line = 7-day rolling average`,
+    columns: [
+      { key: 'label', label: 'Day' },
+      { key: 'avg', label: 'Avg rating' },
+      { key: 'games', label: 'Rated' },
+    ],
+    rows: p.trend.map((t) => ({ label: t.date, avg: t.avg, games: t.games })),
+  },
+  h('div', null,
+    ratingChart(p.trend.map((t) => ({ label: t.date, rating: t.avg, games: t.games }))),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '10px' } },
+      statBox(p.winAvg !== null ? String(p.winAvg) : '–', 'avg rating on wins'),
+      statBox(p.lossAvg !== null ? String(p.lossAvg) : '–', 'avg rating on losses'),
+      statBox(gap !== null ? (gap > 0 ? `+${gap}` : String(gap)) : '–', 'win − loss gap'),
+    ),
+    gap !== null
+      ? h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } },
+          gap >= 15
+            ? 'Your self-read tracks results closely — you rate wins much higher than losses. Worth asking: are you grading the outcome instead of your play?'
+            : gap <= 2
+              ? 'You rate wins and losses about the same — a self-read that ignores the scoreboard is exactly what review is for.'
+              : 'A modest win/loss gap — your self-rating mostly reflects your play, with a little scoreboard bleed.')
+      : null,
+  ));
+}
 
 /**
  * A compact winrate-bar list for a categorical split — one row per group, ranked

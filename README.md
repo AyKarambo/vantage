@@ -35,24 +35,30 @@ comms · toxicity · leavers · your improvement target).
   after N consecutive losses.
 - **Trends** — winrate over time, splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
-  within a sitting, with a "you fade from game N" read when the sample supports it), and an
-  activity heatmap.
+  within a sitting, with a "you fade from game N" read when the sample supports it), an
+  activity heatmap, and **your self-rating over time** (the 0–100 performance slider with a
+  rolling average plus the avg-rating-on-wins vs -losses split — does your self-read track
+  results, or your play?). Per-hero and per-map average self-ratings also appear as **RTG**
+  columns on the Heroes and Maps tables.
 - **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea
-  of *supercompensation*: it estimates whether you're grinding "into the hole" from your play
-  pattern (games/day, session length, days without a rest day) and your self-reported mental
-  state, then gives a traffic-light verdict and a **rest recommendation** (take 1–2 days off),
-  with a trend chart. It watches **both directions**: overtraining *and* undertraining — a
-  week-plus layoff reads as **Rusty** (rest decays into detraining, with a ramp-back-up nudge
-  instead of an alarm) and a thin weekly rhythm gets a consistency signal ("~2 active days/week —
-  consistency builds skill faster than bingeing"). Deliberately conservative and framed as an
-  evidence-informed **wellness nudge, not a diagnosis** — match results alone are a weak fatigue
-  signal, so it leans on load and mental self-report. Optional opt-in tray reminder at launch.
-  Extends (doesn't replace) the Mental break reminder. It's the one screen that ignores the
-  filter bar entirely (no filter bar is even shown) and the account switcher — readiness is
-  about the person, not a slice of their history; a **"How is this calculated?"** link on the
-  verdict card opens a modal with the full methodology (verdict bands, signals, the training-load
-  model, the supercompensation model and its schematic, confidence levels, and the honesty
-  disclaimer).
+  of *supercompensation*, detecting **over- and undertraining**. One **score-first composite**
+  (0–100, the band derives from it — score and verdict can't disagree) built from three
+  families: **behavioral load** (volume vs *your own* norm — habit is not risk), **objective
+  performance vs your own baselines** (winrate and per-10 elims/deaths/damage/healing, per
+  hero *and per account*, so an alt's lobbies never skew your main; a decline only counts once
+  it's sustained — one long marathon session qualifies, a single bad game never does), and
+  down-weighted **self-report** (tilt + your performance rating, hard-capped so a feeling
+  never outweighs the evidence). Working on your **improvement targets** softens a results dip
+  (deliberate practice makes you temporarily worse — that's normal) unless your tilt is clearly
+  elevated; heroes you're still learning are exempt entirely. The screen shows the verdict +
+  score, a **"what moves the score"** subscore breakdown, the top reasons, a rest
+  recommendation, and the trend. A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
+  not an alarm), a thin weekly rhythm gets a consistency signal. Deliberately conservative and
+  framed as an evidence-informed **wellness nudge, not a diagnosis** — the methodology (and
+  its limits, e.g. a balance patch looks like a decline too) lives behind the
+  **"How is this calculated?"** modal. Optional opt-in tray reminder at launch; extends
+  (doesn't replace) the Mental break reminder. It's the one screen that ignores the filter bar
+  and account switcher entirely — readiness is about the person, not a slice of their history.
 - **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
   how each tracked game felt, and rate your own **performance** on a 0-100 slider; **measured
   (⚡) targets are auto-graded from that match's stats and shown read-only**. An
@@ -290,9 +296,12 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   threshold, re-fire cadence, re-arm on a win), driven by the main process after every
   recorded game.
 - `core/readiness/` — the pure readiness / training-load model: gap-based sessions, a local
-  4am-day boundary, EWMA acute-vs-chronic load, self-reported mental signals, and a rule-gated
-  band + rest recommendation. All thresholds are conservative, centrally tuned constants; every
-  gate is unit-tested. Surfaced on `DashboardData` like `mental`.
+  4am-day boundary, EWMA acute-vs-chronic load, per-account/per-hero stat **baselines** with a
+  one-sided-CUSUM decline detector (`baselines.ts`, `performance.ts`), a disagreement-gated
+  subjective read (`subjective.ts`), and the **score-first composite** — three bounded
+  subscore deltas on a 75 anchor, with the band derived from (score, driver, hard gates)
+  (`score.ts`). All thresholds are conservative, centrally tuned constants; every gate is
+  unit-tested. Surfaced on `DashboardData` like `mental`.
 - `shared/contract/` — the single typed IPC contract shared by main **and** renderer
   (import path stays `shared/contract`), including the channel map that preload and the
   renderer bridge are generated from.
