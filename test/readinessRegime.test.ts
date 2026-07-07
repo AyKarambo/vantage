@@ -234,6 +234,83 @@ describe('T6 — tilt as the second adverse family unlocks red on a manual grind
   });
 });
 
+describe('T9 — deaths metric direction (owner amendment: fewer deaths = better)', () => {
+  const HEALTHY = { damage: 8000, deaths: 5, elims: 20, healing: 0 };
+  it('acute deaths BELOW baseline (fewer) is favorable — never fires a decline', () => {
+    const games = [
+      ...statSpan(0, 24, { perDay: 3, hero: 'Tracer', ...HEALTHY }),
+      ...statSpan(25, 35, { perDay: 3, hero: 'Tracer', ...HEALTHY, deaths: 2 }), // fewer deaths
+    ];
+    const p = perfState(games, refOf(games), EMPTY_CONTEXT, false);
+    expect(p.declineFired).toBe(false);
+    expect(p.metricMeans.deaths ?? 0).toBeGreaterThanOrEqual(0); // sign-aligned: lower deaths reads positive
+  });
+  it('acute deaths ABOVE baseline (more) reads adverse on the deaths metric', () => {
+    const games = [
+      ...statSpan(0, 24, { perDay: 3, hero: 'Tracer', ...HEALTHY }),
+      ...statSpan(25, 35, { perDay: 3, hero: 'Tracer', ...HEALTHY, deaths: 11 }), // more deaths
+    ];
+    const p = perfState(games, refOf(games), EMPTY_CONTEXT, false);
+    expect(p.metricMeans.deaths ?? 0).toBeLessThan(0); // more deaths ⇒ negative (worse)
+  });
+});
+
+describe('T9 — b=1 golden regression (stats regime is bit-identical to the shipped engine)', () => {
+  it('a healthy stats-rich history pins its full verdict', () => {
+    const games = statSpan(0, 30, { perDay: 4, hero: 'Tracer', result: 'Win' });
+    const r = computeReadiness(games, ts(30, 20));
+    // Deep-ish snapshot: if any b=1 expression is restructured (arm/cap/floor no longer exactly zero),
+    // one of these moves. Pins the regression guarantee the whole design rests on.
+    expect(r.regime).toBe('stats');
+    expect(r.band).toBe('fresh'); // low daily volume ⇒ the fresh split (cosmetic, green)
+    expect(r.confidence).toBe('high');
+    expect(r.driver).toBe('neutral');
+    expect(r.score).toBe(75);
+    expect(r.subscores.load.coverage).toBe(1);
+  });
+});
+
+describe('T9 — GEP outage: smooth blend down and back, no adverse from missing stats', () => {
+  // Stats-rich era (per-10) then a manual era (game updates broke capture; logging continues).
+  const games = [
+    ...statSpan(0, 24, { perDay: 5, hero: 'Tracer', result: 'Win' }),
+    ...span(25, 40, { perDay: 5, result: 'Win', mental: CALM }), // outage: manual-only, still logging
+  ];
+  const scoreAtDay = (d: number) => computeReadiness(games, ts(d, 20));
+
+  it('regime eases stats → (hybrid) → manual as the acute window loses coverage, never jumping the score', () => {
+    const days = [24, 26, 28, 30, 32, 34];
+    const rs = days.map(scoreAtDay);
+    // Regime monotonically loses coverage (stats-ish early, manual late).
+    expect(rs[0].regime).toBe('stats');
+    expect(rs[rs.length - 1].regime).toBe('manual');
+    // No single day's score jumps by more than a bounded amount from the blend shift.
+    for (let i = 1; i < rs.length; i += 1) {
+      expect(Math.abs(rs[i].score! - rs[i - 1].score!)).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('missing stats never manufacture a decline — the outage can only raise or hold the verdict, never red', () => {
+    for (const d of [26, 28, 30, 32, 34, 40]) {
+      const r = scoreAtDay(d);
+      expect(r.band).not.toBe('in-the-hole'); // absence of stats is never adverse evidence
+      expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(0); // no per-10 penalty from the gap
+    }
+  });
+});
+
+describe('T9 — one-game epsilon: adding a single game moves the score only a little', () => {
+  it('bounded per-game step in a partial-coverage window', () => {
+    const base = [
+      ...statSpan(0, 24, { perDay: 4, hero: 'Tracer', result: 'Win' }),
+      ...span(25, 31, { perDay: 4, result: 'Win', mental: CALM }), // hybrid-ish acute
+    ];
+    const before = computeReadiness(base, ts(31, 20));
+    const after = computeReadiness([...base, ...statSpan(31, 31, { perDay: 1, hero: 'Tracer', result: 'Win' })], ts(31, 20));
+    expect(Math.abs(after.score! - before.score!)).toBeLessThanOrEqual(5);
+  });
+});
+
 describe('T7 — confidence capped at medium in the manual regime', () => {
   it('manual-only history with FULL mental coverage is capped below high', () => {
     const games = span(0, 35, { perDay: 8, result: 'Win', mental: CALM }); // 100% mental coverage
