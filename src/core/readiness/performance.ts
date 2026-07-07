@@ -205,9 +205,17 @@ export function perfState(
   // archival only stops it from the archival day onward — archiving a finished
   // target today must never retroactively strip past trend days' dampening
   // (review finding: `!archivedAt` alone re-scored history on archival).
+  //
+  // SELF-RATED (◎) targets only: measured (⚡) targets auto-grade from match
+  // stats with no deliberate-practice act behind them, and scoring/export
+  // deliberately IGNORE their stored `review.grades` so the two grading paths
+  // can't double-count (`targets/scoring.ts`) — the dampener mirrors both
+  // rules. An auto-hit easy measured target must never buy dampening on
+  // autopilot.
   const activeTargets = ctx.targets.filter(
     (t) =>
       t.isActive &&
+      t.mode !== 'measured' &&
       (!t.archivedAt || dayOrdinal(t.archivedAt) > refOrdinal) &&
       t.id !== NOTION_IMPROVEMENT_TARGET_ID &&
       dayOrdinal(t.createdAt) <= refOrdinal,

@@ -104,13 +104,16 @@ describe('target-focus dampener', () => {
     expect(archivedEarly.targetEvidence).toBe(false);
   });
 
-  it('inactive, archived, Notion-sentinel, and not-yet-created targets never count', () => {
+  it('inactive, archived, Notion-sentinel, not-yet-created, and MEASURED targets never count', () => {
     const dead: ReadinessContext = {
       targets: [
         target('off', 3, { isActive: false }),
         target('archived', 3, { archivedAt: ts(20) }),
         target(NOTION_IMPROVEMENT_TARGET_ID, 3),
         target('future', 60), // created after the reference day
+        // Measured targets auto-grade with no deliberate-practice act — stored
+        // grades for them are ignored (mirrors scoring.ts's double-count guard).
+        target('measured', 3, { mode: 'measured', rule: 'Damage ≥ 1' }),
       ],
     };
     const grades = Object.fromEntries(dead.targets.map((t) => [t.id, 'hit' as TargetGrade]));
