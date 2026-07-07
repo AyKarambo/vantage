@@ -108,39 +108,51 @@ export interface SubjectiveColumnDiag {
 }
 
 /**
- * Classify each of the 5 optional subjective columns purely from schema
- * discovery (no writes, no per-match data): `available` (present with the
- * right type, so it *can* be written), `wrong-type` (present but the wrong
- * Notion type), `near-miss` (absent under the canonical name, but a live
- * property name matches after trimming whitespace and case-folding), or
- * `missing` (absent, no near-miss). This is deliberately schema-level only —
- * per-match "no value" is a separate, sync-time skip reason (spec A3's third
- * reason), not something this function can or should report.
+ * Classify ONE column purely from schema discovery (no writes, no per-match
+ * data), against its expected Notion type: `available` (present with the right
+ * type, so it *can* be written), `wrong-type` (present but the wrong Notion
+ * type), `near-miss` (absent under the canonical name, but a live property name
+ * matches after trimming whitespace and case-folding), or `missing` (absent, no
+ * near-miss). Deliberately schema-level only — per-match "no value" is a
+ * separate, sync-time skip reason (spec A3's third reason). Shared by
+ * {@link diagnoseSubjectiveColumns} and {@link planColumnProvision} so the two
+ * never diverge on what "present / wrong / near / absent" means.
+ */
+export function classifyColumn(
+  properties: Record<string, { type?: string } | undefined>,
+  column: string,
+  expectedType: string,
+): SubjectiveColumnDiag {
+  const actual = properties[column];
+  if (actual) {
+    if (actual.type === expectedType) return { column, status: 'available' };
+    return { column, status: 'wrong-type', actualType: actual.type };
+  }
+  // Absent under the canonical name — look for a live property whose name only
+  // differs by whitespace/case (a rename the user probably meant). Last such
+  // match wins, matching the historical inline behavior.
+  const target = column.trim().toLowerCase();
+  let nearMissName: string | undefined;
+  for (const name of Object.keys(properties)) {
+    if (name.trim().toLowerCase() === target) nearMissName = name;
+  }
+  if (nearMissName && nearMissName !== column) {
+    return { column, status: 'near-miss', actualName: nearMissName };
+  }
+  return { column, status: 'missing' };
+}
+
+/**
+ * Classify each of the 5 optional subjective columns from schema discovery —
+ * a thin wrapper over {@link classifyColumn} across
+ * {@link OPTIONAL_SUBJECTIVE_PROPERTIES}.
  */
 export function diagnoseSubjectiveColumns(
   properties: Record<string, { type?: string } | undefined>,
 ): SubjectiveColumnDiag[] {
-  const foldedLive = new Map<string, string>();
-  for (const name of Object.keys(properties)) {
-    foldedLive.set(name.trim().toLowerCase(), name);
-  }
-
-  return Object.entries(OPTIONAL_SUBJECTIVE_PROPERTIES).map(([column, expectedType]) => {
-    const actual = properties[column];
-    if (actual) {
-      if (actual.type === expectedType) {
-        return { column, status: 'available' as const };
-      }
-      return { column, status: 'wrong-type' as const, actualType: actual.type };
-    }
-
-    const nearMissName = foldedLive.get(column.trim().toLowerCase());
-    if (nearMissName && nearMissName !== column) {
-      return { column, status: 'near-miss' as const, actualName: nearMissName };
-    }
-
-    return { column, status: 'missing' as const };
-  });
+  return Object.entries(OPTIONAL_SUBJECTIVE_PROPERTIES).map(([column, expectedType]) =>
+    classifyColumn(properties, column, expectedType),
+  );
 }
 
 /**
@@ -195,6 +207,79 @@ export function buildGametrackerProperties(mapsDataSourceId?: string): Record<st
     props['Map'] = { relation: { data_source_id: mapsDataSourceId, single_property: {} } };
   }
   return props;
+}
+
+/**
+ * The `dataSources.update` property-create payloads for every Gametracker column
+ * Vantage can add to an *existing* data source — the single source of truth for
+ * "what a missing Vantage column looks like". It is everything the
+ * create-from-scratch schema defines ({@link buildGametrackerProperties}) EXCEPT
+ * the two columns that can't be added additively — the `Name` **title** (a data
+ * source already has exactly one title; a second can't be created) and the `Map`
+ * **relation** (a relation needs a target data source, so it stays the
+ * create/auto-provision-DB flow's job) — PLUS the 5 optional subjective columns
+ * the writer fills in when present ({@link OPTIONAL_SUBJECTIVE_PROPERTIES}).
+ * `Map` is absent for free (no maps id is passed); only `Name` is dropped
+ * explicitly. Select options for Source/Role/Result stay pre-seeded (inherited
+ * from `buildGametrackerProperties`) so a provisioned select matches the writer's
+ * option names. A future field addition is one new entry here.
+ */
+export const PROVISIONABLE_PROPERTIES: Record<string, unknown> = (() => {
+  const props = { ...buildGametrackerProperties() };
+  delete props['Name'];
+  return {
+    ...props,
+    Comms: { select: {} },
+    'Improvement Target': { select: {} },
+    Leaver: { select: {} },
+    Tilt: { checkbox: {} },
+    'Toxic Mates': { checkbox: {} },
+  };
+})();
+
+/**
+ * The Notion property type a create payload declares — its single top-level key
+ * (`{ number: {} }` → `'number'`, `{ select: { options } }` → `'select'`). Lets
+ * {@link planColumnProvision} derive expected types straight from the manifest,
+ * with no parallel type table to keep in sync.
+ */
+export function expectedTypeOf(payload: unknown): string {
+  return Object.keys(payload as Record<string, unknown>)[0];
+}
+
+/** The columns a validation should create vs. surface, from schema discovery. */
+export interface ColumnProvisionPlan {
+  /**
+   * Genuinely-missing Vantage columns → their additive `dataSources.update`
+   * create payload. Empty when the schema is already complete (idempotent).
+   */
+  toCreate: Record<string, unknown>;
+  /**
+   * Columns present-but-wrong-type or shadowed by a near-miss name — Vantage must
+   * NOT create over these (a destructive retype / a confusing duplicate). Surfaced
+   * to the user via the existing diagnostics, never touched.
+   */
+  blocked: SubjectiveColumnDiag[];
+}
+
+/**
+ * Pure schema diff: classify every {@link PROVISIONABLE_PROPERTIES} column against
+ * a database's live `properties` and split into what to create vs. what to leave
+ * alone. `available` (present, right type) → nothing (idempotent); `missing` →
+ * `toCreate` with its payload; `wrong-type` / `near-miss` → `blocked`. Client-free
+ * so it unit-tests directly and drives the provisioning step at the edge.
+ */
+export function planColumnProvision(
+  properties: Record<string, { type?: string } | undefined>,
+): ColumnProvisionPlan {
+  const toCreate: Record<string, unknown> = {};
+  const blocked: SubjectiveColumnDiag[] = [];
+  for (const [column, payload] of Object.entries(PROVISIONABLE_PROPERTIES)) {
+    const diag = classifyColumn(properties, column, expectedTypeOf(payload));
+    if (diag.status === 'missing') toCreate[column] = payload;
+    else if (diag.status === 'wrong-type' || diag.status === 'near-miss') blocked.push(diag);
+  }
+  return { toCreate, blocked };
 }
 
 export interface ShapeValidation {

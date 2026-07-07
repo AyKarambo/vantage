@@ -89,6 +89,22 @@ export interface SubjectiveColumnDiag {
   actualName?: string;
 }
 
+/**
+ * Outcome of the auto-provisioning pass that runs on validate: the Vantage-owned
+ * columns that were missing from the configured database and got created in place
+ * (additively, never retyping user columns), plus any error if the schema update
+ * couldn't be applied (e.g. a token without permission to edit the schema). Absent
+ * on a steady-state schema (nothing to create). Wrong-type/near-miss columns are
+ * NOT reported here — they're left untouched and surfaced via `shapeIssues` /
+ * `subjectiveColumns`.
+ */
+export interface SchemaProvisionStatus {
+  /** Column names Vantage added to the database on this validate cycle. */
+  created: string[];
+  /** Set when provisioning failed; the sync still runs for the columns that exist. */
+  error?: string;
+}
+
 /** A database the Notion integration can see, from the picker's list. */
 export interface NotionDatabaseSummary {
   id: string;
@@ -131,6 +147,12 @@ export interface NotionStatus {
   importedMatches: number;
   /** Per-column schema diagnostics for the optional subjective columns, once validated. */
   subjectiveColumns?: SubjectiveColumnDiag[];
+  /**
+   * Outcome of the schema auto-provisioning pass (columns Vantage added to keep the
+   * database in step with its expected shape, or a provisioning error). Absent when
+   * nothing was created and nothing failed.
+   */
+  schemaProvision?: SchemaProvisionStatus;
 }
 
 /** Live per-game progress while a sync runs (pushed over the bridge). */

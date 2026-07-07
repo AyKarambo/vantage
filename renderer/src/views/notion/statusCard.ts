@@ -6,6 +6,7 @@ import { h } from '../../dom';
 import type { NotionStatus } from '../../../../src/shared/contract';
 import { card } from '../../components/primitives';
 import { subjectiveColumnsSection } from './subjectiveColumnsCard';
+import { schemaProvisionSection } from './schemaProvisionCard';
 
 /** Top-of-screen status readout; `s === null` means the initial fetch hasn't resolved yet. */
 export function statusCard(s: NotionStatus | null): HTMLElement {
@@ -24,6 +25,9 @@ export function statusCard(s: NotionStatus | null): HTMLElement {
             s.shapeIssues?.length ? `Missing: ${s.shapeIssues.join(', ')}` : 'One or more columns don’t match.'),
         ),
       ),
+      // When auto-provisioning couldn't heal the shape (e.g. no schema-edit
+      // permission), explain why the missing columns weren't added for the user.
+      schemaProvisionSection(s.schemaProvision),
     );
   }
 
@@ -40,6 +44,7 @@ export function statusCard(s: NotionStatus | null): HTMLElement {
         ),
       ),
       subjectiveColumnsSection(s.subjectiveColumns),
+      schemaProvisionSection(s.schemaProvision),
     );
   }
   const reason = !s.tokenSet

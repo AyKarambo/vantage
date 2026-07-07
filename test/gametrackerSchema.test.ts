@@ -3,7 +3,8 @@ import {
   REQUIRED_PROPERTIES, buildGametrackerProperties, validateGametrackerShape,
   hasPlayedAtColumn, PLAYED_AT_PROPERTY, hasSrDeltaColumn, SR_DELTA_PROPERTY,
   presentSubjectiveColumns, mapRelationSourceId, diagnoseSubjectiveColumns,
-  OPTIONAL_SUBJECTIVE_PROPERTIES,
+  OPTIONAL_SUBJECTIVE_PROPERTIES, PROVISIONABLE_PROPERTIES, expectedTypeOf,
+  planColumnProvision,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
@@ -184,6 +185,86 @@ describe('diagnoseSubjectiveColumns', () => {
     const props = { Tilt: { type: 'checkbox' } };
     const diags = diagnoseSubjectiveColumns(props);
     expect(diags.find((d) => d.column === 'Tilt')).toEqual({ column: 'Tilt', status: 'available' });
+  });
+});
+
+describe('PROVISIONABLE_PROPERTIES manifest', () => {
+  it('excludes the Name title and the Map relation (not additively creatable)', () => {
+    expect(PROVISIONABLE_PROPERTIES).not.toHaveProperty('Name');
+    expect(PROVISIONABLE_PROPERTIES).not.toHaveProperty('Map');
+  });
+
+  it('includes every REQUIRED_PROPERTIES entry except Name/Map, with the matching type', () => {
+    for (const [name, type] of Object.entries(REQUIRED_PROPERTIES)) {
+      if (name === 'Name' || name === 'Map') continue;
+      expect(PROVISIONABLE_PROPERTIES).toHaveProperty(name);
+      expect(expectedTypeOf(PROVISIONABLE_PROPERTIES[name])).toBe(type);
+    }
+  });
+
+  it('includes the optional Played At / SR Delta columns with their types', () => {
+    expect(expectedTypeOf(PROVISIONABLE_PROPERTIES[PLAYED_AT_PROPERTY])).toBe('date');
+    expect(expectedTypeOf(PROVISIONABLE_PROPERTIES[SR_DELTA_PROPERTY])).toBe('number');
+  });
+
+  it('includes every subjective column with its expected type', () => {
+    for (const [name, type] of Object.entries(OPTIONAL_SUBJECTIVE_PROPERTIES)) {
+      expect(PROVISIONABLE_PROPERTIES).toHaveProperty(name);
+      expect(expectedTypeOf(PROVISIONABLE_PROPERTIES[name])).toBe(type);
+    }
+  });
+
+  it('keeps Source/Result/Role select options pre-seeded (matches the writer)', () => {
+    const src = PROVISIONABLE_PROPERTIES['Source'] as any;
+    expect(src.select.options.map((o: any) => o.name)).toEqual(['Auto', 'Manual']);
+  });
+});
+
+describe('planColumnProvision', () => {
+  it('is empty (no writes) when every expected column is already present — idempotent (AC3)', () => {
+    const live = asRetrievedShape(PROVISIONABLE_PROPERTIES);
+    const plan = planColumnProvision(live);
+    expect(plan.toCreate).toEqual({});
+    expect(plan.blocked).toEqual([]);
+  });
+
+  it('ignores extra unrelated user columns around a complete schema (AC3)', () => {
+    const live = asRetrievedShape(PROVISIONABLE_PROPERTIES);
+    live['My Notes'] = { type: 'rich_text' };
+    live['Priority'] = { type: 'select' };
+    expect(planColumnProvision(live).toCreate).toEqual({});
+  });
+
+  it('plans every provisionable column when the database is empty, none blocked (AC2)', () => {
+    const plan = planColumnProvision({});
+    expect(Object.keys(plan.toCreate).sort()).toEqual(Object.keys(PROVISIONABLE_PROPERTIES).sort());
+    expect(plan.blocked).toEqual([]);
+  });
+
+  it('plans exactly the one missing optional column with its payload (AC1)', () => {
+    const live = asRetrievedShape(PROVISIONABLE_PROPERTIES);
+    delete live[SR_DELTA_PROPERTY];
+    const plan = planColumnProvision(live);
+    expect(Object.keys(plan.toCreate)).toEqual([SR_DELTA_PROPERTY]);
+    expect(plan.toCreate[SR_DELTA_PROPERTY]).toEqual(PROVISIONABLE_PROPERTIES[SR_DELTA_PROPERTY]);
+    expect(plan.blocked).toEqual([]);
+  });
+
+  it('blocks a wrong-typed column — never creates over it (AC4)', () => {
+    const live = asRetrievedShape(PROVISIONABLE_PROPERTIES);
+    live['Comms'] = { type: 'rich_text' };
+    const plan = planColumnProvision(live);
+    expect(plan.toCreate).not.toHaveProperty('Comms');
+    expect(plan.blocked).toContainEqual({ column: 'Comms', status: 'wrong-type', actualType: 'rich_text' });
+  });
+
+  it('blocks a near-miss name — never creates a confusing duplicate (AC4)', () => {
+    const live = asRetrievedShape(PROVISIONABLE_PROPERTIES);
+    delete live[SR_DELTA_PROPERTY];
+    live['sr delta'] = { type: 'number' };
+    const plan = planColumnProvision(live);
+    expect(plan.toCreate).not.toHaveProperty(SR_DELTA_PROPERTY);
+    expect(plan.blocked).toContainEqual({ column: SR_DELTA_PROPERTY, status: 'near-miss', actualName: 'sr delta' });
   });
 });
 

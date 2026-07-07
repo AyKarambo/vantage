@@ -23,9 +23,11 @@ vi.mock('../src/main/config', () => ({
 // stub the class so `rebuild()`/`validateConfigured()` run against a fixed
 // diagnostics result instead of a real Notion client.
 const validateMock = vi.fn();
+const ensureColumnsMock = vi.fn();
 vi.mock('../src/notion/notionAdmin', () => ({
   NotionAdmin: vi.fn().mockImplementation(function (this: any) {
     this.validate = validateMock;
+    this.ensureColumns = ensureColumnsMock;
     this.listDatabases = vi.fn().mockResolvedValue([]);
     this.listParentPages = vi.fn().mockResolvedValue([]);
   }),
@@ -135,6 +137,7 @@ function baseDeps(overrides: Partial<NotionRuntimeDeps> = {}): NotionRuntimeDeps
 beforeEach(() => {
   tokenState.token = undefined;
   validateMock.mockReset();
+  ensureColumnsMock.mockReset().mockResolvedValue([]);
   exporterCtor.mockReset();
   clientMocks.pagesUpdate.mockReset().mockResolvedValue(undefined);
   clientMocks.dataSourcesQuery.mockReset().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
@@ -151,6 +154,7 @@ async function connectedRuntime(deps: Partial<NotionRuntimeDeps> = {}): Promise<
     subjectiveColumns: [], subjectiveColumnDiagnostics: [],
     mapRelationDbId: undefined,
     dataSourceId: 'src-1',
+    provisionPlan: { toCreate: {}, blocked: [] },
   });
   const runtime = new NotionRuntime(baseDeps(deps));
   tokenState.token = 'secret-token';
@@ -177,6 +181,7 @@ describe('NotionRuntime — diagnostics cache reaches status()', () => {
       subjectiveColumnDiagnostics: diagnostics,
       mapRelationDbId: undefined,
       dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
     });
 
     const runtime = new NotionRuntime(baseDeps());
@@ -203,6 +208,109 @@ describe('NotionRuntime — diagnostics cache reaches status()', () => {
   });
 });
 
+describe('NotionRuntime — schema auto-provisioning on validate', () => {
+  /** A `NotionAdmin.validate` result with the fields `validateConfigured` reads; override per case. */
+  function validateResult(overrides: Record<string, any> = {}) {
+    return {
+      ok: true, missing: [], mismatched: [], title: 'Gametracker',
+      hasPlayedAt: false, hasSrDelta: false,
+      subjectiveColumns: [], subjectiveColumnDiagnostics: [],
+      mapRelationDbId: undefined, dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
+      ...overrides,
+    };
+  }
+
+  /** Drain the async validate→provision→re-validate chain kicked off (unawaited) by rebuild(). */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  async function run(): Promise<NotionRuntime> {
+    const runtime = new NotionRuntime(baseDeps());
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+    return runtime;
+  }
+
+  it('creates missing columns then re-validates so they are writable this session (AC1/AC2)', async () => {
+    validateMock
+      // First validate: a required column and an optional one are missing, with a plan to add them.
+      .mockResolvedValueOnce(validateResult({
+        ok: false, missing: ['Result'], hasSrDelta: false,
+        provisionPlan: { toCreate: { Result: { select: {} }, 'SR Delta': { number: {} } }, blocked: [] },
+      }))
+      // Re-validate after provisioning: the schema is now healed.
+      .mockResolvedValueOnce(validateResult({ ok: true, hasSrDelta: true, subjectiveColumns: ['Comms'] }));
+    ensureColumnsMock.mockResolvedValue(['Result', 'SR Delta']);
+
+    const runtime = await run();
+
+    expect(ensureColumnsMock).toHaveBeenCalledWith('src-1', { Result: { select: {} }, 'SR Delta': { number: {} } });
+    expect(validateMock).toHaveBeenCalledTimes(2); // validate → provision → re-validate
+    const status = runtime.status();
+    expect(status.shapeValid).toBe(true); // no more "Database is missing" — the sync proceeds
+    expect(status.schemaProvision).toEqual({ created: ['Result', 'SR Delta'] });
+    expect(status.connected).toBe(true);
+    // The exporter was rebuilt off the HEALED validation — with no shape issues,
+    // so the "Database is missing" short-circuit is disarmed (the mirror of AC5:
+    // this proves the heal actually reached buildExporter, not just status).
+    expect(exporterCtor).toHaveBeenCalled();
+    const [, , , shapeIssuesArg] = exporterCtor.mock.calls.at(-1)!;
+    expect(shapeIssuesArg).toBeUndefined();
+  });
+
+  it('makes no schema write and no re-validate when the database is already complete (AC3)', async () => {
+    validateMock.mockResolvedValue(validateResult()); // empty toCreate
+
+    const runtime = await run();
+
+    expect(ensureColumnsMock).not.toHaveBeenCalled();
+    expect(validateMock).toHaveBeenCalledTimes(1);
+    expect(runtime.status().schemaProvision).toBeUndefined();
+  });
+
+  it('reports a provisioning failure and still builds the exporter for existing columns (AC5)', async () => {
+    validateMock.mockResolvedValue(validateResult({
+      ok: false, missing: ['Result'],
+      provisionPlan: { toCreate: { Result: { select: {} } }, blocked: [] },
+    }));
+    ensureColumnsMock.mockRejectedValue(new Error('insufficient permissions to edit the schema'));
+
+    const runtime = await run();
+
+    const status = runtime.status();
+    expect(status.schemaProvision?.error).toContain('insufficient permissions');
+    expect(status.schemaProvision?.created).toEqual([]);
+    // Re-validate is never reached (ensureColumns threw) — only the first validate ran.
+    expect(validateMock).toHaveBeenCalledTimes(1);
+    // No crash: the still-missing required column keeps the shape invalid, but the
+    // exporter is built so the sync runs for the columns that do exist.
+    expect(status.shapeValid).toBe(false);
+    expect(status.shapeIssues).toContain('Result');
+    expect(status.connected).toBe(true);
+    // The exporter must be built WITH the shape issues (ctor arg 3), so a sync
+    // short-circuits ("Database is missing: Result") instead of writing every row
+    // against a DB still missing the required column. `status.shapeIssues` alone
+    // is read from a different field and does not prove what buildExporter received.
+    expect(exporterCtor).toHaveBeenCalled();
+    const [, , , shapeIssuesArg] = exporterCtor.mock.calls.at(-1)!;
+    expect(shapeIssuesArg).toContain('Result');
+  });
+
+  it('does not provision when there is no data source id (nothing to update against)', async () => {
+    validateMock.mockResolvedValue(validateResult({
+      ok: false, dataSourceId: undefined,
+      provisionPlan: { toCreate: { Result: { select: {} } }, blocked: [] },
+    }));
+
+    const runtime = await run();
+
+    expect(ensureColumnsMock).not.toHaveBeenCalled();
+    expect(validateMock).toHaveBeenCalledTimes(1);
+    expect(runtime.status().schemaProvision).toBeUndefined();
+  });
+});
+
 describe('NotionRuntime — authored ids + ledger reach the exporter', () => {
   it('constructs NotionExporter with the outbox ledger and authoredTargetIds()', async () => {
     validateMock.mockResolvedValue({
@@ -212,6 +320,7 @@ describe('NotionRuntime — authored ids + ledger reach the exporter', () => {
       subjectiveColumnDiagnostics: [],
       mapRelationDbId: undefined,
       dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
     });
 
     const outbox = new OutboxStore(tmpDir());
@@ -255,6 +364,7 @@ describe('NotionRuntime — authored ids + ledger reach the exporter', () => {
       subjectiveColumnDiagnostics: [],
       mapRelationDbId: undefined,
       dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
     });
 
     const runtime = new NotionRuntime(baseDeps());
