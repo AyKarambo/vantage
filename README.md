@@ -59,7 +59,13 @@ comms · toxicity · leavers · your improvement target).
   (deliberate practice makes you temporarily worse — that's normal) unless your tilt is clearly
   elevated; heroes you're still learning are exempt entirely. The screen shows the verdict +
   score, a **"what moves the score"** subscore breakdown, the top reasons, a rest
-  recommendation, and the trend. A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
+  recommendation, and the trend. The verdict is **regime-aware**: a ⚡ stats / ⚡◎ hybrid / ◎
+  manual badge shows how much of the read rests on live match stats vs your own logs, blending
+  continuously as coverage rises or falls (a patch-day GEP outage eases it toward manual and back —
+  missing stats are never counted against you). On manual logs alone (today's norm, pending Overwolf
+  approval) results-vs-your-own-baseline are promoted and a norm-free absolute training-load read
+  (consecutive days, daily volume, marathon sessions) fills in for unmeasurable outcomes, with
+  confidence capped at medium; **load alone still never reads red in any regime**. A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
   not an alarm), a thin weekly rhythm gets a consistency signal. Deliberately conservative and
   framed as an evidence-informed **wellness nudge, not a diagnosis** — the methodology (and
   its limits, e.g. a balance patch looks like a decline too) lives behind the
@@ -308,8 +314,9 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   one-sided-CUSUM decline detector (`baselines.ts`, `performance.ts`), a disagreement-gated
   subjective read (`subjective.ts`), and the **score-first composite** — three bounded
   subscore deltas on a 75 anchor, with the band derived from (score, driver, hard gates)
-  (`score.ts`). All thresholds are conservative, centrally tuned constants; every gate is
-  unit-tested. Surfaced on `DashboardData` like `mental`.
+  (`score.ts`), plus a continuous **stats↔manual blend** `b` (`regime.ts`, bit-identical to the
+  old engine at `b=1`) and the regime label. All thresholds are conservative, centrally tuned
+  constants; every gate is unit-tested. Surfaced on `DashboardData` like `mental`.
 - `shared/contract/` — the single typed IPC contract shared by main **and** renderer
   (import path stays `shared/contract`), including the channel map that preload and the
   renderer bridge are generated from.
