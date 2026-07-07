@@ -393,10 +393,15 @@ function buildForm(
           `Rank tracked for ${roleLabel(state.role)} on ${state.account} — the % above moves it.`));
       return;
     }
+    // A first-time-anchor callout, not a second mode: visually separated (top
+    // border) from the Change-mode SR field above so it doesn't read as the
+    // "Set current rank" toggle state bleeding into "Change".
     render(rankHost, toggleRow, srField,
-      field(optionalLabel('Current rank — set once'), rankPicker()),
-      h('div', { class: 'hint', style: { marginTop: '4px' } },
-        `First competitive ${roleLabel(state.role)} match on ${state.account} — set your current rank so it can be tracked from here.`),
+      h('div', { style: { borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '2px' } },
+        h('div', { class: 'hint', style: { marginBottom: '8px' } },
+          `First competitive ${roleLabel(state.role)} match on ${state.account} — set your current rank once so it can be tracked from here.`),
+        field(optionalLabel('Current rank — one-time setup'), rankPicker()),
+      ),
     );
   };
   paintRank();
