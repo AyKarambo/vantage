@@ -6,7 +6,7 @@ import { loadState } from '../src/core/readiness/signals';
 import { loadParts } from '../src/core/readiness/score';
 import { computeReadiness } from '../src/core/readiness';
 import { dayOrdinal } from '../src/core/readiness/day';
-import { ts, statSpan, span, CALM, TILT } from './readinessFixtures';
+import { ts, statSpan, span, graded, target, CALM, TILT } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
 
 /** A rest-punctuated history: `perDay` games Mon–Fri each week, weekends off. */
@@ -175,7 +175,21 @@ describe('T4 — absolute-load arm (the core manual-regime lever)', () => {
     expect(atStats.delta).toBe(0); // bit-identical to pre-regime engine (no own-norm surge here)
     expect(atStats.overloadPen).toBe(0);
     expect(atManual.delta).toBeLessThan(atStats.delta); // manual regime penalizes the exposure
-    expect(atManual.delta).toBeLessThanOrEqual(-10); // material penalty
+    // EXACT pin: loadDelta at b=0 equals −(absTrust·absRaw) and nothing more. If the arm wrongly set
+    // `surging`, the own-norm streak arm ((consecutiveDays−5)·3) would pile on and this would be far
+    // more negative — so exact equality proves surging stays unset (R2 invariant).
+    const absRaw = Math.min(
+      T.absArmCap,
+      (load.acutePerDay >= T.absElevatedPerDay
+        ? Math.min(T.absStreakPenCap, Math.max(0, load.consecutiveDays - T.absStreakFreeDays) * T.absStreakSlope)
+        : 0) +
+        Math.min(T.absVolPenCap, Math.max(0, load.acutePerDay - T.absElevatedPerDay) * T.absVolSlope) +
+        Math.min(T.restScarcityPenCap, Math.max(0, load.activeDaysPerWeek - T.restScarcityFreePerWeek) * T.restScarcitySlope),
+    );
+    const absTrust =
+      Math.min(1, Math.max(0, (load.chronicActiveDays - T.minChronicActiveDays) / T.absTrustRampDays)) *
+      Math.min(1, Math.max(0, (load.historySpanDays - T.minSpanDays) / T.absTenureRampDays));
+    expect(atManual.delta).toBeCloseTo(-(absTrust * absRaw), 6);
   });
 });
 
@@ -268,6 +282,36 @@ describe('T9 — b=1 golden regression (stats regime is bit-identical to the shi
     expect(r.score).toBe(75);
     expect(r.subscores.load.coverage).toBe(1);
   });
+
+  it('a stats-rich history with an ACTIVE per-10 decline pins its exact score (catches a b=1 leak)', () => {
+    // A trivial all-zero golden can hide a b=1 leak that only shows when a stats-regime penalty is
+    // live. Here the acute per-10 stats fall below baseline, so the decline penalty fires — the score
+    // is < 75 and must be EXACTLY the pre-regime value (the manual arm/caps stay off at b=1).
+    const games = [
+      ...statSpan(0, 24, { perDay: 5, hero: 'Tracer', result: 'Win', damage: 9000, deaths: 4, elims: 22 }),
+      ...statSpan(25, 35, { perDay: 5, hero: 'Tracer', result: 'Win', damage: 4000, deaths: 10, elims: 9 }), // worse
+    ];
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.regime).toBe('stats');
+    expect(r.subscores.performance.delta).toBeLessThan(0); // a real decline is active
+    expect(r.subscores.load.coverage).toBe(1); // b = 1 (bit-identity path)
+    expect(r.score).toBe(45); // exact regression pin (75 − capped decline penalty) — a b=1 leak would move this
+  });
+});
+
+describe('T9 — target grades stay dampener-only: all-missed grades never penalize', () => {
+  it('an active target graded all-missed adds no penalty in any regime (dampener withheld, nothing more)', () => {
+    const tgt = target('t-miss', 0, { mode: 'self' });
+    const base = span(0, 28, { perDay: 12, result: 'Win', mental: CALM });
+    const acute = span(29, 35, { perDay: 12, result: 'Loss', mental: CALM }).map((g) => graded(g, { 't-miss': 'missed' }));
+    const games = [...base, ...acute];
+    const withTarget = computeReadiness(games, ts(35, 20), { targets: [tgt] });
+    const without = computeReadiness(games, ts(35, 20), { targets: [] });
+    // All-missed ⇒ no positive evidence ⇒ dampener never engages ⇒ the objective penalty is identical
+    // to having no target at all. Grades only ever SOFTEN; a miss is never adverse on its own.
+    expect(withTarget.subscores.performance.delta).toBe(without.subscores.performance.delta);
+    expect(withTarget.score).toBe(without.score);
+  });
 });
 
 describe('T9 — GEP outage: smooth blend down and back, no adverse from missing stats', () => {
@@ -296,6 +340,44 @@ describe('T9 — GEP outage: smooth blend down and back, no adverse from missing
       expect(r.band).not.toBe('in-the-hole'); // absence of stats is never adverse evidence
       expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(0); // no per-10 penalty from the gap
     }
+  });
+
+  it('recovery: once capture resumes, the blend climbs back toward stats with the same bounded steps', () => {
+    // Stats era → manual outage → stats resumes. Same hero throughout so the baseline is already
+    // established when capture returns and the resumed games count immediately.
+    const recov = [
+      ...statSpan(0, 20, { perDay: 5, hero: 'Tracer', result: 'Win' }),
+      ...span(21, 27, { perDay: 5, result: 'Win', mental: CALM }), // outage
+      ...statSpan(28, 40, { perDay: 5, hero: 'Tracer', result: 'Win' }), // capture resumes
+    ];
+    const days = [28, 30, 32, 34]; // acute window fills back up with per-10 games
+    const rs = days.map((d) => computeReadiness(recov, ts(d, 20)));
+    expect(rs[0].subscores.load.coverage!).toBeLessThan(0.5); // still mostly manual right after resume
+    expect(rs[rs.length - 1].regime).toBe('stats'); // fully recovered
+    // Monotone climb back, no jump.
+    for (let i = 1; i < rs.length; i += 1) {
+      expect(rs[i].subscores.load.coverage!).toBeGreaterThanOrEqual(rs[i - 1].subscores.load.coverage!);
+      expect(Math.abs(rs[i].score! - rs[i - 1].score!)).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('mixed history: trend points are scored under the blend that existed on each day', () => {
+    // Stats era then a manual grind era: the recent (manual) trend days carry the absolute-load arm,
+    // the early (stats) days don't — so a late point must score below an early point, proving each
+    // day is evaluated under its own coverage rather than one global regime.
+    const mixed = [
+      ...statSpan(0, 18, { perDay: 5, hero: 'Tracer', result: 'Win' }),
+      ...span(19, 34, { perDay: 12, result: 'Win', mental: CALM }), // manual grind, no rest
+    ];
+    const r = computeReadiness(mixed, ts(34, 20));
+    const pts = r.trend.filter((p) => p.score !== null);
+    const early = pts[0].score!;
+    const late = pts[pts.length - 1].score!;
+    expect(late).toBeLessThan(early); // the manual arm bites only on the recent days
+    // And each trend point equals a full recompute as-of that day (per-day blend, not a global one).
+    const lastDate = r.trend[r.trend.length - 1].date;
+    expect(r.trend[r.trend.length - 1].score).toBe(computeReadiness(mixed, ts(34, 20)).trend.at(-1)!.score);
+    expect(lastDate).toBeTruthy();
   });
 });
 
