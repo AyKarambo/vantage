@@ -126,6 +126,33 @@ export const READINESS_TUNING = {
   loadDeltaMin: -40,
   loadDeltaMax: 25,
 
+  // --- absolute training-load arm (manual-regime only; scaled by (1−b)·absTrust, joins the overloadPen sum) ---
+  // Exposure is the only fatigue evidence when outcomes are unmeasurable; contributes EXACTLY zero at b=1
+  // ("habit is not risk" holds where consequences are observable). Volume-gated + tenure-gated against false alarms.
+
+  /** First N consecutive active days are free — a full week of daily play never accrues manual penalty. */
+  absStreakFreeDays: 6,
+  /** Points per rest-less day past the free week (b=0) — slow, sustained-evidence accrual. */
+  absStreakSlope: 1,
+  /** Cap on the streak arm (saturates ~18 straight days). The streak arm is VOLUME-GATED on acutePerDay ≥ absElevatedPerDay. */
+  absStreakPenCap: 12,
+  /** Points per game/day above absElevatedPerDay (b=0) — a third of the own-norm slope (norm-free volume is weaker evidence). */
+  absVolSlope: 1,
+  /** Cap on the absolute-volume arm — volume alone stays a sub-amber nudge; days-without-rest carries the arm. */
+  absVolPenCap: 10,
+  /** Active-days/week below this read as rest-punctuated and free; ramp starts above it (continuous, no cliff). */
+  restScarcityFreePerWeek: 5.5,
+  /** Points per active-day/week above the free bar — steep because the risk band (5.5→7.0) is narrow. */
+  restScarcitySlope: 4,
+  /** Cap on the rest-scarcity arm — corroborates the streak arm, never alarms alone. */
+  restScarcityPenCap: 5,
+  /** Cap on the whole absolute arm before (1−b)·absTrust·trust·fade — max abs-only load (24+8 long-session) leaves score 43 > redCut. */
+  absArmCap: 24,
+  /** Active-day ramp for absTrust: 0 at minChronicActiveDays (7), full at 7+this — norm-free claims need a populated window. */
+  absTrustRampDays: 7,
+  /** History-span ramp for absTrust: full weight only ~this many days past minSpanDays — a daily newcomer isn't flagged in week 3. */
+  absTenureRampDays: 21,
+
   // --- objective-performance subscore (perfDelta ∈ [−45, +8]) ---
 
   /** Games below this duration are excluded from per-10 rates (a 4-minute stomp explodes the denominator). */
@@ -168,6 +195,8 @@ export const READINESS_TUNING = {
   wrPenaltySlope: 100,
   /** Cap on the winrate penalty — the named "outcome cap": losses alone can never move the score more than this. */
   wrPenaltyCap: 15,
+  /** Manual-regime extra winrate cap phased in by (1−b): 15 at b=1 (corroboration, bit-identical) → 30 at b=0 (promoted primary). Slope & wrDipMin stay regime-invariant so objectiveAdverse never flips with b. */
+  wrManualCapBoost: 15,
   /** Mean acute game-z above this (with a quiet CUSUM) earns a small "playing above your usual" bonus. */
   perfBonusMinZ: 0.5,
   /** Cap on that bonus. */
@@ -184,6 +213,8 @@ export const READINESS_TUNING = {
 
   /** Cap on the continuous tilt penalty (coverage-gated, no elevated-bar cliff). */
   tiltPenCap: 10,
+  /** Manual endpoint of tiltPenCap (lerped by b) — exactly the slope-8 theoretical max, so a bound not a new sensitivity; slopes stay regime-invariant. */
+  tiltPenCapManual: 16,
   /** Tilt-rate slopes: acuteTilt × this + max(0, acuteTilt − baseTilt) × this. */
   tiltPenSlope: 8,
   /** Minimum prior rated games before the player's own slider average is a usable baseline. */
@@ -194,11 +225,15 @@ export const READINESS_TUNING = {
   sliderDipMin: 10,
   /** Cap on the slider penalty. */
   sliderPenCap: 8,
+  /** Manual endpoint of sliderPenCap (lerped by b) — same widening as the family cap; slider slope, engage threshold, and sample gates unchanged. */
+  sliderPenCapManual: 12,
   /** Cap on the slider bonus (rating well above one's own average). */
   sliderBonCap: 8,
   /** Hard bounds on the whole subjective delta (the spec's ≤15% hard cap). */
   subjDeltaMin: -15,
   subjDeltaMax: 8,
+  /** Manual endpoint of subjDeltaMin (lerped by b): −15 at b=1 → −25 at b=0; component caps (16+12) over-provision it so it isn't dead code. Positive side (subjDeltaMax) unchanged. */
+  subjDeltaMinManual: -25,
   /** When subjective agrees with an already-detected objective decline it is mostly double-counting — scale by this. */
   subjAgreeFactor: 0.3,
   /** Cap on the "feel great while objectively declining" counter-signal. */
@@ -213,6 +248,17 @@ export const READINESS_TUNING = {
   /** The largest single account must carry at least this share of the acute window for high confidence. */
   accountMixBar: 0.7,
 
+  // --- regime dial (continuous stats↔manual blend b ∈ [0,1]) ---
+
+  /** Blend-denominator floor: caps the per-game blend step at 1/this and is the MAX safe floor — statCoverageHigh(0.5)×wrMinDecidedAcute(20)=10 guarantees b=1 at today's high-confidence bars (any higher breaks b=1 bit-identity). */
+  blendMinCounted: 10,
+  /** Acute comparable-per-10 coverage at/above which b saturates to 1 (mirrors statCoverageHigh as an independent knob); headroom above it absorbs manual-logging bursts and ~3.5 outage days at b=1. */
+  blendCoverageTarget: 0.5,
+  /** b at/below this labels 'manual' AND caps confidence at medium (one constant feeds both, so badge and cap never disagree). ≈ statCoverageLow/blendCoverageTarget. */
+  regimeManualMax: 0.4,
+  /** b at/above this labels 'stats'; below 1.0 so one stray non-qualifying game (max step 0.1) can't flap the badge. */
+  regimeStatsMin: 0.8,
+
   // --- target-focus dampener ---
 
   /** Minimum DISTINCT graded games in the acute window (N targets on one game = one game of evidence). */
@@ -225,6 +271,13 @@ export const READINESS_TUNING = {
   /** Days of readiness history plotted on the trend chart. */
   trendDays: 21,
 } as const;
+
+/**
+ * Linear interpolation between a stats-regime value and a manual-regime value by the blend `b`.
+ * `manualLerp(stats, manual, 1) === stats` exactly (IEEE754: 1·x+0·y = x), so every `b=1` call
+ * site reduces to its shipped constant bit-for-bit — the regression guarantee holds by construction.
+ */
+export const manualLerp = (stats: number, manual: number, b: number): number => b * stats + (1 - b) * manual;
 
 /** Feature settings (persisted to config.local.json, mirrors BreakReminderSettings). */
 export const DEFAULT_READINESS: ReadinessSettings = {
