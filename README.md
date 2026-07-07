@@ -125,7 +125,8 @@ between match details, `H/P/M/S` grading on Review, `W/L/D`+`Enter` in the log d
 everywhere** (click a heatmap day or a Mental flag count to open exactly those matches; hero-drawer
 map rows and Overview scatter dots jump to the Maps screen), hero typeahead + remembered role in
 the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
-colorblind-safe palette option, window-position memory, and a **Settings** screen with an
+choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
+window-position memory, and a **Settings** screen with an
 **accounts manager** (create/edit/delete accounts, per-role rank anchors), a **Master data**
 editor (see below) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
