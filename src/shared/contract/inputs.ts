@@ -13,7 +13,10 @@ export interface ManualMatchInput {
   result: Result;
   role: Role;
   map: string;
+  /** Legacy single hero. Superseded by {@link heroes}; still accepted. */
   hero?: string;
+  /** Heroes played this match (the card allows several). Takes precedence over {@link hero}. */
+  heroes?: string[];
   gameType: string;
   /** Manual after-game flags (tilt / comms / leaver-team / etc.), if any. */
   mental?: MatchMental;
@@ -45,6 +48,8 @@ export interface MatchEditInput {
   /** Single hero; '' clears the hero list. Hand-logged only. */
   hero?: string;
   gameType?: string;
+  /** Replacement hero list. Takes precedence over {@link hero}; `[]` clears. Hand-logged only. */
+  heroes?: string[];
   mental?: MatchMental;
   /** New SR %, or `null` to clear it; `undefined` leaves it unchanged. */
   srDelta?: number | null;

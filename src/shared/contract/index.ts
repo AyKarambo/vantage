@@ -12,7 +12,7 @@
 // Core vocabulary re-exported so the renderer never imports core directly
 export type { Role, Result, HeroStat } from '../../core/model';
 export type {
-  WinLoss, Group, FocusItem, HeroSummary, MatchMental, MatchReview, TargetGrade, Streak,
+  WinLoss, Group, FocusItem, HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak,
   DayGroup, SessionRecap,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';

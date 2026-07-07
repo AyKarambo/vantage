@@ -1,4 +1,4 @@
-import type { GameRecord, HeroStat } from '../analytics';
+import type { GameRecord, HeroStat, MatchMental } from '../analytics';
 import type { Result, Role, RosterPlayer } from '../model';
 import { ACCOUNT_WR, ACCOUNTS, HEROES, MAPS, PLAYER_POOL, ROLE_WR, ROLES, ROSTER_ROLES } from './fixtures';
 
@@ -79,13 +79,18 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
     }
 
     // Manual (◎) after-game self-report — tilt clusters on losses, positive
-    // comms is common. Deterministic via the same seeded stream.
-    const mental = {
+    // comms is common. Deterministic via the same seeded stream. The comms roll
+    // keeps its position/threshold (`< 0.46` = positive) so demo positives are
+    // stable, with the rest split into banter/abusive/none.
+    const mental: MatchMental = {
       tilt: result === 'Loss' ? rnd() < 0.42 : rnd() < 0.12,
       toxicMates: rnd() < 0.16,
       leaver: rnd() < 0.05,
-      positiveComms: rnd() < 0.46,
     };
+    const commsRoll = rnd();
+    if (commsRoll < 0.46) mental.comms = 'positive';
+    else if (commsRoll < 0.72) mental.comms = 'banter';
+    else if (commsRoll < 0.8) mental.comms = 'abusive';
 
     games.push({
       matchId: `sample-${i}`,

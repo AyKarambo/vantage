@@ -62,17 +62,22 @@ comms · toxicity · leavers · your improvement target).
   library that shows whether hitting it actually moves your winrate. The **Focus** screen can
   create a map-practice target for a losing map in one click (**＋ target**).
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
-  `W`/`L`/`D` picks the result, the **map and hero are typeaheads** with your recent picks listed
-  first, `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries the hero over —
-  it's the same sitting). Forgot to log during the session? The **Played** chips backfill a game
+  `W`/`L`/`D` picks the result, the **map is a typeahead** with your recent picks listed first,
+  `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's
+  the same sitting). Forgot to log during the session? The **Played** chips backfill a game
   30 min / 1 h / 2 h into the past so session analytics stay honest. Pick the **account** and
-  role; every logged match is competitive, so there's no mode picker — log the **skill-rating %**
-  (and, the first time for an account+role, your current **rank**), split the **leaver** flag by
-  team (my team / enemy), and grade active improvement targets inline. Vantage then **calculates
-  your live rank** from
-  that anchor plus each logged %, including OW2 **rank protection** (a loss that would drop
-  below 0% holds the division and keeps the true negative carry — matching the game's own
-  negative display — until a win or draw pays it back above 0%; only a further loss demotes).
+  **role** (Tank / Damage / Support / **Open Queue**); the **hero picker is a chip grid filtered by
+  that role** (Open Queue shows every hero) so you can **tap all the heroes you played** in the
+  game. Every logged match is competitive, so there's no mode picker. The **skill-rating** field
+  **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge** (±1) —
+  or flip it to **"Set current rank"** to enter your rank directly and let Vantage work out the
+  change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
+  Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy),
+  set the **comms** tone on a colour switch (**positive / banter / abusive**), and grade active
+  improvement targets inline. Vantage then **calculates your live rank** from that anchor plus each
+  logged %, including OW2 **rank protection** (a loss that would drop below 0% holds the division
+  and keeps the true negative carry — matching the game's own negative display — until a win or
+  draw pays it back above 0%; only a further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
   target database, **push** your tracked games to it and **import** them back — an
   on-demand pull that reads the Gametracker rows into local history for restoring or

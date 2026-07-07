@@ -82,3 +82,30 @@ describe('mentalSummary — decided-sample counts', () => {
     expect(m.calmDecided).toBe(0);
   });
 });
+
+describe('mentalSummary — comms tone', () => {
+  it('scores a new comms:positive game identically to a legacy positiveComms game', () => {
+    const withTone = mentalSummary([game({ ...base, result: 'Win', mental: { comms: 'positive' } })]);
+    const withLegacy = mentalSummary([game({ ...base, result: 'Win', mental: { positiveComms: true } })]);
+    expect(withTone.flags.positiveComms).toBe(1);
+    expect(withLegacy.flags.positiveComms).toBe(1);
+    expect(withTone.calm).toBe(withLegacy.calm);
+  });
+
+  it('counts abusive comms in flags.abusive and does not raise calm', () => {
+    const abusive = mentalSummary([game({ ...base, result: 'Win', mental: { comms: 'abusive' } })]);
+    const positive = mentalSummary([game({ ...base, result: 'Win', mental: { comms: 'positive' } })]);
+    expect(abusive.flags.abusive).toBe(1);
+    expect(abusive.flags.positiveComms).toBe(0);
+    // Abusive is non-positive → it must not lift calm the way positive does.
+    expect(abusive.calm).toBeLessThan(positive.calm);
+  });
+
+  it('treats banter as neutral — no positive credit, no abusive count', () => {
+    const banter = mentalSummary([game({ ...base, result: 'Win', mental: { comms: 'banter' } })]);
+    const none = mentalSummary([game({ ...base, result: 'Win' })]);
+    expect(banter.flags.positiveComms).toBe(0);
+    expect(banter.flags.abusive).toBe(0);
+    expect(banter.calm).toBe(none.calm);
+  });
+});

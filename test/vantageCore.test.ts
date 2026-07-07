@@ -56,7 +56,7 @@ describe('mentalSummary', () => {
       game({ result: 'Loss', map: 'Ilios', role: 'damage', mental: { tilt: true, leaver: true } }),
     ];
     const m = mentalSummary(games);
-    expect(m.flags).toEqual({ tilt: 2, toxicMates: 1, leaver: 1, leaverMyTeam: 1, leaverEnemyTeam: 0, positiveComms: 1 });
+    expect(m.flags).toEqual({ tilt: 2, toxicMates: 1, leaver: 1, leaverMyTeam: 1, leaverEnemyTeam: 0, positiveComms: 1, abusive: 0 });
     expect(m.winWhenCalm).toBe(1); // both calm games were wins
     expect(m.winWhenTilted).toBe(0); // both tilted games were losses
     expect(m.calm).toBeGreaterThanOrEqual(0);

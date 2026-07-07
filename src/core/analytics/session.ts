@@ -7,6 +7,7 @@ import type { GameRecord, Streak } from './types';
 import { byMap, dayKey, winLoss } from './grouping';
 import { heroStats } from './heroStats';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets';
+import { isPositiveComms } from '../comms';
 
 /** Current win/loss streak from the most recent decided games. */
 export function streak(games: GameRecord[]): Streak {
@@ -113,7 +114,13 @@ export function sessionRecap(games: GameRecord[], now: number = Date.now()): Ses
   const flags = { tilt: 0, toxicMates: 0, leaver: 0, positiveComms: 0 };
   for (const g of day) {
     for (const key of Object.keys(flags) as Array<keyof typeof flags>) {
-      if (g.mental?.[key] || g.review?.flags?.[key]) flags[key]++;
+      // positiveComms resolves through the comms tone so new `comms:'positive'`
+      // records count alongside legacy `positiveComms:true` ones.
+      if (key === 'positiveComms') {
+        if (isPositiveComms(g.mental) || isPositiveComms(g.review?.flags)) flags.positiveComms++;
+      } else if (g.mental?.[key] || g.review?.flags?.[key]) {
+        flags[key]++;
+      }
     }
   }
 

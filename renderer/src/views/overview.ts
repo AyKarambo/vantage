@@ -109,9 +109,13 @@ function rankKpi(d: DashboardData): HTMLElement {
   if (r) {
     return kpiCard({
       label: 'Rank',
-      value: rankLabel(r.tier, r.division),
+      value: `${rankLabel(r.tier, r.division)}${r.protected ? ' 🛡' : ''}`,
       delta: {
-        text: r.needsReanchor ? 'set % after demotion' : `${Math.round(r.progressPct)}% in division`,
+        text: r.needsReanchor
+          ? 'set % after demotion'
+          : r.protected
+            ? `${Math.round(r.progressPct)}% · rank protected`
+            : `${Math.round(r.progressPct)}% in division`,
         dir: 'up',
       },
     });

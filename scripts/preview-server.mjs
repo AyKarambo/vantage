@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'renderer');
-const port = Number(process.env.PORT ?? process.env.PREVIEW_PORT ?? 5178);
+// PREVIEW_PORT pins a port; PORT lets a harness assign a free one; else 5178.
+const port = Number(process.env.PREVIEW_PORT ?? process.env.PORT ?? 5178);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

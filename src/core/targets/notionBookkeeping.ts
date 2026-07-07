@@ -10,6 +10,7 @@
  * the new source of truth `core/` (and eventually the edges) import from.
  */
 import type { GameRecord, MatchMental, TargetGrade } from '../analytics';
+import { commsTone } from '../comms';
 
 /**
  * Internal id the Notion import bookkeeping grade is stored under
@@ -30,27 +31,29 @@ export const NOTION_IMPROVEMENT_TARGET_ID = 'notion-improvement-target';
  * ever add noise, not correctness.
  */
 export function matchExportSignature(game: GameRecord, grade: TargetGrade | undefined): string {
-  const mental = mergedMentalForSignature(game.mental, game.review?.flags);
-  const flags = Object.keys(mental)
-    .filter((k) => mental[k as keyof MatchMental])
-    .sort();
+  const flags = mergedFlagsForSignature(game.mental, game.review?.flags);
   return JSON.stringify({ grade: grade ?? null, flags });
 }
 
-/** Union of both mental sources, flattened to just the keys that are `true`. */
-function mergedMentalForSignature(a: MatchMental | undefined, b: MatchMental | undefined): MatchMental {
-  if (!a && !b) return {};
-  const merged: MatchMental = {};
-  const keys: (keyof MatchMental)[] = [
+/**
+ * Union of both mental sources, flattened to a sorted list of signature tokens.
+ * Boolean flags contribute their own key; the three-state comms tone contributes
+ * `'positiveComms'` when positive (so records exported before the tone existed
+ * keep an identical signature and don't churn) or `'comms:<tone>'` for the newer
+ * banter/abusive tones.
+ */
+function mergedFlagsForSignature(a: MatchMental | undefined, b: MatchMental | undefined): string[] {
+  if (!a && !b) return [];
+  const booleanKeys: (keyof MatchMental)[] = [
     'tilt',
     'toxicMates',
     'leaver',
     'leaverMyTeam',
     'leaverEnemyTeam',
-    'positiveComms',
   ];
-  for (const k of keys) {
-    if (a?.[k] || b?.[k]) merged[k] = true;
-  }
-  return merged;
+  const flags = booleanKeys.filter((k) => a?.[k] || b?.[k]) as string[];
+  const tone = commsTone(a) ?? commsTone(b);
+  if (tone === 'positive') flags.push('positiveComms');
+  else if (tone) flags.push(`comms:${tone}`);
+  return flags.sort();
 }

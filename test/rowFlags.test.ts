@@ -59,6 +59,20 @@ describe('rowFlags', () => {
     expect(rowFlags(g)).toEqual({ positiveComms: true });
   });
 
+  it('a new comms:positive tone carries through as positiveComms', () => {
+    const g = game({ ...base, mental: { comms: 'positive' } });
+    expect(rowFlags(g)).toEqual({ positiveComms: true });
+  });
+
+  it('an abusive comms tone carries through as its own flag', () => {
+    const g = game({ ...base, mental: { comms: 'abusive' } });
+    expect(rowFlags(g)).toEqual({ abusive: true });
+  });
+
+  it('a neutral banter tone carries no comms flag', () => {
+    expect(rowFlags(game({ ...base, mental: { comms: 'banter' } }))).toBeUndefined();
+  });
+
   it('unflagged game returns undefined', () => {
     expect(rowFlags(game({ ...base }))).toBeUndefined();
     expect(rowFlags(game({ ...base, mental: {} }))).toBeUndefined();

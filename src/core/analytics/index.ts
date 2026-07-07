@@ -2,7 +2,7 @@
 
 // Vocabulary types
 export type {
-  HeroStat, MatchMental, TargetGrade, MatchReview, GameRecord,
+  HeroStat, MatchMental, CommsTone, TargetGrade, MatchReview, GameRecord,
   WinLoss, Group, FocusItem, HeroSummary, Streak,
 } from './types';
 

@@ -583,7 +583,12 @@ function routeKey(view: ViewId, matchId?: string): string {
  */
 function rankLine(d: DashboardData): string {
   const r = d.primaryRank;
-  if (r) return r.needsReanchor ? `${rankLabel(r.tier, r.division)} · set %` : `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct)}%`;
+  if (r) {
+    if (r.needsReanchor) return `${rankLabel(r.tier, r.division)} · set %`;
+    // A protected rank carries a negative %; the shield keeps that from reading as broken.
+    const shield = r.protected ? ' 🛡' : '';
+    return `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct)}%${shield}`;
+  }
   return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }
 

@@ -242,6 +242,25 @@
   text-align: center;
 }
 
+/* Comms switch — a colour-coded single-select (positive / banter / abusive).
+   Uses `is-on` (not `is-active`) so the accent styling never applies; each
+   option lights up in its own semantic colour when selected. */
+.comms-switch .comms-opt.is-on {
+  font-weight: 600;
+}
+.comms-switch .comms-opt--pos.is-on {
+  background: var(--win-soft);
+  color: var(--win-text);
+}
+.comms-switch .comms-opt--banter.is-on {
+  background: rgba(214, 162, 79, 0.18);
+  color: var(--mid-text);
+}
+.comms-switch .comms-opt--abusive.is-on {
+  background: var(--loss-soft);
+  color: var(--loss-text);
+}
+
 /* Stat bar (label · track · value) ------------------------------------------ */
 .statbar {
   display: flex;

@@ -542,7 +542,7 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
 
     return h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '440px', maxWidth: '92vw' } },
       h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Set rank — ${account}`),
-      h('div', { class: 'hint' }, 'Set your current rank once; logged competitive matches move it from here. Editing re-anchors from the value you enter.'),
+      h('div', { class: 'hint' }, 'Set your current rank once; logged competitive matches move it from here. Editing re-anchors from the value you enter. A negative % means you’re in rank protection.'),
       host,
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
         button('Save', { variant: 'primary', onClick: () => {
@@ -559,7 +559,7 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
 
 function numField(value: string, onChange: (v: string) => void): HTMLInputElement {
   return h('input', {
-    class: 'vt-input mono', type: 'number', step: '1', value, placeholder: '0–100',
+    class: 'vt-input mono', type: 'number', step: '1', value, placeholder: '0–100, or -19 if protected',
     on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
   }) as HTMLInputElement;
 }

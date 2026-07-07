@@ -9,6 +9,15 @@ import type { Result, Role, HeroStat, RosterPlayer } from '../model';
 export type { HeroStat } from '../model';
 
 /**
+ * The tenor of team comms for a match — a single self-reported axis. `positive`
+ * is the old {@link MatchMental.positiveComms} signal; `banter` is neutral;
+ * `abusive` is a negative comms signal (distinct from a toxic teammate). Read
+ * via {@link ../comms commsTone} so legacy `positiveComms:true` records still
+ * resolve to `positive`.
+ */
+export type CommsTone = 'positive' | 'banter' | 'abusive';
+
+/**
  * Manual (◎) after-game self-report — the "mental" signals the game never
  * reports. All optional; absent means the player didn't flag anything.
  */
@@ -25,7 +34,16 @@ export interface MatchMental {
   leaverMyTeam?: boolean;
   /** A player left on the enemy team. */
   leaverEnemyTeam?: boolean;
+  /**
+   * Legacy boolean "positive comms" flag, superseded by {@link comms}. Kept so
+   * stored records keep reading correctly — resolve the comms signal through
+   * {@link ../comms commsTone}/{@link ../comms isPositiveComms}, never this field
+   * directly.
+   * @deprecated use {@link comms}.
+   */
   positiveComms?: boolean;
+  /** Three-state comms tone; new writes set this instead of {@link positiveComms}. */
+  comms?: CommsTone;
 }
 
 /** How the player graded one improvement target for one game. */

@@ -136,7 +136,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         result: input.result,
         gameType: input.gameType,
         source: 'manual',
-        heroes: input.hero ? [input.hero] : [],
+        heroes: input.heroes ?? (input.hero ? [input.hero] : []),
         mental: input.mental,
         ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
         // Inline target grades captured while logging are stored as a review, the
@@ -158,7 +158,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         if (input.role !== undefined) patch.role = input.role;
         if (input.map !== undefined) patch.map = input.map;
         if (input.gameType !== undefined) patch.gameType = input.gameType;
-        if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
+        // `heroes` (the multi-hero list) wins when provided; fall back to the
+        // legacy single-hero coercion. Both honour `[]`/'' as "clear the list".
+        if (input.heroes !== undefined) patch.heroes = input.heroes;
+        else if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
       }
       // The manual layer applies to any match. srDelta: number sets it, null
       // clears it (editManual deletes on null), undefined leaves it unchanged.
