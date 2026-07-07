@@ -57,7 +57,7 @@ const EMPTY_STATE: StateAt = {
   load: {
     acutePerDay: 0, chronicPerDay: 0, ratio: 1, ratioTrusted: false, consecutiveDays: 0,
     chronicActiveDays: 0, activeDaysPerWeek: 0, recentLongSession: false, lastSessionGames: 0,
-    lastSessionMinutes: null, highLoad: false, sustainedLoad: false,
+    lastSessionMinutes: null, highLoad: false, sustainedLoad: false, historySpanDays: 0,
   },
   mental: { coverage: 0, tiltKnown: false, acuteTilt: 0, baseTilt: 0, acutePositive: 0, fatigued: false },
   outcome: { lossStreak: 0 },
@@ -90,10 +90,20 @@ export function restEffectFor(restDays: number): number {
  * relative (habit is not risk — a stable 10-games/day rhythm reads neutral;
  * only surges above the player's own baseline accrue penalty), trust-gated on
  * a populated chronic window, faded by real rest days, and joined by the
- * supercompensation rest curve. Absolute-volume arms live only in the red
- * corroboration gate (`sustainedLoad`), not here.
+ * supercompensation rest curve. Own-norm absolute-volume arms live only in the
+ * red corroboration gate (`sustainedLoad`), not here.
+ *
+ * The manual-regime ABSOLUTE-load arm (`absArm`) is the one exception: when the
+ * objective family can't see outcomes (blend b < 1), raw exposure — days without
+ * rest, absolute daily volume, rest-day scarcity — becomes evidence on its own,
+ * scaled by (1−b). It is volume-gated (a calm daily player stays green) and
+ * tenure-gated (a newcomer isn't flagged in week 3), joins the SAME `overloadPen`
+ * sum (inheriting its cap, the outer trust gate, the rest-day fade, and the
+ * `overload` driver), and is EXACTLY zero at b=1 — so `loadParts` is bit-identical
+ * to the shipped engine in the stats regime. It never feeds a red gate: max
+ * abs-only load (24 + longSession 8) leaves the score at 43 > redCut.
  */
-function loadParts(load: LoadState, restDays: number): { delta: number; overloadPen: number } {
+export function loadParts(load: LoadState, restDays: number, blend: number): { delta: number; overloadPen: number } {
   const trust = Math.min(1, load.chronicActiveDays / T.minChronicActiveDays);
   const ratioPen = load.ratio > T.ratioElevated ? Math.min((load.ratio - T.ratioElevated) * 30, T.ratioPenCap) : 0;
   const habitBar = Math.max(T.absElevatedPerDay, T.habitFactor * load.chronicPerDay);
@@ -102,7 +112,26 @@ function loadParts(load: LoadState, restDays: number): { delta: number; overload
   const streakPen = surging ? Math.min(T.streakPenCap, Math.max(0, load.consecutiveDays - T.sustainedDays) * 3) : 0;
   const longPen = load.recentLongSession ? T.longSessionPen : 0;
   const fade = Math.max(0, 1 - restDays / (T.restFullRecoverDays + 1));
-  const overloadPen = Math.min(T.overloadPenCap, ratioPen + volPen + streakPen + longPen) * trust * fade;
+
+  // Absolute-load arm (manual regime). absTrust ramps on BOTH active-day density and
+  // uncapped history span, so norm-free claims need a genuinely established player.
+  const absTrust =
+    clamp((load.chronicActiveDays - T.minChronicActiveDays) / T.absTrustRampDays, 0, 1) *
+    clamp((load.historySpanDays - T.minSpanDays) / T.absTenureRampDays, 0, 1);
+  // Volume-gated: the streak arm only fires above a real daily volume — a calm 4-games/day daily
+  // habit accrues nothing here (only own-norm surges or rest scarcity can), preventing a false alarm
+  // on mere consistency. `surging` is deliberately NOT set by this arm (it must not trip the own-norm
+  // streak arm above).
+  const restlessPen =
+    load.acutePerDay >= T.absElevatedPerDay
+      ? Math.min(T.absStreakPenCap, Math.max(0, load.consecutiveDays - T.absStreakFreeDays) * T.absStreakSlope)
+      : 0;
+  const absVolPen = Math.min(T.absVolPenCap, Math.max(0, load.acutePerDay - T.absElevatedPerDay) * T.absVolSlope);
+  const scarcityPen = Math.min(T.restScarcityPenCap, Math.max(0, load.activeDaysPerWeek - T.restScarcityFreePerWeek) * T.restScarcitySlope);
+  const absRaw = Math.min(T.absArmCap, restlessPen + absVolPen + scarcityPen);
+  const absArm = blend >= 1 ? 0 : (1 - blend) * absTrust * absRaw; // exact 0 at b=1 (bit-identity)
+
+  const overloadPen = Math.min(T.overloadPenCap, ratioPen + volPen + streakPen + longPen + absArm) * trust * fade;
   const freqPen =
     load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
       ? Math.min(T.freqPenCap, (T.lowFrequencyDaysPerWeek - load.activeDaysPerWeek) * 3)
@@ -135,7 +164,7 @@ export function computeStateAt(
     (s) => s.endOrdinal === lastActiveOrdinal && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
   );
 
-  const lp = loadParts(load, restDays);
+  const lp = loadParts(load, restDays, perf.blend);
   const driver: ReadinessDriver =
     restDays >= T.rustSignalDays ? 'rust' : restDays === 0 && lp.overloadPen >= T.driverBar ? 'overload' : 'neutral';
 

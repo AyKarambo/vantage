@@ -2,10 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { blendFor, regimeFor } from '../src/core/readiness/regime';
 import { manualLerp, READINESS_TUNING as T } from '../src/core/readiness/constants';
 import { perfState, EMPTY_CONTEXT } from '../src/core/readiness/performance';
+import { loadState } from '../src/core/readiness/signals';
+import { loadParts } from '../src/core/readiness/score';
 import { computeReadiness } from '../src/core/readiness';
 import { dayOrdinal } from '../src/core/readiness/day';
-import { ts, statSpan, span } from './readinessFixtures';
+import { ts, statSpan, span, CALM } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
+
+/** A rest-punctuated history: `perDay` games Mon–Fri each week, weekends off. */
+function restPunctuated(weeks: number, perDay: number, lastDay: number): GameRecord[] {
+  const out: GameRecord[] = [];
+  for (let w = 0; w < weeks; w += 1) {
+    const monday = lastDay - (weeks - 1 - w) * 7 - 4; // Mon..Fri block ending Friday
+    out.push(...span(monday, monday + 4, { perDay, mental: CALM }));
+  }
+  return out;
+}
 
 const refOf = (games: GameRecord[]): number =>
   dayOrdinal(games.reduce((m, g) => Math.max(m, g.timestamp), 0));
@@ -110,6 +122,60 @@ describe('T3 — regime field on every ReadinessSummary producer', () => {
     const r = computeReadiness(span(0, 20, { perDay: 4 }), ts(40, 20)); // last game 20 days ago
     expect(r.band).toBe('rusty');
     expect(r.regime).toBe('manual');
+  });
+});
+
+describe('T4 — absolute-load arm (the core manual-regime lever)', () => {
+  it('heavy manual grind (12/day, ~5 weeks, no rest) ⇒ amber `loaded`, one family ⇒ never red', () => {
+    // ≥21 consecutive active days at ≥12 games/day, results at baseline (all wins ⇒ no wr dip),
+    // calm mental. Spec AC: must land ≤ amber cut and read 'loaded', NOT 'steady'.
+    const games = span(0, 35, { perDay: 12, result: 'Win', mental: CALM });
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.regime).toBe('manual');
+    expect(r.score!).toBeLessThanOrEqual(T.amberCut); // ≤ 60
+    expect(r.band).toBe('loaded');
+    expect(r.band).not.toBe('in-the-hole'); // one adverse family (load) can never red
+    expect(r.driver).toBe('overload');
+  });
+
+  it('R2 — calm hobbyist at 4 games/day EVERY day stays GREEN (volume gate zeros the streak arm)', () => {
+    // Same daily consistency as a grinder but low volume: the streak/volume arms must stay silent;
+    // only the mild rest-scarcity nudge applies. Regression the red team caught (ungated ⇒ 58 amber).
+    const games = span(0, 35, { perDay: 4, result: 'Win', mental: CALM });
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.score!).toBeGreaterThan(T.amberCut); // > 60, green
+    expect(['steady', 'fresh']).toContain(r.band);
+  });
+
+  it('R3 — daily newcomer at 6/day, only ~17 days of history, stays GREEN (tenure ramp defers the arm)', () => {
+    // Passes the insufficient gate (span 17 ≥ 14, games ≥ 15) but the absolute arm is tenure-gated,
+    // so an engaged newcomer in week 3 isn't flagged. (Without the tenure ramp this reads ~59 amber.)
+    const games = span(0, 16, { perDay: 6, result: 'Win', mental: CALM });
+    const r = computeReadiness(games, ts(16, 20));
+    expect(r.band).not.toBe('insufficient-data');
+    expect(r.score!).toBeGreaterThan(T.amberCut); // green
+  });
+
+  it('rest-punctuated play (4/day, Mon–Fri, weekends off) stays GREEN — the arm penalizes restlessness, not regularity', () => {
+    const games = restPunctuated(5, 4, 32); // last active day 32
+    const r = computeReadiness(games, ts(32, 20));
+    expect(r.score!).toBeGreaterThan(T.amberCut);
+  });
+
+  it('b=1 bit-identity: loadParts gains ZERO from the absolute arm at full stats coverage', () => {
+    // A heavy-grind LoadState: at b=1 the arm is exactly 0 (own-norm arms silent at ratio≈1) ⇒ delta 0,
+    // identical to the shipped engine; at b=0 the same state accrues the arm. The fact that the b=0
+    // delta equals exactly −absRaw (no extra) also proves `surging` is NOT set by the arm (else the
+    // own-norm streak arm would pile on).
+    const grind = span(0, 35, { perDay: 12, result: 'Win', mental: CALM });
+    const ref = refOf(grind);
+    const load = loadState(grind, ref);
+    const atStats = loadParts(load, 0, 1);
+    const atManual = loadParts(load, 0, 0);
+    expect(atStats.delta).toBe(0); // bit-identical to pre-regime engine (no own-norm surge here)
+    expect(atStats.overloadPen).toBe(0);
+    expect(atManual.delta).toBeLessThan(atStats.delta); // manual regime penalizes the exposure
+    expect(atManual.delta).toBeLessThanOrEqual(-10); // material penalty
   });
 });
 

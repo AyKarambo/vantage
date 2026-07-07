@@ -612,7 +612,13 @@ describe('composite — losing streak alone (winrate gates MET) is bounded and n
     const r = computeReadiness(games, ts(35, 20));
     expect(r.band).not.toBe('in-the-hole');
     expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(-15); // the named outcome cap
-    expect(r.score!).toBeGreaterThanOrEqual(60);
+    // Re-baselined for the manual absolute-load arm (readiness-data-regimes): this fixture also
+    // never takes a rest day (7 active days/week for a month), so a small rest-scarcity nudge now
+    // applies ON TOP of the capped outcome penalty → the score lands in amber. The guarantees that
+    // matter are unchanged: the outcome penalty stays capped (asserted above) and red is unreachable
+    // at this volume (acutePerDay 3 ⇒ no sustainedLoad corroboration), so the total stays ≥ 50.
+    expect(r.band).not.toBe('in-the-hole');
+    expect(r.score!).toBeGreaterThanOrEqual(50);
   });
 });
 

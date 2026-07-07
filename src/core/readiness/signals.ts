@@ -54,6 +54,8 @@ export interface LoadState {
   lastSessionMinutes: number | null;
   highLoad: boolean;
   sustainedLoad: boolean;
+  /** Uncapped days of history (last active day − first game day + 1) — the tenure ramp for the absolute-load arm. */
+  historySpanDays: number;
 }
 
 export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
@@ -72,7 +74,8 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
   // 15-day-old account has 15 observable days, not 21, and must not read as
   // playing ~30% less than it does.
   const firstOrdinal = games.length ? dayOrdinal(games[0].timestamp) : refOrdinal;
-  const observedDays = Math.max(1, Math.min(T.chronicDays, refOrdinal - firstOrdinal + 1));
+  const historySpanDays = Math.max(1, refOrdinal - firstOrdinal + 1);
+  const observedDays = Math.min(T.chronicDays, historySpanDays);
 
   const acuteLoad = ewma(series, T.acuteDays);
   const chronicLoad = ewma(series, T.chronicDays);
@@ -111,6 +114,7 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
     lastSessionMinutes: last ? last.minutes : null,
     highLoad,
     sustainedLoad,
+    historySpanDays,
   };
 }
 
