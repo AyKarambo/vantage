@@ -1,6 +1,6 @@
 ---
 slug: log-match-improvements-2
-status: planned
+status: done
 updated: 2026-07-07
 ---
 
@@ -12,14 +12,14 @@ sites → docs/verification).
 
 ## Data model & core
 
-- [ ] **T1 — `mostPlayedHeroes` pure function**
+- [x] **T1 — `mostPlayedHeroes` pure function**
   - Goal: rank a account+role's played heroes by descending play count (Open Queue = all roles).
   - Files: `src/core/analytics/heroSuggestions.ts` (new), `test/heroSuggestions.test.ts` (new).
   - Check: `npm test` — ties break alphabetically; `openQ` aggregates across roles; a hero played
     twice in one multi-hero game counts twice; unknown account/role returns `[]`.
   - Size: S
 
-- [ ] **T2 — `GameRecord.performance` + `HistoryStore.editManual` patch type**
+- [x] **T2 — `GameRecord.performance` + `HistoryStore.editManual` patch type**
   - Goal: add the optional 0–100 field to the core record and let `editManual` patch it
     (set/clear/leave-unchanged), no SQLite schema change.
   - Files: `src/core/analytics/types.ts`, `src/store/history.ts` (type signature only),
@@ -28,7 +28,7 @@ sites → docs/verification).
     omitting it leaves it unchanged; `rowValues`/`SCHEMA_SQL` untouched (no new column).
   - Size: S
 
-- [ ] **T3 — `performance` on the match-detail read**
+- [x] **T3 — `performance` on the match-detail read**
   - Goal: the pure `matchDetail()` read function surfaces `performance` when present.
   - Files: `src/core/matchDetail.ts`, `src/shared/contract/matchDetail.ts`,
     `test/matchDetail.test.ts` (extend).
@@ -37,7 +37,7 @@ sites → docs/verification).
 
 ## Contract & main process
 
-- [ ] **T4 — Contract: `performance` fields + `mostPlayedHeroes` API method**
+- [x] **T4 — Contract: `performance` fields + `mostPlayedHeroes` API method**
   - Goal: `ManualMatchInput.performance?: number`, `ReviewInput.performance?: number`,
     `MatchEditInput.performance?: number | null`; `OwStatsApi.mostPlayedHeroes()` +
     `IPC_CHANNELS.mostPlayedHeroes`.
@@ -47,7 +47,7 @@ sites → docs/verification).
     tasks).
   - Size: S
 
-- [ ] **T5 — Wire `mostPlayedHeroes` in main**
+- [x] **T5 — Wire `mostPlayedHeroes` in main**
   - Goal: `DataProvider.mostPlayedHeroes()` computed over unfiltered `deps.history.all()`, per
     account+role, registered on the IPC channel.
   - Files: `src/main/dashboard/provider.ts`, `src/main/dataProvider.ts`,
@@ -56,14 +56,14 @@ sites → docs/verification).
     (T1) applied to the full unfiltered history, not scoped by any current filter.
   - Size: M
 
-- [ ] **T6 — Thread `performance` through `logMatch`/`editMatch`/`saveReview`**
+- [x] **T6 — Thread `performance` through `logMatch`/`editMatch`/`saveReview`**
   - Goal: main-process writes persist `performance` the same way `srDelta` does.
   - Files: `src/main/dataProvider.ts`.
   - Check: `npm test` — logging with a performance value stores it; editing sets/clears it; saving a
     review with a performance value stores it onto the match (independent of `grades`/`flags`).
   - Size: S
 
-- [ ] **T7 — Preview harness parity**
+- [x] **T7 — Preview harness parity**
   - Goal: `npm run preview` keeps working for every changed/new API — mirror T5/T6 in the mock
     bridge (`matchDetail`/`heroDetail`/`getDashboard` already reuse the real core functions, so only
     the manual-write handlers + a new `mostPlayedHeroes` mock need edits).
@@ -74,7 +74,7 @@ sites → docs/verification).
 
 ## Renderer components
 
-- [ ] **T8 — `typeahead.ts`: strict + muted + search-pool options**
+- [x] **T8 — `typeahead.ts`: strict + muted + search-pool options**
   - Goal: add `searchSuggestions`, `mutedItems`, `strict` — default behavior for the existing (only)
     caller stays byte-identical until it opts in.
   - Files: `renderer/src/components/typeahead.ts`, `renderer/styles/components.css`
@@ -83,7 +83,7 @@ sites → docs/verification).
     yet).
   - Size: M
 
-- [ ] **T9 — `heroPicker.ts`: shortlist + search option**
+- [x] **T9 — `heroPicker.ts`: shortlist + search option**
   - Goal: `paintHeroChips` accepts an optional `{ shortlist?, search? }`; omitted ⇒ identical to
     today (protects `matchDetail.ts`'s existing call).
   - Files: `renderer/src/components/heroPicker.ts`.
@@ -91,7 +91,7 @@ sites → docs/verification).
     with no behavior change.
   - Size: M
 
-- [ ] **T10 — New `performanceSlider` component**
+- [x] **T10 — New `performanceSlider` component**
   - Goal: a 0–100 range control with a distinct unset state, clear affordance, and a
     winrate-ramp-colored fill (`wrHsl`), CVD-aware.
   - Files: `renderer/src/components/performanceSlider.ts` (new), `renderer/styles/components.css`.
@@ -100,7 +100,7 @@ sites → docs/verification).
 
 ## Settings
 
-- [ ] **T11 — Suggested-hero-count setting**
+- [x] **T11 — Suggested-hero-count setting**
   - Goal: a persisted client pref (default 6, clamped 3–15) and a Settings control for it.
   - Files: `renderer/src/prefs.ts`, `renderer/src/views/settings.ts` (new `quickLogCard`).
   - Check: manual — Settings shows the control, changing it persists across a reload of the preview
@@ -109,7 +109,7 @@ sites → docs/verification).
 
 ## Log Match card
 
-- [ ] **T12 — Map field → locked combobox**
+- [x] **T12 — Map field → locked combobox**
   - Goal: wire T8's new options into the map field; block Save while unresolved.
   - Files: `renderer/src/app/log-match.ts`.
   - Check: manual (`npm run preview`) — typing garbage then blurring reverts; typing an exact known
@@ -117,7 +117,7 @@ sites → docs/verification).
     empty-query browse list; Save is disabled while the field holds no committed value.
   - Size: M
 
-- [ ] **T13 — Hero picker: most-played shortlist wiring**
+- [x] **T13 — Hero picker: most-played shortlist wiring**
   - Goal: fetch `mostPlayedHeroes()` alongside accounts/ranks; shortlist sized by the T11 setting;
     re-rank on account or role change; search reaches the full pool.
   - Files: `renderer/src/app/log-match.ts`.
@@ -125,7 +125,7 @@ sites → docs/verification).
     heroes outside the shortlist and toggles them the same as a shortlist chip.
   - Size: M
 
-- [ ] **T14 — Rank: Set-current prefill + wheel parity**
+- [x] **T14 — Rank: Set-current prefill + wheel parity**
   - Goal: seed tier/division/% from the account+role's existing anchor on entering Set-current mode
     (and on account/role change while in it); extract the wheel-nudge helper and apply it to the %
     field too.
@@ -135,7 +135,7 @@ sites → docs/verification).
     nudges ±1 without scrolling the modal.
   - Size: S
 
-- [ ] **T15 — Performance slider in Log Match**
+- [x] **T15 — Performance slider in Log Match**
   - Goal: add the field to the card and thread it into the save payload.
   - Files: `renderer/src/app/log-match.ts`.
   - Check: manual — rate a match, save, confirm it's visible on reopening the same match's detail.
@@ -143,13 +143,13 @@ sites → docs/verification).
 
 ## Review & match-detail
 
-- [ ] **T16 — Performance slider in Review**
+- [x] **T16 — Performance slider in Review**
   - Goal: add a "How you played" section to the grading card; thread into `saveReview`.
   - Files: `renderer/src/views/review.ts`.
   - Check: manual — grade a pending game with a rating, confirm it persists.
   - Size: S
 
-- [ ] **T17 — Performance slider in match-detail editor**
+- [x] **T17 — Performance slider in match-detail editor**
   - Goal: show/edit/clear the current rating in the "Edit match" modal.
   - Files: `renderer/src/views/matchDetail.ts`.
   - Check: manual — open a rated match, change the rating, save, reopen and confirm; clear it and
@@ -158,14 +158,14 @@ sites → docs/verification).
 
 ## Docs & final verification
 
-- [ ] **T18 — README updates**
+- [x] **T18 — README updates**
   - Goal: document the locked map picker, hero shortlist + its setting, rank prefill, and the
     performance slider as user-visible changes (DoD requirement).
   - Files: `README.md`.
   - Check: reads accurately against the shipped behavior.
   - Size: S
 
-- [ ] **T19 — Full verification pass**
+- [x] **T19 — Full verification pass**
   - Goal: everything green together, not just per-task.
   - Files: none (verification only).
   - Check: `npm test` and `npm run typecheck` both clean; manual preview walkthrough of every

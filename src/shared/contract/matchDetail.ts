@@ -56,6 +56,8 @@ export interface MatchDetail {
   /** Logged skill-rating change for this competitive match, in %-points. */
   srDelta?: number;
   durationMinutes?: number;
+  /** Self-rated performance for this match, 0-100, if the player rated it. */
+  performance?: number;
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */
   finalScore?: string;
   heroes: string[];

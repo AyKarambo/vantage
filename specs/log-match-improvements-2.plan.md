@@ -1,6 +1,6 @@
 ---
 slug: log-match-improvements-2
-status: planned
+status: done
 updated: 2026-07-07
 ---
 

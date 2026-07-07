@@ -12,6 +12,7 @@ import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
 import { button, card, pill, RESULT_STATE, segmented, select, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
@@ -292,6 +293,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   // grid, so editing never collapses the list to just the first hero.
   const heroes = new Set<string>(d.heroes);
   let srDelta: number | undefined = d.srDelta;
+  let performance: number | undefined = d.performance;
 
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
@@ -328,6 +330,8 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
         mental: flags,
         // number sets, null clears (blanked field), field omitted for non-comp.
         ...(isComp ? { srDelta: srDelta ?? null } : {}),
+        // number sets, null clears — performance applies to any match, comp or not.
+        performance: performance ?? null,
         grades,
       }).then(() => {
         gradedThisSession.add(d.matchId);
@@ -357,6 +361,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
           : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
       )),
       editorSection('◎ How it felt', mentalFlagsRow(flags)),
+      editorSection('◎ How you played', performanceSlider(performance, (v) => (performance = v))),
       h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
         button('Save', { variant: 'primary', onClick: save }),
         button('Cancel', { variant: 'ghost', onClick: close }),

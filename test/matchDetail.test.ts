@@ -67,6 +67,13 @@ describe('matchDetail degradation contract', () => {
     expect(d!.scoreboard).toBeUndefined();
     expect(d!.playerHistory).toEqual([]);
     expect(d!.screenshots).toEqual([]);
+    expect(d!.performance).toBeUndefined();
+  });
+
+  it('surfaces performance when the game has one, omits it otherwise', () => {
+    const rated = minimal({ matchId: 'rated-1', performance: 82 });
+    expect(matchDetail([rated], 'rated-1')!.performance).toBe(82);
+    expect(matchDetail([minimal()], 'legacy-1')!.performance).toBeUndefined();
   });
 
   it('competitive section: estimate for competitive games, absent otherwise', () => {

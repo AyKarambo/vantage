@@ -16,9 +16,10 @@ import { openModal } from '../components/overlay';
 import { typeahead } from '../components/typeahead';
 import { targetGradeRow } from '../components/reviewControls';
 import { paintHeroChips } from '../components/heroPicker';
+import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
-import { prefs } from '../prefs';
+import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { TIERS } from '../../../src/core/rank';
 import type { AccountSummary, CommsTone, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
@@ -68,6 +69,8 @@ interface LogState {
   anchorPct: string;
   /** Absolute end-of-game timestamp (ms epoch), or null for "Just now" (stamped at save time). */
   playedAt: number | null;
+  /** Self-rated performance for this match, 0-100, or undefined if not rated. */
+  performance: number | undefined;
 }
 
 /** Fields carried into the next form by "Save & next" (same sitting, so heroes usually hold). */
@@ -97,13 +100,23 @@ function mentalFrom(flags: Set<string>, comms: CommsTone | null): MatchMental | 
 
 export function openLogMatch(ctx: ViewContext, carry?: LogCarry): void {
   // Accounts + current ranks decide the picker options and whether the first-time
-  // rank anchor is still needed — fetch both before building the form.
-  void Promise.all([bridge.listAccounts(), bridge.getRanks()]).then(([accounts, ranks]) => {
-    openModal((close) => buildForm(ctx, close, accounts, ranks, carry));
-  });
+  // rank anchor is still needed; most-played heroes seed the hero-picker shortlist.
+  // All fetched before building the form.
+  void Promise.all([bridge.listAccounts(), bridge.getRanks(), bridge.mostPlayedHeroes()]).then(
+    ([accounts, ranks, mostPlayed]) => {
+      openModal((close) => buildForm(ctx, close, accounts, ranks, mostPlayed, carry));
+    },
+  );
 }
 
-function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary[], ranks: RankSummary[], carry?: LogCarry): HTMLElement {
+function buildForm(
+  ctx: ViewContext,
+  close: () => void,
+  accounts: AccountSummary[],
+  ranks: RankSummary[],
+  mostPlayed: Record<string, Partial<Record<Role, string[]>>>,
+  carry?: LogCarry,
+): HTMLElement {
   const accountOptions = accounts.length
     ? accounts.map((a) => ({ value: a.label, label: a.label }))
     : [{ value: 'You', label: 'You' }];
@@ -132,6 +145,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     anchorDivision: 3,
     anchorPct: '',
     playedAt: null,
+    performance: undefined,
   };
 
   const hasAnchor = (account: string, role: Role): boolean =>
@@ -150,6 +164,15 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     const q = state.map.trim().toLowerCase();
     if (!q) return null;
     return ctx.data.masterData.maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
+  };
+
+  // The map combobox is strict (see mapField below): its committed value can
+  // only ever be an exact known map name or empty. Save stays disabled the
+  // whole time it's empty, rather than only erroring after a submit attempt.
+  const saveButtons: HTMLButtonElement[] = [];
+  const updateSaveEnabled = (): void => {
+    const enabled = resolveMap() != null;
+    for (const b of saveButtons) b.disabled = !enabled;
   };
 
   // Guards against duplicate submits from this form (Enter auto-repeat, double
@@ -186,6 +209,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
         mental: mentalFrom(state.flags, state.comms),
         account: state.account,
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
+        ...(state.performance != null ? { performance: state.performance } : {}),
         ...(Object.keys(grades).length ? { grades } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
@@ -238,27 +262,41 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   }, { Win: 'W', Loss: 'L', Draw: 'D' });
 
   const accountField = field('Account',
-    select(accountOptions, state.account, (v) => { state.account = v; paintRank(); }),
+    // Account scopes both the rank (per account+role) and the hero-picker
+    // shortlist (per-account most-played) — repaint both. Re-seed the Set-current
+    // rank picker too, if it's the active mode, so it reflects the new account.
+    select(accountOptions, state.account, (v) => {
+      state.account = v;
+      if (state.srMode === 'set-current') seedAnchorFromRanks();
+      paintRank();
+      paintHeroes();
+    }),
   );
 
   const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
+  const mutedMapNames = new Set(ctx.data.masterData.maps.filter((m) => !m.isActive).map((m) => m.name));
   const mapField = field('Map',
     typeahead({
       value: state.map,
       placeholder: 'start typing — recent maps listed first',
       suggestions: mapSuggestions(ctx),
+      searchSuggestions: allMapNames(ctx),
+      mutedItems: mutedMapNames,
+      strict: true,
       showOnFocus: true,
       inputClass: 'vt-input',
-      onChange: (v) => { state.map = v; mapError.classList.add('hidden'); },
+      onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
     }),
   );
   mapField.append(mapError);
 
   const roleLabelInitial = Object.keys(ROLE_LABELS).find((k) => ROLE_LABELS[k] === state.role) ?? 'Damage';
   const roleField = field('Role',
-    // Role decides the hero filter (rank is tracked per role too) — repaint both.
+    // Role decides the hero filter (rank is tracked per role too) — repaint both,
+    // and re-seed the Set-current rank picker for the new role if it's active.
     choiceSegment(Object.keys(ROLE_LABELS), roleLabelInitial, (v) => {
       state.role = ROLE_LABELS[v];
+      if (state.srMode === 'set-current') seedAnchorFromRanks();
       paintRank();
       paintHeroes();
     }),
@@ -280,31 +318,46 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   // picked, so switching role keeps off-role picks visible/removable). Toggling
   // a chip flips its `is-on` in place; only a role change repaints the grid.
   const heroHost = h('div');
-  const paintHeroes = (): void => paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes);
+  const paintHeroes = (): void => {
+    const limit = prefs.get('suggestedHeroCount') ?? DEFAULT_SUGGESTED_HEROES;
+    const shortlist = (mostPlayed[state.account]?.[state.role] ?? []).slice(0, limit);
+    paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes, { shortlist, search: true });
+  };
   paintHeroes();
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
   // SR-delta input with the mouse-wheel nudge (±1) and edit tracking.
   const srDeltaInput = (): HTMLInputElement => {
     const el = numInput(state.srDelta, 'e.g. +22 or -19', (v) => { state.srDelta = v; state.srEdited = true; });
-    // passive:false so preventDefault stops the modal scrolling under the pointer.
-    el.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      state.srDelta = String((Number(state.srDelta) || 0) + (e.deltaY < 0 ? 1 : -1));
-      state.srEdited = true;
-      el.value = state.srDelta;
-    }, { passive: false });
+    attachWheelNudge(el, () => state.srDelta, (v) => { state.srDelta = v; state.srEdited = true; });
     return el;
   };
 
   // Tier / division / % picker — shared by the first-match anchor and "set current".
-  const rankPicker = (): HTMLElement =>
-    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+  const rankPicker = (): HTMLElement => {
+    const pctInput = numInput(state.anchorPct, 'e.g. 40, or -19 if protected', (v) => (state.anchorPct = v));
+    attachWheelNudge(pctInput, () => state.anchorPct, (v) => (state.anchorPct = v));
+    return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
       select(TIERS.map((t) => ({ value: t, label: t })), state.anchorTier, (v) => (state.anchorTier = v)),
       select(DIVISIONS.map((d) => ({ value: String(d), label: `Div ${d}` })), String(state.anchorDivision),
         (v) => (state.anchorDivision = Number(v))),
-      numInput(state.anchorPct, 'e.g. 40, or -19 if protected', (v) => (state.anchorPct = v)),
+      pctInput,
     );
+  };
+
+  /**
+   * Seed tier/division/% from the account+role's existing recorded rank when
+   * entering Set-current mode (mirrors Settings' openSetRank prefill) — there's
+   * nothing to prefill when no anchor exists yet, so the hardcoded Gold/3/blank
+   * defaults stand.
+   */
+  const seedAnchorFromRanks = (): void => {
+    const r = ranks.find((x) => x.account === state.account && x.role === state.role);
+    if (!r) return;
+    state.anchorTier = r.tier;
+    state.anchorDivision = r.division;
+    state.anchorPct = r.needsReanchor ? '' : String(Math.round(r.progressPct));
+  };
 
   // Rank block: SR every match, plus the one-time anchor. Everything is
   // competitive now (spec D1), so this always shows — it re-paints when
@@ -316,7 +369,11 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
       segmented<SrMode>({
         options: [{ value: 'change', label: 'Change (±%)' }, { value: 'set-current', label: 'Set current rank' }],
         value: state.srMode,
-        onChange: (v) => { state.srMode = v; paintRank(); },
+        onChange: (v) => {
+          state.srMode = v;
+          if (v === 'set-current') seedAnchorFromRanks();
+          paintRank();
+        },
         fill: true,
       }),
     );
@@ -393,9 +450,15 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     });
   };
 
-  const actions = h('div', { style: { display: 'flex', gap: '10px', paddingTop: '2px' } },
-    button('Save ⏎', { variant: 'primary', class: 'btn--block', onClick: saveAndClose }),
-    button('Save & next  ⌃⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext }),
+  const saveBtn = button('Save ⏎', { variant: 'primary', class: 'btn--block', onClick: saveAndClose });
+  const saveNextBtn = button('Save & next  ⌃⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext });
+  saveButtons.push(saveBtn, saveNextBtn);
+  updateSaveEnabled();
+  const actions = h('div', { style: { display: 'flex', gap: '10px', paddingTop: '2px' } }, saveBtn, saveNextBtn);
+
+  const performanceBlock = field(
+    optionalLabel('Performance', '— how did you play?'),
+    performanceSlider(state.performance, (v) => { state.performance = v; }),
   );
 
   // tabindex -1: focusable via script (for the mount-time focus below) but not
@@ -403,7 +466,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
       field('Result', resultRow), accountField, mapField, roleField, playedField, heroField,
-      rankHost, flagsBlock, commsBlock, targetsBlock, actions),
+      rankHost, flagsBlock, commsBlock, performanceBlock, targetsBlock, actions),
   );
 
   // Keyboard flow: W/L/D pick the result when not typing; Enter saves from
@@ -460,6 +523,15 @@ function mapSuggestions(ctx: ViewContext): string[] {
   return [...recent, ...rest];
 }
 
+/**
+ * Every known map (active + inactive), sorted — the locked combobox's search
+ * pool, so a rotated-out map is still reachable by typing its name (spec AC
+ * 21/22), just deprioritized/muted rather than hidden.
+ */
+function allMapNames(ctx: ViewContext): string[] {
+  return ctx.data.masterData.maps.map((m) => m.name).sort((a, b) => a.localeCompare(b));
+}
+
 function field(label: Node | string, control: Node): HTMLElement {
   return h('div', null, typeof label === 'string' ? h('div', { class: 'field-label' }, label) : label, control);
 }
@@ -478,6 +550,20 @@ function numInput(value: string, placeholder: string, onChange: (v: string) => v
     class: 'vt-input mono', type: 'number', step: '1', value, placeholder,
     on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
   }) as HTMLInputElement;
+}
+
+/**
+ * Mouse-wheel ±1-per-tick nudge for a numeric text field, shared by the SR
+ * delta field and the rank-anchor % field. `passive:false` + preventDefault so
+ * the modal doesn't scroll while the pointer is over the field.
+ */
+function attachWheelNudge(el: HTMLInputElement, get: () => string, set: (v: string) => void): void {
+  el.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const next = String((Number(get()) || 0) + (e.deltaY < 0 ? 1 : -1));
+    set(next);
+    el.value = next;
+  }, { passive: false });
 }
 
 /** A row of large colour-coded choices (Result), with optional single-key hints. */

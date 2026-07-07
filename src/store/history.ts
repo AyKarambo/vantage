@@ -136,7 +136,8 @@ export class HistoryStore {
    */
   editManual(
     matchId: string,
-    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review'>> & { srDelta?: number | null },
+    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review'>> &
+      { srDelta?: number | null; performance?: number | null },
   ): boolean {
     const game = this.getOne(matchId);
     if (!game) return false;
