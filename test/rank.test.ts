@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  applyMatch, computeRank, currentRank, competitiveComps, rankKey, stateFromAnchor,
+  applyMatch, computeRank, currentRank, competitiveComps, rankKey, stateFromAnchor, ladderPoints,
   type RankAnchor, type RankState,
 } from '../src/core/rank';
 import type { GameRecord } from '../src/core/analytics';
@@ -95,39 +95,63 @@ describe('rank engine — rank protection', () => {
     expect(s.protected).toBe(true);
   });
 
-  it('a second loss while protected demotes one division and flags a re-anchor', () => {
+  it('a second loss while protected demotes one division, carrying the buffer', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), loss(-18)]);
-    expect(s.tier).toBe('Gold');
-    expect(s.division).toBe(4); // demoted (5 = lowest)
-    expect(s.needsReanchor).toBe(true);
+    // Buffer at demotion = 10 - 20 - 18 = -28 below the Gold 3 floor → Gold 4 at 100-28.
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 4, progressPct: 72 });
     expect(s.protected).toBe(false);
+    expect(s.needsReanchor).toBe(false); // no freeze — the demoted rank keeps tracking
   });
 
   it('demotion within a tier goes to the next-lower division (1 → 2)', () => {
     const s = computeRank(anchorAt('Platinum', 1, 0), [loss(-20), loss(-20)]);
-    expect(s.tier).toBe('Platinum');
-    expect(s.division).toBe(2); // 1 is the highest division; below it is 2
-    expect(s.needsReanchor).toBe(true);
+    // -40 below the Platinum 1 floor → Platinum 2 at 100-40.
+    expect(pos(s)).toEqual({ tier: 'Platinum', division: 2, progressPct: 60 });
+    expect(s.needsReanchor).toBe(false);
   });
 
   it('demotion from the lowest division (5) drops to the tier below at division 1', () => {
     const s = computeRank(anchorAt('Platinum', 5, 0), [loss(-20), loss(-20)]);
-    expect(s.tier).toBe('Gold');
-    expect(s.division).toBe(1);
-    expect(s.needsReanchor).toBe(true);
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 1, progressPct: 60 });
+    expect(s.needsReanchor).toBe(false);
   });
 
-  it('cannot demote below Bronze 5', () => {
+  it('cannot demote below Bronze 5 — floors at 0%', () => {
     const s = computeRank(anchorAt('Bronze', 5, 0), [loss(-20), loss(-20)]);
-    expect(pos(s).tier).toBe('Bronze');
-    expect(pos(s).division).toBe(5);
+    expect(pos(s)).toEqual({ tier: 'Bronze', division: 5, progressPct: 0 });
+    expect(s.protected).toBe(false);
   });
 
-  it('once a re-anchor is needed, later matches are frozen until re-anchored', () => {
+  it('matches after a demotion keep tracking from the new position (no freeze)', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), loss(-18), win(30), win(30)]);
-    // The two trailing wins must NOT apply — the position is unknown post-demotion.
-    expect(s.needsReanchor).toBe(true);
-    expect(s.division).toBe(4);
+    // Demote to Gold 4 · 72%, then the two wins climb from there: +30 → Gold 3 · 2%, +30 → 32%.
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 32 });
+    expect(s.protected).toBe(false);
+    expect(s.needsReanchor).toBe(false);
+  });
+
+  it('carries the exact buffer into the lower division (Gold 3 −18% → Gold 4 · 82%)', () => {
+    const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), loss(-8)]); // buffer -18
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 4, progressPct: 82 });
+    expect(s.protected).toBe(false);
+  });
+
+  it('a big win clears the buffer and promotes out of protection (Gold 3 −8% + 130 → Gold 2 · 22%)', () => {
+    const s = computeRank(anchorAt('Gold', 3, -8), [win(130)]);
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 2, progressPct: 22 });
+    expect(s.protected).toBe(false);
+  });
+
+  it('cascades across multiple divisions and a tier boundary on a deep demotion', () => {
+    const s = computeRank(anchorAt('Gold', 5, 5), [loss(-10), loss(-250)]); // buffer -255 below the Gold 5 floor
+    expect(pos(s)).toEqual({ tier: 'Silver', division: 3, progressPct: 45 });
+    expect(s.protected).toBe(false);
+  });
+
+  it('a huge demoting loss floors at Bronze 5 · 0% without wrapping', () => {
+    const s = computeRank(anchorAt('Bronze', 5, -5), [loss(-500)]);
+    expect(pos(s)).toEqual({ tier: 'Bronze', division: 5, progressPct: 0 });
+    expect(s.protected).toBe(false);
   });
 });
 
@@ -169,10 +193,11 @@ describe('applyMatch / stateFromAnchor primitives', () => {
     expect(s.protected).toBe(false);
   });
 
-  it('a loss after a protected (negative) anchor demotes a division', () => {
+  it('a loss after a protected (negative) anchor demotes, carrying the buffer', () => {
     const s = computeRank(anchorAt('Gold', 3, -19), [loss(-5)]);
-    expect(s.division).toBe(4); // dropped one division
-    expect(s.needsReanchor).toBe(true);
+    // -24 below the Gold 3 floor → Gold 4 at 100-24.
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 4, progressPct: 76 });
+    expect(s.needsReanchor).toBe(false);
   });
 
   it('a match with no srDelta does not move a mid-division rank', () => {
@@ -221,5 +246,25 @@ describe('rank timeline — GameRecord bridge', () => {
     ];
     expect(currentRank(games, anchors, 'Main', 'damage', 50)!.progressPct).toBe(60);
     expect(currentRank(games, anchors, 'Main', 'damage', 60)!.progressPct).toBe(80);
+  });
+});
+
+describe('rank engine — ladder scale', () => {
+  it('ladderPoints is a monotonic 0..4000 scale, 500 per tier / 100 per division', () => {
+    expect(ladderPoints({ tier: 'Bronze', division: 5, progressPct: 0 })).toBe(0);
+    expect(ladderPoints({ tier: 'Champion', division: 1, progressPct: 100 })).toBe(4000);
+    expect(ladderPoints({ tier: 'Gold', division: 3, progressPct: 40 })).toBe(1240);
+    // A rank-protection buffer sits just below the division floor.
+    expect(ladderPoints({ tier: 'Gold', division: 3, progressPct: -18 })).toBe(1182);
+  });
+
+  it('conserves ladder points across promotion, protection and demotion (no drift)', () => {
+    const anchor = anchorAt('Gold', 3, 40);
+    // Within-division loss, a first-dip protected loss, a second-dip demotion, a
+    // multi-division win out of the new division, and a within-division loss — all on
+    // one shared carry, so the running total maps 1:1 onto the ladder scale.
+    const s = computeRank(anchor, [loss(-50), loss(-30), win(200), loss(-25)]);
+    const sum = -50 - 30 + 200 - 25;
+    expect(ladderPoints(s)).toBe(ladderPoints(anchor) + sum);
   });
 });

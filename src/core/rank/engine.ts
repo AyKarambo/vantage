@@ -9,6 +9,9 @@ import type { RankAnchor, RankMatchInput, RankPosition, RankState } from './type
 export const TIERS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master', 'Grandmaster', 'Champion'];
 const TOP = TIERS.length - 1;
 
+/** Champion 1, 100% — the top of the ladder in {@link ladderPoints} units. */
+const MAX_POINTS = TOP * 500 + 400 + 100;
+
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const tierIdx = (tier: string) => {
   const i = TIERS.indexOf(tier);
@@ -16,81 +19,75 @@ const tierIdx = (tier: string) => {
 };
 
 /**
- * Add progress and carry upward across divisions/tiers. Never demotes: a value
- * below 0 floors at the division's 0% (demotion only happens on a loss, and is
- * handled by the protection path). Caps at Champion 1, 100%.
+ * Project a ladder position onto a single monotonic scale: 0 = Bronze 5 / 0%,
+ * 4000 = Champion 1 / 100%, each tier worth 500 and each division 100 (divisions
+ * run 5 lowest → 1 highest). A negative `progressPct` — a rank-protection buffer —
+ * yields a value below the division floor, which is exactly what lets one carry
+ * handle both promotion and demotion.
  */
-function applyGain(pos: RankPosition, nextPct: number): RankPosition {
-  let ti = tierIdx(pos.tier);
-  let div = pos.division;
-  let p = nextPct;
-  while (p >= 100) {
-    if (div > 1) {
-      div -= 1;
-      p -= 100;
-    } else if (ti < TOP) {
-      ti += 1;
-      div = 5;
-      p -= 100;
-    } else {
-      p = 100; // ceiling: Champion 1, 100%
-      break;
-    }
-  }
-  if (p < 0) p = 0;
-  return { tier: TIERS[ti], division: div, progressPct: p };
+export function ladderPoints(pos: RankPosition): number {
+  return tierIdx(pos.tier) * 500 + (5 - pos.division) * 100 + pos.progressPct;
 }
 
-/** Drop exactly one division, flooring at Bronze 5. Lands at 0% (unknown). */
-function demoteOne(pos: RankPosition): RankPosition {
-  let ti = tierIdx(pos.tier);
-  let div = pos.division;
-  if (div < 5) div += 1;
-  else if (ti > 0) {
-    ti -= 1;
-    div = 1;
-  } else {
-    div = 5; // floor: already Bronze 5
-  }
-  return { tier: TIERS[ti], division: div, progressPct: 0 };
+/**
+ * Inverse of {@link ladderPoints}: decode a (possibly out-of-range) point value
+ * back to a real position, clamped to Bronze 5 / 0% at the bottom and Champion 1 /
+ * 100% at the top.
+ */
+function positionFromPoints(points: number): RankPosition {
+  const p = clamp(points, 0, MAX_POINTS);
+  if (p >= MAX_POINTS) return { tier: 'Champion', division: 1, progressPct: 100 };
+  const ti = Math.floor(p / 500);
+  const within = p - ti * 500;
+  const divOffset = Math.floor(within / 100);
+  return { tier: TIERS[ti], division: 5 - divOffset, progressPct: within - divOffset * 100 };
+}
+
+/**
+ * Carry a running total `next` (relative to `state`'s current division floor) to a
+ * real position on the ladder scale. One shared path for both directions: a positive
+ * overflow promotes across divisions/tiers (capping at Champion 1), a negative buffer
+ * demotes across them (flooring at Bronze 5) — so promotion and demotion cannot drift.
+ */
+function carry(state: RankState, next: number): RankPosition {
+  return positionFromPoints(ladderPoints({ tier: state.tier, division: state.division, progressPct: next }));
 }
 
 /**
  * Advance one competitive match. Protection keys on the running total's sign, not the
  * delta sign or the result type — a protected loss keeps its true negative carry (the
  * in-game rank-protection buffer, e.g. "-19%"), and the following win or draw pays that
- * carry down before it can climb, exactly as the live client does.
+ * carry down before it can climb, exactly as the live client does. A second dip while
+ * protected demotes by carrying the buffer into the lower division and keeps tracking —
+ * no freeze, no re-anchor dead-end.
  */
 export function applyMatch(state: RankState, match: RankMatchInput): RankState {
-  // Once a protected loss has demoted, the rank is frozen until it's re-anchored
-  // (the new intra-division % is unknown and must not be guessed).
-  if (state.needsReanchor) return state;
-
   const delta = match.srDelta ?? 0;
   const next = state.progressPct + delta;
 
   if (match.result === 'Loss') {
-    if (next > 0) {
-      return { ...applyGain(state, next), protected: false, needsReanchor: false };
-    }
-    if (state.protected) {
-      // Second consecutive dip into the buffer → demote one division, % now unknown.
-      return { ...demoteOne(state), protected: false, needsReanchor: true };
+    // A loss that stays positive is a normal within-division subtraction; a loss while
+    // already protected is the second dip → carry the buffer down into a real, tracked
+    // position. Both resolve through the shared carry and clear protection.
+    if (next > 0 || state.protected) {
+      return { ...carry(state, next), protected: false, needsReanchor: false };
     }
     // First loss into the buffer: hold the division, keep the true (negative) carry —
     // the next match's delta is added on top of it, not on top of a phantom 0.
     return { tier: state.tier, division: state.division, progressPct: next, protected: true, needsReanchor: false };
   }
 
-  // Win or Draw: pay down any outstanding carry before climbing.
+  // Win or Draw: pay down any outstanding carry, then climb through the shared carry.
   if (next > 0) {
-    return { ...applyGain(state, next), protected: false, needsReanchor: false };
+    return { ...carry(state, next), protected: false, needsReanchor: false };
   }
   if (state.protected) {
     // Didn't fully clear the buffer — stays protected at the smaller negative carry.
     return { tier: state.tier, division: state.division, progressPct: next, protected: true, needsReanchor: false };
   }
-  return { ...applyGain(state, next), protected: false, needsReanchor: false };
+  // A non-protected win/draw that lands <= 0 (a negative delta) floors at the division's
+  // 0% — it must NOT demote (demotion only ever happens by passing through protection).
+  return { tier: state.tier, division: state.division, progressPct: 0, protected: false, needsReanchor: false };
 }
 
 /**
