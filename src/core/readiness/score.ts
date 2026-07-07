@@ -23,7 +23,8 @@ import { loadState, mentalState, outcomeState, type LoadState, type MentalState,
 import { EMPTY_CONTEXT, EMPTY_PERF, perfState, type PerfState, type ReadinessContext } from './performance';
 import { EMPTY_SUBJ, subjState, type SubjState } from './subjective';
 import { clamp } from './stats';
-import type { ReadinessBand, ReadinessDriver } from './types';
+import { regimeFor } from './regime';
+import type { ReadinessBand, ReadinessDriver, ReadinessRegime } from './types';
 
 export interface StateAt {
   hasData: boolean;
@@ -43,6 +44,10 @@ export interface StateAt {
   /** Fade-adjusted overload penalty (drives the `overload` driver tag). */
   overloadPen: number;
   driver: ReadinessDriver;
+  /** Regime blend b ∈ [0,1] (from perf.blend) — how much of the acute window has comparable per-10 coverage. */
+  blend: number;
+  /** Display-only regime label derived from `blend`. */
+  regime: ReadinessRegime;
 }
 
 const EMPTY_STATE: StateAt = {
@@ -63,6 +68,8 @@ const EMPTY_STATE: StateAt = {
   deltas: { load: 0, perf: 0, subj: 0 },
   overloadPen: 0,
   driver: 'neutral',
+  blend: 0,
+  regime: 'manual',
 };
 
 /**
@@ -151,6 +158,8 @@ export function computeStateAt(
     deltas: { load: lp.delta, perf: perf.delta * fade, subj: subj.delta * fade },
     overloadPen: lp.overloadPen,
     driver,
+    blend: perf.blend,
+    regime: regimeFor(perf.blend),
   };
 }
 

@@ -99,6 +99,8 @@ export interface ReadinessSummary {
   subscores: ReadinessSubscores;
   /** Dominant driver behind a sub-neutral score (overload vs rust). */
   driver: ReadinessDriver;
+  /** Which evidence family the verdict rests on (display-only). 'manual' caps confidence at medium. */
+  regime: ReadinessRegime;
   trend: ReadinessTrendPoint[];
 }
 

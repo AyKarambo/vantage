@@ -23,7 +23,7 @@ export type { BreakReminderSettings } from '../../core/breakReminder';
 export type {
   ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,
   ReadinessConfidence, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
-  ReadinessDriver, ReadinessSubscore, ReadinessSubscores,
+  ReadinessDriver, ReadinessRegime, ReadinessSubscore, ReadinessSubscores,
 } from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
 

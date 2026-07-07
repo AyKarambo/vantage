@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { blendFor, regimeFor } from '../src/core/readiness/regime';
 import { manualLerp, READINESS_TUNING as T } from '../src/core/readiness/constants';
 import { perfState, EMPTY_CONTEXT } from '../src/core/readiness/performance';
+import { computeReadiness } from '../src/core/readiness';
 import { dayOrdinal } from '../src/core/readiness/day';
-import { statSpan, span } from './readinessFixtures';
+import { ts, statSpan, span } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
 
 const refOf = (games: GameRecord[]): number =>
@@ -82,6 +83,33 @@ describe('perfState blend — regime endpoints on real data shapes', () => {
     const p = perfState(games, ref, EMPTY_CONTEXT, false);
     expect(p.blend).toBe(1);
     expect(regimeFor(p.blend)).toBe('stats');
+  });
+});
+
+describe('T3 — regime field on every ReadinessSummary producer', () => {
+  it('manual-only history ⇒ regime "manual" and load subscore coverage = b (0)', () => {
+    const games = span(0, 20, { perDay: 8 });
+    const r = computeReadiness(games, ts(20, 20));
+    expect(r.regime).toBe('manual');
+    expect(r.subscores.load.coverage).toBe(0);
+  });
+  it('stats-rich history ⇒ regime "stats"', () => {
+    const games = statSpan(0, 30, { perDay: 2, hero: 'Tracer' });
+    const r = computeReadiness(games, ts(30, 20));
+    expect(r.regime).toBe('stats');
+    expect(r.subscores.load.coverage).toBe(1);
+  });
+  it('insufficient-data summary carries regime "manual" and null score', () => {
+    const r = computeReadiness(span(0, 3, { perDay: 2 }), ts(3, 20));
+    expect(r.band).toBe('insufficient-data');
+    expect(r.score).toBeNull();
+    expect(r.regime).toBe('manual');
+  });
+  it('stale summary carries regime "manual"', () => {
+    // Enough span/games to clear the insufficient gate, but the last game is >14 days before `now`.
+    const r = computeReadiness(span(0, 20, { perDay: 4 }), ts(40, 20)); // last game 20 days ago
+    expect(r.band).toBe('rusty');
+    expect(r.regime).toBe('manual');
   });
 });
 

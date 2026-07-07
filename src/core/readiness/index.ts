@@ -34,6 +34,7 @@ export type {
   ReadinessDriver,
   ReadinessLoad,
   ReadinessRecommendation,
+  ReadinessRegime,
   ReadinessSignal,
   ReadinessSettings,
   ReadinessSubscore,
@@ -87,7 +88,7 @@ function toLoad(state: StateAt): ReadinessLoad {
 
 function toSubscores(state: StateAt): ReadinessSubscores {
   return {
-    load: { delta: round1(state.deltas.load), available: true },
+    load: { delta: round1(state.deltas.load), available: true, coverage: round2(state.blend) },
     performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.perf.statCoverage) },
     subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.mental.coverage },
   };
@@ -312,6 +313,7 @@ function insufficientSummary(headline: string, trend: ReadinessTrendPoint[]): Re
     load: emptyLoad(),
     subscores: emptySubscores(),
     driver: 'neutral',
+    regime: 'manual',
     trend,
   };
 }
@@ -335,6 +337,7 @@ function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): Readiness
     load: emptyLoad(restDays),
     subscores: emptySubscores(),
     driver: 'rust',
+    regime: 'manual',
     trend,
   };
 }
@@ -391,6 +394,7 @@ export function computeReadiness(
     load: toLoad(state),
     subscores: toSubscores(state),
     driver: state.driver,
+    regime: state.regime,
     trend,
   };
 }
