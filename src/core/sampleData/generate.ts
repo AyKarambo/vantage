@@ -19,13 +19,18 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Deterministically generate a season of demo games for the browser preview and first-run UI. */
-export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
+/**
+ * Deterministically generate a season of demo games for the browser preview and
+ * first-run UI. `activeMaps` (the effective competitive pool) restricts which
+ * maps appear; when omitted or empty it falls back to the full built-in table so
+ * the generator never draws from an empty pool (spec AC 24).
+ */
+export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonly string[]): GameRecord[] {
   const rnd = mulberry32(seed);
   const pick = <T>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];
   const between = (lo: number, hi: number) => lo + rnd() * (hi - lo);
 
-  const mapNames = Object.keys(MAPS);
+  const mapNames = activeMaps && activeMaps.length > 0 ? [...activeMaps] : Object.keys(MAPS);
   // Fixed per-map skill modifier so some maps are consistently weak (→ focus panel).
   const mapMod: Record<string, number> = {};
   for (const m of mapNames) mapMod[m] = between(-0.16, 0.16);

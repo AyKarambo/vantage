@@ -19,13 +19,11 @@ import { paintHeroChips } from '../components/heroPicker';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs } from '../prefs';
-import { MAP_MODES } from '../../../src/core/maps';
 import { TIERS } from '../../../src/core/rank';
 import type { AccountSummary, CommsTone, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy'];
-const ALL_MAPS = Object.keys(MAP_MODES).sort();
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 const DIVISIONS = [5, 4, 3, 2, 1];
 /** The comms switch options, in switch order, with their colour modifier class. */
@@ -142,11 +140,16 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
 
-  /** Resolve free-typed map text onto the canonical map list (case-insensitive). */
+  /**
+   * Resolve free-typed map text onto the known map list (case-insensitive).
+   * Resolution is NOT gated by `isActive`: a user backfilling a game on a map
+   * that has since rotated out of the pool must still be able to type it and log
+   * it (spec AC 22) — only the browse suggestions hide inactive maps.
+   */
   const resolveMap = (): string | null => {
     const q = state.map.trim().toLowerCase();
     if (!q) return null;
-    return ALL_MAPS.find((m) => m.toLowerCase() === q) ?? null;
+    return ctx.data.masterData.maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
   };
 
   // Guards against duplicate submits from this form (Enter auto-repeat, double
@@ -277,7 +280,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   // picked, so switching role keeps off-role picks visible/removable). Toggling
   // a chip flips its `is-on` in place; only a role change repaints the grid.
   const heroHost = h('div');
-  const paintHeroes = (): void => paintHeroChips(heroHost, state.heroes, state.role);
+  const paintHeroes = (): void => paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes);
   paintHeroes();
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
@@ -439,13 +442,22 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
 
 // --- little local builders --------------------------------------------------
 
-/** Canonical map list, recently-played maps first — the typeahead's browse order. */
+/**
+ * Browse order for the map typeahead: recently-played first, then the rest —
+ * built from the ACTIVE competitive pool only, so a map rotated out of the pool
+ * is hidden from suggestions (spec AC 21). It stays type-resolvable via
+ * {@link resolveMap} (AC 22), so history on it is never blocked.
+ */
 function mapSuggestions(ctx: ViewContext): string[] {
+  const active = ctx.data.masterData.maps
+    .filter((m) => m.isActive)
+    .map((m) => m.name)
+    .sort((a, b) => a.localeCompare(b));
+  const activeSet = new Set(active);
   const recent: string[] = [];
-  for (const m of ctx.data.matches) if (!recent.includes(m.map)) recent.push(m.map);
-  const rest = ALL_MAPS.filter((m) => !recent.includes(m));
-  // Only canonical maps are suggested; recents can include legacy names, filter them.
-  return [...recent.filter((m) => ALL_MAPS.includes(m)), ...rest];
+  for (const m of ctx.data.matches) if (activeSet.has(m.map) && !recent.includes(m.map)) recent.push(m.map);
+  const rest = active.filter((m) => !recent.includes(m));
+  return [...recent, ...rest];
 }
 
 function field(label: Node | string, control: Node): HTMLElement {

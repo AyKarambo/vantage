@@ -12,6 +12,9 @@ import { resolveDataDir } from '../store/historyLocation';
 import { migrateDataFolder, type DataMigrationStores } from '../store/dataMigration';
 import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
+import { MasterDataStore } from '../store/masterData';
+import { fetchOverfast } from './masterDataUpdate';
+import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -133,6 +136,13 @@ function main(): void {
   // with its grades; `removeTarget` is a no-op once the seeded target is gone.
   manual.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
   const rankAnchors = new RankAnchorStore(dataDir);
+  const masterDataStore = new MasterDataStore(dataDir);
+  // Effective (defaults ⊕ overrides) map views for the Notion Maps seed (all maps)
+  // and the sample generator's competitive pool (active only).
+  const allMapNames = (): string[] =>
+    mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps.map((m) => m.name);
+  const activeMapNames = (): string[] =>
+    mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps.filter((m) => m.isActive).map((m) => m.name);
   const aggregator = new MatchAggregator();
   const screenshots = new ScreenshotService(path.join(dataDir, 'screenshots'), log.adapter('shots'));
   screenshots.registerProtocol();
@@ -146,6 +156,7 @@ function main(): void {
     manualLog: manual,
     outbox,
     rankAnchors,
+    masterData: masterDataStore,
     screenshots: { relocate: (newDir) => screenshots.relocate(path.join(newDir, 'screenshots')) },
   });
 
@@ -226,6 +237,9 @@ function main(): void {
     // id is never a real, user-facing target.
     authoredTargetIds: () =>
       new Set(manual.targets().filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID).map((t) => t.id)),
+    // Seed a freshly auto-created Maps DB with ALL effective maps (active + inactive)
+    // so historical matches on any map still relate to a page (spec AC 32).
+    mapNames: allMapNames,
   });
 
   const pipeline = createMatchPipeline({
@@ -250,6 +264,8 @@ function main(): void {
     history,
     manual,
     rankAnchors,
+    masterDataStore,
+    fetchMasterDataUpdate: () => fetchOverfast(config.masterData.overfastBaseUrl),
     notion,
     getConfig: () => config,
     persistAccounts: (accounts) => {
@@ -260,7 +276,8 @@ function main(): void {
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
     recordGame: (game) => pipeline.recordGame(game),
     notify: (title, body) => tray.notify(title, body),
-    sampleGames: generateSampleGames,
+    // Demo season draws only from the active competitive pool (spec AC 24).
+    sampleGames: () => generateSampleGames(180, 42, activeMapNames()),
     logger: log,
     gepStatus: () => statusMonitor.current(),
     appSettings: {

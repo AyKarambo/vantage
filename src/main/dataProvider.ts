@@ -10,7 +10,13 @@ import { effectiveDemo } from '../core/demoPreference';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import { currentRank, type RankAnchorMap } from '../core/rank';
 import { sourceOf } from '../core/source';
+import {
+  DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
+  upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
+  upsertSeasonOverride, removeSeasonOverride, type FetchedCatalog, type MasterData,
+} from '../core/masterData';
 import type { RankAnchorStore } from '../store/rankAnchors';
+import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
   GepStatusPayload, MatchEditInput, RankSummary,
@@ -32,6 +38,10 @@ export interface DataProviderDeps {
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
   rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel'>;
+  /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
+  masterDataStore: Pick<MasterDataStore, 'all' | 'replace'>;
+  /** The online-catalog fetch edge (main-process `net.fetch` of OverFast); injected so this stays Electron-free. */
+  fetchMasterDataUpdate(): Promise<FetchedCatalog>;
   /** The Notion edge: export/import, status, token lifecycle, the database picker, and the
    *  export-ledger clear (so a deleted imported match starts fresh on re-import/re-export). */
   notion: Pick<
@@ -79,6 +89,7 @@ export interface DataProviderDeps {
 /** Assemble the dashboard's DataProvider over the injected deps. */
 export function createDataProvider(deps: DataProviderDeps): DataProvider {
   const demoPref = () => deps.getConfig().ui.demoPreference;
+  const effectiveMasterData = (): MasterData => mergeMasterData(DEFAULT_MASTER_DATA, deps.masterDataStore.all());
   return {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
@@ -279,6 +290,39 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     chooseFirstRunDataFolder: () => deps.dataLocation.chooseFirstRun(),
     clearReview: (matchId) => {
       deps.history.clearReview(matchId);
+    },
+    effectiveMasterData,
+    masterDataUpsertHero: (entry) => {
+      deps.masterDataStore.replace(upsertHeroOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, entry));
+      return effectiveMasterData();
+    },
+    masterDataRemoveHero: (name) => {
+      deps.masterDataStore.replace(removeHeroOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, name));
+      return effectiveMasterData();
+    },
+    masterDataUpsertMap: (entry) => {
+      deps.masterDataStore.replace(upsertMapOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, entry));
+      return effectiveMasterData();
+    },
+    masterDataRemoveMap: (name) => {
+      deps.masterDataStore.replace(removeMapOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, name));
+      return effectiveMasterData();
+    },
+    masterDataUpsertSeason: (entry) => {
+      deps.masterDataStore.replace(upsertSeasonOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, entry));
+      return effectiveMasterData();
+    },
+    masterDataRemoveSeason: (id) => {
+      deps.masterDataStore.replace(removeSeasonOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, id));
+      return effectiveMasterData();
+    },
+    masterDataFetchUpdate: async () => {
+      const fetched = await deps.fetchMasterDataUpdate();
+      return diffMasterData(effectiveMasterData(), fetched);
+    },
+    masterDataApplyUpdate: (accepted) => {
+      deps.masterDataStore.replace(applyAccepted(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, accepted));
+      return effectiveMasterData();
     },
   };
 }

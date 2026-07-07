@@ -1,7 +1,7 @@
 import type { GameRecord } from './analytics';
 import type { RosterPlayer } from './model';
 import type { MatchDetail, ScoreboardEntry } from '../shared/contract';
-import { mapMode } from './maps';
+import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
 import { progression } from './progression';
 import { classifyGameType } from './matchFilter';
 import { sourceOf } from './source';
@@ -25,6 +25,7 @@ export function matchDetail(
   matchId: string,
   competitiveContext: GameRecord[] = all,
   anchors: RankAnchorMap = {},
+  mapModeOf: MapModeResolver = makeMapMode(DEFAULT_MASTER_DATA.maps),
 ): MatchDetail | null {
   const game = all.find((g) => g.matchId === matchId);
   if (!game) return null;
@@ -35,7 +36,7 @@ export function matchDetail(
     account: game.account,
     role: game.role,
     map: game.map,
-    mapType: mapMode(game.map),
+    mapType: mapModeOf(game.map),
     result: game.result,
     gameType: game.gameType,
     source: sourceOf(game),

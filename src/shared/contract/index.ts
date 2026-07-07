@@ -30,6 +30,12 @@ export type {
   DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
 } from './dashboard';
 
+// Editable master data (heroes/maps/seasons)
+export type {
+  HeroRole, HeroEntry, MapEntry, SeasonEntry, MasterData, HeroChange, MapChange, UpdatePreview,
+  AcceptedUpdate, MapMode,
+} from './masterData';
+
 // Match drill-down payloads
 export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';
 

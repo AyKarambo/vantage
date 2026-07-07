@@ -17,6 +17,7 @@ import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from 
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
+import type { MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate } from './masterData';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -108,6 +109,24 @@ export interface OwStatsApi {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
+  /** The effective master data (defaults ⊕ overrides), for the Master Data editor. */
+  masterDataGet(): Promise<MasterData>;
+  /** Add or edit a hero; returns the new effective master data. */
+  masterDataUpsertHero(entry: HeroEntry): Promise<MasterData>;
+  /** Remove a hero (tombstone a built-in, or drop a user addition). */
+  masterDataRemoveHero(name: string): Promise<MasterData>;
+  /** Add or edit a map (name/mode/isActive); returns the new effective master data. */
+  masterDataUpsertMap(entry: MapEntry): Promise<MasterData>;
+  /** Remove a map (history on it is unaffected; suggestions/generator exclude it). */
+  masterDataRemoveMap(name: string): Promise<MasterData>;
+  /** Add or edit a season (start + label). */
+  masterDataUpsertSeason(entry: SeasonEntry): Promise<MasterData>;
+  /** Remove a season by its `S:<iso>` id. */
+  masterDataRemoveSeason(id: string): Promise<MasterData>;
+  /** Fetch heroes+maps from the online source and diff vs current — the Update preview (no persist). */
+  masterDataFetchUpdate(): Promise<UpdatePreview>;
+  /** Persist the accepted subset of an Update preview; returns the new effective master data. */
+  masterDataApplyUpdate(accepted: AcceptedUpdate): Promise<MasterData>;
   /** Subscribe to new log entries; returns an unsubscribe function. */
   onLogEntry(cb: (e: LogEntry) => void): () => void;
   /** Subscribe to connection/data-flow state changes; returns an unsubscribe function. */
@@ -185,6 +204,15 @@ export const IPC_CHANNELS = {
   setDataFolder: 'settings:set-data-folder',
   chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
   clearReview: 'manual:clear-review',
+  masterDataGet: 'master:get',
+  masterDataUpsertHero: 'master:upsert-hero',
+  masterDataRemoveHero: 'master:remove-hero',
+  masterDataUpsertMap: 'master:upsert-map',
+  masterDataRemoveMap: 'master:remove-map',
+  masterDataUpsertSeason: 'master:upsert-season',
+  masterDataRemoveSeason: 'master:remove-season',
+  masterDataFetchUpdate: 'master:fetch-update',
+  masterDataApplyUpdate: 'master:apply-update',
 } as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 
 /** The fire-and-forget channels behind the frameless window controls. */
