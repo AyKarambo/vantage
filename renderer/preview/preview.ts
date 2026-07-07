@@ -21,6 +21,12 @@ import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters } from '../../src/core/dashboardData';
 import { heroDetail } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
+import {
+  DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
+  upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
+  upsertSeasonOverride, removeSeasonOverride, emptyOverrides,
+  type MasterDataOverrides, type FetchedCatalog,
+} from '../../src/core/masterData';
 import { sourceOf } from '../../src/core/source';
 import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
@@ -39,6 +45,21 @@ const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
 const ACCOUNTS_KEY = 'vantagePreviewAccounts';
 const ANCHORS_KEY = 'vantagePreviewAnchors';
 const EDITS_KEY = 'vantagePreviewEdits';
+const MASTER_DATA_KEY = 'vantagePreviewMasterData';
+
+/** Preview-side master-data overrides, persisted to localStorage like other writes. */
+function loadOverrides(): MasterDataOverrides {
+  try {
+    const p = JSON.parse(localStorage.getItem(MASTER_DATA_KEY) ?? 'null');
+    if (p && typeof p === 'object') return { heroes: p.heroes ?? {}, maps: p.maps ?? {}, seasons: p.seasons ?? {} };
+  } catch {
+    /* fall through to empty */
+  }
+  return emptyOverrides();
+}
+let previewOverrides = loadOverrides();
+const saveOverrides = (): void => localStorage.setItem(MASTER_DATA_KEY, JSON.stringify(previewOverrides));
+const effectiveMasterData = () => mergeMasterData(DEFAULT_MASTER_DATA, previewOverrides);
 
 const load = <T>(key: string): T[] => {
   try {
@@ -240,11 +261,13 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, readiness, rankAnchors: anchorMap() }),
-  heroDetail: async (hero: string, f: DashboardFilters) => heroDetail(applyFilters(dataset(), f), hero),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, readiness, rankAnchors: anchorMap() }, effectiveMasterData()),
+  heroDetail: async (hero: string, f: DashboardFilters) =>
+    heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
     const games = dataset();
-    return matchDetail(games, matchId, applyFilters(games, f), anchorMap());
+    const eff = effectiveMasterData();
+    return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps));
   },
   exportNotion: async () => {
     if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
@@ -286,6 +309,57 @@ const mock: OwStatsApi = {
     localStorage.setItem(NOTION_DB_KEY, selectedNotionDatabaseId);
     return notionStatusFor(selectedNotionDatabaseId);
   },
+  // Master data: overrides persist to localStorage; the Update fetch is simulated
+  // with a synthetic catalog (one new hero + one new map) so the preview exercises
+  // the additions/changes → accept/discard flow without any network.
+  masterDataGet: async () => effectiveMasterData(),
+  masterDataUpsertHero: async (entry) => {
+    previewOverrides = upsertHeroOverride(previewOverrides, DEFAULT_MASTER_DATA, entry);
+    saveOverrides();
+    return effectiveMasterData();
+  },
+  masterDataRemoveHero: async (name) => {
+    previewOverrides = removeHeroOverride(previewOverrides, DEFAULT_MASTER_DATA, name);
+    saveOverrides();
+    return effectiveMasterData();
+  },
+  masterDataUpsertMap: async (entry) => {
+    previewOverrides = upsertMapOverride(previewOverrides, DEFAULT_MASTER_DATA, entry);
+    saveOverrides();
+    return effectiveMasterData();
+  },
+  masterDataRemoveMap: async (name) => {
+    previewOverrides = removeMapOverride(previewOverrides, DEFAULT_MASTER_DATA, name);
+    saveOverrides();
+    return effectiveMasterData();
+  },
+  masterDataUpsertSeason: async (entry) => {
+    previewOverrides = upsertSeasonOverride(previewOverrides, DEFAULT_MASTER_DATA, entry);
+    saveOverrides();
+    return effectiveMasterData();
+  },
+  masterDataRemoveSeason: async (id) => {
+    previewOverrides = removeSeasonOverride(previewOverrides, DEFAULT_MASTER_DATA, id);
+    saveOverrides();
+    return effectiveMasterData();
+  },
+  masterDataFetchUpdate: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const eff = effectiveMasterData();
+    const fetched: FetchedCatalog = {
+      heroes: [...eff.heroes, { name: 'Preview Hero', role: 'damage' }],
+      maps: [
+        ...eff.maps.map((m) => ({ name: m.name, mode: m.mode, isActive: true })),
+        { name: 'Preview Arena', mode: 'Control', isActive: true },
+      ],
+    };
+    return diffMasterData(eff, fetched);
+  },
+  masterDataApplyUpdate: async (accepted) => {
+    previewOverrides = applyAccepted(previewOverrides, DEFAULT_MASTER_DATA, accepted);
+    saveOverrides();
+    return effectiveMasterData();
+  },
   logMatch: async (input: ManualMatchInput) => {
     const matchId = `manual-${Date.now()}`;
     const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
@@ -298,7 +372,7 @@ const mock: OwStatsApi = {
       result: input.result,
       gameType: input.gameType,
       source: 'manual',
-      heroes: input.hero ? [input.hero] : [],
+      heroes: input.heroes ?? (input.hero ? [input.hero] : []),
       mental: input.mental,
       ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
     });
@@ -318,7 +392,8 @@ const mock: OwStatsApi = {
       if (input.role !== undefined) patch.role = input.role;
       if (input.map !== undefined) patch.map = input.map;
       if (input.gameType !== undefined) patch.gameType = input.gameType;
-      if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
+      if (input.heroes !== undefined) patch.heroes = input.heroes;
+      else if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
     }
     if (input.mental !== undefined) patch.mental = input.mental;
     if (input.srDelta !== undefined) {

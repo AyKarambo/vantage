@@ -7,6 +7,7 @@
 
 import type { GameRecord } from '../analytics';
 import { streak, winLoss } from '../analytics';
+import { isPositiveComms } from '../comms';
 import { READINESS_TUNING as T } from './constants';
 import { dayOrdinal } from './day';
 import { detectSessions, gamesByDay } from './sessions';
@@ -36,7 +37,7 @@ function tiltFlagged(g: GameRecord): boolean {
 }
 
 function positiveFlagged(g: GameRecord): boolean {
-  return Boolean(g.mental?.positiveComms || g.review?.flags?.positiveComms);
+  return isPositiveComms(g.mental) || isPositiveComms(g.review?.flags);
 }
 
 export interface LoadState {

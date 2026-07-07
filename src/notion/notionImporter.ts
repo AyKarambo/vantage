@@ -1,5 +1,5 @@
 import { Client } from '@notionhq/client';
-import type { GameRecord, MatchMental, MatchReview, TargetGrade } from '../core/analytics';
+import type { GameRecord, MatchMental, CommsTone, MatchReview, TargetGrade } from '../core/analytics';
 import type { Result, Role } from '../core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { gameTypeLabel } from '../core/matchFilter';
@@ -343,9 +343,10 @@ function pickCheckbox(prop: any): boolean {
 }
 /**
  * The imported after-game self-report. `Leaver` is a select (team|enemy) mapped
- * onto the two team-specific flags; `Comms` only contributes when positive (the
- * model tracks positive comms, not the negative variants). Undefined when the
- * row flagged nothing, so blank rows don't carry an empty mental object.
+ * onto the two team-specific flags; `Comms` is a select mapped onto the
+ * three-state {@link CommsTone} (`banther` is tolerated as a legacy spelling of
+ * `banter`). Undefined when the row flagged nothing, so blank rows don't carry
+ * an empty mental object.
  */
 function mentalFrom(props: any): MatchMental | undefined {
   const mental: MatchMental = {};
@@ -354,8 +355,16 @@ function mentalFrom(props: any): MatchMental | undefined {
   if (leaver === 'enemy') mental.leaverEnemyTeam = true;
   if (pickCheckbox(props['Tilt'])) mental.tilt = true;
   if (pickCheckbox(props['Toxic Mates'])) mental.toxicMates = true;
-  if (pickSelect(props['Comms']) === 'positive') mental.positiveComms = true;
+  const comms = commsFrom(pickSelect(props['Comms']));
+  if (comms) mental.comms = comms;
   return Object.keys(mental).length ? mental : undefined;
+}
+
+/** Map a Notion `Comms` select value onto a comms tone, tolerating the legacy `banther` spelling. */
+function commsFrom(value: string | undefined): CommsTone | undefined {
+  if (value === 'positive' || value === 'abusive' || value === 'banter') return value;
+  if (value === 'banther') return 'banter';
+  return undefined;
 }
 function titleOf(page: any): string {
   for (const value of Object.values<any>(page?.properties ?? {})) {

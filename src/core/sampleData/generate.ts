@@ -1,4 +1,4 @@
-import type { GameRecord, HeroStat } from '../analytics';
+import type { GameRecord, HeroStat, MatchMental } from '../analytics';
 import type { Result, Role, RosterPlayer } from '../model';
 import { ACCOUNT_WR, ACCOUNTS, HEROES, MAPS, PLAYER_POOL, ROLE_WR, ROLES, ROSTER_ROLES } from './fixtures';
 
@@ -19,13 +19,18 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Deterministically generate a season of demo games for the browser preview and first-run UI. */
-export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
+/**
+ * Deterministically generate a season of demo games for the browser preview and
+ * first-run UI. `activeMaps` (the effective competitive pool) restricts which
+ * maps appear; when omitted or empty it falls back to the full built-in table so
+ * the generator never draws from an empty pool (spec AC 24).
+ */
+export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonly string[]): GameRecord[] {
   const rnd = mulberry32(seed);
   const pick = <T>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];
   const between = (lo: number, hi: number) => lo + rnd() * (hi - lo);
 
-  const mapNames = Object.keys(MAPS);
+  const mapNames = activeMaps && activeMaps.length > 0 ? [...activeMaps] : Object.keys(MAPS);
   // Fixed per-map skill modifier so some maps are consistently weak (→ focus panel).
   const mapMod: Record<string, number> = {};
   for (const m of mapNames) mapMod[m] = between(-0.16, 0.16);
@@ -74,13 +79,18 @@ export function generateSampleGames(count = 180, seed = 42): GameRecord[] {
     }
 
     // Manual (◎) after-game self-report — tilt clusters on losses, positive
-    // comms is common. Deterministic via the same seeded stream.
-    const mental = {
+    // comms is common. Deterministic via the same seeded stream. The comms roll
+    // keeps its position/threshold (`< 0.46` = positive) so demo positives are
+    // stable, with the rest split into banter/abusive/none.
+    const mental: MatchMental = {
       tilt: result === 'Loss' ? rnd() < 0.42 : rnd() < 0.12,
       toxicMates: rnd() < 0.16,
       leaver: rnd() < 0.05,
-      positiveComms: rnd() < 0.46,
     };
+    const commsRoll = rnd();
+    if (commsRoll < 0.46) mental.comms = 'positive';
+    else if (commsRoll < 0.72) mental.comms = 'banter';
+    else if (commsRoll < 0.8) mental.comms = 'abusive';
 
     games.push({
       matchId: `sample-${i}`,

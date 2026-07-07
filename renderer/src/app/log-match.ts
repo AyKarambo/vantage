@@ -11,23 +11,35 @@
 import { h, render } from '../dom';
 import { time, roleLabel } from '../format';
 import { registerShortcut } from '../shortcuts';
-import { badge, button, select } from '../components/primitives';
+import { badge, button, select, segmented } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { typeahead } from '../components/typeahead';
 import { targetGradeRow } from '../components/reviewControls';
+import { paintHeroChips } from '../components/heroPicker';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs } from '../prefs';
-import { MAP_MODES } from '../../../src/core/maps';
-import { ALL_HEROES } from '../../../src/core/heroes';
 import { TIERS } from '../../../src/core/rank';
-import type { AccountSummary, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
+import type { AccountSummary, CommsTone, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
-const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy', 'Positive comms'];
-const ALL_MAPS = Object.keys(MAP_MODES).sort();
-const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support' };
+const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy'];
+const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 const DIVISIONS = [5, 4, 3, 2, 1];
+/** The comms switch options, in switch order, with their colour modifier class. */
+const COMMS_OPTIONS: Array<{ value: CommsTone; label: string; cls: string }> = [
+  { value: 'positive', label: 'Positive', cls: 'pos' },
+  { value: 'banter', label: 'Banter', cls: 'banter' },
+  { value: 'abusive', label: 'Abusive', cls: 'abusive' },
+];
+
+/** The SR-entry mode: nudge the change (±%) or set the current rank outright. */
+type SrMode = 'change' | 'set-current';
+
+/** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
+function presetFor(result: Result): string {
+  return result === 'Win' ? '25' : result === 'Loss' ? '-25' : '0';
+}
 /** "Played" backfill choices — end-of-game time relative to now, in minutes. */
 const PLAYED_OFFSETS: Array<{ label: string; minutes: number }> = [
   { label: 'Just now', minutes: 0 },
@@ -40,10 +52,17 @@ interface LogState {
   result: Result;
   role: Role;
   map: string;
-  hero: string;
+  /** Heroes played this match — the card allows several. */
+  heroes: Set<string>;
   account: string;
   flags: Set<string>;
+  /** Comms tone, or null when the player left the switch unset. */
+  comms: CommsTone | null;
+  /** How SR is entered: nudge the change, or set the current rank directly. */
+  srMode: SrMode;
   srDelta: string;
+  /** True once the player has typed/wheeled SR, so a result change stops re-presetting it. */
+  srEdited: boolean;
   anchorTier: string;
   anchorDivision: number;
   anchorPct: string;
@@ -51,9 +70,9 @@ interface LogState {
   playedAt: number | null;
 }
 
-/** Fields carried into the next form by "Save & next" (same sitting, so the hero usually holds). */
+/** Fields carried into the next form by "Save & next" (same sitting, so heroes usually hold). */
 export interface LogCarry {
-  hero?: string;
+  heroes?: string[];
 }
 
 // Cheatsheet entries only — the dialog binds these keys itself (the global
@@ -65,14 +84,14 @@ registerShortcut({ combo: 'd', description: 'Result: Draw (in the log dialog)', 
 registerShortcut({ combo: 'enter', description: 'Save the match (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 
-/** Turn the chip selection into the optional per-match mental self-report. */
-function mentalFrom(flags: Set<string>): MatchMental | undefined {
+/** Turn the chip selection + comms switch into the optional per-match mental self-report. */
+function mentalFrom(flags: Set<string>, comms: CommsTone | null): MatchMental | undefined {
   const m: MatchMental = {};
   if (flags.has('Tilt')) m.tilt = true;
   if (flags.has('Toxic mates')) m.toxicMates = true;
   if (flags.has('Leaver — my team')) m.leaverMyTeam = true;
   if (flags.has('Leaver — enemy')) m.leaverEnemyTeam = true;
-  if (flags.has('Positive comms')) m.positiveComms = true;
+  if (comms) m.comms = comms;
   return Object.keys(m).length ? m : undefined;
 }
 
@@ -102,10 +121,13 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     result: 'Win',
     role: seededRole ?? (prefill?.role as Role) ?? 'damage',
     map: '',
-    hero: carry?.hero ?? '',
+    heroes: new Set<string>(carry?.heroes ?? []),
     account: defaultAccount,
     flags: new Set<string>(),
-    srDelta: '',
+    comms: null,
+    srMode: 'change',
+    srDelta: presetFor('Win'),
+    srEdited: false,
     anchorTier: 'Gold',
     anchorDivision: 3,
     anchorPct: '',
@@ -118,11 +140,16 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
 
-  /** Resolve free-typed map text onto the canonical map list (case-insensitive). */
+  /**
+   * Resolve free-typed map text onto the known map list (case-insensitive).
+   * Resolution is NOT gated by `isActive`: a user backfilling a game on a map
+   * that has since rotated out of the pool must still be able to type it and log
+   * it (spec AC 22) — only the browse suggestions hide inactive maps.
+   */
   const resolveMap = (): string | null => {
     const q = state.map.trim().toLowerCase();
     if (!q) return null;
-    return ALL_MAPS.find((m) => m.toLowerCase() === q) ?? null;
+    return ctx.data.masterData.maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
   };
 
   // Guards against duplicate submits from this form (Enter auto-repeat, double
@@ -145,22 +172,27 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     state.map = map;
     saving = true;
     try {
+      // "Set current rank" re-anchors the rank directly; the match then carries
+      // no srDelta so it can't double-count on top of the fresh anchor.
+      const setCurrent = state.srMode === 'set-current';
       // Vantage is competitive-only (spec D1) — manual logs always report as such.
-      const srDelta = state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
+      const srDelta = !setCurrent && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
       await bridge.logMatch({
         result: state.result,
         role: state.role,
         map,
-        hero: state.hero.trim() || undefined,
+        heroes: [...state.heroes],
         gameType: 'Competitive',
-        mental: mentalFrom(state.flags),
+        mental: mentalFrom(state.flags, state.comms),
         account: state.account,
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
         ...(Object.keys(grades).length ? { grades } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
-      // First competitive match for this account+role → persist the rank anchor.
-      if (!hasAnchor(state.account, state.role) && state.anchorTier) {
+      // Set-current re-anchors on every save; otherwise the anchor is only set
+      // the first competitive match for this account+role. Either way a negative
+      // % is preserved as a rank-protection carry.
+      if (setCurrent || (!hasAnchor(state.account, state.role) && state.anchorTier)) {
         await bridge.setRankAnchor({
           account: state.account,
           role: state.role,
@@ -197,7 +229,13 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
 
   const resultRow = choiceRow(['Win', 'Loss', 'Draw'], state.result, {
     Win: 'win', Loss: 'loss', Draw: 'draw',
-  }, (v) => (state.result = v as Result), { Win: 'W', Loss: 'L', Draw: 'D' });
+  }, (v) => {
+    state.result = v as Result;
+    // Re-preset the SR delta from the result, but only while the player hasn't
+    // touched it — a manual value must survive a result change.
+    if (!state.srEdited) state.srDelta = presetFor(state.result);
+    paintRank();
+  }, { Win: 'W', Loss: 'L', Draw: 'D' });
 
   const accountField = field('Account',
     select(accountOptions, state.account, (v) => { state.account = v; paintRank(); }),
@@ -218,7 +256,12 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
 
   const roleLabelInitial = Object.keys(ROLE_LABELS).find((k) => ROLE_LABELS[k] === state.role) ?? 'Damage';
   const roleField = field('Role',
-    choiceSegment(Object.keys(ROLE_LABELS), roleLabelInitial, (v) => { state.role = ROLE_LABELS[v]; paintRank(); }),
+    // Role decides the hero filter (rank is tracked per role too) — repaint both.
+    choiceSegment(Object.keys(ROLE_LABELS), roleLabelInitial, (v) => {
+      state.role = ROLE_LABELS[v];
+      paintRank();
+      paintHeroes();
+    }),
   );
 
   const playedField = field(
@@ -233,42 +276,68 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     }),
   );
 
-  const heroField = field(
-    optionalLabel('Hero'),
-    typeahead({
-      value: state.hero,
-      placeholder: 'e.g. Tracer',
-      suggestions: heroSuggestions(ctx),
-      showOnFocus: true,
-      onChange: (v) => (state.hero = v),
-    }),
-  );
+  // Multi-hero picker: a role-filtered chip grid (union with anything already
+  // picked, so switching role keeps off-role picks visible/removable). Toggling
+  // a chip flips its `is-on` in place; only a role change repaints the grid.
+  const heroHost = h('div');
+  const paintHeroes = (): void => paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes);
+  paintHeroes();
+  const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
-  // Rank block: SR % every match, plus the one-time anchor. Everything is
+  // SR-delta input with the mouse-wheel nudge (±1) and edit tracking.
+  const srDeltaInput = (): HTMLInputElement => {
+    const el = numInput(state.srDelta, 'e.g. +22 or -19', (v) => { state.srDelta = v; state.srEdited = true; });
+    // passive:false so preventDefault stops the modal scrolling under the pointer.
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      state.srDelta = String((Number(state.srDelta) || 0) + (e.deltaY < 0 ? 1 : -1));
+      state.srEdited = true;
+      el.value = state.srDelta;
+    }, { passive: false });
+    return el;
+  };
+
+  // Tier / division / % picker — shared by the first-match anchor and "set current".
+  const rankPicker = (): HTMLElement =>
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+      select(TIERS.map((t) => ({ value: t, label: t })), state.anchorTier, (v) => (state.anchorTier = v)),
+      select(DIVISIONS.map((d) => ({ value: String(d), label: `Div ${d}` })), String(state.anchorDivision),
+        (v) => (state.anchorDivision = Number(v))),
+      numInput(state.anchorPct, 'e.g. 40, or -19 if protected', (v) => (state.anchorPct = v)),
+    );
+
+  // Rank block: SR every match, plus the one-time anchor. Everything is
   // competitive now (spec D1), so this always shows — it re-paints when
-  // account/role change, since those decide anchor existence.
+  // account/role/mode/result change, since those decide what it renders.
   const rankHost = h('div');
   const paintRank = (): void => {
-    const srField = field(
-      optionalLabel('Skill rating change (%)'),
-      numInput(state.srDelta, 'e.g. +22 or -19', (v) => (state.srDelta = v)),
+    const toggleRow = field(
+      optionalLabel('Skill rating', '— nudge the change or set your rank'),
+      segmented<SrMode>({
+        options: [{ value: 'change', label: 'Change (±%)' }, { value: 'set-current', label: 'Set current rank' }],
+        value: state.srMode,
+        onChange: (v) => { state.srMode = v; paintRank(); },
+        fill: true,
+      }),
     );
+
+    if (state.srMode === 'set-current') {
+      render(rankHost, toggleRow,
+        field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker()),
+        h('div', { class: 'hint', style: { marginTop: '4px' } },
+          `Sets ${roleLabel(state.role)} on ${state.account} to this rank — we track from here.`));
+      return;
+    }
+
+    const srField = field(optionalLabel('Skill rating change (%)'), srDeltaInput());
     if (hasAnchor(state.account, state.role)) {
-      render(rankHost, srField,
+      render(rankHost, toggleRow, srField,
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           `Rank tracked for ${roleLabel(state.role)} on ${state.account} — the % above moves it.`));
       return;
     }
-    render(rankHost, srField,
-      field(
-        optionalLabel('Current rank — set once'),
-        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          select(TIERS.map((t) => ({ value: t, label: t })), state.anchorTier, (v) => (state.anchorTier = v)),
-          select(DIVISIONS.map((d) => ({ value: String(d), label: `Div ${d}` })), String(state.anchorDivision),
-            (v) => (state.anchorDivision = Number(v))),
-          numInput(state.anchorPct, '% into division', (v) => (state.anchorPct = v)),
-        ),
-      ),
+    render(rankHost, toggleRow, srField,
+      field(optionalLabel('Current rank — set once'), rankPicker()),
       h('div', { class: 'hint', style: { marginTop: '4px' } },
         `First competitive ${roleLabel(state.role)} match on ${state.account} — set your current rank so it can be tracked from here.`),
     );
@@ -289,6 +358,22 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     ),
   );
 
+  // Comms tone: a single-select colour switch (green/yellow/red). Clicking the
+  // active option again clears it — comms stays optional.
+  const commsSwitch = h('div', { class: 'segmented segmented--fill comms-switch' });
+  const commsButtons = COMMS_OPTIONS.map((opt) => {
+    const btn = h('button',
+      { class: `segmented-opt comms-opt comms-opt--${opt.cls}${state.comms === opt.value ? ' is-on' : ''}` }, opt.label);
+    btn.addEventListener('click', () => {
+      state.comms = state.comms === opt.value ? null : opt.value;
+      for (const b of commsButtons) b.classList.remove('is-on');
+      if (state.comms) btn.classList.add('is-on');
+    });
+    return btn;
+  });
+  commsSwitch.append(...commsButtons);
+  const commsBlock = field(optionalLabel('Comms', '— how team comms felt'), commsSwitch);
+
   const targetsBlock = activeTargets.length
     ? field(
         optionalLabel('Targets', '— grade now or later on Review'),
@@ -303,8 +388,8 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
     void persist().then((ok) => {
       if (!ok) return;
       close();
-      // Same sitting → the hero usually holds; map/result never do.
-      openLogMatch(ctx, { hero: state.hero });
+      // Same sitting → the heroes usually hold; map/result never do.
+      openLogMatch(ctx, { heroes: [...state.heroes] });
     });
   };
 
@@ -318,7 +403,7 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
       field('Result', resultRow), accountField, mapField, roleField, playedField, heroField,
-      rankHost, flagsBlock, targetsBlock, actions),
+      rankHost, flagsBlock, commsBlock, targetsBlock, actions),
   );
 
   // Keyboard flow: W/L/D pick the result when not typing; Enter saves from
@@ -357,25 +442,22 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
 
 // --- little local builders --------------------------------------------------
 
-/** Canonical hero list, the player's recent heroes first (they repeat within a session). */
-function heroSuggestions(ctx: ViewContext): string[] {
-  const recent: string[] = [];
-  for (const m of ctx.data.matches) {
-    for (const hero of m.heroes) if (!recent.includes(hero)) recent.push(hero);
-  }
-  const rest = new Set<string>(ALL_HEROES);
-  for (const hs of ctx.data.heroStats) rest.add(hs.hero);
-  for (const r of recent) rest.delete(r);
-  return [...recent, ...[...rest].sort((a, b) => a.localeCompare(b))];
-}
-
-/** Canonical map list, recently-played maps first — the typeahead's browse order. */
+/**
+ * Browse order for the map typeahead: recently-played first, then the rest —
+ * built from the ACTIVE competitive pool only, so a map rotated out of the pool
+ * is hidden from suggestions (spec AC 21). It stays type-resolvable via
+ * {@link resolveMap} (AC 22), so history on it is never blocked.
+ */
 function mapSuggestions(ctx: ViewContext): string[] {
+  const active = ctx.data.masterData.maps
+    .filter((m) => m.isActive)
+    .map((m) => m.name)
+    .sort((a, b) => a.localeCompare(b));
+  const activeSet = new Set(active);
   const recent: string[] = [];
-  for (const m of ctx.data.matches) if (!recent.includes(m.map)) recent.push(m.map);
-  const rest = ALL_MAPS.filter((m) => !recent.includes(m));
-  // Only canonical maps are suggested; recents can include legacy names, filter them.
-  return [...recent.filter((m) => ALL_MAPS.includes(m)), ...rest];
+  for (const m of ctx.data.matches) if (activeSet.has(m.map) && !recent.includes(m.map)) recent.push(m.map);
+  const rest = active.filter((m) => !recent.includes(m));
+  return [...recent, ...rest];
 }
 
 function field(label: Node | string, control: Node): HTMLElement {

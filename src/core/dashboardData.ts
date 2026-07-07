@@ -9,7 +9,7 @@ import {
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
-import { mapMode } from './maps';
+import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
 import { progression } from './progression';
 import { buildTargets, type AuthoredTarget } from './targets';
@@ -19,7 +19,7 @@ import { currentRank, rankKey, type RankAnchorMap } from './rank';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
-import type { DashboardData, DashboardFilters, MatchRow } from '../shared/contract';
+import type { DashboardData, DashboardFilters, MatchRow, MasterData } from '../shared/contract';
 
 /** Manual (◎) data the player authored, threaded in from the main-process store. */
 export interface ManualData {
@@ -37,13 +37,19 @@ export function computeDashboard(
   filters: DashboardFilters,
   demo: DemoContext,
   manual?: ManualData,
+  masterData: MasterData = DEFAULT_MASTER_DATA,
 ): DashboardData {
+  // Effective map-mode + season boundaries come from the (possibly user-edited)
+  // master data so an edited mode/season is honored everywhere; both default to
+  // the built-in snapshot, so callers that pass nothing get today's behavior.
+  const mapModeOf = makeMapMode(masterData.maps);
+  const seasonStartsList = masterData.seasons.map((s) => s.start);
   // Vantage is competitive-only (spec D1): scope every count/stat/option to
   // competitive games ONCE, here, rather than re-filtering in each analytic.
   // Non-competitive rows may still exist in the DB (pre-update history) but
   // must be invisible everywhere the dashboard looks.
   const all = allGames.filter((g) => isCompetitive(g.gameType));
-  const games = applyFilters(all, filters);
+  const games = applyFilters(all, filters, seasonStartsList);
   const overall = winLoss(games);
   // Rank is per-person, computed over the FULL history (like readiness), not the
   // filtered set — the anchored "real" rank the sidebar/KPI show over the heuristic.
@@ -72,7 +78,7 @@ export function computeDashboard(
     options: {
       accounts: distinct(all.map((g) => g.account)).sort(),
       roles: distinct(all.map((g) => g.role)),
-      seasons: seasonsForData(all.map((g) => g.timestamp), Date.now())
+      seasons: seasonsForData(all.map((g) => g.timestamp), Date.now(), seasonStartsList)
         .map((w) => ({ id: w.id, label: w.label })),
     },
     greetingName: topAccount(all),
@@ -84,7 +90,7 @@ export function computeDashboard(
     byRole: byRole(games),
     byAccount: byAccount(games),
     byMap: byMap(games),
-    byMapType: groupBy(games, (g) => mapMode(g.map)),
+    byMapType: groupBy(games, (g) => mapModeOf(g.map)),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     trend: trend(games, weekly ? 'week' : 'day'),
     timeOfDay: byTimeOfDay(games),
@@ -94,10 +100,10 @@ export function computeDashboard(
     calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
-    matches: recentMatches(games),
+    matches: recentMatches(games, mapModeOf),
     mental: mentalSummary(games),
     targets: buildTargets(games, demo.active, manual?.targets),
-    reviewInbox: ungraded.slice(0, ROW_CAP).map(toMatchRow),
+    reviewInbox: ungraded.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf)),
     pendingReviews: ungraded.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
     // Readiness is a per-person verdict → computed over the UNFILTERED
@@ -107,6 +113,7 @@ export function computeDashboard(
     readiness: safeReadiness(all),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     totalGamesAllTime: all.length,
+    masterData,
     ...(recapOf(all) ?? {}),
   };
 }
@@ -117,7 +124,11 @@ function recapOf(all: GameRecord[]): { recap: NonNullable<DashboardData['recap']
   return recap ? { recap } : null;
 }
 
-export function applyFilters(games: GameRecord[], f: DashboardFilters): GameRecord[] {
+export function applyFilters(
+  games: GameRecord[],
+  f: DashboardFilters,
+  seasonStartsList?: readonly number[],
+): GameRecord[] {
   let out = games;
   if (f.account && f.account !== 'all') out = out.filter((g) => g.account === f.account);
   if (f.role && f.role !== 'all') out = out.filter((g) => g.role === f.role);
@@ -127,7 +138,7 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
       // An unknown/unlistable id (untrusted IPC, or a season that rolled off
       // the list) falls back to the 30-day window rather than showing nothing.
       const now = Date.now();
-      const w = seasonWindowById(f.days.season, now);
+      const w = seasonWindowById(f.days.season, now, seasonStartsList);
       if (w) {
         out = out.filter((g) => g.timestamp >= w.start && g.timestamp < w.end);
       } else {
@@ -145,14 +156,14 @@ export function applyFilters(games: GameRecord[], f: DashboardFilters): GameReco
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
 const ROW_CAP = 150;
 
-function recentMatches(games: GameRecord[]): MatchRow[] {
+function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver): MatchRow[] {
   return [...games]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, ROW_CAP)
-    .map(toMatchRow);
+    .map((g) => toMatchRow(g, mapModeOf));
 }
 
-function toMatchRow(g: GameRecord): MatchRow {
+function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver): MatchRow {
   const flags = rowFlags(g);
   return {
     matchId: g.matchId,
@@ -160,7 +171,7 @@ function toMatchRow(g: GameRecord): MatchRow {
     account: g.account,
     role: g.role,
     map: g.map,
-    mapType: mapMode(g.map),
+    mapType: mapModeOf(g.map),
     result: g.result,
     gameType: g.gameType,
     heroes: g.heroes,

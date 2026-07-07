@@ -2,6 +2,7 @@ import { Client } from '@notionhq/client';
 import type { MatchRecord, Result, Role } from '../core/model';
 import type { MatchMental, TargetGrade } from '../core/analytics';
 import { leaverFlags } from '../core/leaver';
+import { commsTone } from '../core/comms';
 import { gameTypeLabel } from '../core/matchFilter';
 
 /** A {@link MatchRecord} plus the resolved Notion values for the four core fields. */
@@ -166,7 +167,8 @@ export class NotionWriter {
     const mental = m.mental;
 
     if (this.writableColumns.has('Comms')) {
-      if (mental?.positiveComms) props['Comms'] = select('positive');
+      const tone = commsTone(mental);
+      if (tone) props['Comms'] = select(tone);
       else if (opts.forUpdate) props['Comms'] = { select: null };
     }
     if (this.writableColumns.has('Improvement Target')) {

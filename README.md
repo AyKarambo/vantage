@@ -62,17 +62,22 @@ comms · toxicity · leavers · your improvement target).
   library that shows whether hitting it actually moves your winrate. The **Focus** screen can
   create a map-practice target for a losing map in one click (**＋ target**).
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
-  `W`/`L`/`D` picks the result, the **map and hero are typeaheads** with your recent picks listed
-  first, `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries the hero over —
-  it's the same sitting). Forgot to log during the session? The **Played** chips backfill a game
+  `W`/`L`/`D` picks the result, the **map is a typeahead** with your recent picks listed first,
+  `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's
+  the same sitting). Forgot to log during the session? The **Played** chips backfill a game
   30 min / 1 h / 2 h into the past so session analytics stay honest. Pick the **account** and
-  role; every logged match is competitive, so there's no mode picker — log the **skill-rating %**
-  (and, the first time for an account+role, your current **rank**), split the **leaver** flag by
-  team (my team / enemy), and grade active improvement targets inline. Vantage then **calculates
-  your live rank** from
-  that anchor plus each logged %, including OW2 **rank protection** (a loss that would drop
-  below 0% holds the division and keeps the true negative carry — matching the game's own
-  negative display — until a win or draw pays it back above 0%; only a further loss demotes).
+  **role** (Tank / Damage / Support / **Open Queue**); the **hero picker is a chip grid filtered by
+  that role** (Open Queue shows every hero) so you can **tap all the heroes you played** in the
+  game. Every logged match is competitive, so there's no mode picker. The **skill-rating** field
+  **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge** (±1) —
+  or flip it to **"Set current rank"** to enter your rank directly and let Vantage work out the
+  change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
+  Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy),
+  set the **comms** tone on a colour switch (**positive / banter / abusive**), and grade active
+  improvement targets inline. Vantage then **calculates your live rank** from that anchor plus each
+  logged %, including OW2 **rank protection** (a loss that would drop below 0% holds the division
+  and keeps the true negative carry — matching the game's own negative display — until a win or
+  draw pays it back above 0%; only a further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
   target database, **push** your tracked games to it and **import** them back — an
   on-demand pull that reads the Gametracker rows into local history for restoring or
@@ -122,7 +127,8 @@ map rows and Overview scatter dots jump to the Maps screen), hero typeahead + re
 the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
 window-position memory, and a **Settings** screen with an
-**accounts manager** (create/edit/delete accounts, per-role rank anchors) alongside the break
+**accounts manager** (create/edit/delete accounts, per-role rank anchors), a **Master data**
+editor (see below) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, rank anchors, and screenshots — to any folder,
 moved together with a copy-verify-then-delete guarantee. Point it at a OneDrive/Dropbox-synced
@@ -138,7 +144,29 @@ Existing installs updating to this version see no prompt and keep their current 
 
 Match history is stored on-device in an embedded **SQLite** database (`history.db`); a pre-SQLite
 `history.json` is imported once on first launch and kept untouched as a frozen backup. Storage stays
-**local-first** — the only outbound path is the opt-in Notion export.
+**local-first** — the only outbound paths are the opt-in Notion export and the opt-in **Master data
+update** below, both user-initiated.
+
+### Master data (heroes, maps & seasons)
+
+The lists behind Vantage — the **hero roster** (and each hero's role), the **maps** (and their game
+modes), and the **competitive seasons** — are fully **editable** in *Settings › Master data*, so you
+never have to wait for an app update when Blizzard adds a hero, a map, or starts a season. Add, edit,
+or remove any entry; maps carry an **In pool / Out of pool** toggle for the current competitive map
+pool (an out-of-pool map stays in your history and analytics but is hidden from new-log suggestions
+and the demo generator). Season boundaries are hand-editable too, and the current season keeps
+auto-extrapolating on its usual cadence between edits.
+
+An **Update** button fetches the latest heroes & maps from the community
+[OverFast API](https://overfast-api.tekrop.fr) (MIT-licensed, derived from Blizzard's public
+reference pages — there is no official Blizzard data API) and shows **new and changed** entries as a
+preview you **accept or discard per item** — nothing is written until you accept, your manual edits
+are never silently overwritten, and everything stays editable afterward. This is the only new
+outbound path besides Notion: it is **user-initiated**, sends **no personal, account, or match
+data**, treats the response as untrusted, and falls back to the bundled snapshot when offline. The
+endpoint is configurable in `appsettings.json` (`masterData.overfastBaseUrl`). Seasons are edited
+by hand only — no public API exposes their dates. Your edits live in `masterData.json` alongside
+the rest of your data and travel with it when you relocate the data folder.
 
 ## Account safety
 

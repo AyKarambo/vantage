@@ -13,6 +13,7 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
   toxicMates: 'toxic mates',
   leaver: 'leaver',
   positiveComms: 'positive comms',
+  abusive: 'abusive comms',
 };
 
 /** Decided tilted games needed before the tilt-tax number is worth believing. */
@@ -57,11 +58,12 @@ export function mental(ctx: ViewContext): HTMLElement {
       ),
     ),
     card({ title: 'Flags this range', sub: 'how often each came up' },
-      h('div', { class: 'grid-4', style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' } },
         flagBox(ctx, m.flags.tilt, 'Tilt', 'tilt'),
         flagBox(ctx, m.flags.toxicMates, 'Toxic mates', 'toxicMates'),
         flagBox(ctx, m.flags.leaver, 'Leavers', 'leaver'),
-        flagBox(ctx, m.flags.positiveComms, 'Positive comms', 'positiveComms', true),
+        flagBox(ctx, m.flags.positiveComms, 'Positive comms', 'positiveComms', 'is-accent'),
+        flagBox(ctx, m.flags.abusive, 'Abusive comms', 'abusive', 'is-loss'),
       ),
     ),
   );
@@ -69,8 +71,8 @@ export function mental(ctx: ViewContext): HTMLElement {
 
 /** A "Flags this range" stat box; clickable when its count is non-zero, opening
  *  Matches scoped to that flag. Zero counts stay plain (nothing to drill into). */
-function flagBox(ctx: ViewContext, count: number, label: string, flag: MatchFlagKey, accent = false): HTMLElement {
-  const value = accent ? h('span', { class: 'is-accent' }, String(count)) : String(count);
+function flagBox(ctx: ViewContext, count: number, label: string, flag: MatchFlagKey, valueClass?: string): HTMLElement {
+  const value = valueClass ? h('span', { class: valueClass }, String(count)) : String(count);
   if (count <= 0) return statBox(value, label);
   return h('button', {
     class: 'inline-link',

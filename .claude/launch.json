@@ -5,7 +5,8 @@
       "name": "vantage-preview",
       "runtimeExecutable": "C:\\nvm4w\\nodejs\\node.exe",
       "runtimeArgs": ["scripts/preview-server.mjs"],
-      "port": 5178
+      "port": 5178,
+      "autoPort": true
     }
   ]
 }

@@ -39,3 +39,71 @@ describe('logMatch — playedAt backfill', () => {
     expect(recorded[0].timestamp).toBeLessThanOrEqual(Date.now());
   });
 });
+
+describe('logMatch — heroes & comms', () => {
+  it('stores the multi-hero list verbatim', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input({ heroes: ['Tracer', 'Widowmaker'] }));
+    expect(recorded[0].heroes).toEqual(['Tracer', 'Widowmaker']);
+  });
+
+  it('falls back to the legacy single hero', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input({ hero: 'Tracer' }));
+    expect(recorded[0].heroes).toEqual(['Tracer']);
+  });
+
+  it('prefers heroes over a legacy hero when both are present', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input({ hero: 'Tracer', heroes: ['Genji', 'Sombra'] }));
+    expect(recorded[0].heroes).toEqual(['Genji', 'Sombra']);
+  });
+
+  it('records no heroes when none are given', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input());
+    expect(recorded[0].heroes).toEqual([]);
+  });
+
+  it('passes the comms tone through on the mental record', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input({ mental: { comms: 'abusive' } }));
+    expect(recorded[0].mental?.comms).toBe('abusive');
+  });
+});
+
+describe('editMatch — hero list', () => {
+  function editHarness(game: GameRecord) {
+    const patches: Array<Partial<GameRecord>> = [];
+    const deps = {
+      history: {
+        all: () => [game],
+        editManual: (_id: string, patch: Partial<GameRecord>) => { patches.push(patch); },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    return { provider: createDataProvider(deps), patches };
+  }
+  const manualGame = (heroes: string[]): GameRecord => ({
+    matchId: 'manual-1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+    result: 'Win', gameType: 'Competitive', source: 'manual', heroes,
+  });
+
+  it('edits the full multi-hero list without collapsing to the first hero', () => {
+    const { provider, patches } = editHarness(manualGame(['Tracer', 'Genji']));
+    provider.editMatch({ matchId: 'manual-1', heroes: ['Sombra', 'Sojourn', 'Ashe'] });
+    expect(patches[0].heroes).toEqual(['Sombra', 'Sojourn', 'Ashe']);
+  });
+
+  it('clears the hero list with an empty array', () => {
+    const { provider, patches } = editHarness(manualGame(['Tracer']));
+    provider.editMatch({ matchId: 'manual-1', heroes: [] });
+    expect(patches[0].heroes).toEqual([]);
+  });
+
+  it('still honours the legacy single hero field', () => {
+    const { provider, patches } = editHarness(manualGame(['Tracer']));
+    provider.editMatch({ matchId: 'manual-1', hero: 'Widowmaker' });
+    expect(patches[0].heroes).toEqual(['Widowmaker']);
+  });
+});

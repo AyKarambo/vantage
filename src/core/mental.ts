@@ -1,5 +1,6 @@
 import { winLoss, type GameRecord } from './analytics';
 import { leaverFlags, mergeLeaver } from './leaver';
+import { isPositiveComms, isAbusiveComms } from './comms';
 
 /**
  * "Mental" analytics — the manual (◎) side of performance the game never
@@ -8,7 +9,7 @@ import { leaverFlags, mergeLeaver } from './leaver';
  */
 
 /** A drill-down-able per-row mental flag (the vocabulary `rowFlags` speaks). */
-export type MatchFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'positiveComms';
+export type MatchFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'positiveComms' | 'abusive';
 
 export interface MentalSummary {
   calm: number; // 0..100
@@ -24,6 +25,8 @@ export interface MentalSummary {
     leaverMyTeam: number;
     leaverEnemyTeam: number;
     positiveComms: number;
+    /** Games flagged with abusive comms — a negative comms signal. */
+    abusive: number;
   };
   winWhenCalm: number; // 0..1
   winWhenTilted: number; // 0..1
@@ -40,7 +43,7 @@ export interface MentalSummary {
 const EMPTY: MentalSummary = {
   calm: 0,
   tilted: 0,
-  flags: { tilt: 0, toxicMates: 0, leaver: 0, leaverMyTeam: 0, leaverEnemyTeam: 0, positiveComms: 0 },
+  flags: { tilt: 0, toxicMates: 0, leaver: 0, leaverMyTeam: 0, leaverEnemyTeam: 0, positiveComms: 0, abusive: 0 },
   winWhenCalm: 0,
   winWhenTilted: 0,
   tiltedDecided: 0,
@@ -50,7 +53,7 @@ const EMPTY: MentalSummary = {
 export function mentalSummary(games: GameRecord[]): MentalSummary {
   if (!games.length) return { ...EMPTY, flags: { ...EMPTY.flags } };
 
-  const flags = { tilt: 0, toxicMates: 0, leaver: 0, leaverMyTeam: 0, leaverEnemyTeam: 0, positiveComms: 0 };
+  const flags = { tilt: 0, toxicMates: 0, leaver: 0, leaverMyTeam: 0, leaverEnemyTeam: 0, positiveComms: 0, abusive: 0 };
   const tiltedGames: GameRecord[] = [];
   const calmGames: GameRecord[] = [];
   for (const g of games) {
@@ -65,7 +68,8 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
     if (leaver.myTeam) flags.leaverMyTeam++;
     if (leaver.enemyTeam) flags.leaverEnemyTeam++;
     if (leaver.myTeam || leaver.enemyTeam) flags.leaver++;
-    if (m.positiveComms || r.positiveComms) flags.positiveComms++;
+    if (isPositiveComms(m) || isPositiveComms(r)) flags.positiveComms++;
+    if (isAbusiveComms(m) || isAbusiveComms(r)) flags.abusive++;
     (tilt ? tiltedGames : calmGames).push(g);
   }
 
@@ -105,7 +109,8 @@ export function rowFlags(g: GameRecord): Partial<Record<MatchFlagKey, true>> | u
   if (m.tilt || r.tilt) out.tilt = true;
   if (m.toxicMates || r.toxicMates) out.toxicMates = true;
   if (leaver.myTeam || leaver.enemyTeam) out.leaver = true;
-  if (m.positiveComms || r.positiveComms) out.positiveComms = true;
+  if (isPositiveComms(m) || isPositiveComms(r)) out.positiveComms = true;
+  if (isAbusiveComms(m) || isAbusiveComms(r)) out.abusive = true;
 
   return Object.keys(out).length ? out : undefined;
 }

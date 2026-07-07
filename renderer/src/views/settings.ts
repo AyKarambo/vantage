@@ -4,13 +4,17 @@
  * appearance (winrate colour scheme), and diagnostics (log level + viewer).
  */
 import { h, render } from '../dom';
-import type { AccountSummary, AppUiSettings, DataLocation, RankSummary, Role } from '../../../src/shared/contract';
+import type {
+  AccountSummary, AppUiSettings, DataLocation, RankSummary, Role,
+  MasterData, HeroEntry, MapEntry, SeasonEntry, HeroRole, MapMode, UpdatePreview,
+} from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { button, card, chip, pill, segmented, select } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
 import { logLevelToggle } from '../components/logLevelToggle';
 import { openModal } from '../components/overlay';
+import { toast } from '../components/toast';
 import { rankLabel, roleLabel } from '../format';
 import { TIERS } from '../../../src/core/rank';
 import { getWinrateScheme, setWinrateScheme } from '../theme';
@@ -24,10 +28,22 @@ const ROLE_OPTIONS: Array<{ value: Role; label: string }> = [
 ];
 const DIVISIONS = [5, 4, 3, 2, 1];
 
+/** Roles a hero can hold (no `openQ` — that's a queue, not a hero role). */
+const HERO_ROLE_OPTIONS: Array<{ value: HeroRole; label: string }> = [
+  { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' }, { value: 'support', label: 'Support' },
+];
+/** Selectable map game modes. */
+const MAP_MODE_OPTIONS: Array<{ value: MapMode; label: string }> = [
+  { value: 'Control', label: 'Control' }, { value: 'Escort', label: 'Escort' }, { value: 'Hybrid', label: 'Hybrid' },
+  { value: 'Push', label: 'Push' }, { value: 'Flashpoint', label: 'Flashpoint' }, { value: 'Clash', label: 'Clash' },
+  { value: 'Unknown', label: 'Unknown' },
+];
+
 export function settings(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view' },
     viewHead('Settings', 'Accounts, app behavior, coaching nudges, appearance, diagnostics'),
     accountsCard(),
+    masterDataCard(ctx),
     h('div', { class: 'grid-2' },
       card({ title: 'Coaching', sub: 'break reminder + readiness nudges' },
         breakReminderEditor(ctx),
@@ -56,6 +72,237 @@ export function settings(ctx: ViewContext): HTMLElement {
     ),
     dataLocationCard(),
   );
+}
+
+// --- Master data (heroes / maps / seasons) ---------------------------------
+
+/** ISO `YYYY-MM-DD` for a UTC season start instant. */
+function isoDate(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * The Master Data editor: add/edit/remove heroes, maps (incl. the competitive
+ * pool `isActive` toggle) and seasons, plus an "Update" that fetches the latest
+ * heroes & maps from the online source and previews additions/changes for
+ * accept/discard. Seeds synchronously from `ctx.data.masterData` (already on the
+ * dashboard payload) so there's no loading flash; mutations round-trip through
+ * the bridge and `store.refresh()` so every consumer (log-match, match detail,
+ * analytics) sees the change.
+ */
+function masterDataCard(ctx: ViewContext): HTMLElement {
+  let data: MasterData = ctx.data.masterData;
+  const body = h('div', { class: 'stack', style: { gap: '18px', marginTop: '4px' } });
+
+  /** Adopt fresh effective data, repaint, and propagate to the rest of the app. */
+  const apply = (next: MasterData): void => {
+    data = next;
+    paint();
+    void store.refresh();
+  };
+
+  const updateBtn = button('Update from online source', {
+    variant: 'soft',
+    onClick: () => void runUpdate(),
+  });
+
+  async function runUpdate(): Promise<void> {
+    updateBtn.disabled = true;
+    updateBtn.textContent = 'Checking…';
+    try {
+      const preview = await bridge.masterDataFetchUpdate();
+      const empty =
+        !preview.heroes.additions.length && !preview.heroes.changes.length &&
+        !preview.maps.additions.length && !preview.maps.changes.length;
+      if (empty) toast('Master data is already up to date.');
+      else openUpdatePreview(preview, apply);
+    } catch (err) {
+      toast(`Update failed — ${String(err)}`);
+    } finally {
+      updateBtn.disabled = false;
+      updateBtn.textContent = 'Update from online source';
+    }
+  }
+
+  function paint(): void {
+    render(body,
+      heroSection(data.heroes, apply),
+      mapSection(data.maps, apply),
+      seasonSection(data.seasons, apply),
+    );
+  }
+
+  paint();
+  return card(
+    {
+      title: 'Master data',
+      sub: 'Heroes, maps & seasons — edit them, or pull new ones from the online source',
+      actions: updateBtn,
+    },
+    body,
+  );
+}
+
+/** A titled sub-group inside the master-data card. */
+function mdGroup(title: string, hint: string, rows: Node[], addForm: Node): HTMLElement {
+  return h('div', null,
+    h('div', { style: { fontSize: '13px', fontWeight: '600', marginBottom: '2px' } }, title),
+    h('div', { class: 'hint', style: { marginBottom: '8px' } }, hint),
+    h('div', { class: 'stack', style: { gap: '6px' } }, ...rows, addForm),
+  );
+}
+
+/** A one-line editor row (label/controls left, actions right). `muted` dims inactive maps. */
+function mdRow(muted: boolean, ...children: Node[]): HTMLElement {
+  return h('div', {
+    style: {
+      display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+      padding: '4px 0', ...(muted ? { opacity: '0.55' } : {}),
+    },
+  }, ...children);
+}
+
+function textInput(value: string, placeholder: string): HTMLInputElement {
+  return h('input', { class: 'vt-input', type: 'text', value, placeholder }) as HTMLInputElement;
+}
+
+function heroSection(heroes: HeroEntry[], apply: (d: MasterData) => void): HTMLElement {
+  const rows = heroes.map((hero) =>
+    mdRow(false,
+      h('div', { style: { flex: '1 1 140px', minWidth: '120px' } }, hero.name),
+      select(HERO_ROLE_OPTIONS, hero.role, (role) =>
+        void bridge.masterDataUpsertHero({ name: hero.name, role: role as HeroRole }).then(apply)),
+      button('Remove', { variant: 'ghost', onClick: () => void bridge.masterDataRemoveHero(hero.name).then(apply) }),
+    ),
+  );
+  const name = textInput('', 'New hero name');
+  let role: HeroRole = 'damage';
+  const add = h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '8px' } },
+    name,
+    select(HERO_ROLE_OPTIONS, role, (v) => (role = v as HeroRole)),
+    button('Add hero', { variant: 'soft', onClick: () => {
+      const n = name.value.trim();
+      if (!n) return;
+      void bridge.masterDataUpsertHero({ name: n, role }).then(apply);
+    } }),
+  );
+  return mdGroup('Heroes', 'The quick-log hero list. Changing a role only affects new logs — past matches keep their recorded role.', rows, add);
+}
+
+function mapSection(maps: MapEntry[], apply: (d: MasterData) => void): HTMLElement {
+  const rows = maps.map((map) =>
+    mdRow(!map.isActive,
+      h('div', { style: { flex: '1 1 140px', minWidth: '120px' } }, map.name),
+      select(MAP_MODE_OPTIONS, map.mode, (mode) =>
+        void bridge.masterDataUpsertMap({ ...map, mode: mode as MapMode }).then(apply)),
+      chip(map.isActive ? 'In pool' : 'Out of pool', map.isActive, () =>
+        void bridge.masterDataUpsertMap({ ...map, isActive: !map.isActive }).then(apply)),
+      button('Remove', { variant: 'ghost', onClick: () => void bridge.masterDataRemoveMap(map.name).then(apply) }),
+    ),
+  );
+  const name = textInput('', 'New map name');
+  let mode: MapMode = 'Control';
+  const add = h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '8px' } },
+    name,
+    select(MAP_MODE_OPTIONS, mode, (v) => (mode = v as MapMode)),
+    button('Add map', { variant: 'soft', onClick: () => {
+      const n = name.value.trim();
+      if (!n) return;
+      void bridge.masterDataUpsertMap({ name: n, mode, isActive: true }).then(apply);
+    } }),
+  );
+  return mdGroup(
+    'Maps',
+    '“In pool” = part of the current competitive map pool. Out-of-pool maps stay in your history but aren’t suggested for new logs.',
+    rows,
+    add,
+  );
+}
+
+function seasonSection(seasons: SeasonEntry[], apply: (d: MasterData) => void): HTMLElement {
+  // Newest first, matching the season filter.
+  const rows = [...seasons].sort((a, b) => b.start - a.start).map((season) => {
+    const label = textInput(season.label, 'Season label');
+    const commit = (): void => {
+      const l = label.value.trim();
+      if (l && l !== season.label) void bridge.masterDataUpsertSeason({ start: season.start, label: l }).then(apply);
+    };
+    label.addEventListener('change', commit);
+    return mdRow(false,
+      h('div', { class: 'mono u-dim', style: { flex: '0 0 96px', fontSize: '12px' } }, isoDate(season.start)),
+      h('div', { style: { flex: '1 1 160px' } }, label),
+      button('Remove', { variant: 'ghost', onClick: () =>
+        void bridge.masterDataRemoveSeason(`S:${isoDate(season.start)}`).then(apply) }),
+    );
+  });
+  const date = h('input', { class: 'vt-input', type: 'date' }) as HTMLInputElement;
+  const label = textInput('', 'Season label (e.g. 2026 Season 4)');
+  const add = h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '8px' } },
+    date, label,
+    button('Add season', { variant: 'soft', onClick: () => {
+      const start = Date.parse(date.value);
+      const l = label.value.trim();
+      if (Number.isNaN(start) || !l) return;
+      void bridge.masterDataUpsertSeason({ start, label: l }).then(apply);
+    } }),
+  );
+  return mdGroup(
+    'Seasons',
+    'Competitive season boundaries for the “This season” filter. The current season is auto-extrapolated; add one here to correct or get ahead of a new start.',
+    rows,
+    add,
+  );
+}
+
+/**
+ * The Update preview modal: each proposed addition/change gets a checkbox
+ * (checked by default). Accept applies only the ticked items; Discard leaves
+ * everything untouched (spec AC 5/6). `isActive` is never a proposed change —
+ * the diff excludes it — so a user's pool toggle is never reverted here.
+ */
+function openUpdatePreview(preview: UpdatePreview, onApplied: (d: MasterData) => void): void {
+  openModal((close) => {
+    const picks: Array<{ cb: HTMLInputElement; hero?: HeroEntry; map?: MapEntry }> = [];
+
+    const checkRow = (text: string, sel: { hero?: HeroEntry; map?: MapEntry }): HTMLElement => {
+      const cb = h('input', { type: 'checkbox', checked: 'checked' }) as HTMLInputElement;
+      picks.push({ cb, ...sel });
+      return h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px' } }, cb, h('span', null, text));
+    };
+
+    const groups: Node[] = [];
+    if (preview.heroes.additions.length || preview.heroes.changes.length) {
+      groups.push(h('div', { style: { fontWeight: '600', fontSize: '13px', marginTop: '4px' } }, 'Heroes'));
+      for (const hentry of preview.heroes.additions) groups.push(checkRow(`+ ${hentry.name} · ${hentry.role}`, { hero: hentry }));
+      for (const c of preview.heroes.changes) groups.push(checkRow(`~ ${c.to.name}: ${c.from.role} → ${c.to.role}`, { hero: c.to }));
+    }
+    if (preview.maps.additions.length || preview.maps.changes.length) {
+      groups.push(h('div', { style: { fontWeight: '600', fontSize: '13px', marginTop: '4px' } }, 'Maps'));
+      for (const m of preview.maps.additions) groups.push(checkRow(`+ ${m.name} · ${m.mode}`, { map: m }));
+      for (const c of preview.maps.changes) groups.push(checkRow(`~ ${c.to.name}: ${c.from.mode} → ${c.to.mode}`, { map: c.to }));
+    }
+
+    const accept = (): void => {
+      const heroes = picks.filter((p) => p.hero && p.cb.checked).map((p) => p.hero as HeroEntry);
+      const maps = picks.filter((p) => p.map && p.cb.checked).map((p) => p.map as MapEntry);
+      if (!heroes.length && !maps.length) { close(); return; }
+      void bridge.masterDataApplyUpdate({ heroes, maps }).then((next) => {
+        close();
+        onApplied(next);
+        toast(`Applied ${heroes.length + maps.length} update${heroes.length + maps.length === 1 ? '' : 's'}.`);
+      });
+    };
+
+    return h('div', { class: 'stack', style: { gap: '12px', padding: '18px', width: '460px', maxWidth: '92vw' } },
+      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Master data update'),
+      h('div', { class: 'hint' }, 'New and changed entries from the online source. Untick anything you don’t want, then Accept.'),
+      h('div', { class: 'stack', style: { gap: '6px', maxHeight: '46vh', overflowY: 'auto' } }, ...groups),
+      h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
+        button('Accept selected', { variant: 'primary', onClick: accept }),
+        button('Discard', { variant: 'ghost', onClick: close }),
+      ),
+    );
+  });
 }
 
 /**
@@ -302,7 +549,7 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
 
     return h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '440px', maxWidth: '92vw' } },
       h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Set rank — ${account}`),
-      h('div', { class: 'hint' }, 'Set your current rank once; logged competitive matches move it from here. Editing re-anchors from the value you enter.'),
+      h('div', { class: 'hint' }, 'Set your current rank once; logged competitive matches move it from here. Editing re-anchors from the value you enter. A negative % means you’re in rank protection.'),
       host,
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
         button('Save', { variant: 'primary', onClick: () => {
@@ -319,7 +566,7 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
 
 function numField(value: string, onChange: (v: string) => void): HTMLInputElement {
   return h('input', {
-    class: 'vt-input mono', type: 'number', step: '1', value, placeholder: '0–100',
+    class: 'vt-input mono', type: 'number', step: '1', value, placeholder: '0–100, or -19 if protected',
     on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
   }) as HTMLInputElement;
 }

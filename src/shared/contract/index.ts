@@ -12,7 +12,7 @@
 // Core vocabulary re-exported so the renderer never imports core directly
 export type { Role, Result, HeroStat } from '../../core/model';
 export type {
-  WinLoss, Group, FocusItem, HeroSummary, MatchMental, MatchReview, TargetGrade, Streak,
+  WinLoss, Group, FocusItem, HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak,
   DayGroup, SessionRecap,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
@@ -29,6 +29,12 @@ export type { DemoPreference } from '../../core/demoPreference';
 export type {
   DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
 } from './dashboard';
+
+// Editable master data (heroes/maps/seasons)
+export type {
+  HeroRole, HeroEntry, MapEntry, SeasonEntry, MasterData, HeroChange, MapChange, UpdatePreview,
+  AcceptedUpdate, MapMode,
+} from './masterData';
 
 // Match drill-down payloads
 export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';

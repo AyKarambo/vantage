@@ -244,22 +244,29 @@ describe('NotionImporter — mental self-report', () => {
     expect(theirs.mental).toEqual({ leaverEnemyTeam: true });
   });
 
-  it('maps Tilt/Toxic Mates checkboxes and positive Comms onto mental', async () => {
+  it('maps Tilt/Toxic Mates checkboxes and the Comms tone onto mental', async () => {
     const { client } = mockClient({
       gametracker: [row({ tilt: true, toxicMates: true, comms: 'positive' })],
       maps: [],
     });
     const [g] = (await new NotionImporter(client, GT).import()).games;
-    expect(g.mental).toEqual({ tilt: true, toxicMates: true, positiveComms: true });
+    expect(g.mental).toEqual({ tilt: true, toxicMates: true, comms: 'positive' });
   });
 
-  it('treats non-positive Comms as no positive-comms flag', async () => {
+  it('maps all three Comms tones, tolerating the legacy "banther" spelling', async () => {
     const { client } = mockClient({
-      gametracker: [row({ id: 'a', comms: 'abusive' }), row({ id: 'b', comms: 'banther' }), row({ id: 'c', comms: 'none' })],
+      gametracker: [
+        row({ id: 'a', comms: 'abusive' }),
+        row({ id: 'b', comms: 'banther' }),
+        row({ id: 'c', comms: 'banter' }),
+        row({ id: 'd', comms: 'none' }),
+      ],
       maps: [],
     });
-    const games = (await new NotionImporter(client, GT).import()).games;
-    expect(games.every((g) => g.mental === undefined)).toBe(true);
+    const tones = (await new NotionImporter(client, GT).import()).games.map((g) => g.mental?.comms);
+    expect(tones.filter((t) => t === 'abusive').length).toBe(1);
+    expect(tones.filter((t) => t === 'banter').length).toBe(2); // 'banter' + legacy 'banther'
+    expect(tones.filter((t) => t === undefined).length).toBe(1); // 'none' is not a tone
   });
 
   it('leaves mental undefined when the row flagged nothing', async () => {

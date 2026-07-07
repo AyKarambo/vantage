@@ -142,10 +142,37 @@ describe('rank engine — editability (recompute forward)', () => {
 });
 
 describe('applyMatch / stateFromAnchor primitives', () => {
-  it('stateFromAnchor clamps a malformed anchor into range', () => {
+  it('stateFromAnchor clamps a malformed anchor into the upper range, unprotected', () => {
     const s = stateFromAnchor({ tier: 'Gold', division: 9, progressPct: 250, setAt: 0 });
     expect(s.division).toBe(5);
     expect(s.progressPct).toBe(100);
+    expect(s.protected).toBe(false);
+  });
+
+  it('a negative anchor % is a rank-protection carry (kept negative, protected)', () => {
+    const s = stateFromAnchor(anchorAt('Gold', 3, -19));
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -19 });
+    expect(s.protected).toBe(true);
+    expect(s.needsReanchor).toBe(false);
+  });
+
+  it('an extreme negative anchor % floors at -100 (still protected)', () => {
+    const s = stateFromAnchor(anchorAt('Gold', 3, -250));
+    expect(s.progressPct).toBe(-100);
+    expect(s.protected).toBe(true);
+  });
+
+  it('a win after a protected (negative) anchor pays the carry down', () => {
+    // Anchored at Gold 3, -19 (in protection); a +22 win clears the buffer and climbs.
+    const s = computeRank(anchorAt('Gold', 3, -19), [win(22)]);
+    expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 3 });
+    expect(s.protected).toBe(false);
+  });
+
+  it('a loss after a protected (negative) anchor demotes a division', () => {
+    const s = computeRank(anchorAt('Gold', 3, -19), [loss(-5)]);
+    expect(s.division).toBe(4); // dropped one division
+    expect(s.needsReanchor).toBe(true);
   });
 
   it('a match with no srDelta does not move a mid-division rank', () => {

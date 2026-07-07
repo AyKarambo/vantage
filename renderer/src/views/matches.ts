@@ -16,6 +16,7 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
   toxicMates: 'toxic-mates-flagged',
   leaver: 'leaver-flagged',
   positiveComms: 'positive-comms',
+  abusive: 'abusive-comms',
 };
 
 /** Canonical field order — both the "Customize view" popover and rendering follow this (spec F1). */
