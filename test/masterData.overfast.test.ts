@@ -73,6 +73,17 @@ describe('parseOverfastMaps', () => {
     expect(out).toEqual([{ name: 'NewCompMap', mode: 'Unknown', isActive: true }]);
   });
 
+  it('drops Stadium-only maps so the Update never re-introduces them', () => {
+    const out = parseOverfastMaps([
+      { name: 'Colosseo', gamemodes: ['push'] },
+      { name: 'Gogadoro', gamemodes: ['control'] },
+      { name: 'Place Lacroix', gamemodes: ['push'] },
+      { name: 'Arena Victoriae', gamemodes: ['control'] },
+      { name: 'wuxing university', gamemodes: ['control'] }, // casing variant still blocked
+    ]);
+    expect(out).toEqual([{ name: 'Colosseo', mode: 'Push', isActive: true }]);
+  });
+
   it('throws on a non-array payload (AC 14)', () => {
     expect(() => parseOverfastMaps('nope')).toThrow();
   });

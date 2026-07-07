@@ -10,7 +10,7 @@
  * flips them active and sets the mode).
  */
 import { HEROES_BY_ROLE } from '../heroes';
-import { MAP_MODES, type MapMode } from '../maps';
+import { MAP_MODES, isStadiumOnlyMap, type MapMode } from '../maps';
 import { SEASON_STARTS, seasonEntriesFromStarts } from '../season';
 import type { HeroEntry, HeroRole, MapEntry, MasterData } from './types';
 
@@ -29,11 +29,13 @@ function defaultHeroes(): HeroEntry[] {
 }
 
 function defaultMaps(): MapEntry[] {
-  const out: MapEntry[] = Object.entries(MAP_MODES).map(([name, mode]) => ({
-    name,
-    mode,
-    isActive: true,
-  }));
+  const out: MapEntry[] = Object.entries(MAP_MODES)
+    .filter(([name]) => !isStadiumOnlyMap(name))
+    .map(([name, mode]) => ({
+      name,
+      mode,
+      isActive: true,
+    }));
   for (const w of WITHHELD_MAPS) {
     if (!out.some((m) => m.name === w.name)) out.push({ name: w.name, mode: w.mode, isActive: false });
   }
