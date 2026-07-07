@@ -6,14 +6,17 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, Result, Role, TargetGrade } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, Role, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
 import { button, card, pill, RESULT_STATE, segmented, select, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { resultChooser } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
+import { attachWheelNudge } from '../app/wheelStepper';
+import { TIERS } from '../../../src/core/rank';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
 import { gradedThisSession } from '../reviews';
@@ -27,9 +30,10 @@ const ROLE_OPTS: Array<{ value: Role; label: string }> = [
   { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' },
   { value: 'support', label: 'Support' }, { value: 'openQ', label: 'Open Q' },
 ];
-const RESULT_OPTS: Array<{ value: Result; label: string }> = [
-  { value: 'Win', label: 'Win' }, { value: 'Loss', label: 'Loss' }, { value: 'Draw', label: 'Draw' },
-];
+/** Divisions high→low for the Set-current rank picker (5 = lowest band, 1 = highest). */
+const DIVISIONS = [5, 4, 3, 2, 1];
+/** The editor's SR-entry mode: nudge the change (±%) or set the resulting rank (back-computed). */
+type SrMode = 'change' | 'set-current';
 
 /**
  * Selectable maps for the editor: the active competitive pool, plus the match's
@@ -198,9 +202,12 @@ function perHeroSection(perHero: HeroStat[]): HTMLElement | null {
 
 // --- competitive progress (calculated from your rank anchor + logged SR) ------
 
-const NOTE_LABEL: Record<string, string> = { calculated: 'Calculated', estimate: 'Estimate', reported: 'Reported' };
+const NOTE_LABEL: Record<string, string> = {
+  calculated: 'Calculated', reconstructed: 'Reconstructed', estimate: 'Estimate', reported: 'Reported',
+};
 const NOTE_SUB: Record<string, string> = {
   calculated: 'from your rank anchor + logged SR — the game feed does not report rank',
+  reconstructed: 'reconstructed backward from your rank anchor — best-effort, may drift on missing SR',
   estimate: 'estimated from recent results — set a rank anchor to track the real number',
   reported: 'reported by the game feed',
 };
@@ -232,8 +239,9 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
           : withinDivision != null
             ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
             : null,
-      // The SR change logged for this specific match (calculated path).
-      c.note === 'calculated' && srDelta != null
+      // The SR change logged for this specific match — always shown when set
+      // (typed or back-computed), regardless of whether a rank anchor exists.
+      srDelta != null
         ? h('span', {
             class: 'mono',
             style: { fontSize: '12px', color: srDelta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
@@ -260,8 +268,9 @@ function editorSection(label: string, body: Node): HTMLElement {
 
 /**
  * Fold a legacy `leaver` boolean into the my-team flag so its chip pre-selects.
- * The comms tone is left untouched — the "Good comms" chip reads/writes it
- * directly (see reviewControls), so banter/abusive survive an unrelated edit.
+ * The comms tone is left untouched — the three-state comms switch in
+ * `mentalFlagsRow` (see reviewControls) reads/writes it through `commsTone`, so
+ * banter/abusive survive an unrelated edit.
  */
 function normalizeFlags(m: MatchMental): MatchMental {
   const out: MatchMental = { ...m };
@@ -294,6 +303,14 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   const heroes = new Set<string>(d.heroes);
   let srDelta: number | undefined = d.srDelta;
   let performance: number | undefined = d.performance;
+  // SR entry mirrors the log card: nudge the change, or set the rank you ended
+  // at (main back-computes the %). The Set-current fields seed from the rank shown
+  // on the card (reconstructed as of this match), so a drift-correction starts
+  // from where you actually are.
+  let srMode: SrMode = 'change';
+  let anchorTier = d.competitive?.tier ?? 'Gold';
+  let anchorDivision = d.competitive?.division ?? 3;
+  let anchorPct = d.competitive?.progressPct != null ? String(Math.round(d.competitive.progressPct)) : '';
 
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
@@ -304,9 +321,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
 
     const factsBlock = editable
       ? h('div', { class: 'stack', style: { gap: '12px' } },
-          editField('Result', segmented({
-            options: RESULT_OPTS, value: state.result, fill: true, onChange: (v) => (state.result = v),
-          })),
+          editField('Result', resultChooser({ value: state.result, onChange: (v) => (state.result = v) })),
           editField('Role', segmented({
             // Role filters the hero grid — repaint it when the role changes.
             options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => { state.role = v; paintEditorHeroes(); },
@@ -319,17 +334,62 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
       : h('div', { class: 'hint' },
           `Auto-tracked from the game feed — result, map and heroes are locked. ${d.map} · ${roleLabel(d.role)}`);
 
-    const srBlock = isComp
-      ? editField('Skill rating change (%)', srInput(srDelta, (v) => (srDelta = v)))
-      : null;
+    // Change mode → the raw signed SR % (with wheel nudge). Set-current mode →
+    // the tier/division/% picker (prefilled, wheel-nudged) the app back-computes
+    // the SR % from on save.
+    const srDeltaField = (): HTMLInputElement => {
+      const el = srInput(srDelta, (v) => (srDelta = v));
+      attachWheelNudge(el, () => (srDelta != null ? String(srDelta) : ''), (v) => { srDelta = v === '' ? undefined : Number(v); });
+      return el;
+    };
+    const rankPicker = (): HTMLElement => {
+      const pct = h('input', {
+        class: 'vt-input mono', type: 'number', step: '1', value: anchorPct, placeholder: 'e.g. 40',
+        on: { input: (e) => (anchorPct = (e.target as HTMLInputElement).value) },
+      }) as HTMLInputElement;
+      attachWheelNudge(pct, () => anchorPct, (v) => (anchorPct = v));
+      return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+        select(TIERS.map((t) => ({ value: t, label: t })), anchorTier, (v) => (anchorTier = v)),
+        select(DIVISIONS.map((dv) => ({ value: String(dv), label: `Div ${dv}` })), String(anchorDivision), (v) => (anchorDivision = Number(v))),
+        pct,
+      );
+    };
+    const srHost = h('div');
+    const paintSr = (): void => {
+      const toggle = segmented<SrMode>({
+        options: [{ value: 'change', label: 'Change (±%)' }, { value: 'set-current', label: 'Set current rank' }],
+        value: srMode,
+        fill: true,
+        onChange: (v) => { srMode = v; paintSr(); },
+      });
+      if (srMode === 'set-current') {
+        render(srHost,
+          editField('Skill rating', toggle),
+          editField('Current rank — negative % means rank protection', rankPicker()),
+          h('div', { class: 'hint', style: { marginTop: '4px' } },
+            'The rank you were at after this match — we back-calculate its SR %. Your live rank tracking is left as-is.'));
+      } else {
+        render(srHost,
+          editField('Skill rating', toggle),
+          editField('Skill rating change (%)', srDeltaField()));
+      }
+    };
+    if (isComp) paintSr();
+    const srBlock = isComp ? srHost : null;
 
     const save = (): void => {
       void bridge.editMatch({
         matchId: d.matchId,
         ...(editable ? { result: state.result, role: state.role, map: state.map, heroes: [...heroes] } : {}),
         mental: flags,
-        // number sets, null clears (blanked field), field omitted for non-comp.
-        ...(isComp ? { srDelta: srDelta ?? null } : {}),
+        // Competitive rank: Set-current sends the resulting rank (main derives the
+        // srDelta); Change sends the raw % (number sets, null clears). Omitted for
+        // non-comp.
+        ...(isComp
+          ? (srMode === 'set-current'
+              ? { setRank: { tier: anchorTier, division: anchorDivision, progressPct: Number(anchorPct) || 0 } }
+              : { srDelta: srDelta ?? null })
+          : {}),
         // number sets, null clears — performance applies to any match, comp or not.
         performance: performance ?? null,
         grades,

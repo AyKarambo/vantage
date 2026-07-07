@@ -21,6 +21,13 @@ comms · toxicity · leavers · your improvement target).
   game feed actually reported for that match). Every match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
+  The editor mirrors the Log match card: colour-coded **W/L/D**, the **mouse-wheel
+  nudge** on the SR field, the **three-state comms** switch (positive / banter /
+  abusive), and a **"Set current rank"** mode — enter the rank you ended at and Vantage
+  **back-calculates that match's SR %** (your live anchor is left as-is). Competitive
+  progress shows the rank you held **after that specific match**: forward-calculated for
+  matches at/after your anchor, and **reconstructed backward** (best-effort) for older
+  ones, so a past game no longer just echoes today's rank.
   A **Customize view** popover lets you set role, heroes, account, SR delta, duration
   and final score each to hidden, inline (folded into the row's meta line), or its own
   aligned column — the choice persists across sessions. The meta line only ever joins
@@ -88,9 +95,10 @@ comms · toxicity · leavers · your improvement target).
   already tracked** for that account+role, if any — also wheel-adjustable) and let Vantage work out
   the change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
   Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy), set
-  the **comms** tone on a colour switch (**positive / banter / abusive**), rate your own
-  **performance** on a 0-100 slider (colored on the same red→green scale as winrate elsewhere; also
-  editable later from Review or a match's detail page), and grade active improvement targets inline.
+  the **comms** tone on a colour switch (**positive / banter / abusive** — the same switch now backs
+  Review and the match editor), rate your own **performance** on a 0-100 slider (colored on the same
+  red→green scale as winrate elsewhere; also editable later from Review or a match's detail page), and
+  grade active improvement targets inline.
   Vantage then **calculates your live rank** from that anchor plus each logged %, including OW2
   **rank protection** (a loss that would drop below 0% holds the division and keeps the true negative
   carry — matching the game's own negative display — until a win or draw pays it back above 0%; only

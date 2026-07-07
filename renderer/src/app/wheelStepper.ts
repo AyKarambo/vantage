@@ -35,3 +35,22 @@ export function attachStepper(el: HTMLInputElement, opts: StepperOpts): void {
     { passive: false },
   );
 }
+
+/**
+ * The simple ±1-per-tick nudge for a signed numeric text field — shared by the
+ * log-match SR/% inputs and the match-detail editor so the two surfaces can't
+ * drift. No lower clamp (SR deltas and rank-protection % can go negative).
+ * `passive:false` + preventDefault so the modal never scrolls under the pointer.
+ */
+export function attachWheelNudge(el: HTMLInputElement, get: () => string, set: (v: string) => void): void {
+  el.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      const next = String((Number(get()) || 0) + (e.deltaY < 0 ? 1 : -1));
+      set(next);
+      el.value = next;
+    },
+    { passive: false },
+  );
+}

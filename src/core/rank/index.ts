@@ -6,3 +6,5 @@ export type {
 export { rankKey } from './types';
 export { TIERS, applyMatch, computeRank, stateFromAnchor } from './engine';
 export { competitiveComps, currentRank } from './timeline';
+export { rankToPoints, pointsToRank } from './scalar';
+export { rankAfterMatch, srDeltaForSetRank } from './reconstruct';
