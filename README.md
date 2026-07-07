@@ -116,6 +116,11 @@ comms · toxicity · leavers · your improvement target).
   or skipped with a reason (missing, wrong type, or a near-miss name like `comms ` you
   probably meant). Only the manual **Sync**, **Import** and **Clean up** buttons ever
   send data outbound — no automatic traffic.
+- **About** — the app's identity and version, the build/runtime facts (Electron, Chromium,
+  Node, V8, platform/OS) with a one-click **Copy diagnostics** for bug reports, the
+  account-safety ("zero ban risk — GEP only") and local-first promises restated in-app, and
+  support/legal (support email, MIT © Timo Seikel). External links open via the sanctioned
+  `shell.openExternal` path — the renderer window itself never navigates.
 
 Vantage tracks **competitive matches only** — quick play and arcade games are never recorded,
 live or manually logged, so every stat, count, and export is competitive by construction (existing

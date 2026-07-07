@@ -184,6 +184,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
     provider.setAppSettings(patch),
   );
   handle(ch.getAppInfo, () => provider.getAppInfo());
+  handle(ch.openExternal, (_e, url: string) => provider.openExternal(url));
 
   // Data-location (Settings "Data storage" card + first-run folder prompt).
   handle(ch.getDataLocation, () => provider.getDataLocation());

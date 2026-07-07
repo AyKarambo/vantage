@@ -24,7 +24,8 @@ export type ViewId =
   | 'targets'
   | 'notion'
   | 'logs'
-  | 'settings';
+  | 'settings'
+  | 'about';
 
 /** Parameters for parameterized views (the match detail drill-down). */
 export interface ViewParams {
@@ -84,7 +85,7 @@ const STORAGE_KEY = 'vantageFilters';
 /** The last visited top-level view, restored on launch (never a detail page). */
 function initialView(): ViewId {
   const saved = prefs.get('view');
-  const valid: ViewId[] = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings'];
+  const valid: ViewId[] = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about'];
   return valid.includes(saved as ViewId) ? (saved as ViewId) : 'overview';
 }
 

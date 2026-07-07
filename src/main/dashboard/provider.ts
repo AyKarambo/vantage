@@ -102,8 +102,10 @@ export interface DataProvider {
   getAppSettings(): AppUiSettings;
   /** Apply + persist app-behavior settings; returns the applied values. */
   setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
-  /** Version + support contact. */
+  /** Version + build/runtime facts + support contact (the About screen). */
   getAppInfo(): AppInfo;
+  /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
+  openExternal(url: string): Promise<void>;
   /** Where Vantage's data folder currently lives (DB + manual data + screenshots). */
   getDataLocation(): DataLocation;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder; async (shows a dialog). */

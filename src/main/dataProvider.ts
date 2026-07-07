@@ -7,6 +7,7 @@ import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
 import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { effectiveDemo } from '../core/demoPreference';
+import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import { currentRank, type RankAnchorMap } from '../core/rank';
 import { sourceOf } from '../core/source';
@@ -75,8 +76,10 @@ export interface DataProviderDeps {
     get(): AppUiSettings;
     apply(patch: Partial<AppUiSettings>): AppUiSettings;
   };
-  /** Version + support contact for the About card. */
+  /** Version + build/runtime facts + support contact for the About screen. */
   appInfo(): AppInfo;
+  /** Open an external URL — the composition root's `shell.openExternal`. */
+  openExternal(url: string): Promise<void>;
   /** Data-folder location: current value, Settings folder-picker/migrate, and the
    *  first-run picker (owned by the composition root — it holds the mutable data
    *  dir and the live store handles the migration executor repoints). */
@@ -290,6 +293,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     getAppSettings: () => deps.appSettings.get(),
     setAppSettings: (patch) => deps.appSettings.apply(patch),
     getAppInfo: () => deps.appInfo(),
+    // Scheme-guarded before it ever reaches the shell: a disallowed URL is a no-op.
+    openExternal: async (url) => { await openIfAllowed(url, deps.openExternal); },
     getDataLocation: () => deps.dataLocation.get(),
     chooseDataFolder: () => deps.dataLocation.choose(),
     setDataFolder: (input) => deps.dataLocation.set(input),

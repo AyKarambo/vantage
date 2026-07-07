@@ -1,5 +1,6 @@
 import { app, shell, dialog } from 'electron';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import {
   loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath, type AppConfig,
@@ -312,7 +313,18 @@ function main(): void {
         };
       },
     },
-    appInfo: () => ({ version: app.getVersion(), supportEmail: 'timo.seikel@gmail.com' }),
+    appInfo: () => ({
+      version: app.getVersion(),
+      supportEmail: 'timo.seikel@gmail.com',
+      electron: process.versions.electron ?? '',
+      chromium: process.versions.chrome ?? '',
+      node: process.versions.node,
+      v8: process.versions.v8,
+      platform: process.platform,
+      osRelease: os.release(),
+      packaged: app.isPackaged,
+    }),
+    openExternal: (url) => shell.openExternal(url),
     dataLocation: {
       get: () => ({ ...currentDataLocation(), ...(firstRunNeedsDataChoice ? { needsFirstRunChoice: true } : {}) }),
       choose: async (): Promise<DataLocationResult> => {

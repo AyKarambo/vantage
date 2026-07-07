@@ -100,8 +100,11 @@ export interface OwStatsApi {
   getAppSettings(): Promise<AppUiSettings>;
   /** Persist app-behavior settings; returns the applied values. */
   setAppSettings(patch: Partial<AppUiSettings>): Promise<AppUiSettings>;
-  /** Version + support contact (Settings screen's About card). */
+  /** Version + build/runtime facts + support contact (the About screen). */
   getAppInfo(): Promise<AppInfo>;
+  /** Open a maintainer-provided external URL (mailto:/https:) via the sanctioned
+   *  main-process shell.openExternal — the renderer window blocks navigation. */
+  openExternal(url: string): Promise<void>;
   /** Where Vantage's data folder currently lives (Settings screen + first run). */
   getDataLocation(): Promise<DataLocation>;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder. */
@@ -203,6 +206,7 @@ export const IPC_CHANNELS = {
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',
   getAppInfo: 'app:info',
+  openExternal: 'app:open-external',
   getDataLocation: 'settings:get-data-location',
   chooseDataFolder: 'settings:choose-data-folder',
   setDataFolder: 'settings:set-data-folder',
