@@ -5,7 +5,7 @@
  * this is a wellness heuristic, not a diagnosis.
  */
 import { h } from '../dom';
-import type { ReadinessBand, ReadinessSignal, ReadinessSummary } from '../../../src/shared/contract';
+import type { ReadinessBand, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
 import { PALETTE } from '../theme';
 import { button, card, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -36,10 +36,45 @@ export function readiness(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view' },
     viewHead('Readiness', 'Training load & recovery — a wellness heuristic, not a diagnosis'),
     h('div', { class: 'grid-2' }, verdictCard(ctx), whyCard(r)),
+    subscoresCard(r),
     loadCard(r),
     chartCard(r),
     honestyCard(),
     card({ title: 'Settings' }, readinessSettingsEditor(ctx)),
+  );
+}
+
+/** One family's pull on the composite: signed delta + a small magnitude bar.
+ *  A bare track (not statBar) — statBar reserves fixed label/value gutters that
+ *  would leave ~35% of the tile blank here (review finding). */
+function subscoreTile(label: string, sub: ReadinessSubscore, maxAbs: number, note?: string): HTMLElement {
+  const delta = sub.delta;
+  const value = !sub.available ? '—' : `${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}`;
+  const color = !sub.available || Math.abs(delta) < 1 ? PALETTE.muted : delta < 0 ? (delta <= -maxAbs / 2 ? PALETTE.loss : PALETTE.mid) : PALETTE.win;
+  const frac = sub.available ? Math.min(1, Math.abs(delta) / maxAbs) : 0;
+  return h('div', null,
+    statBox(value, label),
+    h('div', { class: 'track', style: { marginTop: '6px' } },
+      h('div', { class: 'track-fill', style: { width: `${Math.round(frac * 100)}%`, background: color } })),
+    h('div', { class: 'hint', style: { marginTop: '4px', fontSize: '11px' } },
+      !sub.available ? (note ?? 'no usable data yet') : note ?? ''),
+  );
+}
+
+/** The three signal families behind the score — research says exposing the WHY
+ *  is what makes a composite score trustworthy. */
+function subscoresCard(r: ReadinessSummary): HTMLElement {
+  const s = r.subscores;
+  const statNote = s.performance.available
+    ? `stat coverage ${Math.round((s.performance.coverage ?? 0) * 100)}%`
+    : 'needs tracked games with stats';
+  const subjNote = s.subjective.available ? '' : 'log mental state or rate your games';
+  return card({ title: 'What moves the score', sub: 'each family pulls the score from its neutral anchor (75)' },
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '4px' } },
+      subscoreTile('Load balance', s.load, 40),
+      subscoreTile('Performance vs your usual', s.performance, 45, statNote),
+      subscoreTile('Self-report', s.subjective, 15, subjNote),
+    ),
   );
 }
 
@@ -107,11 +142,35 @@ function readinessMethodology(close: () => void): HTMLElement {
         'turns "watch" or "high" severity when it crosses a threshold tuned from training theory.'),
     ),
     h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'The three families & weights'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'The score starts at a neutral 75 and three families pull on it: behavioral load (up to ~40 ' +
+        'points), objective performance vs your own baselines (up to ~45 — winrate and per-10-minute ' +
+        'stats), and self-report (tilt + your performance rating, hard-capped at 15 so a feeling ' +
+        'never outweighs the evidence). The verdict band derives from the score — they can’t disagree.'),
+    ),
+    h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Training-load model'),
       h('div', { class: 'hint', style: { lineHeight: '1.6' } },
-        'Acute load (recent games/day) is compared against your longer-run baseline as a ratio. ' +
-        'A ratio well above 1× means you’re playing much more than usual — the classic overtraining ' +
-        'shape; a ratio well below it, alongside a long layoff, flags rust instead.'),
+        'Recent volume is compared against YOUR OWN norm — a stable 10-games-a-day rhythm is habit, ' +
+        'not risk; only surging above your usual (or a genuine acute:chronic ratio spike) costs ' +
+        'points. The ratio is a workload trend observation, not a validated burnout predictor.'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Your own baselines'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Per-10-minute stats (elims, deaths, damage, healing) are compared per hero — and per account, ' +
+        'so an alt’s lobbies never skew your main — against your own rolling history, never against ' +
+        'other players. A decline only counts once it is sustained across enough games (one long ' +
+        'session qualifies); a single bad game never fires it. Heroes you’re still learning (first ' +
+        'dozen games) are exempt — early games there don’t count against you.'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Improvement-target dampener'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Practicing something deliberately makes you temporarily worse — that’s normal. When you’re ' +
+        'actively hitting your improvement targets (graded on the Review screen), a results dip is ' +
+        'softened — unless your tilt is clearly elevated, which voids the benefit of the doubt.'),
     ),
     h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'The supercompensation model'),
@@ -126,15 +185,18 @@ function readinessMethodology(close: () => void): HTMLElement {
     h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Confidence levels'),
       h('div', { class: 'hint', style: { lineHeight: '1.6' } },
-        'Confidence reflects how much history and mental-state logging back the read. At low ' +
-        'confidence the crisp score is hidden so it never reads as more certain than it is — log ' +
-        'your mental state after games to sharpen it.'),
+        'Confidence now reflects the coverage of the objective inputs first — how many recent games ' +
+        'carry real stats, whether the winrate sample is big enough, and whether one account ' +
+        'dominates the window. A stats-rich tracked history reaches high confidence without any ' +
+        'mental logging; at low confidence the crisp score is hidden so it never overclaims.'),
     ),
     h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Honesty note'),
       h('div', { class: 'hint', style: { lineHeight: '1.6' } },
         'Readiness is an evidence-informed wellness heuristic borrowed from sports training theory — ' +
-        'not a medical or diagnostic tool. Treat it as a nudge, and trust your own read.'),
+        'not a medical or diagnostic tool. It also cannot tell external causes apart from fatigue: a ' +
+        'balance patch nerfing your hero looks like a decline too. Treat it as a nudge, and trust ' +
+        'your own read.'),
     ),
     h('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, button('Close', { variant: 'ghost', onClick: close })),
   );

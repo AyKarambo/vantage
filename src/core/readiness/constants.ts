@@ -6,6 +6,10 @@
  * effects are tiny, and acute:chronic ratio thresholds are contested — so the
  * model biases hard against false "rest now" alarms. These are heuristics, not
  * validated predictors for Overwatch.
+ *
+ * The composite model (see `score.ts`): `score = baseScore + loadDelta +
+ * perfDelta + subjDelta`, each delta bounded so the bounds ARE the family
+ * weights (load ~40%, objective performance ~45%, subjective ≤15%).
  */
 
 import type { ReadinessSettings } from './types';
@@ -25,7 +29,7 @@ export const READINESS_TUNING = {
   acuteDays: 3,
   /** Chronic baseline window in days. */
   chronicDays: 21,
-  /** Mental acute window in days. */
+  /** Mental/performance acute window in days. */
   acuteMentalDays: 7,
 
   /** Need at least this span AND this many games before any verdict is offered. */
@@ -33,35 +37,35 @@ export const READINESS_TUNING = {
   minGames: 15,
   /** No game in this many days → treat as rested-but-unknown, not a confident verdict. */
   staleDays: 14,
-  /** The acute:chronic ratio is only trusted when the chronic window has at least this many active days. */
+  /** Overload arms (ratio AND absolute volume) are only trusted when the chronic window has at least this many active days. */
   minChronicActiveDays: 7,
 
   /** Acute:chronic ratio at/above this is "elevated" (amber contributor). */
   ratioElevated: 1.3,
-  /** Acute:chronic ratio at/above this is "high" (one arm of the red gate). */
+  /** Acute:chronic ratio at/above this is "high" (one arm of the red-corroboration gate). */
   ratioHigh: 1.5,
   /** At/below this ratio (with low volume) the player reads as fresh. */
   ratioFreshMax: 1.15,
 
-  /** Absolute games/day at/above this is "elevated" (amber contributor). */
+  /** Absolute games/day at/above this is "elevated" — the floor of the own-norm volume bar. */
   absElevatedPerDay: 6,
-  /** Absolute games/day at/above this is "high" (the arm that lets a flat, high-volume grinder reach red without acceleration). */
+  /** Absolute games/day at/above this is "high" (the arm that lets a flat, high-volume grinder corroborate red). */
   absHighPerDay: 9,
   /** At/below this games/day (with low ratio) the player reads as fresh. */
   freshPerDay: 4,
 
-  /** Consecutive active days at/above this is the day-count arm of the red gate. */
+  /** Consecutive active days at/above this is the day-count arm of the red-corroboration gate. */
   sustainedDays: 5,
   /** Consecutive active days at/above this is worth surfacing as a "watch" signal. */
   loadedDays: 4,
 
-  /** Fraction of acute games that must carry a logged mental flag before the fatigue signal is trusted. */
+  /** Fraction of acute games that must carry a logged mental flag before tilt signals are trusted. */
   mentalMinCoverage: 0.4,
-  /** Coverage at/above this counts toward high confidence. */
+  /** Coverage at/above this counts toward high confidence (secondary factor now). */
   mentalHighCoverage: 0.6,
-  /** Acute tilt rate at/above this is elevated (absolute). */
+  /** Acute tilt rate at/above this is elevated (absolute) — the dampener void bar. */
   tiltElevatedAbs: 0.4,
-  /** Acute tilt rate this much above baseline is elevated (relative). */
+  /** Acute tilt rate this much above baseline is elevated (relative) — the dampener void bar. */
   tiltElevatedDelta: 0.15,
 
   /** Rest days needed to fully clear a heavy state (→ fresh). Below it → recovering. */
@@ -78,20 +82,145 @@ export const READINESS_TUNING = {
   rustDays: 7,
   /** At/above this many rest days the rust signal escalates from watch → high. */
   rustSevereDays: 10,
+  /** At/above this many rest days the dominant driver reads as rust (restEffect has turned negative). */
+  rustSignalDays: 6,
   /** Score decay per rest day past the supercompensation peak (rest day 3). */
   rustDecayPerDay: 12,
-  /** Cap on the rust score penalty (keeps a long layoff amber, never red — you're rested, just dull). */
-  rustPenaltyCap: 45,
-  /** Fewer active days/week than this (chronic window) → consistency nudge signal. */
+  /** Floor of the rust decay (keeps a long layoff "dull", never "wrecked" — score floor = baseScore − this). */
+  rustPenaltyCap: 35,
+  /** Fewer active days/week than this (chronic window) → consistency nudge signal + small penalty. */
   lowFrequencyDaysPerWeek: 3,
   /** Below this many active days/week the nudge escalates from ok → watch. */
   lowFrequencyWatchPerWeek: 2,
+  /** Cap on the low-frequency penalty (a thin weekly rhythm is a nudge, not an alarm). */
+  freqPenCap: 5,
 
-  /** Score penalty caps (score is illustrative; the band is rule-gated). */
-  loadPenaltyCap: 45,
-  mentalPenaltyCap: 40,
-  outcomePenaltyCap: 8,
+  // --- composite anchors (score = baseScore + loadDelta + perfDelta + subjDelta) ---
+
+  /** Neutral anchor: a healthy, in-rhythm player with no signals sits here-ish (plus rest bonus). */
+  baseScore: 75,
+  /** Score at/below this (plus load corroboration, played today) → in-the-hole. */
+  redCut: 40,
+  /** Score at/below this (played today) → loaded (amber). */
+  amberCut: 60,
+  /** Overload penalty at/above this makes "overload" the dominant driver. */
+  driverBar: 8,
+
+  // --- load-balance subscore (loadDelta ∈ [−40, +25]) ---
+
+  /** Cap on the summed overload penalty (ratio + volume + streak + long-session). */
+  overloadPenCap: 40,
+  /** Cap on the ratio arm of the overload penalty. */
+  ratioPenCap: 22,
+  /** Cap on the own-norm-relative volume arm. */
+  volPenCap: 22,
+  /** Cap on the consecutive-days arm (only fires during a genuine surge). */
+  streakPenCap: 12,
+  /** Flat penalty for a recent ≥2.5h session. */
+  longSessionPen: 8,
+  /** Volume only penalizes above max(absElevatedPerDay, habitFactor × own chronic norm) — habit is not risk. */
+  habitFactor: 1.25,
+  /** Cap on the rest-recovery bonus (supercompensation peak at rest day 3). */
   restRecoveryCap: 25,
+  /** Hard bounds on the whole load delta (critique: unclamped stacking reached −42). */
+  loadDeltaMin: -40,
+  loadDeltaMax: 25,
+
+  // --- objective-performance subscore (perfDelta ∈ [−45, +8]) ---
+
+  /** Games below this duration are excluded from per-10 rates (a 4-minute stomp explodes the denominator). */
+  minPer10Minutes: 6,
+  /** A hero with fewer lifetime games (per account) is "still learning" — excluded from decline detection. */
+  heroLearnGames: 12,
+  /** Minimum baseline games before a stat bucket is trusted at all. */
+  statMinGames: 15,
+  /** Trust ramps linearly from statMinGames to statMinGames + this (no on/off cliff). */
+  statTrustRamp: 5,
+  /** Trailing baseline window per bucket (uncoupled — excludes the acute window). */
+  baseWindowGames: 40,
+  /** SD floor as a fraction of the baseline mean (ultra-consistent stats must not z-blow-up). */
+  sdFloorFrac: 0.15,
+  /** Per-game metric z-scores are winsorized to ±this (one absurd game cannot dominate). */
+  zWinsor: 2.5,
+  /** Fixed metric weights, renormalized over the metrics active for a game. */
+  metricWeights: { damage: 0.3, deaths: 0.3, eliminations: 0.25, healing: 0.15 },
+  /** A metric with a baseline mean below its floor is skipped (e.g. healing on a DPS baseline). */
+  metricSkipMin: { damage: 50, healing: 50, eliminations: 0.5, deaths: 0.5 },
+  /** One-sided CUSUM slack: only game-scores worse than baseline by more than this accumulate. */
+  cusumSlack: 0.25,
+  /** CUSUM decision threshold (in cumulative z units). One winsorized game ≤ 2.25 < this by construction. */
+  cusumThreshold: 2.5,
+  /** Minimum qualifying acute games before the decline index may fire (independent AND-gate). */
+  evidenceMinGames: 8,
+  /** Penalty when the decline index fires, at the threshold... */
+  statPenaltyBase: 10,
+  /** ...plus this per cumulative z unit above the threshold... */
+  statPenaltySlope: 4,
+  /** ...capped here. */
+  statPenaltyCap: 30,
+  /** Minimum decided games in the acute window before an account's winrate dip is trusted. */
+  wrMinDecidedAcute: 20,
+  /** Minimum decided games in the (uncoupled) baseline window before the account's baseline winrate is trusted. */
+  wrMinDecidedBase: 30,
+  /** Winrate dips below this (in winrate fraction) are ordinary variance — no penalty. */
+  wrDipMin: 0.1,
+  /** Penalty slope above the dip floor (dip 0.10 → 5, dip 0.20 → 15). */
+  wrPenaltySlope: 100,
+  /** Cap on the winrate penalty — the named "outcome cap": losses alone can never move the score more than this. */
+  wrPenaltyCap: 15,
+  /** Mean acute game-z above this (with a quiet CUSUM) earns a small "playing above your usual" bonus. */
+  perfBonusMinZ: 0.5,
+  /** Cap on that bonus. */
+  perfBonusCap: 8,
+  /** Role-fallback comparisons need at least this acute-vs-baseline hero-mix overlap (a mix shift is not a decline). */
+  mixOverlapMin: 0.5,
+  /** Hard bounds on the whole performance delta. */
+  perfDeltaMin: -45,
+  perfDeltaMax: 8,
+  /** A session on the reference day with ≥ sessionLongMinutes AND this many games corroborates red (marathon arm). */
+  marathonMinGames: 10,
+
+  // --- subjective subscore (subjDelta ∈ [−15, +8], disagreement-gated) ---
+
+  /** Cap on the continuous tilt penalty (coverage-gated, no elevated-bar cliff). */
+  tiltPenCap: 10,
+  /** Tilt-rate slopes: acuteTilt × this + max(0, acuteTilt − baseTilt) × this. */
+  tiltPenSlope: 8,
+  /** Minimum prior rated games before the player's own slider average is a usable baseline. */
+  sliderMinBase: 10,
+  /** Minimum rated games in the acute window before the slider read is trusted. */
+  sliderMinAcute: 3,
+  /** Slider points below the personal average before the penalty engages. */
+  sliderDipMin: 10,
+  /** Cap on the slider penalty. */
+  sliderPenCap: 8,
+  /** Cap on the slider bonus (rating well above one's own average). */
+  sliderBonCap: 8,
+  /** Hard bounds on the whole subjective delta (the spec's ≤15% hard cap). */
+  subjDeltaMin: -15,
+  subjDeltaMax: 8,
+  /** When subjective agrees with an already-detected objective decline it is mostly double-counting — scale by this. */
+  subjAgreeFactor: 0.3,
+  /** Cap on the "feel great while objectively declining" counter-signal. */
+  subjCounterCap: 4,
+
+  // --- confidence ---
+
+  /** Share of acute games with usable per-10 stats needed (with the other gates) for high confidence. */
+  statCoverageHigh: 0.5,
+  /** Below this stat coverage (with no mental/slider data either) confidence is low. */
+  statCoverageLow: 0.2,
+  /** The largest single account must carry at least this share of the acute window for high confidence. */
+  accountMixBar: 0.7,
+
+  // --- target-focus dampener ---
+
+  /** Minimum DISTINCT graded games in the acute window (N targets on one game = one game of evidence). */
+  dampMinGraded: 5,
+  /** Mean per-game grade credit (hit=1, partial=0.5) at/above this = positive evidence of hitting targets. */
+  dampHitRate: 0.6,
+  /** The fixed dampening factor on the objective-performance penalty. Never stacks, never zeroes the penalty. */
+  dampFactor: 0.5,
 
   /** Days of readiness history plotted on the trend chart. */
   trendDays: 21,

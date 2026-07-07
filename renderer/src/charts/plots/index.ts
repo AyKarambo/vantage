@@ -18,3 +18,5 @@ export { sparkline } from './sparkline';
 export { donutChart } from './donutChart';
 export type { DonutSlice } from './donutChart';
 export { readinessChart, supercompensationSchematic } from './readinessChart';
+export { ratingChart } from './ratingChart';
+export type { RatingPoint } from './ratingChart';

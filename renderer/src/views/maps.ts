@@ -27,10 +27,17 @@ export function maps(ctx: ViewContext): HTMLElement {
         { key: 'winrate', label: 'WR' },
         { key: 'net', label: 'Net' },
         { key: 'games', label: 'Games' },
+        { key: 'rating', label: 'Rtg' },
       ],
-      rows: rankedMaps(d).map((m) => ({
-        map: m.key, winrate: pct(m.winrate), net: signed(m.wins - m.losses), games: m.games,
-      })),
+      // Self-rating joins by map key; empty cells stay '–', never 0 (this table
+      // path has no per-column render, so formatting lives in the row-mapper).
+      rows: rankedMaps(d).map((m) => {
+        const rating = d.performance.byMap.find((b) => b.key === m.key)?.avg;
+        return {
+          map: m.key, winrate: pct(m.winrate), net: signed(m.wins - m.losses), games: m.games,
+          rating: rating !== undefined ? String(rating) : '–',
+        };
+      }),
     }, horizontalBars(rankedMaps(d).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })))),
   );
   // Palette / cross-link entry: scroll to and flash the requested map's bar.

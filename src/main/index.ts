@@ -22,6 +22,7 @@ import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
 import { safeReadiness } from '../core/readiness';
+import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
@@ -444,7 +445,14 @@ function main(): void {
   // player is grinding into the hole. A post-hoc read of stored history only —
   // never touches the game (guardrail 1).
   if (config.readiness.enabled && config.readiness.launchToast) {
-    const readiness = safeReadiness(history.all());
+    // Competitive-only, matching the dashboard's readiness feed (dashboardData.ts:51)
+    // — previously this read the RAW history and could disagree with the dashboard
+    // verdict for quickplay-heavy histories. Active targets feed the dampener.
+    const readiness = safeReadiness(
+      history.all().filter((g) => isCompetitive(g.gameType)),
+      Date.now(),
+      { targets: manual.targets() },
+    );
     if (readiness.band === 'in-the-hole') {
       tray.notify(
         'Readiness: time to rest',

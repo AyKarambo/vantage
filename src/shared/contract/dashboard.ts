@@ -4,7 +4,7 @@
  * renderer bundle can all share it.
  */
 import type { Role, Result } from '../../core/model';
-import type { WinLoss, Group, FocusItem, HeroSummary, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
@@ -118,6 +118,8 @@ export interface DashboardData {
   heroStats: HeroSummary[];
   matches: MatchRow[];
   mental: MentalSummary;
+  /** Self-rated performance rollups over the FILTERED range (issue #44 analytics). */
+  performance: PerformanceStats;
   targets: TargetSummary[];
   /** Ungraded tracked games, newest first — ALWAYS unfiltered (the inbox source). */
   reviewInbox: MatchRow[];
