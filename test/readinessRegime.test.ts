@@ -6,7 +6,7 @@ import { loadState } from '../src/core/readiness/signals';
 import { loadParts } from '../src/core/readiness/score';
 import { computeReadiness } from '../src/core/readiness';
 import { dayOrdinal } from '../src/core/readiness/day';
-import { ts, statSpan, span, CALM } from './readinessFixtures';
+import { ts, statSpan, span, CALM, TILT } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
 
 /** A rest-punctuated history: `perDay` games Mon–Fri each week, weekends off. */
@@ -210,6 +210,27 @@ describe('T5 — promoted results (winrate) ceiling', () => {
     expect(r.regime).toBe('manual');
     expect(r.band).toBe('in-the-hole');
     expect(r.score!).toBeLessThanOrEqual(T.redCut);
+  });
+});
+
+describe('T6 — tilt as the second adverse family unlocks red on a manual grind', () => {
+  it('sustained load + elevated acute tilt (calm baseline) ⇒ in-the-hole', () => {
+    // Heavy manual grind, results at baseline (wins ⇒ no wr dip), but the acute week is tilted while
+    // the baseline was calm — fatigued fires as the independent adverse family alongside the load gate.
+    const games = [
+      ...span(0, 28, { perDay: 12, result: 'Win', mental: CALM }),
+      ...span(29, 35, { perDay: 12, result: 'Win', mental: TILT }),
+    ];
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.regime).toBe('manual');
+    expect(r.subscores.performance.delta).toBe(0); // results are fine — tilt is the second family
+    expect(r.band).toBe('in-the-hole');
+  });
+
+  it('the SAME grind with a calm acute week stays amber (load alone never reds)', () => {
+    const games = span(0, 35, { perDay: 12, result: 'Win', mental: CALM });
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.band).toBe('loaded');
   });
 });
 

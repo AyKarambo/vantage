@@ -158,7 +158,7 @@ export function computeStateAt(
   const mental = mentalState(upTo, lastActiveOrdinal);
   const outcome = outcomeState(upTo, lastActiveOrdinal);
   const perf = perfState(upTo, lastActiveOrdinal, ctx, mental.fatigued);
-  const subj = subjState(upTo, lastActiveOrdinal, mental, perf.objectiveAdverse);
+  const subj = subjState(upTo, lastActiveOrdinal, mental, perf.objectiveAdverse, perf.blend);
   const heavy = (load.sustainedLoad && mental.fatigued) || load.highLoad || mental.fatigued;
   const marathonSession = detectSessions(upTo).some(
     (s) => s.endOrdinal === lastActiveOrdinal && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
