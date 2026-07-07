@@ -565,10 +565,8 @@ function numField(value: string, onChange: (v: string) => void): HTMLInputElemen
 }
 
 function diagnosticsCard(): HTMLElement {
-  const about = h('div', { class: 'hint', style: { marginTop: '10px' } }, '');
-  void bridge.getAppInfo().then((info) => {
-    render(about, `Vantage ${info.version} · support: ${info.supportEmail}`);
-  });
+  // Version + build facts + support live on the About screen (single source of
+  // truth); this card just links there.
   return card({ title: 'Diagnostics', sub: 'the release debug log' },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' } },
       logLevelToggle(),
@@ -579,6 +577,11 @@ function diagnosticsCard(): HTMLElement {
     ),
     h('div', { class: 'hint', style: { marginTop: '8px' } },
       'Every build writes a rotating log — GEP lifecycle, match pipeline, sync results. Tokens are never logged.'),
-    about,
+    h('div', { style: { marginTop: '10px' } },
+      h('button', {
+        class: 'btn btn--ghost',
+        on: { click: () => store.setView('about') },
+      }, 'About Vantage →'),
+    ),
   );
 }

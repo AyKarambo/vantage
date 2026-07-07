@@ -31,6 +31,7 @@ import { notion } from '../views/notion';
 import { review } from '../views/review';
 import { logViewer } from '../views/logViewer';
 import { settings } from '../views/settings';
+import { about } from '../views/about';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { openLogMatch } from './log-match';
@@ -41,12 +42,12 @@ import { openDataLocationPrompt } from './dataLocationPrompt';
 
 // matchDetail is a parameterized view: registered here (routable) but not in
 // NAV — the sidebar keeps Matches highlighted while it is active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings };
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
  *  unaffected by it, so showing the bar would imply a control that does nothing. */
-const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness']);
+const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about']);
 
 interface NavItem {
   id: ViewId;
@@ -85,6 +86,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: 'App',
     items: [
       { id: 'settings', label: 'Settings', icon: '⚙' },
+      { id: 'about', label: 'About', icon: 'ⓘ' },
     ],
   },
 ];

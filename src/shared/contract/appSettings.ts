@@ -16,6 +16,20 @@ export interface AppUiSettings {
 export interface AppInfo {
   version: string;
   supportEmail: string;
+  /** Electron / ow-electron runtime version (process.versions.electron). */
+  electron: string;
+  /** Chromium version behind the renderer (process.versions.chrome). */
+  chromium: string;
+  /** Node.js version in the main process (process.versions.node). */
+  node: string;
+  /** V8 engine version (process.versions.v8). */
+  v8: string;
+  /** OS platform id (process.platform, e.g. 'win32'). */
+  platform: string;
+  /** OS release string (os.release()). */
+  osRelease: string;
+  /** True for an installed/packaged build, false in dev and the browser preview. */
+  packaged: boolean;
 }
 
 /** Where Vantage's data folder (DB + manual data + screenshots) currently lives (Settings screen). */

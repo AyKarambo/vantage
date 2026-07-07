@@ -555,7 +555,21 @@ const mock: OwStatsApi = {
     save(APP_SETTINGS_KEY, appSettings);
     return appSettings;
   },
-  getAppInfo: async () => ({ version: 'preview', supportEmail: 'timo.seikel@gmail.com' }),
+  getAppInfo: async () => ({
+    version: 'preview',
+    supportEmail: 'timo.seikel@gmail.com',
+    electron: 'preview',
+    chromium: 'preview',
+    node: 'preview',
+    v8: 'preview',
+    platform: 'browser',
+    osRelease: 'preview',
+    packaged: false,
+  }),
+  openExternal: async (url: string) => {
+    // No shell in the browser harness — echo the intent so links stay debuggable.
+    console.info('[preview] openExternal', url);
+  },
   getDataLocation: async () => ({
     folder: previewDataFolder,
     isDefault: previewDataFolderIsDefault,
