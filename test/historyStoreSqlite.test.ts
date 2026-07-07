@@ -50,6 +50,19 @@ describe('HistoryStore (SQLite) — core interface', () => {
     expect(h.all()[0].map).toBe('Nepal');
   });
 
+  it('editManual sets, updates, clears (null) and leaves (undefined) performance', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'a' }));
+    expect(h.editManual('a', { performance: 72 })).toBe(true);
+    expect(h.all()[0].performance).toBe(72);
+    h.editManual('a', { performance: 90 });
+    expect(h.all()[0].performance).toBe(90);
+    h.editManual('a', { map: 'Nepal' }); // unrelated patch key leaves performance untouched
+    expect(h.all()[0].performance).toBe(90);
+    h.editManual('a', { performance: null });
+    expect(h.all()[0].performance).toBeUndefined();
+  });
+
   it('addScreenshots appends, and is false for unknown id or empty list', () => {
     const h = open(tmp());
     h.add(g({ matchId: 'a', screenshots: ['one.png'] }));

@@ -42,6 +42,7 @@ export function matchDetail(
     source: sourceOf(game),
     srDelta: game.srDelta,
     durationMinutes: game.durationMinutes,
+    performance: game.performance,
     finalScore: game.finalScore,
     heroes: game.heroes,
     perHero: game.perHero ?? [],

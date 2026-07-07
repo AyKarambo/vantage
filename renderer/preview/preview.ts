@@ -19,7 +19,7 @@ import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters } from '../../src/core/dashboardData';
-import { heroDetail } from '../../src/core/analytics';
+import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
@@ -375,6 +375,7 @@ const mock: OwStatsApi = {
       heroes: input.heroes ?? (input.hero ? [input.hero] : []),
       mental: input.mental,
       ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
+      ...(input.performance != null ? { performance: input.performance } : {}),
     });
     save(LOGGED_KEY, logged);
     if (grades) {
@@ -399,6 +400,10 @@ const mock: OwStatsApi = {
     if (input.srDelta !== undefined) {
       if (input.srDelta === null) delete patch.srDelta;
       else patch.srDelta = input.srDelta;
+    }
+    if (input.performance !== undefined) {
+      if (input.performance === null) delete patch.performance;
+      else patch.performance = input.performance;
     }
     previewEdits[input.matchId] = patch;
     save(EDITS_KEY, previewEdits);
@@ -436,6 +441,20 @@ const mock: OwStatsApi = {
     return accountList();
   },
   getRanks: async () => previewRanks(),
+  mostPlayedHeroes: async () => {
+    const games = dataset();
+    const roles: Role[] = ['tank', 'damage', 'support', 'openQ'];
+    const out: Record<string, Partial<Record<Role, string[]>>> = {};
+    for (const account of new Set(games.map((g) => g.account))) {
+      const perRole: Partial<Record<Role, string[]>> = {};
+      for (const role of roles) {
+        const names = rankHeroesByPlays(games, account, role);
+        if (names.length) perRole[role] = names;
+      }
+      if (Object.keys(perRole).length) out[account] = perRole;
+    }
+    return out;
+  },
   setRankAnchor: async (input: RankAnchorInput) => {
     previewAnchors[rankKey(input.account, input.role)] = {
       account: input.account, role: input.role,
@@ -467,6 +486,10 @@ const mock: OwStatsApi = {
   saveReview: async (input: ReviewInput) => {
     previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.flags };
     save(REVIEWS_KEY, previewReviews);
+    if (input.performance !== undefined) {
+      previewEdits[input.matchId] = { ...previewEdits[input.matchId], performance: input.performance };
+      save(EDITS_KEY, previewEdits);
+    }
   },
   importReviews: async (inputs: ReviewInput[]) => {
     const known = new Set(dataset().map((g) => g.matchId));

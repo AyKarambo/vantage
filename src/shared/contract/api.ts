@@ -14,6 +14,7 @@ import type {
 } from './notion';
 import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
+import type { Role } from '../../core/model';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
@@ -41,6 +42,8 @@ export interface OwStatsApi {
   deleteAccount(battleTag: string): Promise<AccountSummary[]>;
   /** Computed current rank for each anchored (account, role). */
   getRanks(): Promise<RankSummary[]>;
+  /** Per-account, per-role most-played hero names (desc by play count) — the Log Match shortlist. */
+  mostPlayedHeroes(): Promise<Record<string, Partial<Record<Role, string[]>>>>;
   /** Set (or replace) the one-time rank anchor for an (account, role). */
   setRankAnchor(input: RankAnchorInput): Promise<RankSummary[]>;
   /** Pull matches from the configured Notion Gametracker database into history. */
@@ -175,6 +178,7 @@ export const IPC_CHANNELS = {
   saveAccount: 'accounts:save',
   deleteAccount: 'accounts:delete',
   getRanks: 'rank:list',
+  mostPlayedHeroes: 'hero:most-played',
   setRankAnchor: 'rank:set-anchor',
   importNotion: 'notion:import',
   deleteImportedMatches: 'notion:delete-imported',

@@ -5,6 +5,7 @@
  */
 import type { DashboardFilters } from '../../src/shared/contract';
 import { migrateLegacySeasonDays } from '../../src/core/season';
+import type { WinrateScheme } from './winrateScheme';
 
 export interface HeroSortPref {
   key: string;
@@ -51,13 +52,31 @@ interface PrefsShape {
   filterPresets: FilterPresetPref[];
   /** Day-key of the last session recap shown (one per day). */
   recapShown: string;
-  /** Colorblind-safe palette toggle. */
-  colorblind: boolean;
+  /** Active winrate colour scheme (Appearance). Applied at bundle load in `theme.ts`. */
+  winrateScheme: WinrateScheme;
+  /**
+   * @deprecated Superseded by {@link winrateScheme}. Retained read-only so the
+   * one-time migration in `theme.ts` (`resolveWinrateScheme`) can map a legacy
+   * `true` to the `colorblind` scheme; never written anymore.
+   */
+  colorblind?: boolean;
   /** Matches-list per-field display mode, merged over `MATCH_COLUMNS_DEFAULT`. */
   matchColumns: MatchColumnsPref;
+  /** How many "most played" heroes the Log Match hero picker shortlists (default 6, clamped 3-15). */
+  suggestedHeroCount: number;
 }
 
 const PREFIX = 'vantagePref.';
+
+/** Default suggested-hero-count when the user hasn't set one. */
+export const DEFAULT_SUGGESTED_HEROES = 6;
+const SUGGESTED_HEROES_MIN = 3;
+const SUGGESTED_HEROES_MAX = 15;
+
+/** Clamp a suggested-hero-count input to the supported range. */
+export function clampSuggestedHeroCount(n: number): number {
+  return Math.min(SUGGESTED_HEROES_MAX, Math.max(SUGGESTED_HEROES_MIN, Math.round(n)));
+}
 
 /**
  * Strip legacy `mode`/`account` keys a preset may still carry from before

@@ -1,4 +1,5 @@
 import type { GameRecord } from '../../core/analytics';
+import type { Role } from '../../core/model';
 import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSettings } from '../../core/readiness';
@@ -47,6 +48,8 @@ export interface DataProvider {
   deleteAccount(battleTag: string): AccountSummary[];
   /** Computed current rank for each anchored (account, role). */
   getRanks(): RankSummary[];
+  /** Per-account, per-role most-played hero names (desc by play count), over the full unfiltered history. */
+  mostPlayedHeroes(): Record<string, Partial<Record<Role, string[]>>>;
   /** Set (or replace) the one-time rank anchor for an (account, role); returns the ranks. */
   setRankAnchor(input: RankAnchorInput): RankSummary[];
   /** Anchors keyed for the rank engine, passed into the match-detail read. */

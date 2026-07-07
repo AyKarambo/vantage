@@ -14,6 +14,9 @@ export {
 // Per-hero stat rollups
 export { heroStats } from './heroStats';
 
+// Most-played-heroes ranking (Log Match hero-picker shortlist)
+export { mostPlayedHeroes } from './heroSuggestions';
+
 // Session, streak & drill-down reads
 export { streak, latestSession, calendar, heroDetail, groupByDay, sessionRecap } from './session';
 export type { DayGroup, SessionRecap } from './session';

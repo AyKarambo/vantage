@@ -129,6 +129,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.deleteAccount, (_e, battleTag: string) => provider.deleteAccount(battleTag));
   handle(ch.getRanks, () => provider.getRanks());
   handle(ch.setRankAnchor, (_e, input: RankAnchorInput) => provider.setRankAnchor(input));
+  handle(ch.mostPlayedHeroes, () => provider.mostPlayedHeroes());
 
   // Notion import (pull) + wipe-for-re-import.
   handle(ch.importNotion, () => provider.importNotion());
