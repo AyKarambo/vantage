@@ -55,6 +55,14 @@ export interface MatchEditInput {
   mental?: MatchMental;
   /** New SR %, or `null` to clear it; `undefined` leaves it unchanged. */
   srDelta?: number | null;
+  /**
+   * Absolute rank held AFTER this match (the editor's "Set current rank" mode).
+   * Main back-computes the match's `srDelta` from it against the reconstructed
+   * rank-before; when no anchor exists yet it bootstraps one at this match
+   * instead. Ignored for non-competitive matches. Takes precedence over
+   * {@link srDelta} when both are provided.
+   */
+  setRank?: { tier: string; division: number; progressPct: number };
   /** New performance rating (0-100), or `null` to clear it; `undefined` leaves it unchanged. */
   performance?: number | null;
   grades?: Record<string, TargetGrade>;

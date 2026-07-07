@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { matchDetail } from '../src/core/matchDetail';
 import { generateSampleGames } from '../src/core/sampleData';
+import { rankKey, type RankAnchorMap } from '../src/core/rank';
 import type { GameRecord } from '../src/core/analytics';
 
 /** The bare minimum a legacy history.json record can contain. */
@@ -94,6 +95,29 @@ describe('matchDetail degradation contract', () => {
     expect(matchDetail(all, 'c-1', [target])!.competitive?.tier).toBe('Champion');
     // Context = the whole history (4 losses + 1 win up to the target) → far lower tier.
     expect(matchDetail(all, 'c-1', all)!.competitive?.tier).not.toBe('Champion');
+  });
+
+  it('per-match rank note: calculated forward, reconstructed backward, estimate without an anchor', () => {
+    const anchors: RankAnchorMap = {
+      [rankKey('Main', 'damage')]: { tier: 'Gold', division: 3, progressPct: 40, setAt: 100 },
+    };
+    const all = [
+      minimal({ matchId: 'pre', timestamp: 50, result: 'Win', srDelta: 20 }),
+      minimal({ matchId: 'pre2', timestamp: 80, result: 'Loss', srDelta: -10 }),
+      minimal({ matchId: 'post', timestamp: 150, result: 'Win', srDelta: 20 }),
+    ];
+
+    // Match after the anchor → forward replay, 'calculated'.
+    expect(matchDetail(all, 'post', all, anchors)!.competitive).toMatchObject({
+      note: 'calculated', tier: 'Gold', division: 3, progressPct: 60, // 40 + 20
+    });
+    // Match before the anchor → backward reconstruction, 'reconstructed', and it
+    // reflects its then-rank (Gold 3 50 = anchor − the −10 loss at pre2), not the anchor.
+    expect(matchDetail(all, 'pre', all, anchors)!.competitive).toMatchObject({
+      note: 'reconstructed', tier: 'Gold', division: 3, progressPct: 50,
+    });
+    // No anchor → the winrate estimate.
+    expect(matchDetail(all, 'post', all, {})!.competitive!.note).toBe('estimate');
   });
 
   it('surfaces the saved review (grades + flags) so the editor can pre-fill, or undefined when ungraded', () => {

@@ -10,7 +10,8 @@ import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
-import { currentRank, type RankAnchorMap } from '../core/rank';
+import { currentRank, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
+import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
 import type { Role } from '../core/model';
@@ -178,7 +179,38 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // The manual layer applies to any match. srDelta: number sets it, null
       // clears it (editManual deletes on null), undefined leaves it unchanged.
       if (input.mental !== undefined) patch.mental = input.mental;
-      if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
+      // Competitive rank input: either a direct srDelta (Change mode) or an
+      // absolute "rank after this match" (Set-current mode) we back-compute a
+      // srDelta from. setRank wins over srDelta when both are present.
+      if (classifyGameType(game.gameType) === 'competitive' && input.setRank) {
+        // Rank is tracked per (account, role) — key the back-compute/anchor on the
+        // role the match will actually LAND on (a manual edit can change role in the
+        // same save), not the pre-edit role, so the derived srDelta/anchor go onto
+        // the correct ladder.
+        const rankRole = patch.role ?? game.role;
+        const anchor = deps.rankAnchors.get(game.account, rankRole);
+        if (anchor) {
+          // Derive the SR % from the entered rank and the reconstructed rank
+          // before this match; the live anchor is left untouched.
+          patch.srDelta = srDeltaForSetRank(
+            deps.history.all(), deps.rankAnchors.map(), game.account, rankRole, game.timestamp, input.setRank,
+          );
+        } else {
+          // No anchor yet → bootstrap one at this match (nothing before it to diff
+          // against, so no srDelta is derived) — mirrors log-match's "no anchor →
+          // Set current rank establishes the anchor".
+          deps.rankAnchors.set({
+            account: game.account,
+            role: rankRole,
+            tier: input.setRank.tier,
+            division: input.setRank.division,
+            progressPct: input.setRank.progressPct,
+            setAt: game.timestamp,
+          });
+        }
+      } else if (input.srDelta !== undefined) {
+        patch.srDelta = input.srDelta;
+      }
       if (input.performance !== undefined) patch.performance = input.performance;
       // Only stamp a review when there are grades — an edit with no targets
       // shouldn't mark an otherwise-ungraded match as reviewed.

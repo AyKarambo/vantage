@@ -15,8 +15,11 @@ import { badge, button, select, segmented } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { typeahead } from '../components/typeahead';
 import { targetGradeRow } from '../components/reviewControls';
+import { resultChooser } from '../components/resultChooser';
+import { commsSwitch } from '../components/commsSwitch';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
+import { attachWheelNudge } from './wheelStepper';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
@@ -27,12 +30,6 @@ import type { ViewContext } from '../views/view';
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy'];
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 const DIVISIONS = [5, 4, 3, 2, 1];
-/** The comms switch options, in switch order, with their colour modifier class. */
-const COMMS_OPTIONS: Array<{ value: CommsTone; label: string; cls: string }> = [
-  { value: 'positive', label: 'Positive', cls: 'pos' },
-  { value: 'banter', label: 'Banter', cls: 'banter' },
-  { value: 'abusive', label: 'Abusive', cls: 'abusive' },
-];
 
 /** The SR-entry mode: nudge the change (±%) or set the current rank outright. */
 type SrMode = 'change' | 'set-current';
@@ -258,15 +255,17 @@ function buildForm(
     ),
   );
 
-  const resultRow = choiceRow(['Win', 'Loss', 'Draw'], state.result, {
-    Win: 'win', Loss: 'loss', Draw: 'draw',
-  }, (v) => {
-    state.result = v as Result;
-    // Re-preset the SR delta from the result, but only while the player hasn't
-    // touched it — a manual value must survive a result change.
-    if (!state.srEdited) state.srDelta = presetFor(state.result);
-    paintRank();
-  }, { Win: 'W', Loss: 'L', Draw: 'D' });
+  const resultRow = resultChooser({
+    value: state.result,
+    keys: true,
+    onChange: (v) => {
+      state.result = v;
+      // Re-preset the SR delta from the result, but only while the player hasn't
+      // touched it — a manual value must survive a result change.
+      if (!state.srEdited) state.srDelta = presetFor(state.result);
+      paintRank();
+    },
+  });
 
   const accountField = field('Account',
     // Account scopes both the rank (per account+role) and the hero-picker
@@ -417,20 +416,10 @@ function buildForm(
   );
 
   // Comms tone: a single-select colour switch (green/yellow/red). Clicking the
-  // active option again clears it — comms stays optional.
-  const commsSwitch = h('div', { class: 'segmented segmented--fill comms-switch' });
-  const commsButtons = COMMS_OPTIONS.map((opt) => {
-    const btn = h('button',
-      { class: `segmented-opt comms-opt comms-opt--${opt.cls}${state.comms === opt.value ? ' is-on' : ''}` }, opt.label);
-    btn.addEventListener('click', () => {
-      state.comms = state.comms === opt.value ? null : opt.value;
-      for (const b of commsButtons) b.classList.remove('is-on');
-      if (state.comms) btn.classList.add('is-on');
-    });
-    return btn;
-  });
-  commsSwitch.append(...commsButtons);
-  const commsBlock = field(optionalLabel('Comms', '— how team comms felt'), commsSwitch);
+  // active option again clears it — comms stays optional. Shared with the editor
+  // and Review via the commsSwitch component.
+  const commsBlock = field(optionalLabel('Comms', '— how team comms felt'),
+    commsSwitch({ get: () => state.comms, set: (t) => { state.comms = t; } }));
 
   const targetsBlock = activeTargets.length
     ? field(
@@ -560,46 +549,6 @@ function numInput(value: string, placeholder: string, onChange: (v: string) => v
     class: 'vt-input mono', type: 'number', step: '1', value, placeholder,
     on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
   }) as HTMLInputElement;
-}
-
-/**
- * Mouse-wheel ±1-per-tick nudge for a numeric text field, shared by the SR
- * delta field and the rank-anchor % field. `passive:false` + preventDefault so
- * the modal doesn't scroll while the pointer is over the field.
- */
-function attachWheelNudge(el: HTMLInputElement, get: () => string, set: (v: string) => void): void {
-  el.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const next = String((Number(get()) || 0) + (e.deltaY < 0 ? 1 : -1));
-    set(next);
-    el.value = next;
-  }, { passive: false });
-}
-
-/** A row of large colour-coded choices (Result), with optional single-key hints. */
-function choiceRow(
-  options: string[],
-  initial: string | null,
-  state: Record<string, 'win' | 'loss' | 'mid' | 'draw'>,
-  onPick: (value: string) => void,
-  keys?: Record<string, string>,
-): HTMLElement {
-  const row = h('div', { style: { display: 'flex', gap: '8px' } });
-  const buttons = options.map((opt) => {
-    const btn = h('button', { class: `choice choice--${state[opt]}${opt === initial ? ' is-active' : ''}` },
-      opt,
-      keys?.[opt] ? h('span', { class: 'kbd', style: { marginLeft: '7px', fontSize: '9.5px', opacity: '0.7' } }, keys[opt]) : null,
-    );
-    btn.dataset.value = opt;
-    btn.addEventListener('click', () => {
-      for (const b of buttons) b.classList.remove('is-active');
-      btn.classList.add('is-active');
-      onPick(opt);
-    });
-    return btn;
-  });
-  row.append(...buttons);
-  return row;
 }
 
 /** Compact segmented choice (Role, Mode). */

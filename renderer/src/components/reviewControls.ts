@@ -7,6 +7,7 @@
  */
 import { h } from '../dom';
 import { commsTone } from '../../../src/core/comms';
+import { commsSwitch } from './commsSwitch';
 import type { MatchMental, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 
 const GRADES: Array<{ v: TargetGrade; label: string; bg: string; fg: string }> = [
@@ -69,16 +70,27 @@ const FLAGS: Array<{ label: string; key: BoolFlagKey }> = [
 ];
 
 /**
- * The mental-flag chips, seeded from (and toggling) the caller's `flags`. Comms
- * is a three-state tone (positive / banter / abusive) captured on the log card;
- * here it keeps a binary "Good comms" chip that maps to `comms:'positive'` and
- * leaves any banter/abusive tone intact when untouched (the row can't downgrade
- * it, but it must never silently discard the toggle or lose the stored tone).
+ * The mental-flag chips + the three-state comms switch, seeded from (and
+ * toggling) the caller's `flags`. Comms is the full Positive / Banter / Abusive
+ * tone (the same {@link commsSwitch} the log card uses), reading through
+ * `commsTone` so a legacy `positiveComms`/`comms:'positive'` record shows
+ * selected and clearing the legacy boolean whenever it writes, so the tone stays
+ * the single source of truth. Shared by the match-detail editor and Review.
  */
 export function mentalFlagsRow(flags: MatchMental): HTMLElement {
-  return h('div', { class: 'review-flags' },
-    ...FLAGS.map((f) => flagChip(f.label, flags, f.key)),
-    goodCommsChip(flags),
+  return h('div', { class: 'stack', style: { gap: '10px' } },
+    h('div', { class: 'review-flags' }, ...FLAGS.map((f) => flagChip(f.label, flags, f.key))),
+    h('div', null,
+      h('div', { class: 'field-label', style: { marginBottom: '6px' } }, 'Comms'),
+      commsSwitch({
+        get: () => commsTone(flags) ?? null,
+        set: (t) => {
+          if (t) flags.comms = t;
+          else delete flags.comms;
+          delete flags.positiveComms; // the tone is authoritative from here on
+        },
+      }),
+    ),
   );
 }
 
@@ -88,24 +100,5 @@ function flagChip(label: string, flags: MatchMental, key: BoolFlagKey): HTMLElem
     on: { click: () => { flags[key] = !flags[key]; btn.classList.toggle('is-on', Boolean(flags[key])); } },
   }, label);
   if (flags[key]) btn.classList.add('is-on');
-  return btn;
-}
-
-/**
- * The binary "Good comms" chip, operating on the three-state comms tone: ON sets
- * `comms:'positive'`; OFF clears a positive tone. It reads the tone through
- * `commsTone` (so a legacy `positiveComms` record shows on) and clears the legacy
- * boolean whenever it writes, so the tone stays the single source of truth.
- */
-function goodCommsChip(flags: MatchMental): HTMLElement {
-  const btn = h('button', { class: 'chip' }, 'Good comms');
-  const paint = (): void => { btn.classList.toggle('is-on', commsTone(flags) === 'positive'); };
-  btn.addEventListener('click', () => {
-    if (commsTone(flags) === 'positive') delete flags.comms;
-    else flags.comms = 'positive';
-    delete flags.positiveComms; // the tone is authoritative from here on
-    paint();
-  });
-  paint();
   return btn;
 }

@@ -5,7 +5,7 @@ import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './master
 import { progression } from './progression';
 import { classifyGameType } from './matchFilter';
 import { sourceOf } from './source';
-import { currentRank, type RankAnchorMap } from './rank';
+import { rankAfterMatch, rankKey, type RankAnchorMap } from './rank';
 import { resolveRole } from './resolvers/role';
 import { playerHistory } from './playerIndex';
 
@@ -110,11 +110,14 @@ function competitiveOf(
 ): MatchDetail['competitive'] {
   if (classifyGameType(game.gameType) !== 'competitive') return undefined;
 
-  // Preferred: the calculated rank as of this match, from the anchor timeline.
-  const rank = currentRank(all, anchors, game.account, game.role, game.timestamp);
-  if (rank) {
+  // Preferred: the rank as of this match, from the anchor timeline. A match
+  // at/after the anchor is forward-replayed ('calculated'); an older one is
+  // reconstructed backward from the anchor ('reconstructed', best-effort).
+  const anchor = anchors[rankKey(game.account, game.role)];
+  const rank = rankAfterMatch(all, anchors, game.account, game.role, game.timestamp);
+  if (rank && anchor) {
     return {
-      note: 'calculated',
+      note: game.timestamp >= anchor.setAt ? 'calculated' : 'reconstructed',
       tier: rank.tier,
       division: rank.division,
       progressPct: rank.needsReanchor ? undefined : rank.progressPct,

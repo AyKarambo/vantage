@@ -72,16 +72,18 @@ export interface MatchDetail {
   /** Grouped by `team` in the renderer; absent → local-row-only fallback. */
   scoreboard?: ScoreboardEntry[];
   /**
-   * Competitive progress. 'calculated' = derived from the user's rank anchor +
-   * logged SR deltas (the real path once an anchor exists); 'estimate' = the
-   * winrate heuristic fallback; 'reported' is reserved for a future GEP upgrade.
+   * Competitive progress. 'calculated' = forward-replayed from the user's rank
+   * anchor + logged SR deltas for a match at/after the anchor; 'reconstructed' =
+   * the same anchor walked backward for a match older than it (best-effort);
+   * 'estimate' = the winrate heuristic fallback when no anchor exists; 'reported'
+   * is reserved for a future GEP upgrade.
    * `progressPct` is 0–100 within the division, except it can go negative while
    * `protected` is true — the rank-protection buffer's carry (calculated), matching the
    * live client's own negative display. `delta` is signed %-points.
    * `protected`/`needsReanchor` describe the rank-protection state (calculated).
    */
   competitive?: {
-    note: 'estimate' | 'reported' | 'calculated';
+    note: 'estimate' | 'reported' | 'calculated' | 'reconstructed';
     tier?: string;
     division?: number;
     progressPct?: number;
