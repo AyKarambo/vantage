@@ -179,6 +179,40 @@ describe('T4 — absolute-load arm (the core manual-regime lever)', () => {
   });
 });
 
+describe('T5 — promoted results (winrate) ceiling', () => {
+  // Base wins → acute losses ⇒ a deep, sample-adequate winrate dip. Same shape stats-rich vs manual.
+  const manualDip = [
+    ...span(0, 28, { perDay: 12, result: 'Win', mental: CALM }),
+    ...span(29, 35, { perDay: 12, result: 'Loss', mental: CALM }),
+  ];
+  const statsDip = [
+    ...statSpan(0, 28, { perDay: 12, result: 'Win', mental: CALM }),
+    ...statSpan(29, 35, { perDay: 12, result: 'Loss', mental: CALM }),
+  ];
+
+  it('manual regime lifts the winrate penalty above the shipped cap (up to 30)', () => {
+    const p = perfState(manualDip, refOf(manualDip), EMPTY_CONTEXT, false);
+    expect(p.blend).toBe(0);
+    expect(p.wrPenalty).toBeGreaterThan(T.wrPenaltyCap); // promoted beyond 15
+    expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap + T.wrManualCapBoost); // ≤ 30
+    expect(p.objectiveAdverse).toBe(true);
+  });
+
+  it('b=1: the same dip stays capped at the shipped 15 (bit-identical corroboration role)', () => {
+    const p = perfState(statsDip, refOf(statsDip), EMPTY_CONTEXT, false);
+    expect(p.blend).toBe(1);
+    expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap); // ≤ 15
+    expect(p.wrPenalty).toBeGreaterThan(0); // the dip still fired
+  });
+
+  it('two adverse families (sustained load + results dip) ⇒ red reachable in the manual regime', () => {
+    const r = computeReadiness(manualDip, ts(35, 20));
+    expect(r.regime).toBe('manual');
+    expect(r.band).toBe('in-the-hole');
+    expect(r.score!).toBeLessThanOrEqual(T.redCut);
+  });
+});
+
 describe('R1 — onboarding trust ramp: b rises smoothly as a baseline crosses the trust floor (no cliff)', () => {
   // A single-hero stats history: K acute games on the last day, N comparable baseline games before
   // the acute window. As N crosses trustFor's floor (n 15→20), blend must RAMP, not cliff-jump the

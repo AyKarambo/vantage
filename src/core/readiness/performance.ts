@@ -207,9 +207,14 @@ export function perfState(
     dipWeight += acuteDecided;
   }
   const wrDip = dipWeight > 0 ? dipWeighted / dipWeight : null;
+  // Manual regime PROMOTES the results arm — cap only. The ceiling lerps 15 → 30 by (1−b); the
+  // firing threshold (wrDipMin) and slope (wrPenaltySlope) stay regime-invariant, so `objectiveAdverse`
+  // never flips with b and ordinary winrate noise never reddens (only a genuinely deep, sustained dip
+  // reaches the promoted ceiling). At b=1: cap = wrPenaltyCap exactly ⇒ bit-identical.
+  const wrCap = T.wrPenaltyCap + T.wrManualCapBoost * (1 - blend);
   const wrPenalty =
     wrDip !== null && wrDip >= T.wrDipMin
-      ? Math.min(T.wrPenaltyCap, (wrDip - 0.05) * T.wrPenaltySlope)
+      ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope)
       : 0;
 
   // --- target-focus dampener (deliberate-practice exemption) ---
