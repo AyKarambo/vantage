@@ -106,4 +106,89 @@ describe('editMatch — hero list', () => {
     provider.editMatch({ matchId: 'manual-1', hero: 'Widowmaker' });
     expect(patches[0].heroes).toEqual(['Widowmaker']);
   });
+
+  it('sets performance, and null clears it', () => {
+    const { provider, patches } = editHarness(manualGame(['Tracer']));
+    provider.editMatch({ matchId: 'manual-1', performance: 65 });
+    expect(patches[0].performance).toBe(65);
+    provider.editMatch({ matchId: 'manual-1', performance: null });
+    expect(patches[1].performance).toBeNull();
+  });
+
+  it('leaves performance untouched when omitted', () => {
+    const { provider, patches } = editHarness(manualGame(['Tracer']));
+    provider.editMatch({ matchId: 'manual-1', map: 'Nepal' });
+    expect(patches[0]).not.toHaveProperty('performance');
+  });
+});
+
+describe('logMatch — performance', () => {
+  it('stores a performance rating when given', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input({ performance: 88 }));
+    expect(recorded[0].performance).toBe(88);
+  });
+
+  it('omits performance when not given', () => {
+    const { provider, recorded } = harness();
+    provider.logMatch(input());
+    expect(recorded[0].performance).toBeUndefined();
+  });
+});
+
+describe('saveReview — performance', () => {
+  function reviewHarness() {
+    const reviews: Array<{ matchId: string; grades: unknown; flags: unknown }> = [];
+    const patches: Array<{ matchId: string; patch: Partial<GameRecord> }> = [];
+    const deps = {
+      history: {
+        setReview: (matchId: string, review: { grades: unknown; flags: unknown }) => {
+          reviews.push({ matchId, ...review });
+        },
+        editManual: (matchId: string, patch: Partial<GameRecord>) => { patches.push({ matchId, patch }); },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    return { provider: createDataProvider(deps), reviews, patches };
+  }
+
+  it('patches performance alongside the review when given', () => {
+    const { provider, patches } = reviewHarness();
+    provider.saveReview({ matchId: 'm1', grades: {}, flags: {}, performance: 40 });
+    expect(patches).toEqual([{ matchId: 'm1', patch: { performance: 40 } }]);
+  });
+
+  it('does not touch performance when omitted', () => {
+    const { provider, patches } = reviewHarness();
+    provider.saveReview({ matchId: 'm1', grades: {}, flags: {} });
+    expect(patches).toEqual([]);
+  });
+});
+
+describe('mostPlayedHeroes', () => {
+  it('ranks per account/role over the full history', () => {
+    const games: GameRecord[] = [
+      { matchId: '1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: ['Tracer'] },
+      { matchId: '2', timestamp: 2, account: 'Main', role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: ['Tracer'] },
+      { matchId: '3', timestamp: 3, account: 'Main', role: 'damage', map: 'Ilios', result: 'Loss', gameType: 'Competitive', heroes: ['Genji'] },
+    ];
+    const deps = {
+      history: { all: () => games },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    const provider = createDataProvider(deps);
+    // openQ aggregates across every recorded role for the account — here that's
+    // the same games as 'damage' since all three were logged as damage.
+    expect(provider.mostPlayedHeroes()).toEqual({
+      Main: { damage: ['Tracer', 'Genji'], openQ: ['Tracer', 'Genji'] },
+    });
+  });
+
+  it('returns an empty object for no history', () => {
+    const deps = {
+      history: { all: () => [] },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    expect(createDataProvider(deps).mostPlayedHeroes()).toEqual({});
+  });
 });

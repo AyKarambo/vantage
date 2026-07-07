@@ -53,31 +53,37 @@ comms · toxicity · leavers · your improvement target).
   verdict card opens a modal with the full methodology (verdict bands, signals, the training-load
   model, the supercompensation model and its schematic, confidence levels, and the honesty
   disclaimer).
-- **Review** — grade your active improvement targets (Hit / Partial / Missed) and flag
-  how each tracked game felt; an always-visible inbox of ungraded games, independent of
-  the global filters.
+- **Review** — grade your active improvement targets (Hit / Partial / Missed), flag
+  how each tracked game felt, and rate your own **performance** on a 0-100 slider; an
+  always-visible inbox of ungraded games, independent of the global filters.
 - **Improvement Target** — build a target (self-rated ◎ or measured ⚡), or start from a
   **curated template** (trade discipline, ult economy, comms, warm-up, replay review); choose
   which targets are active (graded on Review), edit or archive/delete them, and track a
   library that shows whether hitting it actually moves your winrate. The **Focus** screen can
   create a map-practice target for a losing map in one click (**＋ target**).
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
-  `W`/`L`/`D` picks the result, the **map is a typeahead** with your recent picks listed first,
-  `Enter` saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's
-  the same sitting). Forgot to log during the session? The **Played** chips backfill a game
-  30 min / 1 h / 2 h into the past so session analytics stay honest. Pick the **account** and
-  **role** (Tank / Damage / Support / **Open Queue**); the **hero picker is a chip grid filtered by
-  that role** (Open Queue shows every hero) so you can **tap all the heroes you played** in the
-  game. Every logged match is competitive, so there's no mode picker. The **skill-rating** field
-  **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge** (±1) —
-  or flip it to **"Set current rank"** to enter your rank directly and let Vantage work out the
-  change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
-  Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy),
-  set the **comms** tone on a colour switch (**positive / banter / abusive**), and grade active
-  improvement targets inline. Vantage then **calculates your live rank** from that anchor plus each
-  logged %, including OW2 **rank protection** (a loss that would drop below 0% holds the division
-  and keeps the true negative carry — matching the game's own negative display — until a win or
-  draw pays it back above 0%; only a further loss demotes).
+  `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
+  listed first), but the field can only ever hold a real map name; a rotated-out map is still
+  reachable by typing its name (shown muted, deprioritized), just not offered by default. `Enter`
+  saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's the same
+  sitting). Forgot to log during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h
+  into the past so session analytics stay honest. Pick the **account** and **role** (Tank / Damage /
+  Support / **Open Queue**); the **hero picker defaults to your most-played heroes** for that
+  role and account (chip grid, same tap-to-toggle as before) — **search** reaches any hero outside
+  the shortlist, and how many heroes it suggests is configurable in **Settings › Quick Log**
+  (default 6). Every logged match is competitive, so there's no mode picker. The **skill-rating**
+  field **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge**
+  (±1) — or flip it to **"Set current rank"** to enter your rank directly (**prefilled from the rank
+  already tracked** for that account+role, if any — also wheel-adjustable) and let Vantage work out
+  the change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
+  Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy), set
+  the **comms** tone on a colour switch (**positive / banter / abusive**), rate your own
+  **performance** on a 0-100 slider (colored on the same red→green scale as winrate elsewhere; also
+  editable later from Review or a match's detail page), and grade active improvement targets inline.
+  Vantage then **calculates your live rank** from that anchor plus each logged %, including OW2
+  **rank protection** (a loss that would drop below 0% holds the division and keeps the true negative
+  carry — matching the game's own negative display — until a win or draw pays it back above 0%; only
+  a further loss demotes).
 - **Notion sync** — connect a Notion integration token, pick (or auto-create) the
   target database, **push** your tracked games to it and **import** them back — an
   on-demand pull that reads the Gametracker rows into local history for restoring or
@@ -123,12 +129,13 @@ find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` che
 between match details, `H/P/M/S` grading on Review, `W/L/D`+`Enter` in the log dialog), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
 everywhere** (click a heatmap day or a Mental flag count to open exactly those matches; hero-drawer
-map rows and Overview scatter dots jump to the Maps screen), hero typeahead + remembered role in
-the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
+map rows and Overview scatter dots jump to the Maps screen), remembered role + account in the
+quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
 window-position memory, and a **Settings** screen with an
 **accounts manager** (create/edit/delete accounts, per-role rank anchors), a **Master data**
-editor (see below) alongside the break
+editor (see below), a **Quick Log** card (how many most-played heroes the log-match hero picker
+suggests) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, rank anchors, and screenshots — to any folder,
 moved together with a copy-verify-then-delete guarantee. Point it at a OneDrive/Dropbox-synced

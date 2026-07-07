@@ -82,6 +82,8 @@ export interface GameRecord {
    */
   srDelta?: number;
   durationMinutes?: number;
+  /** Self-rated performance for this match, 0-100, if the player rated it. */
+  performance?: number;
   heroes: string[];
   /** Per-hero breakdown for the local player (from GEP roster), if available. */
   perHero?: HeroStat[];

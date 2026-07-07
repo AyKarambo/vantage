@@ -24,6 +24,8 @@ export interface ManualMatchInput {
   account?: string;
   /** Signed skill-rating % for this competitive match (e.g. +22, -19). */
   srDelta?: number;
+  /** Self-rated performance for this match, 0-100, if the player rated it. */
+  performance?: number;
   /** Optional target grades captured inline while logging. */
   grades?: Record<string, TargetGrade>;
   /**
@@ -53,6 +55,8 @@ export interface MatchEditInput {
   mental?: MatchMental;
   /** New SR %, or `null` to clear it; `undefined` leaves it unchanged. */
   srDelta?: number | null;
+  /** New performance rating (0-100), or `null` to clear it; `undefined` leaves it unchanged. */
+  performance?: number | null;
   grades?: Record<string, TargetGrade>;
 }
 
@@ -76,4 +80,6 @@ export interface ReviewInput {
   matchId: string;
   grades: Record<string, TargetGrade>;
   flags: MatchMental;
+  /** Self-rated performance for this match, 0-100, if the player rated it. */
+  performance?: number;
 }

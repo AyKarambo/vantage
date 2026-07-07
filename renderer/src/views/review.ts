@@ -13,6 +13,7 @@ import type { MatchMental, MatchRow, TargetGrade, TargetSummary } from '../../..
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { store } from '../store';
 import { bridge } from '../bridge';
@@ -100,6 +101,7 @@ function collapsed(m: MatchRow, onGrade: () => void): HTMLElement {
 function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onSkip: () => void): HTMLElement {
   const grades: Record<string, TargetGrade> = {};
   const flags: MatchMental = {};
+  let performance: number | undefined;
 
   const rows = active.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
   let focusIdx = 0;
@@ -109,7 +111,7 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   markFocus();
 
   const doSave = (): void => {
-    void bridge.saveReview({ matchId: m.matchId, grades, flags }).then(() => {
+    void bridge.saveReview({ matchId: m.matchId, grades, flags, ...(performance != null ? { performance } : {}) }).then(() => {
       gradedThisSession.add(m.matchId);
       kbHook = null;
       onSaved();
@@ -140,6 +142,7 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
         : [h('div', { class: 'hint' }, 'No active targets yet — add some on the Targets page to grade them here.')]),
     )),
     section('◎ How it felt', mentalFlagsRow(flags)),
+    section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),

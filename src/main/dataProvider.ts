@@ -10,6 +10,8 @@ import { effectiveDemo } from '../core/demoPreference';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import { currentRank, type RankAnchorMap } from '../core/rank';
 import { sourceOf } from '../core/source';
+import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
+import type { Role } from '../core/model';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -112,6 +114,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     saveReview: (input) => {
       deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
+      if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
     },
     importReviews: (inputs) =>
       deps.history.setReviews(inputs.map((i) => ({
@@ -139,6 +142,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         heroes: input.heroes ?? (input.hero ? [input.hero] : []),
         mental: input.mental,
         ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
+        ...(input.performance != null ? { performance: input.performance } : {}),
         // Inline target grades captured while logging are stored as a review, the
         // same shape the Review screen writes — so they score identically.
         ...(grades ? { review: { at: Date.now(), grades, flags: input.mental ?? {} } } : {}),
@@ -167,6 +171,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // clears it (editManual deletes on null), undefined leaves it unchanged.
       if (input.mental !== undefined) patch.mental = input.mental;
       if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
+      if (input.performance !== undefined) patch.performance = input.performance;
       // Only stamp a review when there are grades — an edit with no targets
       // shouldn't mark an otherwise-ungraded match as reviewed.
       if (input.grades && Object.keys(input.grades).length) {
@@ -199,6 +204,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return accountList(accounts);
     },
     getRanks: () => rankSummaries(deps),
+    mostPlayedHeroes: () => mostPlayedHeroesByAccount(deps),
     setRankAnchor: (input) => {
       deps.rankAnchors.set({
         account: input.account,
@@ -353,6 +359,27 @@ function seedImportedAccounts(deps: DataProviderDeps, games: GameRecord[]): numb
 /** Shape the accounts map (battleTag → label) into the contract's summary list. */
 function accountList(accounts: Record<string, string>): AccountSummary[] {
   return Object.entries(accounts).map(([battleTag, label]) => ({ battleTag, label: label || battleTag }));
+}
+
+/**
+ * Per-account, per-role most-played hero names, over the FULL unfiltered
+ * history (a durable "what do I usually play" signal, not scoped to whatever
+ * the global dashboard filter currently shows) — the Log Match hero-picker
+ * shortlist's source. Only accounts/roles with at least one game get an entry.
+ */
+function mostPlayedHeroesByAccount(deps: DataProviderDeps): Record<string, Partial<Record<Role, string[]>>> {
+  const games = deps.history.all();
+  const roles: Role[] = ['tank', 'damage', 'support', 'openQ'];
+  const out: Record<string, Partial<Record<Role, string[]>>> = {};
+  for (const account of new Set(games.map((g) => g.account))) {
+    const perRole: Partial<Record<Role, string[]>> = {};
+    for (const role of roles) {
+      const names = rankHeroesByPlays(games, account, role);
+      if (names.length) perRole[role] = names;
+    }
+    if (Object.keys(perRole).length) out[account] = perRole;
+  }
+  return out;
 }
 
 /** Compute the live rank for every anchored (account, role). */
