@@ -325,14 +325,22 @@ export class App {
     if (last) this.scrollMemory.set(routeKey(last.view, last.matchId), this.contentHost.scrollTop);
     const navigated = !last || last.view !== key.view || last.matchId !== key.matchId;
     // A same-route re-render (e.g. a master-data edit round-tripping through
-    // store.refresh()) replaces the DOM, which resets scrollTop to 0. Capture
-    // it first so we can put the user back where they were.
+    // store.refresh()) replaces the DOM. That resets scrollTop to 0 and, because
+    // a brand-new `.view` is mounted, replays the `rise-in` entry animation —
+    // the page visibly slides/fades back in as if freshly entered. Capture the
+    // scroll first, then restore it and cancel the entry animation so an in-place
+    // refresh is seamless. Real navigation keeps both the animation and the
+    // per-route scroll memory.
     const priorScroll = this.contentHost.scrollTop;
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
-    this.contentHost.scrollTop = navigated
-      ? this.scrollMemory.get(routeKey(key.view, key.matchId)) ?? 0
-      : priorScroll;
+    if (navigated) {
+      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId)) ?? 0;
+    } else {
+      const view = this.contentHost.firstElementChild as HTMLElement | null;
+      if (view) view.style.animation = 'none';
+      this.contentHost.scrollTop = priorScroll;
+    }
   }
 
   /** Cold-start failure: nothing to show — offer an explicit retry. */
