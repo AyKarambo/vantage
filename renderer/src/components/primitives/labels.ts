@@ -24,9 +24,13 @@ export function resultPill(result: Result): HTMLElement {
   return pill(RESULT_LETTER[result] ?? result, RESULT_STATE[result], { mono: true });
 }
 
-/** Tags a value's data provenance — sample data vs. live-tracked vs. user-entered. */
-export function badge(text: Child, kind: 'demo' | 'auto' | 'manual' = 'demo'): HTMLElement {
-  return h('span', { class: `badge badge--${kind}` }, text);
+/** Tags a value's data provenance — sample data vs. live-tracked vs. user-entered vs. blended. */
+export function badge(
+  text: Child,
+  kind: 'demo' | 'auto' | 'manual' | 'hybrid' = 'demo',
+  opts: { title?: string } = {},
+): HTMLElement {
+  return h('span', { class: `badge badge--${kind}`, title: opts.title }, text);
 }
 
 /** Toggleable filter tag; `on` reflects the current selection state. */

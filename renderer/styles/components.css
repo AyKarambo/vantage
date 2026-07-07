@@ -214,6 +214,12 @@
   border: 1px solid var(--accent-border);
   color: var(--accent-text-2);
 }
+/* Blended stats+manual read — amber "in-between", matching the app's stale-chip amber. */
+.badge--hybrid {
+  background: rgba(188, 169, 118, 0.14);
+  border: 1px solid rgba(188, 169, 118, 0.5);
+  color: var(--mid-text);
+}
 
 /* Segmented control --------------------------------------------------------- */
 .segmented {

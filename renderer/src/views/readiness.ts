@@ -5,9 +5,9 @@
  * this is a wellness heuristic, not a diagnosis.
  */
 import { h } from '../dom';
-import type { ReadinessBand, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
+import type { ReadinessBand, ReadinessRegime, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
 import { PALETTE } from '../theme';
-import { button, card, statBox } from '../components/primitives';
+import { badge, button, card, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { readinessChart, supercompensationSchematic } from '../charts/plots';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
@@ -28,6 +28,41 @@ const SEV: Record<ReadinessSignal['severity'], string> = {
   watch: PALETTE.mid,
   ok: PALETTE.muted,
 };
+
+/** Which evidence the verdict rests on — the badge on the Verdict card + its hover explanation. */
+const REGIME_META: Record<ReadinessRegime, { label: string; kind: 'auto' | 'hybrid' | 'manual'; title: string }> = {
+  stats: {
+    label: '⚡ based on live match stats',
+    kind: 'auto',
+    title: 'Full live-stat coverage — the model runs exactly as it always has.',
+  },
+  hybrid: {
+    label: '⚡◎ blending live stats + manual logs',
+    kind: 'hybrid',
+    title: 'Live match stats and your manual logs are blended continuously as coverage rises or falls — no cliff either way.',
+  },
+  manual: {
+    label: '◎ based on your manual logs',
+    kind: 'manual',
+    title: 'Built from your manual logs only. Confidence is capped at medium until live match stats are available — a limit of the evidence, not a penalty.',
+  },
+};
+
+/** Bands whose acute window is empty/absent, so a regime badge would misleadingly claim 'manual'. */
+function showRegime(band: ReadinessBand): boolean {
+  return band !== 'insufficient-data' && band !== 'rusty';
+}
+
+/** The Load tile's regime-aware footnote — explains the absolute-load arm when it contributes. */
+function loadNote(r: ReadinessSummary): string | undefined {
+  if (r.regime === 'stats') return undefined; // arm silent at full coverage — say nothing
+  if (r.regime === 'manual') {
+    return 'includes an absolute-load read (days without rest, daily volume, long sessions) — results can’t be measured without live match stats yet';
+  }
+  const b = r.subscores.load.coverage;
+  const pct = b != null ? Math.round((1 - b) * 100) : null;
+  return `partly includes an absolute-load read${pct != null ? ` (~${pct}% weight)` : ''} — fades out as live-stat coverage grows`;
+}
 
 export function readiness(ctx: ViewContext): HTMLElement {
   if (!ctx.data.readinessSettings.enabled) return disabledView(ctx);
@@ -71,7 +106,7 @@ function subscoresCard(r: ReadinessSummary): HTMLElement {
   const subjNote = s.subjective.available ? '' : 'log mental state or rate your games';
   return card({ title: 'What moves the score', sub: 'each family pulls the score from its neutral anchor (75)' },
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '4px' } },
-      subscoreTile('Load balance', s.load, 40),
+      subscoreTile('Load balance', s.load, 40, loadNote(r)),
       subscoreTile('Performance vs your usual', s.performance, 45, statNote),
       subscoreTile('Self-report', s.subjective, 15, subjNote),
     ),
@@ -84,10 +119,18 @@ const BREAK_REMINDER_BANDS: ReadinessBand[] = ['loaded', 'in-the-hole'];
 function verdictCard(ctx: ViewContext): HTMLElement {
   const r = ctx.data.readiness;
   const meta = BAND[r.band];
+  const regime = REGIME_META[r.regime];
   // When confidence is low we deliberately suppress the crisp number so it never
   // reads as more certain than it is.
   const showScore = r.score !== null && r.confidence !== 'low';
-  return card({ title: 'Verdict' },
+  const confidenceNote =
+    r.confidence === 'low'
+      ? ' — log your mental state after games to sharpen this'
+      : r.regime === 'manual'
+        ? ' — capped until live match stats are available'
+        : '';
+  return card(
+    { title: 'Verdict', actions: showRegime(r.band) ? badge(regime.label, regime.kind, { title: regime.title }) : undefined },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' } },
       h('span', { style: { width: '14px', height: '14px', borderRadius: '50%', background: meta.color, flex: '0 0 auto' } }),
       h('span', { style: { fontSize: '20px', fontWeight: '700' } }, meta.label),
@@ -101,7 +144,7 @@ function verdictCard(ctx: ViewContext): HTMLElement {
       : null,
     BREAK_REMINDER_BANDS.includes(r.band) ? breakReminderHint(ctx) : null,
     h('div', { class: 'hint', style: { marginTop: '10px' } },
-      `Confidence: ${r.confidence}${r.confidence === 'low' ? ' — log your mental state after games to sharpen this' : ''} · `,
+      `Confidence: ${r.confidence}${confidenceNote} · `,
       h('button', {
         class: 'inline-link',
         title: 'How the readiness verdict is calculated',
@@ -150,6 +193,29 @@ function readinessMethodology(close: () => void): HTMLElement {
         'never outweighs the evidence). The verdict band derives from the score — they can’t disagree.'),
     ),
     h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Which evidence it uses: stats vs manual'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Live per-10 stats and session lengths come from Overwolf’s Game Events Provider, pending ' +
+        'store approval — so most installs run on manual logs: your own results, tilt, and ratings. ' +
+        'The verdict runs on whichever evidence actually exists. At full live-stat coverage (⚡) this ' +
+        'is exactly the model as always. On manual logs (◎) two things change so the score can still ' +
+        'move: results vs your own baseline count for more, and unmeasured exposure — consecutive ' +
+        'days without rest, daily volume, marathon sessions — becomes evidence on its own, since ' +
+        'there’s no outcome to weigh it against. In between (⚡◎ hybrid) the two blend continuously ' +
+        'as coverage rises or falls — stats mode unlocks by itself once live capture lands; there’s ' +
+        'no setting to flip. A stat only counts once a hero has enough history behind it for a fair ' +
+        'comparison, so a stats-carrying history can still read as manual early on. Load alone never ' +
+        'reaches In the hole in any regime — a real results dip or elevated tilt is always required.'),
+    ),
+    h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'When live capture drops out'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Game updates can knock live capture out for a few days. The verdict eases toward hybrid or ' +
+        'manual and back automatically as tracking resumes — missing stats are never read as a bad ' +
+        'sign, only as less evidence. Keep logging through an outage and your results, tilt, and ' +
+        'ratings still count in full.'),
+    ),
+    h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Training-load model'),
       h('div', { class: 'hint', style: { lineHeight: '1.6' } },
         'Recent volume is compared against YOUR OWN norm — a stable 10-games-a-day rhythm is habit, ' +
@@ -188,7 +254,9 @@ function readinessMethodology(close: () => void): HTMLElement {
         'Confidence now reflects the coverage of the objective inputs first — how many recent games ' +
         'carry real stats, whether the winrate sample is big enough, and whether one account ' +
         'dominates the window. A stats-rich tracked history reaches high confidence without any ' +
-        'mental logging; at low confidence the crisp score is hidden so it never overclaims.'),
+        'mental logging; at low confidence the crisp score is hidden so it never overclaims. ' +
+        'Running on manual logs alone caps confidence at medium, whatever your mental-log coverage — ' +
+        'high confidence is something only live stats can buy.'),
     ),
     h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Honesty note'),
