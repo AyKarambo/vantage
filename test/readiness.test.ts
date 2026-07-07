@@ -4,6 +4,7 @@ import {
   safeReadiness,
   DEFAULT_READINESS,
   normalizeReadiness,
+  READINESS_TUNING as T,
 } from '../src/core/readiness';
 import { restEffectFor } from '../src/core/readiness/score';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
@@ -610,15 +611,15 @@ describe('composite — losing streak alone (winrate gates MET) is bounded and n
       ...span(32, 35, { perDay: 3, mental: CALM, result: 'Loss' }), // 12 losses; acute decided ≈ 21
     ];
     const r = computeReadiness(games, ts(35, 20));
+    // Re-baselined for readiness-data-regimes. Two things changed for this MANUAL fixture (b=0):
+    //   1. the results arm is promoted (cap 15 → 30), so the outcome penalty is now bounded by 30;
+    //   2. it never rests (7 active days/week), so a small rest-scarcity nudge also applies.
+    // The guarantees that actually matter are unchanged: the outcome penalty stays CAPPED (≥ −30,
+    // not unbounded) and red is UNREACHABLE at this volume — acutePerDay 3 ⇒ no sustainedLoad
+    // corroboration ⇒ the two-family red gate can never open, whatever the score.
     expect(r.band).not.toBe('in-the-hole');
-    expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(-15); // the named outcome cap
-    // Re-baselined for the manual absolute-load arm (readiness-data-regimes): this fixture also
-    // never takes a rest day (7 active days/week for a month), so a small rest-scarcity nudge now
-    // applies ON TOP of the capped outcome penalty → the score lands in amber. The guarantees that
-    // matter are unchanged: the outcome penalty stays capped (asserted above) and red is unreachable
-    // at this volume (acutePerDay 3 ⇒ no sustainedLoad corroboration), so the total stays ≥ 50.
-    expect(r.band).not.toBe('in-the-hole');
-    expect(r.score!).toBeGreaterThanOrEqual(50);
+    expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(-30); // promoted manual outcome cap
+    expect(r.score!).toBeGreaterThan(T.redCut); // numerically above red, too
   });
 });
 

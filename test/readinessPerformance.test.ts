@@ -143,7 +143,7 @@ describe('winrate component (per-account, sample-gated)', () => {
     expect(p.wrPenalty).toBe(0);
   });
 
-  it('a real dip over enough games engages, capped at wrPenaltyCap', () => {
+  it('a real dip over enough games engages, capped at its regime ceiling', () => {
     const games = [
       ...span(5, 28, { perDay: 3 }), // wins, base ≥ 30 decided
       ...span(29, 35, { perDay: 4, result: 'Loss' }), // 28 acute decided losses
@@ -151,7 +151,9 @@ describe('winrate component (per-account, sample-gated)', () => {
     const p = perfAt(games, 35);
     expect(p.wrDip).not.toBeNull();
     expect(p.wrPenalty).toBeGreaterThan(0);
-    expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap);
+    // Manual fixture (no per-10 stats) ⇒ b=0 ⇒ the promoted manual ceiling (readiness-data-regimes).
+    // The invariant that matters is unchanged: the penalty is CAPPED, never unbounded.
+    expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap + T.wrManualCapBoost);
   });
 
   it("per-account isolation: a smurf's stable results never mask the main account's dip", () => {
@@ -186,7 +188,11 @@ describe('flex player (buckets never fill)', () => {
     const p = perfAt(games, 35);
     expect(p.countedGames).toBe(0);
     expect(p.statCoverage).toBe(0);
-    expect(p.delta).toBeGreaterThanOrEqual(-T.wrPenaltyCap); // winrate never absorbs the freed stat weight
+    // readiness-data-regimes SUPERSEDES the prior "winrate never absorbs the freed stat weight" rule:
+    // with no per-10 coverage (b=0) the results arm is deliberately PROMOTED to the manual ceiling.
+    // The surviving invariant is that it stays bounded by that ceiling (and still can't red without
+    // load corroboration — verified in the composite suite), not that it shrinks.
+    expect(p.delta).toBeGreaterThanOrEqual(-(T.wrPenaltyCap + T.wrManualCapBoost));
   });
 
   it('a STABLE flex rotation is covered by the role fallback by design (mix overlap high)', () => {
