@@ -234,6 +234,22 @@ describe('T6 — tilt as the second adverse family unlocks red on a manual grind
   });
 });
 
+describe('T7 — confidence capped at medium in the manual regime', () => {
+  it('manual-only history with FULL mental coverage is capped below high', () => {
+    const games = span(0, 35, { perDay: 8, result: 'Win', mental: CALM }); // 100% mental coverage
+    const r = computeReadiness(games, ts(35, 20));
+    expect(r.regime).toBe('manual');
+    expect(r.confidence).not.toBe('high'); // capped whatever the mental coverage
+  });
+
+  it('stats-rich single-account history can still reach high confidence', () => {
+    const games = statSpan(0, 30, { perDay: 4, hero: 'Tracer', result: 'Win' });
+    const r = computeReadiness(games, ts(30, 20));
+    expect(r.regime).toBe('stats');
+    expect(r.confidence).toBe('high');
+  });
+});
+
 describe('R1 — onboarding trust ramp: b rises smoothly as a baseline crosses the trust floor (no cliff)', () => {
   // A single-hero stats history: K acute games on the last day, N comparable baseline games before
   // the acute window. As N crosses trustFor's floor (n 15→20), blend must RAMP, not cliff-jump the

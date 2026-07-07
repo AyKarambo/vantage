@@ -104,12 +104,16 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  */
 function confidenceFor(state: StateAt): ReadinessConfidence {
   const statCoverage = state.perf.statCoverage;
-  if (
+  const high =
     state.load.chronicActiveDays >= T.confidenceActiveDays &&
     statCoverage >= T.statCoverageHigh &&
     state.perf.wrDip !== null &&
-    state.perf.maxAccountShare >= T.accountMixBar
-  ) {
+    state.perf.maxAccountShare >= T.accountMixBar;
+  // Manual regime caps confidence at medium, whatever the mental-log coverage — high confidence is
+  // something only live match stats can buy. Structurally redundant today ('high' already requires
+  // statCoverage ≥ statCoverageHigh ⇒ b = 1, never 'manual'), but a pinned invariant that survives any
+  // future confidence retuning where wr-sample adequacy alone might otherwise lift a stats-free read.
+  if (high && state.regime !== 'manual') {
     return 'high';
   }
   if (statCoverage < T.statCoverageLow && state.mental.coverage < T.mentalMinCoverage && state.subj.sliderDiff === null) {
