@@ -17,7 +17,6 @@ import { scoreboard } from '../components/scoreboard';
 import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { classifyGameType } from '../../../src/core/matchFilter';
-import { MAP_MODES } from '../../../src/core/maps';
 import { PALETTE } from '../theme';
 import type { ViewContext } from './view';
 
@@ -28,7 +27,17 @@ const ROLE_OPTS: Array<{ value: Role; label: string }> = [
 const RESULT_OPTS: Array<{ value: Result; label: string }> = [
   { value: 'Win', label: 'Win' }, { value: 'Loss', label: 'Loss' }, { value: 'Draw', label: 'Draw' },
 ];
-const MAP_OPTS = Object.keys(MAP_MODES).sort().map((m) => ({ value: m, label: m }));
+
+/**
+ * Selectable maps for the editor: the active competitive pool, plus the match's
+ * `current` map even when it is inactive — so opening an old match on a
+ * rotated-out map never blanks or silently changes it (spec AC 25).
+ */
+function mapOptions(ctx: ViewContext, current: string): Array<{ value: string; label: string }> {
+  const names = ctx.data.masterData.maps.filter((m) => m.isActive).map((m) => m.name);
+  if (current && !names.includes(current)) names.push(current);
+  return names.sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m }));
+}
 
 const RESULT_TEXT: Record<string, string> = { Win: 'Victory', Loss: 'Defeat', Draw: 'Draw' };
 
@@ -278,7 +287,7 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
           editField('Role', segmented({
             options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => (state.role = v),
           })),
-          editField('Map', select(MAP_OPTS, state.map, (v) => (state.map = v))),
+          editField('Map', select(mapOptions(ctx, d.map), state.map, (v) => (state.map = v))),
           editField('Hero', heroInput(state.hero, (v) => (state.hero = v))),
           // No Mode control — Vantage is competitive-only (spec D1); matches stay
           // competitive, mirroring the quick-log's removed mode picker.

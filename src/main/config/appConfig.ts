@@ -22,6 +22,12 @@ export interface NotionConfig {
 
 export type Sensor = 'counterwatch' | 'gep';
 
+/** Editable-master-data settings: the (configurable) online source for the Update fetch. */
+export interface MasterDataConfig {
+  /** Base URL of the OverFast-compatible API used by the "Update" action. */
+  overfastBaseUrl: string;
+}
+
 /** The dashboard window's last-seen placement, restored on launch. */
 export interface WindowBounds {
   x: number;
@@ -54,6 +60,8 @@ export interface AppConfig {
   breakReminder: BreakReminderSettings;
   /** Readiness / training-load coach settings (feature toggle + opt-in launch toast). */
   readiness: ReadinessSettings;
+  /** Editable-master-data source config (the Update action's endpoint). */
+  masterData: MasterDataConfig;
   /**
    * Folder holding all Vantage data files (SQLite match history, manual log,
    * outbox ledger, rank anchors, screenshots). Absent ⇒ the default
@@ -80,6 +88,7 @@ const DEFAULTS: AppConfig = {
   mapAliases: {},
   breakReminder: { ...DEFAULT_BREAK_REMINDER },
   readiness: { ...DEFAULT_READINESS },
+  masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: { closeToTray: true, demoPreference: 'unset' },
 };
 
@@ -118,6 +127,7 @@ export function loadConfig(): AppConfig {
     mapAliases: { ...(bundled.mapAliases ?? {}), ...(local.mapAliases ?? {}) },
     breakReminder: { ...DEFAULTS.breakReminder, ...(bundled.breakReminder ?? {}), ...(local.breakReminder ?? {}) },
     readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
+    masterData: { ...DEFAULTS.masterData, ...(bundled.masterData ?? {}), ...(local.masterData ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };
   // `dataFolder` (new key) falls back to the legacy `historyDbFolder` (old key)

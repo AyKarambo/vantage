@@ -60,6 +60,7 @@ export interface DataMigrationStores {
   manualLog?: Relocatable;
   outbox?: Relocatable;
   rankAnchors?: Relocatable;
+  masterData?: Relocatable;
   screenshots?: Relocatable;
 }
 
@@ -220,6 +221,7 @@ function relocateAll(stores: DataMigrationStores, toDir: string, opts: { adopt: 
     if (stores.manualLog) adoptOrRelocate(stores.manualLog, toDir);
     if (stores.outbox) adoptOrRelocate(stores.outbox, toDir);
     if (stores.rankAnchors) adoptOrRelocate(stores.rankAnchors, toDir);
+    if (stores.masterData) adoptOrRelocate(stores.masterData, toDir);
     if (stores.screenshots) adoptOrRelocate(stores.screenshots, toDir);
     return undefined;
   }
@@ -227,6 +229,7 @@ function relocateAll(stores: DataMigrationStores, toDir: string, opts: { adopt: 
   if (stores.manualLog) stores.manualLog.relocate(toDir);
   if (stores.outbox) stores.outbox.relocate(toDir);
   if (stores.rankAnchors) stores.rankAnchors.relocate(toDir);
+  if (stores.masterData) stores.masterData.relocate(toDir);
   if (stores.screenshots) stores.screenshots.relocate(toDir);
   return deleteHistoryOriginal;
 }
@@ -246,6 +249,7 @@ function statPresence(dir: string): DataArtifactPresence {
     manualLog: has('manual.json'),
     outbox: has('outbox.json'),
     rankAnchors: has('rankAnchors.json'),
+    masterData: has('masterData.json'),
     screenshots: has('screenshots'),
     legacyHistoryJson: has('history.json'),
   };

@@ -3,6 +3,6 @@
 export {
   userConfigPath, loadConfig, saveLocalConfig, saveLocalNotionConfig, saveLocalUiConfig, saveLocalReadiness, saveLocalAccounts, notionDatabaseSource,
 } from './appConfig';
-export type { NotionConfig, Sensor, AppConfig, UiConfig, WindowBounds } from './appConfig';
+export type { NotionConfig, Sensor, AppConfig, UiConfig, WindowBounds, MasterDataConfig } from './appConfig';
 // Notion token at rest (encrypted).
 export { getNotionToken, setNotionToken, clearNotionToken } from './notionToken';

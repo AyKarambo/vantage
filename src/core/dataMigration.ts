@@ -8,6 +8,7 @@ export const HISTORY_DB_FILE = 'history.db';
 export const MANUAL_LOG_FILE = 'manual.json';
 export const OUTBOX_FILE = 'outbox.json';
 export const RANK_ANCHORS_FILE = 'rankAnchors.json';
+export const MASTER_DATA_FILE = 'masterData.json';
 export const SCREENSHOTS_DIR = 'screenshots';
 export const LEGACY_HISTORY_JSON_FILE = 'history.json';
 
@@ -28,6 +29,8 @@ export interface DataArtifactPresence {
   outbox: boolean;
   /** `rankAnchors.json`. */
   rankAnchors: boolean;
+  /** `masterData.json` — editable heroes/maps/seasons override deltas. */
+  masterData: boolean;
   /** `screenshots/` directory. */
   screenshots: boolean;
   /** Frozen legacy `history.json` backup, present only on installs migrated from pre-SQLite. */
@@ -87,6 +90,7 @@ export function planDataMigration(
   addFile(MANUAL_LOG_FILE, files.manualLog, true);
   addFile(OUTBOX_FILE, files.outbox, true);
   addFile(RANK_ANCHORS_FILE, files.rankAnchors, true);
+  addFile(MASTER_DATA_FILE, files.masterData, true);
   addFile(LEGACY_HISTORY_JSON_FILE, files.legacyHistoryJson, true);
   addDir(SCREENSHOTS_DIR, files.screenshots, true);
 

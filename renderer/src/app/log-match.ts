@@ -18,14 +18,11 @@ import { targetGradeRow } from '../components/reviewControls';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs } from '../prefs';
-import { MAP_MODES } from '../../../src/core/maps';
-import { ALL_HEROES } from '../../../src/core/heroes';
 import { TIERS } from '../../../src/core/rank';
 import type { AccountSummary, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy', 'Positive comms'];
-const ALL_MAPS = Object.keys(MAP_MODES).sort();
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support' };
 const DIVISIONS = [5, 4, 3, 2, 1];
 /** "Played" backfill choices — end-of-game time relative to now, in minutes. */
@@ -118,11 +115,16 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
 
-  /** Resolve free-typed map text onto the canonical map list (case-insensitive). */
+  /**
+   * Resolve free-typed map text onto the known map list (case-insensitive).
+   * Resolution is NOT gated by `isActive`: a user backfilling a game on a map
+   * that has since rotated out of the pool must still be able to type it and log
+   * it (spec AC 22) — only the browse suggestions hide inactive maps.
+   */
   const resolveMap = (): string | null => {
     const q = state.map.trim().toLowerCase();
     if (!q) return null;
-    return ALL_MAPS.find((m) => m.toLowerCase() === q) ?? null;
+    return ctx.data.masterData.maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
   };
 
   // Guards against duplicate submits from this form (Enter auto-repeat, double
@@ -357,25 +359,39 @@ function buildForm(ctx: ViewContext, close: () => void, accounts: AccountSummary
 
 // --- little local builders --------------------------------------------------
 
-/** Canonical hero list, the player's recent heroes first (they repeat within a session). */
+/**
+ * Canonical hero list, the player's recent heroes first (they repeat within a
+ * session). Sourced from the effective master data; heroes GEP reported that
+ * aren't in the list still flow through via `heroStats` (the list assists input,
+ * never gates it — spec AC 4).
+ */
 function heroSuggestions(ctx: ViewContext): string[] {
   const recent: string[] = [];
   for (const m of ctx.data.matches) {
     for (const hero of m.heroes) if (!recent.includes(hero)) recent.push(hero);
   }
-  const rest = new Set<string>(ALL_HEROES);
+  const rest = new Set<string>(ctx.data.masterData.heroes.map((hero) => hero.name));
   for (const hs of ctx.data.heroStats) rest.add(hs.hero);
   for (const r of recent) rest.delete(r);
   return [...recent, ...[...rest].sort((a, b) => a.localeCompare(b))];
 }
 
-/** Canonical map list, recently-played maps first — the typeahead's browse order. */
+/**
+ * Browse order for the map typeahead: recently-played first, then the rest —
+ * built from the ACTIVE competitive pool only, so a map rotated out of the pool
+ * is hidden from suggestions (spec AC 21). It stays type-resolvable via
+ * {@link resolveMap} (AC 22), so history on it is never blocked.
+ */
 function mapSuggestions(ctx: ViewContext): string[] {
+  const active = ctx.data.masterData.maps
+    .filter((m) => m.isActive)
+    .map((m) => m.name)
+    .sort((a, b) => a.localeCompare(b));
+  const activeSet = new Set(active);
   const recent: string[] = [];
-  for (const m of ctx.data.matches) if (!recent.includes(m.map)) recent.push(m.map);
-  const rest = ALL_MAPS.filter((m) => !recent.includes(m));
-  // Only canonical maps are suggested; recents can include legacy names, filter them.
-  return [...recent.filter((m) => ALL_MAPS.includes(m)), ...rest];
+  for (const m of ctx.data.matches) if (activeSet.has(m.map) && !recent.includes(m.map)) recent.push(m.map);
+  const rest = active.filter((m) => !recent.includes(m));
+  return [...recent, ...rest];
 }
 
 function field(label: Node | string, control: Node): HTMLElement {

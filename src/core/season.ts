@@ -8,6 +8,12 @@
  * published schedule) plus a fixed nine-week cadence used to extrapolate future
  * seasons the table doesn't yet list — so the boundary stays sensible between
  * app releases instead of silently breaking when a new season starts.
+ *
+ * Every public function accepts an optional `starts` list (defaulting to the
+ * built-in {@link SEASON_STARTS}); the editable-master-data feature passes the
+ * user's effective season starts (defaults ⊕ overrides) so hand-added seasons
+ * are honored without forking this logic. Callers that pass nothing get exactly
+ * the pre-feature behavior.
  */
 
 /** Nine weeks — Blizzard's stated season target; used to extrapolate past the table. */
@@ -23,7 +29,7 @@ export const SEASON_CADENCE_MS = 63 * 86_400_000;
  * that restart their numbering; these boundaries are continuous regardless of the
  * labels below.
  */
-const SEASON_STARTS: readonly number[] = [
+export const SEASON_STARTS: readonly number[] = [
   '2024-08-20', // S12 New Frontiers
   '2024-10-15', // S13 Spellbinder
   '2024-12-10', // S14 Hazard
@@ -38,8 +44,13 @@ const SEASON_STARTS: readonly number[] = [
   '2026-06-16', // 2026 arc S3 Into the Tiger's Den
 ].map((d) => Date.parse(d));
 
-const FIRST = SEASON_STARTS[0];
-const LAST = SEASON_STARTS[SEASON_STARTS.length - 1];
+/** First/last of an ascending starts list (defensive against an empty list). */
+function firstOf(starts: readonly number[]): number {
+  return starts.length ? starts[0] : SEASON_STARTS[0];
+}
+function lastOf(starts: readonly number[]): number {
+  return starts.length ? starts[starts.length - 1] : SEASON_STARTS[SEASON_STARTS.length - 1];
+}
 
 /**
  * The start instant (ms) of the competitive season containing `now`: the latest
@@ -48,19 +59,21 @@ const LAST = SEASON_STARTS[SEASON_STARTS.length - 1];
  * `now` precedes the table (defensive — production always passes the real now).
  * Total — never throws; always `<= now`.
  */
-export function seasonStart(now: number): number {
-  if (now < FIRST) {
-    const stepsBack = Math.ceil((FIRST - now) / SEASON_CADENCE_MS);
-    return FIRST - stepsBack * SEASON_CADENCE_MS;
+export function seasonStart(now: number, starts: readonly number[] = SEASON_STARTS): number {
+  const first = firstOf(starts);
+  const last = lastOf(starts);
+  if (now < first) {
+    const stepsBack = Math.ceil((first - now) / SEASON_CADENCE_MS);
+    return first - stepsBack * SEASON_CADENCE_MS;
   }
-  let start = FIRST;
-  for (const s of SEASON_STARTS) {
+  let start = first;
+  for (const s of starts) {
     if (s <= now) start = s;
     else break;
   }
-  if (start === LAST) {
+  if (start === last) {
     // Past the last known season → roll forward by whole cadences.
-    start += Math.floor((now - LAST) / SEASON_CADENCE_MS) * SEASON_CADENCE_MS;
+    start += Math.floor((now - last) / SEASON_CADENCE_MS) * SEASON_CADENCE_MS;
   }
   return start;
 }
@@ -70,10 +83,15 @@ export function seasonStart(now: number): number {
  * known table boundary when `start` sits inside the table, otherwise one cadence
  * after `start` (the last-known or extrapolated season's estimated end).
  */
-export function currentSeason(now: number): { start: number; end: number } {
-  const start = seasonStart(now);
-  if (start < FIRST || start >= LAST) return { start, end: start + SEASON_CADENCE_MS };
-  const next = SEASON_STARTS.find((s) => s > start) as number;
+export function currentSeason(
+  now: number,
+  starts: readonly number[] = SEASON_STARTS,
+): { start: number; end: number } {
+  const first = firstOf(starts);
+  const last = lastOf(starts);
+  const start = seasonStart(now, starts);
+  if (start < first || start >= last) return { start, end: start + SEASON_CADENCE_MS };
+  const next = starts.find((s) => s > start) as number;
   return { start, end: next };
 }
 
@@ -115,17 +133,17 @@ function numberedLabel(year: number, seasonOfYear: number): string {
 /**
  * Builds the ascending list of season start instants from the first known
  * season through (and including) the season containing `now`, extrapolating
- * past {@link LAST} by whole {@link SEASON_CADENCE_MS} steps as needed. This
+ * past the last entry by whole {@link SEASON_CADENCE_MS} steps as needed. This
  * is the single walk that both {@link currentSeasonWindow} and
  * {@link seasonsForData} use to derive `year`/`seasonOfYear` consistently.
  */
-function seasonStartsThrough(now: number): number[] {
-  const starts = [...SEASON_STARTS];
-  const containing = seasonStart(now);
-  while (starts[starts.length - 1] < containing) {
-    starts.push(starts[starts.length - 1] + SEASON_CADENCE_MS);
+function seasonStartsThrough(now: number, starts: readonly number[] = SEASON_STARTS): number[] {
+  const list = [...starts];
+  const containing = seasonStart(now, starts);
+  while (list[list.length - 1] < containing) {
+    list.push(list[list.length - 1] + SEASON_CADENCE_MS);
   }
-  return starts;
+  return list;
 }
 
 /**
@@ -160,11 +178,11 @@ function windowFor(starts: readonly number[], i: number): SeasonWindow {
  * first known season (e.g. a reset system clock) clamps to that first season
  * rather than looking up an index that isn't in the table.
  */
-export function currentSeasonWindow(now: number): SeasonWindow {
-  const starts = seasonStartsThrough(now);
-  const containing = seasonStart(now);
-  const i = starts.indexOf(containing);
-  return windowFor(starts, i === -1 ? 0 : i);
+export function currentSeasonWindow(now: number, starts: readonly number[] = SEASON_STARTS): SeasonWindow {
+  const list = seasonStartsThrough(now, starts);
+  const containing = seasonStart(now, starts);
+  const i = list.indexOf(containing);
+  return windowFor(list, i === -1 ? 0 : i);
 }
 
 /**
@@ -174,8 +192,11 @@ export function currentSeasonWindow(now: number): SeasonWindow {
  * `store.ts`'s `vantageFilters` load, `prefs.ts`'s saved-preset migration)
  * shares the exact same fallback instead of each re-deriving it.
  */
-export function migrateLegacySeasonDays(now: number): { season: string } {
-  return { season: currentSeasonWindow(now).id };
+export function migrateLegacySeasonDays(
+  now: number,
+  starts: readonly number[] = SEASON_STARTS,
+): { season: string } {
+  return { season: currentSeasonWindow(now, starts).id };
 }
 
 /**
@@ -185,14 +206,18 @@ export function migrateLegacySeasonDays(now: number): { season: string } {
  * account switcher — callers pass competitive-match timestamps across every
  * account (spec D2 / Resolved Q13).
  */
-export function seasonsForData(timestamps: readonly number[], now: number): SeasonWindow[] {
-  const current = currentSeasonWindow(now);
+export function seasonsForData(
+  timestamps: readonly number[],
+  now: number,
+  starts: readonly number[] = SEASON_STARTS,
+): SeasonWindow[] {
+  const current = currentSeasonWindow(now, starts);
   const oldest = timestamps.length > 0 ? Math.min(...timestamps) : now;
-  const starts = seasonStartsThrough(Math.max(now, oldest));
+  const list = seasonStartsThrough(Math.max(now, oldest), starts);
   const windows: SeasonWindow[] = [];
-  for (let i = 0; i < starts.length; i++) {
-    if (starts[i] > now) break;
-    const w = windowFor(starts, i);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] > now) break;
+    const w = windowFor(list, i);
     if (w.id === current.id) continue; // added once, below
     if (timestamps.some((t) => t >= w.start && t < w.end)) windows.push(w);
   }
@@ -206,13 +231,34 @@ export function seasonsForData(timestamps: readonly number[], now: number): Seas
  * or {@link seasonsForData}), or `undefined` if `id` isn't addressable —
  * callers (`applyFilters`) fall back to a default window in that case.
  */
-export function seasonWindowById(id: string, now: number): SeasonWindow | undefined {
+export function seasonWindowById(
+  id: string,
+  now: number,
+  starts: readonly number[] = SEASON_STARTS,
+): SeasonWindow | undefined {
   const match = /^S:(\d{4}-\d{2}-\d{2})$/.exec(id);
   if (!match) return undefined;
   const start = Date.parse(match[1]);
   if (Number.isNaN(start)) return undefined;
-  const starts = seasonStartsThrough(Math.max(now, start));
-  const i = starts.indexOf(start);
+  const list = seasonStartsThrough(Math.max(now, start), starts);
+  const i = list.indexOf(start);
   if (i === -1) return undefined;
-  return windowFor(starts, i);
+  return windowFor(list, i);
+}
+
+/**
+ * The `{ start, label }` entries for every season in `starts`, labels derived
+ * over the *whole* list (so per-year numbering stays correct when the user adds
+ * a season mid-table). Used to build the editable-master-data season snapshot —
+ * structurally a `SeasonEntry[]` without importing the master-data module (which
+ * imports this one), keeping the dependency one-directional.
+ */
+export function seasonEntriesFromStarts(
+  starts: readonly number[] = SEASON_STARTS,
+): Array<{ start: number; label: string }> {
+  const list = [...starts].sort((a, b) => a - b);
+  return list.map((_, i) => {
+    const w = windowFor(list, i);
+    return { start: w.start, label: w.label };
+  });
 }

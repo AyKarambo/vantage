@@ -121,7 +121,8 @@ everywhere** (click a heatmap day or a Mental flag count to open exactly those m
 map rows and Overview scatter dots jump to the Maps screen), hero typeahead + remembered role in
 the quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 colorblind-safe palette option, window-position memory, and a **Settings** screen with an
-**accounts manager** (create/edit/delete accounts, per-role rank anchors) alongside the break
+**accounts manager** (create/edit/delete accounts, per-role rank anchors), a **Master data**
+editor (see below) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, rank anchors, and screenshots — to any folder,
 moved together with a copy-verify-then-delete guarantee. Point it at a OneDrive/Dropbox-synced
@@ -137,7 +138,29 @@ Existing installs updating to this version see no prompt and keep their current 
 
 Match history is stored on-device in an embedded **SQLite** database (`history.db`); a pre-SQLite
 `history.json` is imported once on first launch and kept untouched as a frozen backup. Storage stays
-**local-first** — the only outbound path is the opt-in Notion export.
+**local-first** — the only outbound paths are the opt-in Notion export and the opt-in **Master data
+update** below, both user-initiated.
+
+### Master data (heroes, maps & seasons)
+
+The lists behind Vantage — the **hero roster** (and each hero's role), the **maps** (and their game
+modes), and the **competitive seasons** — are fully **editable** in *Settings › Master data*, so you
+never have to wait for an app update when Blizzard adds a hero, a map, or starts a season. Add, edit,
+or remove any entry; maps carry an **In pool / Out of pool** toggle for the current competitive map
+pool (an out-of-pool map stays in your history and analytics but is hidden from new-log suggestions
+and the demo generator). Season boundaries are hand-editable too, and the current season keeps
+auto-extrapolating on its usual cadence between edits.
+
+An **Update** button fetches the latest heroes & maps from the community
+[OverFast API](https://overfast-api.tekrop.fr) (MIT-licensed, derived from Blizzard's public
+reference pages — there is no official Blizzard data API) and shows **new and changed** entries as a
+preview you **accept or discard per item** — nothing is written until you accept, your manual edits
+are never silently overwritten, and everything stays editable afterward. This is the only new
+outbound path besides Notion: it is **user-initiated**, sends **no personal, account, or match
+data**, treats the response as untrusted, and falls back to the bundled snapshot when offline. The
+endpoint is configurable in `appsettings.json` (`masterData.overfastBaseUrl`). Seasons are edited
+by hand only — no public API exposes their dates. Your edits live in `masterData.json` alongside
+the rest of your data and travel with it when you relocate the data folder.
 
 ## Account safety
 
