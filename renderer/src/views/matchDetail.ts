@@ -9,16 +9,16 @@ import { h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
-import { button, card, pill, RESULT_STATE, segmented, select, statBar, statBox } from '../components/primitives';
+import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
-import { attachWheelNudge } from '../components/wheelStepper';
+import { field, optionalLabel } from '../components/formField';
+import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
-import { TIERS } from '../../../src/core/rank';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
 import { gradedThisSession } from '../reviews';
@@ -32,11 +32,6 @@ const ROLE_OPTS: Array<{ value: Role; label: string }> = [
   { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' },
   { value: 'support', label: 'Support' }, { value: 'openQ', label: 'Open Q' },
 ];
-/** Divisions high→low for the Set-current rank picker (5 = lowest band, 1 = highest). */
-const DIVISIONS = [5, 4, 3, 2, 1];
-/** The editor's SR-entry mode: nudge the change (±%) or set the resulting rank (back-computed). */
-type SrMode = 'change' | 'set-current';
-
 /**
  * The editor's map pool: every known map, plus the match's `current` map even
  * when master data no longer knows it (shown muted) — so opening an old match
@@ -260,30 +255,17 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
 
 // --- edit tracking (re-open the manual read for any match, graded or not) -----
 
-/** Local section wrapper reusing the Review screen's label styling. */
-function editorSection(label: string, body: Node): HTMLElement {
-  return h('div', { class: 'review-section' },
-    h('div', { class: 'review-section-label' }, label),
-    body,
-  );
-}
-
 /**
  * Fold a legacy `leaver` boolean into the my-team flag so its chip pre-selects.
- * The comms tone is left untouched — the three-state comms switch in
- * `mentalFlagsRow` (see reviewControls) reads/writes it through `commsTone`, so
- * banter/abusive survive an unrelated edit.
+ * The comms tone is left untouched — the shared three-state comms switch
+ * (`commsToneSwitch`, see reviewControls) reads/writes it through `commsTone`,
+ * so banter/abusive survive an unrelated edit.
  */
 function normalizeFlags(m: MatchMental): MatchMental {
   const out: MatchMental = { ...m };
   if (out.leaver && !out.leaverMyTeam) out.leaverMyTeam = true;
   delete out.leaver;
   return out;
-}
-
-/** A labelled editor field (label above the control). */
-function editField(label: string, control: Node): HTMLElement {
-  return h('div', null, h('div', { class: 'field-label' }, label), control);
 }
 
 /**
@@ -327,6 +309,32 @@ function buildMatchEditor(
   let anchorDivision = d.competitive?.division ?? 3;
   let anchorPct = d.competitive?.progressPct != null ? String(Math.round(d.competitive.progressPct)) : '';
 
+  /**
+   * Re-seed the Set-current picker (mirrors the log card's seedAnchorFromRanks,
+   * so a role switch never leaves a stale prefilled rank): the match's own role
+   * seeds from the rank reconstructed as of this match (the card's read); another
+   * role seeds from that (account, role)'s current tracked rank; with nothing
+   * tracked, the Gold / Div 3 / blank defaults stand.
+   */
+  const seedAnchor = (): void => {
+    if (state.role === d.role) {
+      anchorTier = d.competitive?.tier ?? 'Gold';
+      anchorDivision = d.competitive?.division ?? 3;
+      anchorPct = d.competitive?.progressPct != null ? String(Math.round(d.competitive.progressPct)) : '';
+      return;
+    }
+    const r = ranks.find((x) => x.account === d.account && x.role === state.role);
+    if (!r) {
+      anchorTier = 'Gold';
+      anchorDivision = 3;
+      anchorPct = '';
+      return;
+    }
+    anchorTier = r.tier;
+    anchorDivision = r.division;
+    anchorPct = r.needsReanchor ? '' : String(Math.round(r.progressPct));
+  };
+
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
 
@@ -351,7 +359,7 @@ function buildMatchEditor(
     };
 
     const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => (state.result = v) });
-    const mapField = editField('Map',
+    const mapField = field('Map',
       mapPicker({
         value: state.map,
         maps,
@@ -361,60 +369,63 @@ function buildMatchEditor(
     );
     mapField.append(mapError);
 
+    // Canonical field order shared with the log card: Result, Map, Role, Heroes.
     const factsBlock = editable
       ? h('div', { class: 'stack', style: { gap: '12px' } },
-          editField('Result', resultRow),
-          editField('Role', segmented({
-            // Role filters the hero grid — repaint it when the role changes.
-            options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => { state.role = v; paintEditorHeroes(); },
-          })),
+          field('Result', resultRow),
           mapField,
-          editField('Heroes', heroEditHost),
+          field('Role', segmented({
+            // Role filters the hero grid and keys the Set-current rank seed —
+            // repaint the heroes, and re-seed + repaint the picker if it's active.
+            options: ROLE_OPTS, value: state.role, fill: true,
+            onChange: (v) => {
+              state.role = v;
+              paintEditorHeroes();
+              if (isComp && srMode === 'set-current') {
+                seedAnchor();
+                paintSr();
+              }
+            },
+          })),
+          field(optionalLabel('Heroes', '— tap all you played'), heroEditHost),
           // No Mode control — Vantage is competitive-only (spec D1); matches stay
           // competitive, mirroring the quick-log's removed mode picker.
         )
       : h('div', { class: 'hint' },
           `Auto-tracked from the game feed — result, map and heroes are locked. ${d.map} · ${roleLabel(d.role)}`);
 
-    // Change mode → the raw signed SR % (with wheel nudge). Set-current mode →
-    // the tier/division/% picker (prefilled, wheel-nudged) the app back-computes
-    // the SR % from on save.
-    const srDeltaField = (): HTMLInputElement => {
-      const el = srInput(srDelta, (v) => (srDelta = v));
-      attachWheelNudge(el, () => (srDelta != null ? String(srDelta) : ''), (v) => { srDelta = v === '' ? undefined : Number(v); });
-      return el;
-    };
-    const rankPicker = (): HTMLElement => {
-      const pct = h('input', {
-        class: 'vt-input mono', type: 'number', step: '1', value: anchorPct, placeholder: 'e.g. 40',
-        on: { input: (e) => (anchorPct = (e.target as HTMLInputElement).value) },
-      }) as HTMLInputElement;
-      attachWheelNudge(pct, () => anchorPct, (v) => (anchorPct = v));
-      return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        select(TIERS.map((t) => ({ value: t, label: t })), anchorTier, (v) => (anchorTier = v)),
-        select(DIVISIONS.map((dv) => ({ value: String(dv), label: `Div ${dv}` })), String(anchorDivision), (v) => (anchorDivision = Number(v))),
-        pct,
-      );
-    };
+    // SR block from the shared srControls, with the log card's labels. Change
+    // mode → the raw signed SR % (wheel-nudged); Set-current mode → the
+    // tier/division/% picker the app back-computes the SR % from on save.
     const srHost = h('div');
     const paintSr = (): void => {
-      const toggle = segmented<SrMode>({
-        options: [{ value: 'change', label: 'Change (±%)' }, { value: 'set-current', label: 'Set current rank' }],
-        value: srMode,
-        fill: true,
-        onChange: (v) => { srMode = v; paintSr(); },
-      });
+      const toggleRow = field(
+        optionalLabel('Skill rating', '— nudge the change or set your rank'),
+        srModeToggle(srMode, (v) => {
+          srMode = v;
+          if (v === 'set-current') seedAnchor();
+          paintSr();
+        }),
+      );
       if (srMode === 'set-current') {
-        render(srHost,
-          editField('Skill rating', toggle),
-          editField('Current rank — negative % means rank protection', rankPicker()),
+        render(srHost, toggleRow,
+          field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker({
+            tier: anchorTier,
+            division: anchorDivision,
+            pct: anchorPct,
+            onTier: (v) => (anchorTier = v),
+            onDivision: (v) => (anchorDivision = v),
+            onPct: (v) => (anchorPct = v),
+          })),
           h('div', { class: 'hint', style: { marginTop: '4px' } },
             'The rank you were at after this match — we back-calculate its SR %. Your live rank tracking is left as-is.'));
-      } else {
-        render(srHost,
-          editField('Skill rating', toggle),
-          editField('Skill rating change (%)', srDeltaField()));
+        return;
       }
+      render(srHost, toggleRow,
+        field(optionalLabel('Skill rating change (%)'),
+          srDeltaInput(srDelta != null ? String(srDelta) : '', (v) => {
+            srDelta = v.trim() === '' ? undefined : Number(v);
+          })));
     };
     if (isComp) paintSr();
     const srBlock = isComp ? srHost : null;
@@ -468,19 +479,25 @@ function buildMatchEditor(
 
     // tabindex -1: focusable via script (for the mount-time focus below) but not
     // part of the natural Tab order — mirrors the log card's keyboard handling.
+    // Field order and label convention are the log card's (its Account/Played
+    // fields are log-only): Result, Map, Role, Heroes, Skill rating,
+    // Performance, Comms, Flags, Targets.
     const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw', outline: 'none' } },
       h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
       h('div', { class: 'u-muted', style: { fontSize: '12px' } },
         `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}`),
-      editorSection('Match', factsBlock),
-      srBlock ? editorSection('◎ Rank', srBlock) : null,
-      editorSection('◎ Target grades', h('div', { class: 'stack', style: { gap: '11px' } },
-        ...(rows.length
-          ? rows.map((r) => r.el)
-          : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
-      )),
-      editorSection('◎ How it felt', mentalFlagsRow(flags)),
-      editorSection('◎ How you played', performanceSlider(performance, (v) => (performance = v))),
+      factsBlock,
+      srBlock,
+      field(optionalLabel('Performance', '— how did you play?'),
+        performanceSlider(performance, (v) => (performance = v))),
+      field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
+      field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
+      field(optionalLabel('Targets', '— grade now or later on Review'),
+        h('div', { class: 'stack', style: { gap: '11px' } },
+          ...(rows.length
+            ? rows.map((r) => r.el)
+            : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+        )),
       h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
         saveBtn,
         button('Cancel', { variant: 'ghost', onClick: close }),
@@ -496,19 +513,6 @@ function buildMatchEditor(
     requestAnimationFrame(() => root.focus());
     return root;
   });
-}
-
-/** A signed number input for the per-match skill-rating %; blank → undefined. */
-function srInput(value: number | undefined, onChange: (v: number | undefined) => void): HTMLInputElement {
-  const el = h('input', {
-    class: 'vt-input mono', type: 'number', step: '1', placeholder: 'e.g. +22 or -19',
-    value: value != null ? String(value) : '',
-    on: { input: (e) => {
-      const raw = (e.target as HTMLInputElement).value.trim();
-      onChange(raw === '' ? undefined : Number(raw));
-    } },
-  }) as HTMLInputElement;
-  return el;
 }
 
 // --- player history -------------------------------------------------------------
