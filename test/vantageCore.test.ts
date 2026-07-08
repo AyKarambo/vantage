@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import type { GameRecord } from '../src/core/analytics';
+import type { GameRecord, HeroStat } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 import { mapMode } from '../src/core/maps';
 import { mentalSummary } from '../src/core/mental';
 import { progression, winrateToSr, tierOf } from '../src/core/progression';
-import { sampleTargets } from '../src/core/targets';
+import { sampleTargets, type AuthoredTarget } from '../src/core/targets';
 import { computeDashboard, applyFilters, pendingReviewMatches } from '../src/core/dashboardData';
 import { currentSeasonWindow } from '../src/core/season';
 import { isCompetitive } from '../src/core/matchFilter';
@@ -409,6 +409,24 @@ describe('computeDashboard', () => {
     expect(rowWithNeither).not.toHaveProperty('srDelta');
     expect(rowWithNeither).not.toHaveProperty('finalScore');
     expect(rowWithNeither).not.toHaveProperty('performance');
+  });
+
+  it('populates measuredGrades on match-list rows for active measured targets and omits it otherwise (#68)', () => {
+    const line: HeroStat = { hero: 'Tracer', role: 'damage', eliminations: 0, deaths: 0, assists: 0, damage: 11000, healing: 0, mitigation: 0 };
+    const measurable = game({ result: 'Win', map: 'Ilios', role: 'damage', durationMinutes: 10, perHero: [line] });
+    const bare = game({ result: 'Loss', map: 'Ilios', role: 'damage' }); // no stats → 'no-stat'
+    const measured: AuthoredTarget = { id: 'dmg', name: 'Damage focus', mode: 'measured', rule: 'Damage ≥ 10,000', createdAt: 0, isActive: true };
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+
+    const withTarget = computeDashboard([measurable, bare], { days: 'all' }, demo, { targets: [measured] });
+    const measurableRow = withTarget.matches.find((m) => m.matchId === measurable.matchId)!;
+    const bareRow = withTarget.matches.find((m) => m.matchId === bare.matchId)!;
+    expect(measurableRow.measuredGrades?.dmg).toEqual({ grade: 'hit', value: 11000 });
+    expect(bareRow.measuredGrades?.dmg).toBe('no-stat');
+
+    // No active measured targets → the property is omitted entirely, as before.
+    const withoutTarget = computeDashboard([measurable, bare], { days: 'all' }, demo);
+    expect(withoutTarget.matches.find((m) => m.matchId === measurable.matchId)).not.toHaveProperty('measuredGrades');
   });
 
   it('carries performance onto ungraded review-inbox rows so the Review card can seed its slider', () => {

@@ -72,9 +72,10 @@ export interface MatchRow {
   flags?: Partial<Record<MatchFlagKey, true>>;
   /**
    * Auto-graded measured (⚡) targets for this match, shown read-only on the
-   * Review screen: target id → the derived grade + underlying per-10/ratio value,
-   * or `'no-stat'` when the match can't measure it. Only populated for the
-   * currently-active measured targets on the review inbox rows.
+   * Review screen and as an optional Matches-list field: target id → the
+   * derived grade + underlying per-10/ratio value, or `'no-stat'` when the
+   * match can't measure it. Only populated for the currently-active measured
+   * targets, on both review-inbox and match-list rows.
    */
   measuredGrades?: Record<string, { grade: TargetGrade; value: number } | 'no-stat'>;
 }
