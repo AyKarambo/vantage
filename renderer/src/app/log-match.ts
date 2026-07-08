@@ -15,7 +15,7 @@ import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { mapPicker, resolveMapName } from '../components/mapPicker';
 import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
-import { resultChooser } from '../components/resultChooser';
+import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
@@ -424,23 +424,12 @@ function buildForm(
     ),
   );
 
-  // Keyboard flow: W/L/D pick the result when not typing; Enter saves from
-  // anywhere but a button (a focused button keeps its native click) and the
-  // typeahead swallows Enter itself while its list is open.
+  // Keyboard flow: W/L/D pick the result when not typing (shared binding);
+  // Enter saves from anywhere but a button (a focused button keeps its native
+  // click) and the typeahead swallows Enter itself while its list is open.
+  bindResultKeys(form, resultRow);
   form.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
-    const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
-    if (!typing) {
-      const byKey: Record<string, string> = { w: 'Win', l: 'Loss', d: 'Draw' };
-      const pick = byKey[e.key.toLowerCase()];
-      if (pick && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        resultRow.querySelectorAll('button').forEach((b) => {
-          if (b.dataset.value === pick) b.click();
-        });
-        return;
-      }
-    }
     // e.repeat: ignore key-repeat from a held Enter — only a fresh keydown saves.
     if (e.key === 'Enter' && !e.repeat && !(t instanceof HTMLButtonElement)) {
       e.preventDefault();

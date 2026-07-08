@@ -6,16 +6,18 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, Role, TargetGrade } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
 import { button, card, pill, RESULT_STATE, segmented, select, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
-import { resultChooser } from '../components/resultChooser';
+import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
+import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
 import { attachWheelNudge } from '../components/wheelStepper';
+import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { TIERS } from '../../../src/core/rank';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
@@ -36,14 +38,14 @@ const DIVISIONS = [5, 4, 3, 2, 1];
 type SrMode = 'change' | 'set-current';
 
 /**
- * Selectable maps for the editor: the active competitive pool, plus the match's
- * `current` map even when it is inactive — so opening an old match on a
- * rotated-out map never blanks or silently changes it (spec AC 25).
+ * The editor's map pool: every known map, plus the match's `current` map even
+ * when master data no longer knows it (shown muted) — so opening an old match
+ * on a rotated-out or renamed map never blanks or silently changes it (spec AC 25).
  */
-function mapOptions(ctx: ViewContext, current: string): Array<{ value: string; label: string }> {
-  const names = ctx.data.masterData.maps.filter((m) => m.isActive).map((m) => m.name);
-  if (current && !names.includes(current)) names.push(current);
-  return names.sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m }));
+function editorMapPool(ctx: ViewContext, current: string): MapPickerEntry[] {
+  const maps = ctx.data.masterData.maps;
+  if (!current || maps.some((m) => m.name === current)) return maps;
+  return [...maps, { name: current, isActive: false }];
 }
 
 const RESULT_TEXT: Record<string, string> = { Win: 'Victory', Loss: 'Defeat', Draw: 'Draw' };
@@ -292,6 +294,19 @@ function editField(label: string, control: Node): HTMLElement {
  * re-pulls the detail so every dependent view reflects the change.
  */
 function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
+  // Preload mirrors the log card: current ranks feed the Set-current re-seed
+  // on a role switch; per-account most-played heroes feed the picker shortlist.
+  void Promise.all([bridge.getRanks(), bridge.mostPlayedHeroes()]).then(([ranks, mostPlayed]) => {
+    buildMatchEditor(ctx, d, ranks, mostPlayed);
+  });
+}
+
+function buildMatchEditor(
+  ctx: ViewContext,
+  d: MatchDetail,
+  ranks: RankSummary[],
+  mostPlayed: Record<string, Partial<Record<Role, string[]>>>,
+): void {
   const active = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
@@ -315,18 +330,45 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
 
+    // Multi-hero picker with the log card's shortlist + search: most-played for
+    // this match's account and the selected role, the rest reachable via search.
     const heroEditHost = h('div');
-    const paintEditorHeroes = (): void => paintHeroChips(heroEditHost, heroes, state.role, ctx.data.masterData.heroes);
+    const paintEditorHeroes = (): void => {
+      const limit = prefs.get('suggestedHeroCount') ?? DEFAULT_SUGGESTED_HEROES;
+      const shortlist = (mostPlayed[d.account]?.[state.role] ?? []).slice(0, limit);
+      paintHeroChips(heroEditHost, heroes, state.role, ctx.data.masterData.heroes, { shortlist, search: true });
+    };
     paintEditorHeroes();
+
+    // The same strict map combobox as the log card, with the same save guard:
+    // the field can only commit a known map, and Save stays disabled while the
+    // text resolves to none. The match's current map is always in the pool.
+    const maps = editorMapPool(ctx, d.map);
+    const resolveMap = (): string | null => resolveMapName(state.map, maps);
+    const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
+    const updateSaveEnabled = (): void => {
+      saveBtn.disabled = editable && resolveMap() == null;
+    };
+
+    const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => (state.result = v) });
+    const mapField = editField('Map',
+      mapPicker({
+        value: state.map,
+        maps,
+        recentMaps: ctx.data.matches.map((m) => m.map),
+        onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
+      }),
+    );
+    mapField.append(mapError);
 
     const factsBlock = editable
       ? h('div', { class: 'stack', style: { gap: '12px' } },
-          editField('Result', resultChooser({ value: state.result, onChange: (v) => (state.result = v) })),
+          editField('Result', resultRow),
           editField('Role', segmented({
             // Role filters the hero grid — repaint it when the role changes.
             options: ROLE_OPTS, value: state.role, fill: true, onChange: (v) => { state.role = v; paintEditorHeroes(); },
           })),
-          editField('Map', select(mapOptions(ctx, d.map), state.map, (v) => (state.map = v))),
+          mapField,
           editField('Heroes', heroEditHost),
           // No Mode control — Vantage is competitive-only (spec D1); matches stay
           // competitive, mirroring the quick-log's removed mode picker.
@@ -378,6 +420,18 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
     const srBlock = isComp ? srHost : null;
 
     const save = (): void => {
+      if (editable) {
+        // Same guard as the log card: only a resolved, known map may save.
+        const resolved = resolveMap();
+        if (!resolved) {
+          mapError.textContent = state.map.trim()
+            ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
+            : 'Pick the map — start typing and choose from the list.';
+          mapError.classList.remove('hidden');
+          return;
+        }
+        state.map = resolved;
+      }
       void bridge.editMatch({
         matchId: d.matchId,
         ...(editable ? { result: state.result, role: state.role, map: state.map, heroes: [...heroes] } : {}),
@@ -409,7 +463,12 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
       });
     };
 
-    return h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw' } },
+    const saveBtn = button('Save', { variant: 'primary', onClick: save });
+    updateSaveEnabled();
+
+    // tabindex -1: focusable via script (for the mount-time focus below) but not
+    // part of the natural Tab order — mirrors the log card's keyboard handling.
+    const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw', outline: 'none' } },
       h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
       h('div', { class: 'u-muted', style: { fontSize: '12px' } },
         `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}`),
@@ -423,12 +482,19 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
       editorSection('◎ How it felt', mentalFlagsRow(flags)),
       editorSection('◎ How you played', performanceSlider(performance, (v) => (performance = v))),
       h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
-        button('Save', { variant: 'primary', onClick: save }),
+        saveBtn,
         button('Cancel', { variant: 'ghost', onClick: close }),
         h('span', { style: { flex: '1' } }),
         d.review ? button('Clear grades', { variant: 'ghost', onClick: clear }) : null,
       ),
     );
+
+    // W/L/D drive the result chooser for editable matches — the same shared
+    // binding as the log card. openModal appends the panel after build returns,
+    // so defer the focus to the next frame once it's actually in the DOM.
+    if (editable) bindResultKeys(root, resultRow);
+    requestAnimationFrame(() => root.focus());
+    return root;
   });
 }
 
