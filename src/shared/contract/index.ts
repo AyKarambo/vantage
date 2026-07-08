@@ -31,6 +31,7 @@ export type { SessionSettings } from '../../core/sessionSettings';
 // Dashboard payloads
 export type {
   DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
+  MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide,
 } from './dashboard';
 
 // Editable master data (heroes/maps/seasons)

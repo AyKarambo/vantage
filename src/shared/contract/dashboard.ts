@@ -6,7 +6,7 @@
 import type { Role, Result } from '../../core/model';
 import type { WinLoss, Group, FocusItem, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
-import type { MentalCosts, TiltPositionBucket, TiltTrendPoint } from '../../core/mentalAnalytics';
+import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
 import type { StalenessSettings } from '../../core/staleness';
@@ -46,7 +46,7 @@ export interface CalendarDay {
 // Re-exported so renderer/main keep importing match-row vocabulary from the contract.
 export type { MatchFlagKey };
 // Re-exported so the Mental view reads its analytics vocabulary from the contract too.
-export type { MentalCosts, TiltPositionBucket, TiltTrendPoint };
+export type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide };
 
 /** A single match for the Matches list. */
 export interface MatchRow {
