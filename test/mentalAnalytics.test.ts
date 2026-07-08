@@ -252,6 +252,14 @@ describe('tiltTrendDirection', () => {
     ]);
     expect(tiltTrendDirection(points)).toBe('improving');
   });
+
+  it('still reads a direction when the LATER day dominates the game count', () => {
+    // Day 2 carries 7 of 13 games — more than half — so it must land in the
+    // late half rather than swallowing the split into `early` and returning
+    // null. Early (day 1) rate 1, late (day 2) rate 0 → improving.
+    const points = tiltTrend([...dayGames('2026-07-01', 6, 6), ...dayGames('2026-07-02', 7, 0)]);
+    expect(tiltTrendDirection(points)).toBe('improving');
+  });
 });
 
 // ---- tiltBySessionPosition -----------------------------------------------------

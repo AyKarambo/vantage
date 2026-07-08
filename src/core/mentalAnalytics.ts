@@ -143,7 +143,11 @@ export function tiltTrendDirection(
   const late: TiltTrendPoint[] = [];
   let seen = 0;
   for (const p of points) {
-    (seen < total / 2 ? early : late).push(p);
+    // Assign by the day's own midpoint, not its start — otherwise a final day
+    // that alone carries more than half the range's games gets pulled wholly
+    // into `early` (since `seen` before it is still under the midpoint),
+    // leaving `late` empty and the read null even on well-sampled ranges.
+    (seen + p.games / 2 < total / 2 ? early : late).push(p);
     seen += p.games;
   }
   const a = halfRate(early);

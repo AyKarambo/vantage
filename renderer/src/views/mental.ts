@@ -174,6 +174,7 @@ function sessionCard(ctx: ViewContext): HTMLElement {
   }
   // The stop-point claim needs a bucket that can carry it: enough games AND
   // actual tilt at that position. Thin or tilt-free peaks stay unclaimed.
+  const sampled = buckets.some((b) => b.games >= COST_MIN_SAMPLE);
   const peak = buckets
     .filter((b) => b.games >= COST_MIN_SAMPLE && b.tilted > 0)
     .sort((a, b) => b.rate - a.rate)[0];
@@ -194,7 +195,12 @@ function sessionCard(ctx: ViewContext): HTMLElement {
             // "Break before game 1" is not advice — a first-game peak means the
             // tilt walks in with you, so the nudge points at the queue-up instead.
             peak.key === '1' ? 'You may be queuing already tilted — check in before you start.' : 'Plan the break before then.')
-        : `Not enough games per position yet (${COST_MIN_SAMPLE} needed) to call a stop point.`),
+        // Two distinct empty states: genuinely thin samples vs. plenty of
+        // games but no tilt flagged anywhere — don't blame sample size for
+        // the latter (AC7: no fake/false reasons in empty states).
+        : sampled
+          ? 'No tilt flagged at any position in this range — nothing to call a stop point from.'
+          : `Not enough games per position yet (${COST_MIN_SAMPLE} needed) to call a stop point.`),
   );
 }
 
