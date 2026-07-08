@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { focusEntries, focusTrend, type GameRecord } from '../src/core/analytics';
-import type { Result, Role } from '../src/core/model';
+import { focusEntries, focusTrend, linkFocusTargets, type GameRecord } from '../src/core/analytics';
+import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
+import type { Result } from '../src/core/model';
 
 const T0 = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 3600000;
@@ -133,5 +134,99 @@ describe('focusTrend', () => {
     const three = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Numbani' }));
     const noTrend = focusEntries(three).find((e) => e.key === 'Numbani');
     expect(noTrend?.trend).toBeUndefined();
+  });
+});
+
+describe('linkFocusTargets', () => {
+  let tSeq = 0;
+  function target(name: string, p: Partial<AuthoredTarget> = {}): AuthoredTarget {
+    tSeq += 1;
+    return {
+      id: `t${tSeq}`, name, mode: 'self', rule: 'You grade it',
+      createdAt: T0, isActive: true, ...p,
+    };
+  }
+  const at = (i: number, result: Result, p: Partial<GameRecord> = {}): GameRecord =>
+    game({ result, timestamp: T0 + i * HOUR, ...p });
+  /** A single map entry to link against. */
+  const entriesFor = (games: GameRecord[]) => focusEntries(games).filter((e) => e.dimension === 'map');
+
+  it('links by case-insensitive name substring and computes the since-flagged delta', () => {
+    // Before the flag: 1W4L (20%). Since: 3W1L (75%). Flag at i=5. Net stays 1.
+    const games = [
+      at(0, 'Win', { map: "King's Row" }), ...[1, 2, 3, 4].map((i) => at(i, 'Loss', { map: "King's Row" })),
+      ...[5, 6, 7].map((i) => at(i, 'Win', { map: "King's Row" })), at(8, 'Loss', { map: "King's Row" }),
+    ];
+    const t = target("practice KING'S ROW: warm up unranked + review one replay", { activatedAt: T0 + 5 * HOUR });
+    const [linked] = linkFocusTargets(entriesFor(games), [t], games);
+    expect(linked.progress).toMatchObject({
+      targetId: t.id, targetName: t.name, since: T0 + 5 * HOUR, gamesSince: 4, deltaPts: 55,
+    });
+  });
+
+  it('falls back to createdAt when activatedAt is absent', () => {
+    const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Busan' }));
+    const t = target('Practice Busan: warm up', { createdAt: T0 + 1 * HOUR });
+    const [linked] = linkFocusTargets(entriesFor(games), [t], games);
+    expect(linked.progress?.since).toBe(T0 + 1 * HOUR);
+    expect(linked.progress?.gamesSince).toBe(2);
+    expect(linked.progress?.deltaPts).toBeUndefined(); // 1 decided game before < 3
+  });
+
+  it('never links inactive, archived, non-matching or Notion-bookkeeping targets', () => {
+    const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Oasis' }));
+    const targets = [
+      target('Practice Oasis', { isActive: false }),
+      target('Practice Oasis', { archivedAt: T0 }),
+      target('Practice Ilios'),
+      { ...target('Practice Oasis'), id: NOTION_IMPROVEMENT_TARGET_ID },
+    ];
+    const [entry] = linkFocusTargets(entriesFor(games), targets, games);
+    expect(entry.progress).toBeUndefined();
+  });
+
+  it('picks the most recently flagged target when several match', () => {
+    const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Junkertown' }));
+    const older = target('Practice Junkertown v1', { activatedAt: T0 + 1 * HOUR });
+    const newer = target('Practice Junkertown v2', { activatedAt: T0 + 2 * HOUR });
+    const [linked] = linkFocusTargets(entriesFor(games), [older, newer], games);
+    expect(linked.progress?.targetId).toBe(newer.id);
+  });
+
+  it('counts gamesSince over the full history, not the filtered range', () => {
+    // Entry derived from a narrow range; allGames holds older + newer games too.
+    const rangeGames = [10, 11, 12].map((i) => at(i, 'Loss', { map: 'Hollywood' }));
+    const allGames = [
+      ...[0, 1].map((i) => at(i, 'Loss', { map: 'Hollywood' })), // before the flag
+      ...[5, 6].map((i) => at(i, 'Win', { map: 'Hollywood' })), // since, outside range
+      ...rangeGames,
+    ];
+    const t = target('Practice Hollywood', { activatedAt: T0 + 4 * HOUR });
+    const [linked] = linkFocusTargets(entriesFor(rangeGames), [t], allGames);
+    expect(linked.progress?.gamesSince).toBe(5);
+  });
+
+  it('draws are not decided games for the delta gate', () => {
+    const games = [
+      at(0, 'Win', { map: 'Nepal' }), at(1, 'Loss', { map: 'Nepal' }), at(2, 'Draw', { map: 'Nepal' }),
+      ...[3, 4, 5, 6].map((i) => at(i, 'Loss', { map: 'Nepal' })),
+    ];
+    const t = target('Practice Nepal', { activatedAt: T0 + 3 * HOUR });
+    const [linked] = linkFocusTargets(entriesFor(games), [t], games);
+    // Before: W L D → only 2 decided; since: 4 losses. No delta, but progress rides.
+    expect(linked.progress?.gamesSince).toBe(4);
+    expect(linked.progress?.deltaPts).toBeUndefined();
+  });
+
+  it('links hero and role entries too', () => {
+    const games = [
+      ...[0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Ana'], map: `H${i}` })),
+      ...[3, 4, 5, 6, 7].map((i) => at(i, 'Loss', { role: 'support', map: `R${i}` })),
+    ];
+    const entries = focusEntries(games);
+    const linked = linkFocusTargets(entries, [target('Practice Ana: aim drills'), target('Fix my SUPPORT games')], games);
+    expect(linked.find((e) => e.dimension === 'hero' && e.key === 'Ana')?.progress).toBeDefined();
+    expect(linked.find((e) => e.dimension === 'role' && e.key === 'support')?.progress).toBeDefined();
+    expect(linked.find((e) => e.dimension === 'map')?.progress).toBeUndefined();
   });
 });

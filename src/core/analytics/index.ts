@@ -13,7 +13,7 @@ export {
 } from './grouping';
 
 // Cross-dimension focus ranking (the Focus screen's "work on these" hub)
-export { focusEntries, focusTrend, focusGamesFor } from './focus';
+export { focusEntries, focusTrend, focusGamesFor, linkFocusTargets } from './focus';
 
 // Per-hero stat rollups
 export { heroStats } from './heroStats';

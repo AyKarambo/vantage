@@ -6,7 +6,11 @@
  * actually working. Pure and I/O-free — consumed by dashboardData.
  */
 import { byHero, focusBy, winLoss } from './grouping';
-import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord } from './types';
+import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, WinLoss } from './types';
+import type { AuthoredTarget } from '../targets/types';
+// Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
+// analytics back, and this keeps the module graph cycle-free at runtime.
+import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 
 /** Per-dimension minimum sample before a group can be flagged. Roles are only
  *  four broad buckets, so they get a higher floor than maps/heroes. */
@@ -20,6 +24,9 @@ const TREND_MIN_GAMES = 6;
 
 /** Winrate dead-band (0..1) within which a trend reads 'flat'. */
 const TREND_DEADBAND = 0.05;
+
+/** Decided games needed on each side of the flag instant before a delta is shown. */
+const PROGRESS_MIN_DECIDED = 3;
 
 /** The games that count toward one focus entry (a game counts toward every hero played in it). */
 export function focusGamesFor(games: GameRecord[], dimension: FocusDimension, key: string): GameRecord[] {
@@ -64,6 +71,43 @@ export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
   return delta > 0 ? 'improving' : 'declining';
 }
 
+/**
+ * Attach since-flagged progress to every entry that has a linked improvement
+ * target: an active, non-archived authored target whose name mentions the entry
+ * key (case-insensitive; the Notion bookkeeping pseudo-target never links).
+ * `allGames` should be the UNFILTERED competitive history — progress is about
+ * the target's lifetime, not the current filter (same stance as staleness).
+ */
+export function linkFocusTargets(
+  entries: FocusEntry[],
+  targets: AuthoredTarget[],
+  allGames: GameRecord[],
+): FocusEntry[] {
+  const candidates = targets.filter(
+    (t) => t.isActive && !t.archivedAt && t.id !== NOTION_IMPROVEMENT_TARGET_ID,
+  );
+  if (!candidates.length) return entries;
+  return entries.map((e) => {
+    const target = linkedTarget(e.key, candidates);
+    if (!target) return e;
+    const since = target.activatedAt ?? target.createdAt;
+    const entryGames = focusGamesFor(allGames, e.dimension, e.key);
+    const before = winLoss(entryGames.filter((g) => g.timestamp < since));
+    const after = winLoss(entryGames.filter((g) => g.timestamp >= since));
+    const withDelta = decided(before) >= PROGRESS_MIN_DECIDED && decided(after) >= PROGRESS_MIN_DECIDED;
+    return {
+      ...e,
+      progress: {
+        targetId: target.id,
+        targetName: target.name,
+        since,
+        gamesSince: after.games,
+        ...(withDelta ? { deltaPts: Math.round((after.winrate - before.winrate) * 1000) / 10 } : {}),
+      },
+    };
+  });
+}
+
 // --- helpers ----------------------------------------------------------------
 
 /**
@@ -81,3 +125,13 @@ function focusByHero(games: GameRecord[], minGames: number): FocusItem[] {
 function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntry[] {
   return items.map((i) => ({ ...i, dimension }));
 }
+
+/** Most recently flagged candidate whose name mentions the key (case-insensitive). */
+function linkedTarget(key: string, candidates: AuthoredTarget[]): AuthoredTarget | undefined {
+  const needle = key.toLowerCase();
+  return candidates
+    .filter((t) => t.name.toLowerCase().includes(needle))
+    .sort((a, b) => (b.activatedAt ?? b.createdAt) - (a.activatedAt ?? a.createdAt))[0];
+}
+
+const decided = (wl: WinLoss): number => wl.wins + wl.losses;
