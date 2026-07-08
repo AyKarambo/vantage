@@ -52,15 +52,25 @@ export function nextScrollTop(action: ScrollAction, m: ScrollMetrics): number {
 export const INNER_SCROLLER_SELECTOR = '.table-wrap, .log-lines';
 
 /**
- * Selection rule: the first inner candidate that actually overflows wins —
- * a capped-but-short table doesn't steal the keys from a scrolling `.content`.
- * No overflowing inner candidate → the host scrolls.
+ * Selection rule: the candidate that owns the most scrollable content wins,
+ * with the host as the baseline. An inner scroller (Heroes' capped table, the
+ * Logs tail) takes the keys only when it overflows AND has more room to scroll
+ * than the host — so a chart card toggled to "view as table" inside a long
+ * dashboard doesn't steal paging from the page itself, while on Heroes the
+ * table (which holds virtually all the scrollable content) still wins even if
+ * `.content` overflows by a few pixels. Ties keep the host.
  */
 export function pickScroller<T extends ScrollerCandidate>(inner: Iterable<T>, host: T): T {
+  let best = host;
+  let bestSurplus = Math.max(0, host.scrollHeight - host.clientHeight);
   for (const el of inner) {
-    if (el.scrollHeight > el.clientHeight) return el;
+    const surplus = el.scrollHeight - el.clientHeight;
+    if (surplus > bestSurplus) {
+      best = el;
+      bestSurplus = surplus;
+    }
   }
-  return host;
+  return best;
 }
 
 /** Resolve the ACTIVE view's real scroll container inside the content host. */

@@ -62,25 +62,39 @@ describe('nextScrollTop', () => {
 });
 
 describe('pickScroller', () => {
-  const host = { scrollHeight: 3000, clientHeight: 600, name: 'host' };
+  // A non-scrolling host (Heroes/Logs: .content fits, the inner element scrolls).
+  const snugHost = { scrollHeight: 600, clientHeight: 600, name: 'host' };
 
-  it('prefers the first inner candidate that actually overflows', () => {
+  it('prefers an overflowing inner scroller over a host that cannot scroll', () => {
     const table = { scrollHeight: 2000, clientHeight: 500, name: 'table' };
-    expect(pickScroller([table], host)).toBe(table);
+    expect(pickScroller([table], snugHost)).toBe(table);
   });
 
-  it('skips inner candidates that do not overflow (short capped table)', () => {
-    const shortTable = { scrollHeight: 400, clientHeight: 500, name: 'short' };
+  it('picks the inner candidate with the most scrollable content', () => {
+    const shortTable = { scrollHeight: 600, clientHeight: 500, name: 'short' };
     const logs = { scrollHeight: 9000, clientHeight: 500, name: 'logs' };
-    expect(pickScroller([shortTable, logs], host)).toBe(logs);
+    expect(pickScroller([shortTable, logs], snugHost)).toBe(logs);
   });
 
-  it('exactly-fitting candidates count as non-scrollable', () => {
+  it('the host keeps the keys when it scrolls further than an inner table (chart card toggled to table view)', () => {
+    const longHost = { scrollHeight: 3000, clientHeight: 600, name: 'host' };
+    const chartTable = { scrollHeight: 850, clientHeight: 700, name: 'chart-table' };
+    expect(pickScroller([chartTable], longHost)).toBe(longHost);
+  });
+
+  it('an inner scroller dominating a marginally-scrolling host wins (Heroes with a few px of .content overflow)', () => {
+    const marginalHost = { scrollHeight: 640, clientHeight: 600, name: 'host' };
+    const heroTable = { scrollHeight: 2500, clientHeight: 550, name: 'table' };
+    expect(pickScroller([heroTable], marginalHost)).toBe(heroTable);
+  });
+
+  it('exactly-fitting or shorter candidates count as non-scrollable', () => {
     const snug = { scrollHeight: 500, clientHeight: 500, name: 'snug' };
-    expect(pickScroller([snug], host)).toBe(host);
+    const shorter = { scrollHeight: 300, clientHeight: 500, name: 'shorter' };
+    expect(pickScroller([snug, shorter], snugHost)).toBe(snugHost);
   });
 
   it('falls back to the host when no inner candidate exists', () => {
-    expect(pickScroller([], host)).toBe(host);
+    expect(pickScroller([], snugHost)).toBe(snugHost);
   });
 });
