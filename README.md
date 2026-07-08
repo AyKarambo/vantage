@@ -23,9 +23,10 @@ never shows stale data as "current."
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a focus band, a focus queue and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**
-  (scoreboard, per-hero tabs, competitive progress, player history, and an
-  end-of-match screenshots gallery — each section degrades gracefully to whatever the
-  game feed actually reported for that match). Every match is **editable** from here:
+  (scoreboard, per-hero tabs, competitive progress, a read-only **Grades card** with
+  the match's target grades, performance rating and feel/leaver flags, player history,
+  and an end-of-match screenshots gallery — each section degrades gracefully to whatever
+  the game feed actually reported for that match). Every match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
   The editor mirrors the Log match card: colour-coded **W/L/D**, the **mouse-wheel
