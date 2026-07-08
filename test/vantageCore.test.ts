@@ -362,9 +362,9 @@ describe('computeDashboard', () => {
     expect(d).not.toHaveProperty('byMode');
   });
 
-  it('toMatchRow carries srDelta/finalScore when present and omits them when absent', () => {
+  it('toMatchRow carries srDelta/finalScore/performance when present and omits them when absent', () => {
     const withBoth = game({
-      result: 'Win', map: 'Ilios', role: 'damage', srDelta: 25, finalScore: '3–1',
+      result: 'Win', map: 'Ilios', role: 'damage', srDelta: 25, finalScore: '3–1', performance: 75,
     });
     const withNeither = game({ result: 'Loss', map: 'Ilios', role: 'damage' });
     const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
@@ -373,7 +373,20 @@ describe('computeDashboard', () => {
     const rowWithNeither = d.matches.find((m) => m.matchId === withNeither.matchId)!;
     expect(rowWithBoth.srDelta).toBe(25);
     expect(rowWithBoth.finalScore).toBe('3–1');
+    expect(rowWithBoth.performance).toBe(75);
     expect(rowWithNeither).not.toHaveProperty('srDelta');
     expect(rowWithNeither).not.toHaveProperty('finalScore');
+    expect(rowWithNeither).not.toHaveProperty('performance');
+  });
+
+  it('carries performance onto ungraded review-inbox rows so the Review card can seed its slider', () => {
+    // An imported / pre-rated game has a performance but no review — it belongs in
+    // the inbox, and its rating must ride along so the card shows it (not "Not rated").
+    const rated = game({ result: 'Win', map: 'Ilios', role: 'damage', performance: 50 });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard([rated], { days: 'all' }, demo);
+    const inboxRow = d.reviewInbox.find((m) => m.matchId === rated.matchId)!;
+    expect(inboxRow).toBeDefined();
+    expect(inboxRow.performance).toBe(50);
   });
 });
