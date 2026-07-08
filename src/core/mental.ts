@@ -40,6 +40,15 @@ export interface MentalSummary {
   calmDecided: number;
 }
 
+/**
+ * True when the game was flagged tilted in either source (quick-log
+ * self-report OR Review-screen flags) — the tilt read every mental analytic
+ * shares.
+ */
+export function isTilted(g: GameRecord): boolean {
+  return Boolean(g.mental?.tilt || g.review?.flags?.tilt);
+}
+
 const EMPTY: MentalSummary = {
   calm: 0,
   tilted: 0,
@@ -61,7 +70,7 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
     // OR-merge per flag so a game flagged in both sources still counts once.
     const m = g.mental ?? {};
     const r = g.review?.flags ?? {};
-    const tilt = Boolean(m.tilt || r.tilt);
+    const tilt = isTilted(g);
     if (tilt) flags.tilt++;
     if (m.toxicMates || r.toxicMates) flags.toxicMates++;
     const leaver = mergeLeaver(leaverFlags(m), leaverFlags(r));
@@ -106,7 +115,7 @@ export function rowFlags(g: GameRecord): Partial<Record<MatchFlagKey, true>> | u
   const leaver = mergeLeaver(leaverFlags(m), leaverFlags(r));
 
   const out: Partial<Record<MatchFlagKey, true>> = {};
-  if (m.tilt || r.tilt) out.tilt = true;
+  if (isTilted(g)) out.tilt = true;
   if (m.toxicMates || r.toxicMates) out.toxicMates = true;
   if (leaver.myTeam || leaver.enemyTeam) out.leaver = true;
   if (isPositiveComms(m) || isPositiveComms(r)) out.positiveComms = true;
