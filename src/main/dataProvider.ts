@@ -223,10 +223,19 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         patch.srDelta = input.srDelta;
       }
       if (input.performance !== undefined) patch.performance = input.performance;
-      // Only stamp a review when there are grades — an edit with no targets
-      // shouldn't mark an otherwise-ungraded match as reviewed.
-      if (input.grades && Object.keys(input.grades).length) {
-        patch.review = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
+      // Stamp a review when there are grades to save, OR when the match is
+      // already reviewed — an edit with no targets shouldn't mark an otherwise-
+      // ungraded match as reviewed, but if it's already reviewed we must
+      // re-stamp review.flags alongside patch.mental so the two layers can't
+      // drift (an editor flag-only edit would otherwise leave review.flags
+      // stale while mental moves on, resurrecting the old flag on read).
+      const hasGrades = !!(input.grades && Object.keys(input.grades).length);
+      if (hasGrades || game.review) {
+        patch.review = {
+          at: Date.now(),
+          grades: hasGrades ? input.grades! : game.review?.grades ?? {},
+          flags: input.mental ?? game.mental ?? {},
+        };
       }
       deps.history.editManual(input.matchId, patch);
     },
