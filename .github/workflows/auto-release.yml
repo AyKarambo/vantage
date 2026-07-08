@@ -11,10 +11,12 @@
 # bypass of branch protection. package.json on `main` stays at its floor; the
 # tag, the Release and the installer filename carry the real version.
 #
-# Signing stays a manual, local step: CI artifacts are UNSIGNED (SmartScreen
-# still warns). The tag-triggered `release.yml` builds a downloadable unsigned
-# artifact for that local `npm run sign:local` path; this workflow is the
-# automatic, publish-on-merge path.
+# Signing happens IN the build via SSL.com eSigner (scripts/esigner-sign.cjs):
+# when the four ES_* repo secrets are configured, the app exe, uninstaller and
+# installer are all signed with the IV certificate (required for the Overwolf
+# gaming packages / GEP to load in distributed builds). Without the secrets the
+# hook no-ops and this publishes an unsigned installer, same as before.
+# Runbook: docs/signing.md. Each signed release consumes 3 eSigner credits.
 name: auto-release
 
 on:
@@ -32,6 +34,10 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    env:
+      # 'true' only when every eSigner secret is present — gates the signing steps
+      # (the secrets context can't be used directly in step `if:` conditions).
+      HAS_ESIGNER: ${{ secrets.ES_USERNAME != '' && secrets.ES_PASSWORD != '' && secrets.ES_CREDENTIAL_ID != '' && secrets.ES_TOTP_SECRET != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,12 +81,41 @@ jobs:
           echo "tag=v$next" >> "$GITHUB_OUTPUT"
           echo "Bump: ${last_tag:-<none>} ($base) -> v$next ($level)"
 
-      # ow-electron-builder -> release/Vantage-Setup-<ver>.exe (unsigned; --publish=never)
+      # SSL.com CodeSignTool for the eSigner sign hook. The zip (~220 MB, bundles its
+      # own JDK) has NO top-level folder — extract into a dedicated dir.
+      - name: Set up CodeSignTool (SSL.com eSigner)
+        if: env.HAS_ESIGNER == 'true'
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'CodeSignTool.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'CodeSignTool'
+          Invoke-WebRequest -Uri 'https://www.ssl.com/download/codesigntool-for-windows/' -OutFile $zip
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          "CODE_SIGN_TOOL_PATH=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # ow-electron-builder -> release/Vantage-Setup-<ver>.exe (--publish=never).
+      # scripts/esigner-sign.cjs signs the app exe, uninstaller and installer during
+      # the build when the ES_* env is present; otherwise it warns and leaves them
+      # unsigned. (No CSC_* vars: the custom sign hook is the only Windows signer.)
       - name: Build installer
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
+          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          ES_CREDENTIAL_ID: ${{ secrets.ES_CREDENTIAL_ID }}
+          ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
         run: npm run release
+
+      # A signed release must actually be signed — catch silent hook regressions.
+      - name: Verify Authenticode signature
+        if: env.HAS_ESIGNER == 'true'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release/Vantage-Setup-*.exe | Select-Object -First 1
+          $sig = Get-AuthenticodeSignature $exe.FullName
+          if ($sig.Status -ne 'Valid') { throw "Signature check failed for $($exe.Name): $($sig.Status) — $($sig.StatusMessage)" }
+          Write-Host "Signed: $($exe.Name) by $($sig.SignerCertificate.Subject)"
 
       # Creates the tag at this commit and publishes the Release with the exe.
       - name: Publish GitHub Release

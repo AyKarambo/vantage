@@ -44,8 +44,9 @@ Notion export. Built on **ow-electron** (Overwolf's Electron) — a frameless de
 1. **Account safety — GEP only.** Live match data comes solely from Overwolf's Game Events
    Provider. Never read game memory, inject, or expose hidden info. This is the product's
    core promise and the zero-ban-risk guarantee.
-2. **No secrets in git.** Code-signing material (Certum / SimplySign), Notion tokens, and
-   keys are never committed. Signing is local-only; tokens live in user config, not source.
+2. **No secrets in git.** Code-signing material (SSL.com eSigner credentials), Notion tokens,
+   and keys are never committed. Signing credentials live in GitHub Actions secrets or local
+   env vars; tokens live in user config, not source.
 3. **`core/` stays pure & Electron-free.** Nothing under `src/core/` imports
    Electron/Overwolf/Notion — this keeps domain logic unit-testable and able to drive the
    browser preview. Plumbing stays at the edges.

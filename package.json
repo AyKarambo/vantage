@@ -60,7 +60,14 @@
         }
       ],
       "icon": "assets/appicon.png",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "signtoolOptions": {
+        "sign": "./scripts/esigner-sign.cjs",
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "publisherName": "Timo Seikel"
+      }
     },
     "nsis": {
       "oneClick": false,
