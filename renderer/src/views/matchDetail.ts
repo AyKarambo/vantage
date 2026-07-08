@@ -15,7 +15,7 @@ import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
 import { resultChooser } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
-import { attachWheelNudge } from '../app/wheelStepper';
+import { attachWheelNudge } from '../components/wheelStepper';
 import { TIERS } from '../../../src/core/rank';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';

@@ -11,7 +11,7 @@
 import { h, render } from '../dom';
 import { time, roleLabel } from '../format';
 import { registerShortcut } from '../shortcuts';
-import { badge, button, select, segmented } from '../components/primitives';
+import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { typeahead } from '../components/typeahead';
 import { targetGradeRow } from '../components/reviewControls';
@@ -19,20 +19,16 @@ import { resultChooser } from '../components/resultChooser';
 import { commsSwitch } from '../components/commsSwitch';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
-import { attachWheelNudge } from './wheelStepper';
+import { field, optionalLabel } from '../components/formField';
+import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
-import { TIERS } from '../../../src/core/rank';
 import type { AccountSummary, CommsTone, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy'];
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
-const DIVISIONS = [5, 4, 3, 2, 1];
-
-/** The SR-entry mode: nudge the change (±%) or set the current rank outright. */
-type SrMode = 'change' | 'set-current';
 
 /** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
 function presetFor(result: Result): string {
@@ -332,25 +328,6 @@ function buildForm(
   paintHeroes();
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
-  // SR-delta input with the mouse-wheel nudge (±1) and edit tracking.
-  const srDeltaInput = (): HTMLInputElement => {
-    const el = numInput(state.srDelta, 'e.g. +22 or -19', (v) => { state.srDelta = v; state.srEdited = true; });
-    attachWheelNudge(el, () => state.srDelta, (v) => { state.srDelta = v; state.srEdited = true; });
-    return el;
-  };
-
-  // Tier / division / % picker — the "Set current rank" mode's input.
-  const rankPicker = (): HTMLElement => {
-    const pctInput = numInput(state.anchorPct, 'e.g. 40, or -19 if protected', (v) => (state.anchorPct = v));
-    attachWheelNudge(pctInput, () => state.anchorPct, (v) => (state.anchorPct = v));
-    return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-      select(TIERS.map((t) => ({ value: t, label: t })), state.anchorTier, (v) => (state.anchorTier = v)),
-      select(DIVISIONS.map((d) => ({ value: String(d), label: `Div ${d}` })), String(state.anchorDivision),
-        (v) => (state.anchorDivision = Number(v))),
-      pctInput,
-    );
-  };
-
   /**
    * Seed tier/division/% from the account+role's existing recorded rank when
    * entering Set-current mode (mirrors Settings' openSetRank prefill) — there's
@@ -372,27 +349,30 @@ function buildForm(
   const paintRank = (): void => {
     const toggleRow = field(
       optionalLabel('Skill rating', '— nudge the change or set your rank'),
-      segmented<SrMode>({
-        options: [{ value: 'change', label: 'Change (±%)' }, { value: 'set-current', label: 'Set current rank' }],
-        value: state.srMode,
-        onChange: (v) => {
-          state.srMode = v;
-          if (v === 'set-current') seedAnchorFromRanks();
-          paintRank();
-        },
-        fill: true,
+      srModeToggle(state.srMode, (v) => {
+        state.srMode = v;
+        if (v === 'set-current') seedAnchorFromRanks();
+        paintRank();
       }),
     );
 
     if (state.srMode === 'set-current') {
       render(rankHost, toggleRow,
-        field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker()),
+        field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker({
+          tier: state.anchorTier,
+          division: state.anchorDivision,
+          pct: state.anchorPct,
+          onTier: (v) => (state.anchorTier = v),
+          onDivision: (v) => (state.anchorDivision = v),
+          onPct: (v) => (state.anchorPct = v),
+        })),
         h('div', { class: 'hint', style: { marginTop: '4px' } },
           `Sets ${roleLabel(state.role)} on ${state.account} to this rank — we track from here.`));
       return;
     }
 
-    const srField = field(optionalLabel('Skill rating change (%)'), srDeltaInput());
+    const srField = field(optionalLabel('Skill rating change (%)'),
+      srDeltaInput(state.srDelta, (v) => { state.srDelta = v; state.srEdited = true; }));
     const hint = hasAnchor(state.account, state.role)
       ? `Rank tracked for ${roleLabel(state.role)} on ${state.account} — the % above moves it.`
       : `No rank tracked for ${roleLabel(state.role)} on ${state.account} yet — switch to “Set current rank” to set your starting rank.`;
@@ -529,26 +509,6 @@ function mapSuggestions(ctx: ViewContext): string[] {
  */
 function allMapNames(ctx: ViewContext): string[] {
   return ctx.data.masterData.maps.map((m) => m.name).sort((a, b) => a.localeCompare(b));
-}
-
-function field(label: Node | string, control: Node): HTMLElement {
-  return h('div', null, typeof label === 'string' ? h('div', { class: 'field-label' }, label) : label, control);
-}
-
-/** A field label with a dimmed "— optional / …" suffix. */
-function optionalLabel(label: string, suffix = '— optional'): HTMLElement {
-  return h('span', null,
-    h('span', { class: 'field-label', style: { display: 'inline', margin: '0' } }, label),
-    h('span', { class: 'u-dim', style: { fontSize: '11px', marginLeft: '6px' } }, suffix),
-  );
-}
-
-/** A text/number input styled like the rest of the form. */
-function numInput(value: string, placeholder: string, onChange: (v: string) => void): HTMLInputElement {
-  return h('input', {
-    class: 'vt-input mono', type: 'number', step: '1', value, placeholder,
-    on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
-  }) as HTMLInputElement;
 }
 
 /** Compact segmented choice (Role, Mode). */
