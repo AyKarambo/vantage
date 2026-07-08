@@ -14,9 +14,8 @@ import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { mapPicker, resolveMapName } from '../components/mapPicker';
-import { targetGradeRow } from '../components/reviewControls';
+import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser } from '../components/resultChooser';
-import { commsSwitch } from '../components/commsSwitch';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
@@ -24,10 +23,9 @@ import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../componen
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
-import type { AccountSummary, CommsTone, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
+import type { AccountSummary, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
-const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy'];
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 
 /** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
@@ -49,9 +47,8 @@ interface LogState {
   /** Heroes played this match — the card allows several. */
   heroes: Set<string>;
   account: string;
-  flags: Set<string>;
-  /** Comms tone, or null when the player left the switch unset. */
-  comms: CommsTone | null;
+  /** The mental self-report (flags + comms tone), toggled in place by the shared chips/switch. */
+  mental: MatchMental;
   /** How SR is entered: nudge the change, or set the current rank directly. */
   srMode: SrMode;
   srDelta: string;
@@ -80,14 +77,19 @@ registerShortcut({ combo: 'd', description: 'Result: Draw (in the log dialog)', 
 registerShortcut({ combo: 'enter', description: 'Save the match (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 
-/** Turn the chip selection + comms switch into the optional per-match mental self-report. */
-function mentalFrom(flags: Set<string>, comms: CommsTone | null): MatchMental | undefined {
+/**
+ * Serialize the chip/switch-driven mental state into the optional per-match
+ * self-report: only truthy flags and a set comms tone go out (a toggled-off
+ * chip leaves a `false` behind in the working object), and an untouched report
+ * stays `undefined` so nothing is logged for it.
+ */
+function mentalFrom(mental: MatchMental): MatchMental | undefined {
   const m: MatchMental = {};
-  if (flags.has('Tilt')) m.tilt = true;
-  if (flags.has('Toxic mates')) m.toxicMates = true;
-  if (flags.has('Leaver — my team')) m.leaverMyTeam = true;
-  if (flags.has('Leaver — enemy')) m.leaverEnemyTeam = true;
-  if (comms) m.comms = comms;
+  if (mental.tilt) m.tilt = true;
+  if (mental.toxicMates) m.toxicMates = true;
+  if (mental.leaverMyTeam) m.leaverMyTeam = true;
+  if (mental.leaverEnemyTeam) m.leaverEnemyTeam = true;
+  if (mental.comms) m.comms = mental.comms;
   return Object.keys(m).length ? m : undefined;
 }
 
@@ -136,8 +138,7 @@ function buildForm(
     map: '',
     heroes: new Set<string>(carry?.heroes ?? []),
     account: defaultAccount,
-    flags: new Set<string>(),
-    comms: null,
+    mental: {},
     // No anchor yet for this account+role → open in "Set current rank" so the
     // starting rank gets established there (replacing the old one-time-setup
     // block); otherwise default to nudging the change.
@@ -198,7 +199,7 @@ function buildForm(
         map,
         heroes: [...state.heroes],
         gameType: 'Competitive',
-        mental: mentalFrom(state.flags, state.comms),
+        mental: mentalFrom(state.mental),
         account: state.account,
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
         ...(state.performance != null ? { performance: state.performance } : {}),
@@ -367,25 +368,14 @@ function buildForm(
   };
   paintRank();
 
+  // Flags + comms: the shared chip row and three-state comms switch (also used
+  // by the editor and Review), toggling the mental self-report in place.
   const flagsBlock = field(
     optionalLabel('Flags', "— manual, the game doesn't report these"),
-    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-      ...FLAGS.map((f) => {
-        const el = h('button', { class: `chip${state.flags.has(f) ? ' is-on' : ''}` }, f);
-        el.addEventListener('click', () => {
-          state.flags.has(f) ? state.flags.delete(f) : state.flags.add(f);
-          el.classList.toggle('is-on');
-        });
-        return el;
-      }),
-    ),
+    mentalFlagChips(state.mental),
   );
-
-  // Comms tone: a single-select colour switch (green/yellow/red). Clicking the
-  // active option again clears it — comms stays optional. Shared with the editor
-  // and Review via the commsSwitch component.
   const commsBlock = field(optionalLabel('Comms', '— how team comms felt'),
-    commsSwitch({ get: () => state.comms, set: (t) => { state.comms = t; } }));
+    commsToneSwitch(state.mental));
 
   const targetsBlock = activeTargets.length
     ? field(
