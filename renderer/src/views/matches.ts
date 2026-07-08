@@ -1,9 +1,10 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
-import type { MatchFlagKey, MatchRow } from '../../../src/shared/contract';
+import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
 import { dayKey, groupByDay } from '../../../src/core/analytics';
 import { relTime, roleLabel, signed } from '../format';
-import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented } from '../components/primitives';
+import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
+import { wrHsl } from '../theme';
 import { openPopover } from '../components/popover';
 import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
@@ -159,9 +160,70 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext): Node | n
       return m.durationMinutes != null ? document.createTextNode(`${m.durationMinutes}m`) : null;
     case 'finalScore':
       return m.finalScore ? document.createTextNode(m.finalScore) : null;
+    case 'performance':
+      // The 0-100 self-rating as a small stat, tinted with the same continuous
+      // ramp the performance slider uses, so the colour language matches.
+      return m.performance != null
+        ? h('span', { class: 'mono', title: 'Self-rated performance', style: { color: wrHsl(m.performance / 100) } }, String(m.performance))
+        : null;
+    case 'measuredGrades':
+      return gradePills(m, ctx);
+    case 'flags':
+      return flagPills(m);
     default:
       return null;
   }
+}
+
+/** Hit/Partial/Missed pill vocabulary — the Review card's grade tones (spec F1 extension, #68). */
+const GRADE_PILLS: Record<TargetGrade, { label: string; state: PillState }> = {
+  hit: { label: 'Hit', state: 'win' },
+  partial: { label: 'Partial', state: 'draw' },
+  missed: { label: 'Missed', state: 'loss' },
+};
+
+/**
+ * Compact auto-graded target pills for a row — one per graded measured target,
+ * `'no-stat'` entries skipped; the pill's tooltip names the target (falling back
+ * to its id for a since-deleted one) and the measured value.
+ */
+function gradePills(m: MatchRow, ctx: ViewContext): HTMLElement | null {
+  const entries = Object.entries(m.measuredGrades ?? {}).filter(
+    (e): e is [string, { grade: TargetGrade; value: number }] => e[1] !== 'no-stat',
+  );
+  if (!entries.length) return null;
+  const nameOf = (id: string): string => ctx.data.targets.find((t) => t.id === id)?.name ?? id;
+  return pillRow(entries.map(([id, res]) => {
+    const p = pill(GRADE_PILLS[res.grade].label, GRADE_PILLS[res.grade].state);
+    p.title = `${nameOf(id)} — ${res.value.toLocaleString('en-US')}`;
+    return p;
+  }));
+}
+
+/** Per-row flag pill vocabulary — compact labels, tones matching the match-detail header pills. */
+const FLAG_PILLS: Array<{ key: MatchFlagKey; label: string; state: PillState }> = [
+  { key: 'tilt', label: 'Tilt', state: 'loss' },
+  { key: 'toxicMates', label: 'Toxic', state: 'loss' },
+  { key: 'leaver', label: 'Leaver', state: 'draw' },
+  { key: 'positiveComms', label: '+Comms', state: 'win' },
+  { key: 'abusive', label: 'Abusive', state: 'loss' },
+];
+
+/** Compact leaver/mental flag pills for a row, or `null` when unflagged (spec F3). */
+function flagPills(m: MatchRow): HTMLElement | null {
+  const set = FLAG_PILLS.filter((f) => m.flags?.[f.key]);
+  return set.length
+    ? pillRow(set.map((f) => {
+        const p = pill(f.label, f.state);
+        p.title = FLAG_LABELS[f.key];
+        return p;
+      }))
+    : null;
+}
+
+/** A tight inline run of pills — shared by the grades and flags fields. */
+function pillRow(pills: HTMLElement[]): HTMLElement {
+  return h('span', { style: { display: 'inline-flex', gap: '4px', alignItems: 'center', verticalAlign: 'middle' } }, ...pills);
 }
 
 /** Hero cross-links, comma-joined; stopPropagation keeps the row click intact. */

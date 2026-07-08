@@ -1273,8 +1273,15 @@ table.data tbody tr:hover {
 }
 .match-col--srDelta,
 .match-col--duration,
-.match-col--finalScore {
+.match-col--finalScore,
+.match-col--performance {
   width: 52px;
+}
+/* Pill-run fields (#68): wide enough for the common 1-2 pill case; longer runs
+   ellipsis-clip like every other column cell. */
+.match-col--measuredGrades,
+.match-col--flags {
+  width: 110px;
 }
 
 /* Shortcut cheatsheet ------------------------------------------------------------ */
