@@ -1,9 +1,10 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
 import type { MatchFlagKey, RatedSide, WinrateSide } from '../../../src/shared/contract';
-import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
+import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '../../../src/core/mentalAnalytics';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
+import { sparkline } from '../charts/plots';
 import { badge, card, statBar, statBox } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { viewHead, type ViewContext } from './view';
@@ -31,6 +32,10 @@ export function mental(ctx: ViewContext): HTMLElement {
         breakReminderEditor(ctx),
       ),
       costsCard(ctx),
+    ),
+    h('div', { class: 'grid-2' },
+      trendsCard(ctx),
+      sessionCard(ctx),
     ),
     card({ title: 'Flags this range', sub: 'how often each came up' },
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' } },
@@ -124,6 +129,73 @@ function perfRow(p: { calm: RatedSide; tilted: RatedSide }): HTMLElement {
   const drop = Math.round(p.calm.avg - p.tilted.avg);
   return costRow('Performance when tilted', costVerdict(drop, ''),
     `self-rating ${p.calm.avg} calm · ${p.tilted.avg} tilted`);
+}
+
+// ---- Trends & session triggers ------------------------------------------------
+
+/** The coach copy for each tilt-trend read (lower tilt rate = improving). */
+const TREND_READ: Record<TiltTrendDirection, { cls: string; text: string }> = {
+  improving: { cls: 'is-win', text: '↓ Improving — you are tilting less lately. Keep doing what you changed.' },
+  worsening: { cls: 'is-loss', text: '↑ Worsening — the tilt rate is climbing. Shorter sessions, earlier breaks.' },
+  flat: { cls: 'u-dim', text: '→ Flat — no clear move either way yet.' },
+};
+
+/** Per-day tilt-rate sparkline + the improving/worsening read (issue #70 B). */
+function trendsCard(ctx: ViewContext): HTMLElement {
+  const points = ctx.data.tiltTrend;
+  if (points.length < 2) {
+    return card({ title: 'Trends', sub: 'share of games flagged tilted, per day' },
+      h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
+        'Not enough days with games in this range to draw a tilt-rate trend yet — keep flagging games.'));
+  }
+  const dir = tiltTrendDirection(points);
+  return card({ title: 'Trends', sub: 'share of games flagged tilted, per day' },
+    h('div', { style: { marginTop: '4px' } },
+      sparkline(points.map((p) => p.rate * 100), { width: 260, height: 46, color: PALETTE.loss }),
+      h('div', { class: 'hint mono', style: { marginTop: '4px', display: 'flex', justifyContent: 'space-between', maxWidth: '260px' } },
+        h('span', null, points[0].date),
+        h('span', null, points[points.length - 1].date),
+      ),
+    ),
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      dir
+        ? h('span', { class: TREND_READ[dir].cls }, TREND_READ[dir].text)
+        : h('span', { class: 'u-dim' }, `Not enough games in each half of the range to read a direction yet (${COST_MIN_SAMPLE} each needed).`)),
+  );
+}
+
+/** Tilt rate by game # within a sitting — the "stop after game N" card (issue #70 C). */
+function sessionCard(ctx: ViewContext): HTMLElement {
+  const buckets = ctx.data.tiltBySession;
+  if (!buckets.length) {
+    return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting' },
+      h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
+        'No games in this range yet — the per-position tilt read appears once you have sittings to compare.'));
+  }
+  // The stop-point claim needs a bucket that can carry it: enough games AND
+  // actual tilt at that position. Thin or tilt-free peaks stay unclaimed.
+  const peak = buckets
+    .filter((b) => b.games >= COST_MIN_SAMPLE && b.tilted > 0)
+    .sort((a, b) => b.rate - a.rate)[0];
+  return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting' },
+    h('div', { class: 'stack', style: { gap: '9px', marginTop: '4px' } },
+      ...buckets.map((b) => statBar({
+        label: `Game ${b.key}`,
+        frac: b.rate,
+        color: PALETTE.loss,
+        valueText: `${pct(b.rate)} · ${b.games}g`,
+        slim: true,
+      })),
+    ),
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      peak
+        ? h('span', null, 'Tilt peaks at ', h('span', { class: 'is-loss' }, `game ${peak.key}`),
+            ` — ${pct(peak.rate)} of ${peak.games} games. `,
+            // "Break before game 1" is not advice — a first-game peak means the
+            // tilt walks in with you, so the nudge points at the queue-up instead.
+            peak.key === '1' ? 'You may be queuing already tilted — check in before you start.' : 'Plan the break before then.')
+        : `Not enough games per position yet (${COST_MIN_SAMPLE} needed) to call a stop point.`),
+  );
 }
 
 /** A "Flags this range" stat box; clickable when its count is non-zero, opening
