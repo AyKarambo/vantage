@@ -22,7 +22,7 @@ export type { PerformanceStats, PerformanceBucket, PerformanceTrendPoint } from 
 export { mostPlayedHeroes } from './heroSuggestions';
 
 // Session, streak & drill-down reads
-export { streak, latestSession, calendar, heroDetail, groupByDay, sessionRecap } from './session';
+export { streak, currentSession, calendar, heroDetail, groupByDay, sessionRecap } from './session';
 export type { DayGroup, SessionRecap } from './session';
 
 // Temporal splits (time of day, session position, fade detection)

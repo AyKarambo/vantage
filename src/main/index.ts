@@ -282,6 +282,7 @@ function main(): void {
     persistBreakReminder: (breakReminder) => saveLocalConfig({ breakReminder }),
     persistStaleness: (staleness) => saveLocalConfig({ staleness }),
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
+    persistSessionSettings: (sessionSettings) => saveLocalConfig({ sessionSettings }),
     recordGame: (game) => pipeline.recordGame(game),
     notify: (title, body) => tray.notify(title, body),
     // Demo season draws only from the active competitive pool (spec AC 24).

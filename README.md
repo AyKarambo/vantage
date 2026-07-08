@@ -13,6 +13,13 @@ comms · toxicity · leavers · your improvement target).
 
 ## Screens
 
+Every screen sits behind a persistent sidebar: the account switcher (a specific tracked
+account, or **All accounts**), navigation, and a **Current session** card — a live recap
+(W–L, net, winrate) of your current sitting. A sitting ends once you've gone longer than a
+configurable gap since your last game (default 3h; adjustable in Settings → General →
+Coaching), so a late-night session spanning past midnight still reads as one, and the card
+never shows stale data as "current."
+
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a focus band, a focus queue and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**

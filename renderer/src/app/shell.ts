@@ -122,7 +122,7 @@ export class App {
   private readonly navButtons = new Map<ViewId, HTMLButtonElement>();
   private readonly sessionBody = h('div');
   private readonly sessionCardEl = h('div', { class: 'sidebar-session' },
-    h('div', { class: 'nav-group' }, "Today's session"),
+    h('div', { class: 'nav-group' }, 'Current session'),
     this.sessionBody,
   );
   private sidebarBuilt = false;
@@ -357,9 +357,10 @@ export class App {
   private renderSidebar(state: AppState): void {
     if (!this.sidebarBuilt) this.buildSidebar();
     const d = state.data;
-    // The chip doubles as the account switcher: it shows the active account (the
-    // selected filter, or the most-played one when viewing "all") and its rank.
-    const displayName = (d && d.filters.account !== 'all' ? d.filters.account : d?.greetingName) ?? 'Vantage';
+    // The chip doubles as the account switcher: it shows the active account
+    // filter's name, or "All accounts" literally when that's the active scope
+    // (never silently substituting the most-played account) — and its rank.
+    const displayName = d ? (d.filters.account !== 'all' ? d.filters.account : 'All accounts') : 'Vantage';
     this.avatarEl.textContent = displayName.charAt(0).toUpperCase();
     this.accountNameEl.textContent = displayName;
     this.accountSubEl.textContent = d ? rankLine(d) : '—';
@@ -435,7 +436,7 @@ export class App {
     });
   }
 
-  /** The "Today's session" body, re-rendered into the persistent session card. */
+  /** The "Current session" body, re-rendered into the persistent session card. */
   private sessionSummary(state: AppState): HTMLElement {
     const s = state.data?.session;
     return s && s.games
@@ -444,7 +445,7 @@ export class App {
           h('span', { style: { fontSize: '11px', color: 'var(--win-text)' } }, `${signed(s.wins - s.losses)} net`),
           h('span', { class: 'u-muted', style: { fontSize: '11px' } }, `· ${pct(s.winrate)}`),
         )
-      : h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px' } }, 'No games today yet');
+      : h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px' } }, 'No current session yet');
   }
 
   /** The status-bar connection indicator: dot color + short truthful label. */

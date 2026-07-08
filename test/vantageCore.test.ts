@@ -10,6 +10,7 @@ import { currentSeasonWindow } from '../src/core/season';
 import { isCompetitive } from '../src/core/matchFilter';
 import { generateSampleGames } from '../src/core/sampleData';
 import { DEFAULT_BREAK_REMINDER } from '../src/core/breakReminder';
+import { DEFAULT_SESSION_SETTINGS } from '../src/core/sessionSettings';
 
 function game(p: Partial<GameRecord> & { result: Result; map: string; role: Role }): GameRecord {
   return {
@@ -228,6 +229,56 @@ describe('computeDashboard', () => {
     expect(computeDashboard(games, { days: 'all', role: 'support' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'support', tier: 'Diamond' });
     // Role filter on an unanchored role → falls back to most-played.
     expect(computeDashboard(games, { days: 'all', role: 'damage' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank' });
+  });
+
+  it('session: account "all" lets a cross-account game within the gap threshold join the current session', () => {
+    const now = Date.now();
+    const g = (matchId: string, account: string, minutesAgo: number): GameRecord =>
+      ({ matchId, timestamp: now - minutesAgo * 60_000, account, role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const games = [g('a', 'Main', 60), g('b', 'Smurf', 30)];
+    expect(computeDashboard(games, { days: 'all' }, demo).session).toMatchObject({ games: 2 });
+  });
+
+  it('session: a specific account excludes a temporally-adjacent different-account game', () => {
+    const now = Date.now();
+    const g = (matchId: string, account: string, minutesAgo: number): GameRecord =>
+      ({ matchId, timestamp: now - minutesAgo * 60_000, account, role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const games = [g('a', 'Main', 60), g('b', 'Smurf', 30)];
+    expect(computeDashboard(games, { days: 'all', account: 'Main' }, demo).session).toMatchObject({ games: 1 });
+  });
+
+  it('session: role and date-range filters do not narrow the computed session', () => {
+    const now = Date.now();
+    const g = (matchId: string, role: Role, minutesAgo: number): GameRecord =>
+      ({ matchId, timestamp: now - minutesAgo * 60_000, account: 'Main', role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const games = [g('a', 'tank', 60), g('b', 'support', 30)];
+    expect(computeDashboard(games, { days: 'all' }, demo).session).toMatchObject({ games: 2 });
+    // A role filter narrows `games`/other fields but must not narrow the session.
+    expect(computeDashboard(games, { days: 'all', role: 'tank' }, demo).session).toMatchObject({ games: 2 });
+    // Nor does a tight date-range filter.
+    expect(computeDashboard(games, { days: 1 }, demo).session).toMatchObject({ games: 2 });
+  });
+
+  it('session: uses the configured sessionSettings.gapMinutes as the boundary', () => {
+    const now = Date.now();
+    const g = (matchId: string, minutesAgo: number): GameRecord =>
+      ({ matchId, timestamp: now - minutesAgo * 60_000, account: 'Main', role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const games = [g('a', 120), g('b', 10)]; // 110-minute gap between them
+    // Default threshold (180 min) joins them into one session.
+    expect(computeDashboard(games, { days: 'all' }, demo).session).toMatchObject({ games: 2 });
+    // A tighter 60-minute threshold splits them.
+    expect(computeDashboard(games, { days: 'all' }, demo, { sessionSettings: { gapMinutes: 60 } }).session).toMatchObject({ games: 1 });
+  });
+
+  it('threads sessionSettings through unchanged, defaulting to DEFAULT_SESSION_SETTINGS when omitted', () => {
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    expect(computeDashboard(all, { days: 'all' }, demo).sessionSettings).toEqual(DEFAULT_SESSION_SETTINGS);
+    const custom = { gapMinutes: 45 };
+    expect(computeDashboard(all, { days: 'all' }, demo, { sessionSettings: custom }).sessionSettings).toEqual(custom);
   });
 
   it('applyFilters narrows by account and role (competitive-only scoping, no mode filter)', () => {

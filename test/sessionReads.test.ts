@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dayKey, groupByDay, sessionRecap } from '../src/core/analytics';
+import { currentSession, dayKey, groupByDay, sessionRecap } from '../src/core/analytics';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
@@ -58,6 +58,57 @@ describe('groupByDay', () => {
 
   it('returns no groups for no rows', () => {
     expect(groupByDay([], NOW)).toEqual([]);
+  });
+});
+
+describe('currentSession', () => {
+  it('joins games across midnight when consecutive gaps stay within the threshold', () => {
+    const games = [
+      game({ timestamp: Date.UTC(2026, 6, 3, 23, 30, 0), result: 'Win' }),
+      game({ timestamp: Date.UTC(2026, 6, 4, 0, 45, 0), result: 'Loss' }), // 75 min gap, crosses midnight
+    ];
+    const now = Date.UTC(2026, 6, 4, 1, 0, 0);
+    expect(currentSession(games, now, 180)).toMatchObject({ games: 2, wins: 1, losses: 1 });
+  });
+
+  it('splits off the trailing group when a gap exceeds the threshold', () => {
+    const games = [
+      game({ timestamp: hoursAgo(10), result: 'Loss' }),
+      game({ timestamp: hoursAgo(9), result: 'Loss' }),
+      // gap > 3h threshold here
+      game({ timestamp: hoursAgo(2), result: 'Win' }),
+      game({ timestamp: hoursAgo(1), result: 'Win' }),
+    ];
+    expect(currentSession(games, NOW, 180)).toMatchObject({ games: 2, wins: 2, losses: 0 });
+  });
+
+  it('returns null once the elapsed time since the last game exceeds the threshold', () => {
+    const games = [game({ timestamp: hoursAgo(4), result: 'Win' })];
+    expect(currentSession(games, NOW, 180)).toBeNull();
+  });
+
+  it('returns the session when elapsed time since the last game is within the threshold, even from a previous calendar day', () => {
+    const games = [game({ timestamp: hoursAgo(2), result: 'Win' })];
+    expect(currentSession(games, NOW, 180)).toMatchObject({ games: 1, wins: 1 });
+  });
+
+  it('returns null for no games', () => {
+    expect(currentSession([], NOW, 180)).toBeNull();
+  });
+
+  it('keeps a gap exactly equal to the threshold in the same session, but splits one unit past it', () => {
+    const gapMs = 180 * 60_000;
+    const joined = [
+      game({ timestamp: NOW - gapMs, result: 'Loss' }),
+      game({ timestamp: NOW, result: 'Win' }),
+    ];
+    expect(currentSession(joined, NOW, 180)).toMatchObject({ games: 2, wins: 1, losses: 1 });
+
+    const split = [
+      game({ timestamp: NOW - gapMs - 60_000, result: 'Loss' }),
+      game({ timestamp: NOW, result: 'Win' }),
+    ];
+    expect(currentSession(split, NOW, 180)).toMatchObject({ games: 1, wins: 1, losses: 0 });
   });
 });
 

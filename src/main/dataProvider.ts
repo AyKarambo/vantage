@@ -7,6 +7,7 @@ import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
 import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
 import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
+import { normalizeSessionSettings, type SessionSettings } from '../core/sessionSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
@@ -65,6 +66,8 @@ export interface DataProviderDeps {
   persistStaleness(s: StalenessSettings): void;
   /** Persist new readiness feature settings into the user's local config file. */
   persistReadiness(s: ReadinessSettings): void;
+  /** Persist a new session-gap threshold into the user's local config file. */
+  persistSessionSettings(s: SessionSettings): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
   recordGame(g: GameRecord): boolean;
   /** Surface a user-facing notification (the tray balloon in production). */
@@ -308,6 +311,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       config.readiness = normalizeReadiness(input);
       deps.persistReadiness(config.readiness);
       return config.readiness;
+    },
+    getSessionSettings: () => deps.getConfig().sessionSettings,
+    setSessionSettings: (input) => {
+      const config = deps.getConfig();
+      config.sessionSettings = normalizeSessionSettings(input);
+      deps.persistSessionSettings(config.sessionSettings);
+      return config.sessionSettings;
     },
     getStaleness: () => deps.getConfig().staleness,
     setStaleness: (input) => {

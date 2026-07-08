@@ -11,6 +11,7 @@ import type { TargetSummary } from '../../core/targets';
 import type { StalenessSettings } from '../../core/staleness';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
+import type { SessionSettings } from '../../core/sessionSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
 
@@ -22,7 +23,12 @@ export interface DashboardFilters {
   days?: number | 'all' | { season: string };
 }
 
-/** One day's recap (the sidebar "today" card + Overview session). */
+/**
+ * Recap of the current (gap-based) sitting for the sidebar "Current session"
+ * card — the trailing run of games with no gap longer than the configured
+ * threshold, ending at the most recent one. `date` is the calendar day of the
+ * most recent game in the sitting.
+ */
 export interface Session extends WinLoss {
   date: string;
   streak: Streak;
@@ -140,6 +146,8 @@ export interface DashboardData {
   readiness: ReadinessSummary;
   /** The effective readiness feature settings, so views render synchronously. */
   readinessSettings: ReadinessSettings;
+  /** The effective "Current session" gap threshold, so the Settings editor renders synchronously. */
+  sessionSettings: SessionSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */
   totalGamesAllTime: number;
   /** Yesterday's recap (unfiltered); absent when yesterday had no games. */
