@@ -31,7 +31,10 @@ const TIER_LABEL: Array<{ value: WikiTier; label: string }> = [
 export function openReadinessWiki(ctx: ViewContext, initial: WikiRoute = { view: 'overview' }): void {
   openDrawer((close) => {
     const region = h('div');
-    const stack: WikiRoute[] = [initial];
+    // Seed an implicit Overview base under any deep link so Back is always present
+    // and lands on the guide's Overview (deep-linked articles have no prior page).
+    const stack: WikiRoute[] =
+      initial.view === 'overview' ? [initial] : [{ view: 'overview' }, initial];
 
     const draw = (): void => {
       const route = stack[stack.length - 1];
@@ -84,10 +87,14 @@ function breadcrumb(stack: WikiRoute[], nav: WikiNav): HTMLElement {
   const route = stack[stack.length - 1];
   const atRoot = stack.length === 1 && route.view === 'overview';
   return h('div', { class: 'wiki-breadcrumb' },
-    stack.length > 1 ? h('button', { class: 'inline-link', on: { click: () => nav.back() } }, '‹ Back') : null,
-    h('button', { class: 'inline-link', on: { click: () => nav.home() } }, 'Guide'),
-    atRoot ? null : h('span', null, '›'),
-    atRoot ? null : h('span', { style: { color: 'var(--text)' } }, routeTitle(route)),
+    stack.length > 1
+      ? h('button', { class: 'wiki-back', title: 'Back', on: { click: () => nav.back() } }, '‹ Back')
+      : null,
+    h('div', { class: 'wiki-trail' },
+      h('button', { class: 'inline-link wiki-crumb', on: { click: () => nav.home() } }, 'Guide'),
+      atRoot ? null : h('span', { class: 'wiki-crumb-sep' }, '›'),
+      atRoot ? null : h('span', { class: 'wiki-crumb-current' }, routeTitle(route)),
+    ),
   );
 }
 
