@@ -140,9 +140,15 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
   );
 }
 
+/**
+ * The feel/leaver pill row for a match, reading the merged manual layer —
+ * the quick-log self-report (`d.mental`) overlaid key-by-key with the saved
+ * Review flags (`d.review.flags`), the same seed the match editor builds —
+ * so flags graded only on the Review screen show up too. Null when nothing
+ * is flagged. Shared by the header and the Grades card.
+ */
 function mentalFlags(d: MatchDetail): HTMLElement | null {
-  const m = d.mental;
-  if (!m) return null;
+  const m: MatchMental = { ...(d.mental ?? {}), ...(d.review?.flags ?? {}) };
   const lv = leaverFlags(m);
   const flags: Node[] = [];
   if (m.tilt) flags.push(pill('Tilt', 'loss'));
