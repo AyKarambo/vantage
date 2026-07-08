@@ -137,6 +137,11 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.importNotion, () => provider.importNotion());
   handle(ch.deleteImportedMatches, () => provider.deleteImportedMatches());
   handle(ch.cleanupNotionDuplicates, () => provider.cleanupNotionDuplicates());
+
+  // Local file import (Settings → Data) + independent wipe/count.
+  handle(ch.importFromFile, () => provider.importFromFile());
+  handle(ch.deleteFileImports, () => provider.deleteFileImports());
+  handle(ch.fileImportedCount, () => provider.fileImportedCount());
   handle(ch.saveTarget, (_e, input: AuthoredTargetInput) => {
     provider.saveTarget(input);
   });

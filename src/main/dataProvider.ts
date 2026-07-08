@@ -13,6 +13,7 @@ import { LOG_LEVELS, type LogLevel } from '../core/logging';
 import { currentRank, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
+import { parseVantageImport } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
 import type { Role } from '../core/model';
 import {
@@ -24,7 +25,7 @@ import type { RankAnchorStore } from '../store/rankAnchors';
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
-  GepStatusPayload, MatchEditInput, RankSummary,
+  GepStatusPayload, ImportFileResult, MatchEditInput, RankSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -38,7 +39,7 @@ import type { GameRecord } from '../core/analytics';
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'removeImported'>;
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'removeImported' | 'importedCount'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -59,6 +60,13 @@ export interface DataProviderDeps {
   getConfig(): AppConfig;
   /** Persist the full accounts map (battleTag → label) into the user's local config. */
   persistAccounts(accounts: Record<string, string>): void;
+  /**
+   * The file-import edge: show a picker, read the chosen file, and JSON.parse it.
+   * Injected so this provider stays Electron/fs-free (mirrors {@link dataLocation}).
+   * Resolves `undefined` when the user cancels; throws when the file can't be read
+   * or isn't JSON (the caller turns that into an error result).
+   */
+  importFile: { pick(): Promise<unknown | undefined> };
   /** Persist new break-reminder settings into the user's local config file. */
   persistBreakReminder(s: BreakReminderSettings): void;
   /** Persist new target-staleness thresholds into the user's local config file. */
@@ -274,9 +282,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const existing = res.games.filter((g) => known.has(g.matchId));
       // Stamp every brand-new imported game so it can be wiped for a clean
       // re-import (removeImported) without touching live-tracked or
-      // hand-logged matches. A merged row keeps its existing provenance.
+      // hand-logged matches. `importSource:'notion'` keeps this clear scoped to
+      // Notion imports (file imports are a separate bucket). A merged row keeps
+      // its existing provenance.
       const importedAt = Date.now();
-      const { imported } = deps.history.addMany(fresh.map((g) => ({ ...g, importedAt })));
+      const { imported } = deps.history.addMany(
+        fresh.map((g) => ({ ...g, importedAt, importSource: 'notion' as const })),
+      );
       const { merged, skipped } = deps.history.mergeImported(existing);
       // Surface the imported accounts so they appear in the account manager, the
       // filters and the rank UI — Notion only stores the account *label*, not the
@@ -290,10 +302,71 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       };
     },
     deleteImportedMatches: () => {
-      const removed = deps.history.removeImported();
+      const removed = deps.history.removeImported('notion');
       deps.notion.clearExports(removed.map((g) => g.matchId));
       return { deleted: removed.length };
     },
+    importFromFile: async (): Promise<ImportFileResult> => {
+      const empty = { imported: 0, skipped: 0, invalid: 0, accountsAdded: 0, anchorSet: false };
+      let raw: unknown;
+      try {
+        const picked = await deps.importFile.pick();
+        if (picked === undefined) return { ...empty, cancelled: true };
+        raw = picked;
+      } catch (err) {
+        return { ...empty, error: err instanceof Error ? err.message : String(err) };
+      }
+      const parsed = parseVantageImport(raw);
+      // `invalid` counts only rejected match ROWS (index !== null); envelope- and
+      // anchor-level problems (index === null) are surfaced via `error`/`anchorSet`.
+      const invalid = parsed.errors.filter((e) => e.index !== null).length;
+      // Nothing importable AND an envelope-level problem → reject cleanly, write nothing.
+      if (!parsed.games.length) {
+        const envelopeErr = parsed.errors.find((e) => e.index === null);
+        if (envelopeErr) return { ...empty, invalid, error: envelopeErr.reason };
+      }
+      // Mark every added game as file-imported so it can be wiped for a clean
+      // re-sync without touching live, hand-logged, or Notion-imported matches.
+      const importedAt = Date.now();
+      const { imported, skipped } = deps.history.addMany(
+        parsed.games.map((g) => ({ ...g, importedAt, importSource: 'file' as const })),
+      );
+      const accountsAdded = seedImportedAccounts(deps, parsed.games);
+      let anchorSet = false;
+      if (parsed.anchor && parsed.account) {
+        // Anchor at the latest imported competitive match for this (account, role):
+        // the rank engine reconstructs older matches backward from the supplied
+        // current rank. `rankAnchors.set` directly (NOT setRankAnchor, which would
+        // stamp setAt=now and exclude every match from the ladder).
+        const { anchor, account } = parsed;
+        const latest = parsed.games
+          .filter((g) => g.account === account && g.role === anchor.role && classifyGameType(g.gameType) === 'competitive')
+          .reduce((max, g) => Math.max(max, g.timestamp), 0);
+        // Don't backdate over a newer anchor the player set by hand (or via a later
+        // import): only (re)set when there's no anchor yet, or this file's latest
+        // match is at least as recent as the existing anchor. A plain re-import of
+        // the same file re-sets the identical value (harmless).
+        const existing = deps.rankAnchors.get(account, anchor.role);
+        if (latest > 0 && (!existing || latest >= existing.setAt)) {
+          deps.rankAnchors.set({
+            account,
+            role: anchor.role,
+            tier: anchor.tier,
+            division: anchor.division,
+            progressPct: anchor.progressPct,
+            setAt: Math.min(latest, importedAt),
+          });
+          anchorSet = true;
+        }
+      }
+      return { imported, skipped, invalid, accountsAdded, anchorSet };
+    },
+    deleteFileImports: () => {
+      const removed = deps.history.removeImported('file');
+      deps.notion.clearExports(removed.map((g) => g.matchId));
+      return { deleted: removed.length };
+    },
+    fileImportedCount: () => deps.history.importedCount('file'),
     cleanupNotionDuplicates: () => deps.notion.cleanupDuplicates(),
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {

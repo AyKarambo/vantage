@@ -12,6 +12,7 @@ import { accountsCard } from './accounts';
 import { appBehaviorCard } from './appBehavior';
 import { diagnosticsCard } from './diagnostics';
 import { dataLocationCard } from './dataLocation';
+import { importCard } from './importCard';
 
 /**
  * Quick Log preferences: how many "most played" heroes the Log Match hero
@@ -74,5 +75,6 @@ export function generalTab(ctx: ViewContext): HTMLElement {
       diagnosticsCard(),
     ),
     dataLocationCard(),
+    importCard(),
   );
 }

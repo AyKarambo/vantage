@@ -235,6 +235,8 @@ const syncListeners = new Set<(p: SyncProgress) => void>();
 
 // Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
 let previewImportedMatches = 0;
+// Canned count of file-imported matches (Settings → Data), cleared independently of Notion imports.
+let previewFileImports = 0;
 
 // In-memory data-folder mock (Area C): the browser preview has no real
 // filesystem to migrate, so "choosing a folder" just relabels the mock
@@ -483,6 +485,17 @@ const mock: OwStatsApi = {
     previewImportedMatches = 0;
     return { deleted };
   },
+  importFromFile: async () => {
+    // No real filesystem in the harness — simulate importing a small file.
+    previewFileImports += 5;
+    return { imported: 5, skipped: 0, invalid: 0, accountsAdded: 1, anchorSet: true };
+  },
+  deleteFileImports: async () => {
+    const deleted = previewFileImports;
+    previewFileImports = 0;
+    return { deleted };
+  },
+  fileImportedCount: async () => previewFileImports,
   cleanupNotionDuplicates: async () => {
     if (!selectedNotionDatabaseId) return { archived: 0, kept: 0, failed: 0, unavailable: true };
     // No real Notion rows in the harness — return a canned result so the UI is testable.

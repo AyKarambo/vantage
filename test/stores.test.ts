@@ -57,17 +57,18 @@ describe('HistoryStore manual-layer edits', () => {
     const h = hist();
     h.addMany([
       g({ matchId: 'live', importedAt: undefined }),          // live-tracked / hand-logged
-      g({ matchId: 'imp1', importedAt: 1_700_000_000_000 }),  // imported
-      g({ matchId: 'imp2', importedAt: 1_700_000_000_000 }),  // imported
+      g({ matchId: 'imp1', importedAt: 1_700_000_000_000 }),  // legacy Notion import (no importSource)
+      g({ matchId: 'imp2', importedAt: 1_700_000_000_000 }),  // legacy Notion import (no importSource)
     ]);
-    expect(h.importedCount()).toBe(2);
-    const removed = h.removeImported();
+    // Legacy imports predate `importSource` → COALESCE treats them as 'notion'.
+    expect(h.importedCount('notion')).toBe(2);
+    const removed = h.removeImported('notion');
     expect(removed.map((r) => r.matchId).sort()).toEqual(['imp1', 'imp2']);
     expect(h.all().map((x) => x.matchId)).toEqual(['live']);
-    expect(h.importedCount()).toBe(0);
+    expect(h.importedCount('notion')).toBe(0);
     // Persisted (survives a reload) and a second call is a no-op.
-    expect(hist().importedCount()).toBe(0);
-    expect(h.removeImported()).toEqual([]);
+    expect(hist().importedCount('notion')).toBe(0);
+    expect(h.removeImported('notion')).toEqual([]);
   });
 });
 

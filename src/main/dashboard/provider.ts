@@ -8,7 +8,7 @@ import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
-  DataLocation, DataLocationResult, GepStatusPayload, ImportResult, LogEntry, LogLevel,
+  DataLocation, DataLocationResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogLevel,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
   RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
@@ -59,6 +59,12 @@ export interface DataProvider {
   importNotion(): Promise<ImportResult>;
   /** Delete every Notion-imported match from history (for a clean re-import); returns how many were removed. */
   deleteImportedMatches(): { deleted: number };
+  /** Pick a Vantage import file and ingest it into history (marked file-imported); async (shows a dialog). */
+  importFromFile(): Promise<ImportFileResult>;
+  /** Delete every file-imported match (independently of Notion imports); returns how many were removed. */
+  deleteFileImports(): { deleted: number };
+  /** How many file-imported matches are stored (Settings → Data status line). */
+  fileImportedCount(): number;
   /** Explicit action: archive redundant duplicate rows (Notion trash) in the configured Gametracker database. */
   cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
   /** Attach a Review-screen read (grades + flags) to a tracked match. */

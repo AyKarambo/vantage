@@ -364,6 +364,17 @@ npm start          # runs with the demo dataset
 Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pipeline;
 `OW_SYNC_SENSOR=gep|counterwatch` switches the sensor.
 
+## Importing match history
+
+Bring an existing tracker's matches into Vantage without giving up your own tool. A companion
+PowerShell script converts an Obsidian match vault into a **Vantage import file** (JSON), and
+Settings → **Data import** ingests it — imported matches are tagged so they can be cleared and
+re-imported cleanly. See **[docs/import.md](docs/import.md)** for the workflow and the file format.
+
+```powershell
+npm run import:obsidian -- -VaultPath "C:\path\to\vault" -OutFile "vantage-import.json" -CurrentRank "Diamond 3"
+```
+
 ## Build a release
 
 Every push to `main` auto-publishes a GitHub Release: the

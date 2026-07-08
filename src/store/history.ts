@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS games (
   srDelta          REAL,
   durationMinutes  REAL,
   importedAt       INTEGER,
+  importSource     TEXT,
   data             TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_games_account   ON games(account);
@@ -35,12 +36,12 @@ CREATE INDEX IF NOT EXISTS idx_games_role       ON games(role);
 `;
 
 const INSERT_SQL =
-  `INSERT INTO games (matchId, timestamp, account, role, map, result, gameType, source, srDelta, durationMinutes, importedAt, data)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `INSERT INTO games (matchId, timestamp, account, role, map, result, gameType, source, srDelta, durationMinutes, importedAt, importSource, data)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
    ON CONFLICT(matchId) DO NOTHING`;
 
 const UPDATE_SQL =
-  `UPDATE games SET timestamp=?, account=?, role=?, map=?, result=?, gameType=?, source=?, srDelta=?, durationMinutes=?, importedAt=?, data=?
+  `UPDATE games SET timestamp=?, account=?, role=?, map=?, result=?, gameType=?, source=?, srDelta=?, durationMinutes=?, importedAt=?, importSource=?, data=?
    WHERE matchId=?`;
 
 /** The bind values for one game, matching the column order of {@link INSERT_SQL}. */
@@ -57,6 +58,7 @@ function rowValues(g: GameRecord): SQLInputValue[] {
     g.srDelta ?? null,
     g.durationMinutes ?? null,
     g.importedAt ?? null,
+    g.importSource ?? null,
     JSON.stringify(g),
   ];
 }
@@ -171,19 +173,25 @@ export class HistoryStore {
     return Number(this.countStmt.get()?.c ?? 0);
   }
 
-  /** How many stored games came from a Notion import (carry `importedAt`). */
-  importedCount(): number {
-    return Number(this.importedCountStmt.get()?.c ?? 0);
+  /**
+   * How many stored games came from the given import channel (carry `importedAt`
+   * with that provenance). Legacy imports predating {@link GameRecord.importSource}
+   * count as `'notion'` via `COALESCE(importSource,'notion')`.
+   */
+  importedCount(source: 'notion' | 'file'): number {
+    return Number(this.importedCountStmt.get(source)?.c ?? 0);
   }
 
   /**
-   * Drop every game that came from a Notion import (carries `importedAt`),
-   * leaving live-tracked and hand-logged games untouched — so a bad import can
-   * be wiped and re-run cleanly. Returns the removed games.
+   * Drop every game that came from the given import channel (carries `importedAt`
+   * with that provenance), leaving live-tracked, hand-logged, and other-channel
+   * imports untouched — so one import can be wiped and re-run cleanly without
+   * disturbing another. Legacy imports predating {@link GameRecord.importSource}
+   * are treated as `'notion'`. Returns the removed games.
    */
-  removeImported(): GameRecord[] {
-    const removed = this.selectImportedStmt.all().map((row) => JSON.parse(String(row.data)) as GameRecord);
-    if (removed.length) this.deleteImportedStmt.run();
+  removeImported(source: 'notion' | 'file'): GameRecord[] {
+    const removed = this.selectImportedStmt.all(source).map((row) => JSON.parse(String(row.data)) as GameRecord);
+    if (removed.length) this.deleteImportedStmt.run(source);
     return removed;
   }
 
@@ -360,15 +368,44 @@ export class HistoryStore {
     this.db.exec('PRAGMA journal_mode = DELETE;');
     this.db.exec('PRAGMA synchronous = FULL;');
     this.db.exec(SCHEMA_SQL);
+    this.migrate();
     this.insertStmt = this.db.prepare(INSERT_SQL);
     this.updateStmt = this.db.prepare(UPDATE_SQL);
     this.getStmt = this.db.prepare('SELECT data FROM games WHERE matchId = ?');
     this.hasStmt = this.db.prepare('SELECT 1 FROM games WHERE matchId = ?');
     this.allStmt = this.db.prepare('SELECT data FROM games ORDER BY rowid');
     this.countStmt = this.db.prepare('SELECT COUNT(*) AS c FROM games');
-    this.importedCountStmt = this.db.prepare('SELECT COUNT(*) AS c FROM games WHERE importedAt IS NOT NULL');
-    this.selectImportedStmt = this.db.prepare('SELECT data FROM games WHERE importedAt IS NOT NULL ORDER BY rowid');
-    this.deleteImportedStmt = this.db.prepare('DELETE FROM games WHERE importedAt IS NOT NULL');
+    // Import channels share the `importedAt` flag but are scoped by `importSource`
+    // so one channel's clear/count never touches another's. `COALESCE(…,'notion')`
+    // maps legacy Notion imports (written before the column existed) to 'notion'.
+    this.importedCountStmt = this.db.prepare(
+      `SELECT COUNT(*) AS c FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
+    );
+    this.selectImportedStmt = this.db.prepare(
+      `SELECT data FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ? ORDER BY rowid`,
+    );
+    this.deleteImportedStmt = this.db.prepare(
+      `DELETE FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
+    );
+  }
+
+  /**
+   * Idempotent, additive schema migration for databases created before a column
+   * existed. `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a
+   * new nullable column must be added here for stores that predate it. Runs on
+   * every open; a no-op once the column is present.
+   *
+   * Note: `ALTER TABLE … ADD COLUMN` appends physically, so a migrated DB has
+   * `importSource` *after* `data`, whereas a fresh DB (SCHEMA_SQL) has it before
+   * `data`. This divergence is safe only because every statement here binds by
+   * column name — never `SELECT *`, positional reads, or column-count asserts.
+   * Keep it that way, or align the two layouts before adding such a read.
+   */
+  private migrate(): void {
+    const cols = this.db.prepare('PRAGMA table_info(games)').all().map((row) => String(row.name));
+    if (!cols.includes('importSource')) {
+      this.db.exec('ALTER TABLE games ADD COLUMN importSource TEXT');
+    }
   }
 
   private getOne(matchId: string): GameRecord | undefined {
