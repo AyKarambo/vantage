@@ -61,7 +61,11 @@ export function mental(ctx: ViewContext): HTMLElement {
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' } },
         flagBox(ctx, m.flags.tilt, 'Tilt', 'tilt'),
         flagBox(ctx, m.flags.toxicMates, 'Toxic mates', 'toxicMates'),
-        flagBox(ctx, m.flags.leaver, 'Leavers', 'leaver'),
+        // The my-team/enemy split is aggregated separately on the payload; the
+        // drill-down stays combined ('leaver') until MatchFlagKey is widened
+        // (explicitly deferred — see spec #76).
+        flagBox(ctx, m.flags.leaverMyTeam, 'Leaver — my team', 'leaver', 'is-loss'),
+        flagBox(ctx, m.flags.leaverEnemyTeam, 'Leaver — enemy', 'leaver', 'is-win'),
         flagBox(ctx, m.flags.positiveComms, 'Positive comms', 'positiveComms', 'is-accent'),
         flagBox(ctx, m.flags.abusive, 'Abusive comms', 'abusive', 'is-loss'),
       ),
