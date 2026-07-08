@@ -158,7 +158,7 @@ function adviceFor(band: ReadinessBand, state: StateAt): Advice {
       return {
         recommendation: 'ramp-back-up',
         recommendationText:
-          'Ease back in: an aim warmup and a couple of unranked games before you queue ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
+          'Ease back in: an aim warmup and a couple of unranked games before you play ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
         headline: `${state.restDays} days since your last game — expect some rust.`,
       };
     case 'fresh':
@@ -350,7 +350,7 @@ function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): Readiness
     headline: `No games in ${restDays} days — fully rested, but expect rust.`,
     recommendation: 'ramp-back-up',
     recommendationText:
-      'Ease back in: an aim warmup and a couple of unranked games before you queue ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
+      'Ease back in: an aim warmup and a couple of unranked games before you play ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
     signals: [
       { key: 'rust-gap', label: `${restDays} days since your last game — sharpness decays after ~4`, severity: 'high' },
     ],

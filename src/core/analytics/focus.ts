@@ -60,15 +60,22 @@ export function focusEntries(games: GameRecord[]): FocusEntry[] {
 /**
  * Recent-half vs earlier-half winrate verdict over one entry's games. Needs
  * ≥{@link TREND_MIN_GAMES} games; a winrate move within ±{@link TREND_DEADBAND}
- * reads 'flat'. Draws are excluded by the winrate itself (see {@link winLoss}).
+ * reads 'flat'. Both halves need at least one decided game — {@link winLoss}
+ * falls back to a 0% winrate for an all-draw half, which would otherwise
+ * fabricate a verdict from a baseline that was never actually measured.
  */
 export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
   if (entryGames.length < TREND_MIN_GAMES) return undefined;
   const sorted = [...entryGames].sort((a, b) => a.timestamp - b.timestamp);
   const mid = Math.floor(sorted.length / 2);
-  const delta = winLoss(sorted.slice(mid)).winrate - winLoss(sorted.slice(0, mid)).winrate;
-  if (Math.abs(delta) <= TREND_DEADBAND) return 'flat';
-  return delta > 0 ? 'improving' : 'declining';
+  const earlier = winLoss(sorted.slice(0, mid));
+  const recent = winLoss(sorted.slice(mid));
+  if (decided(earlier) === 0 || decided(recent) === 0) return undefined;
+  // Compare in whole points to dodge IEEE-754 wobble (e.g. 0.55 - 0.5 landing
+  // a hair above 0.05) right at the dead-band boundary.
+  const pts = Math.round((recent.winrate - earlier.winrate) * 1000) / 10;
+  if (Math.abs(pts) <= TREND_DEADBAND * 100) return 'flat';
+  return pts > 0 ? 'improving' : 'declining';
 }
 
 /**

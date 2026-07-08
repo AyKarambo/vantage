@@ -120,6 +120,26 @@ describe('focusTrend', () => {
     expect(focusTrend([0, 1, 2, 3, 4].map((i) => at(i, 'Loss')))).toBeUndefined();
   });
 
+  it('is undefined when a half has no decided games — draws must not fabricate a 0% baseline', () => {
+    // Earlier half: 3 draws (no decided games at all). Recent half: 2L 1W.
+    const drawsThenLosses = [0, 1, 2].map((i) => at(i, 'Draw'))
+      .concat([3, 4].map((i) => at(i, 'Loss')), [at(5, 'Win')]);
+    expect(focusTrend(drawsThenLosses)).toBeUndefined();
+
+    // Mirror: recent half is all draws.
+    const lossesThenDraws = [0, 1].map((i) => at(i, 'Loss')).concat([at(2, 'Win')])
+      .concat([3, 4, 5].map((i) => at(i, 'Draw')));
+    expect(focusTrend(lossesThenDraws)).toBeUndefined();
+  });
+
+  it('reads flat at an exact 5-point move despite IEEE-754 float wobble', () => {
+    // Earlier half: 10W/10L (50%). Recent half: 11W/9L (55%) — exactly a 5-point
+    // move, which in raw floats is 0.050000000000000044 (> 0.05) without rounding.
+    const earlier = Array.from({ length: 20 }, (_, i) => at(i, i < 10 ? 'Win' : 'Loss'));
+    const recent = Array.from({ length: 20 }, (_, i) => at(20 + i, i < 11 ? 'Win' : 'Loss'));
+    expect(focusTrend([...earlier, ...recent])).toBe('flat');
+  });
+
   it('sorts by timestamp, not input order', () => {
     const games = [4, 5, 6, 7].map((i) => at(i, 'Win')).concat([0, 1, 2, 3].map((i) => at(i, 'Loss')));
     expect(focusTrend(games)).toBe('improving');
