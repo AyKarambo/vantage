@@ -62,19 +62,19 @@ Derived from `specs/readiness-data-regimes.plan.md`. Ordered dependencies-first.
   - **Check:** docs describe regimes, the patch-day note, "load alone never red", and confidence cap; superseded note present.
   - **Size:** S
 
-- [ ] **T11 — Passivity guard: output-gated deaths credit** *(revision 2026-07-08)*
+- [x] **T11 — Passivity guard: output-gated deaths credit** *(revision 2026-07-08)*
   - **Goal:** Deaths' favorable credit scaled by `clamp(1 + outputZ/passivityRampZ, 0, 1)` (weight leaves the blend with it); deaths-adverse unchanged; raw `metricSums` kept; `passivityRampZ = 0.5` constant.
   - **Files:** `src/core/readiness/performance.ts`, `constants.ts`, tests.
   - **Check:** scared-play fixture (damage+elims down, deaths down) fires the decline index; deaths-down-while-output-holds still favorable (T9 pin unchanged); deaths-up unchanged in every context; graduated boundary (no cliff at outputZ 0); `deaths-improve-damage-fall` scenario re-pinned.
   - **Size:** M
 
-- [ ] **T12 — Rank-gated undertraining nudge** *(revision 2026-07-08)*
+- [x] **T12 — Rank-gated undertraining nudge** *(revision 2026-07-08)*
   - **Goal:** New pure `rankTrend.ts` (`'climbing'|'stagnant'|'unknown'` from anchors + srDelta-carrying comps over a 14-day window, evidence-gated); `ReadinessContext.rankAnchors`; `StateAt.rankTrend`; `freqPen` + low-frequency signal fire only on `stagnant` with new copy; both call sites pass anchors; methodology + README lines.
   - **Files:** `src/core/readiness/rankTrend.ts` (new), `constants.ts`, `score.ts`, `performance.ts` (ctx type), `index.ts`, `src/core/dashboardData.ts`, `src/main/index.ts`, `renderer/src/views/readiness.ts`, docs, tests.
   - **Check:** no rank data ⇒ nudge+penalty silent; evidenced climbing ⇒ silent; evidenced stagnation ⇒ signal (new copy) + capped freqPen; unlogged-srDelta window reads `unknown`, never `stagnant`; per-day gate on trend days; typecheck clean across ctx change.
   - **Size:** L
 
-- [ ] **T13 — Catalog + docs re-pins for the revision**
+- [x] **T13 — Catalog + docs re-pins for the revision**
   - **Goal:** Re-pin affected scenario rows (`deaths-improve-damage-fall` → scared-play decline; weekend scenarios → 75 silent); add two new rows (scared-play; weekend + proven stagnation → hint); refresh `.scenarios.md` tables; full suite green.
   - **Files:** `test/readinessScenarios.test.ts`, `specs/readiness-data-regimes.scenarios.md`, affected `readiness*.test.ts`.
   - **Check:** `npm test` green; catalog tables match engine output; scenario count ≥ 28.
