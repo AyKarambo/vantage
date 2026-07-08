@@ -20,7 +20,10 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
 };
 
 /** Canonical field order — both the "Customize view" popover and rendering follow this (spec F1). */
-const FIELD_ORDER: MatchColumnKey[] = ['role', 'heroes', 'account', 'srDelta', 'duration', 'finalScore'];
+const FIELD_ORDER: MatchColumnKey[] = [
+  'role', 'heroes', 'account', 'srDelta', 'duration', 'finalScore',
+  'performance', 'measuredGrades', 'flags',
+];
 
 const FIELD_LABELS: Record<MatchColumnKey, string> = {
   role: 'Role',
@@ -29,6 +32,9 @@ const FIELD_LABELS: Record<MatchColumnKey, string> = {
   srDelta: 'SR delta',
   duration: 'Duration',
   finalScore: 'Final score',
+  performance: 'Performance',
+  measuredGrades: 'Target grades',
+  flags: 'Flags',
 };
 
 export function matches(ctx: ViewContext): HTMLElement {
