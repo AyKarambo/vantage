@@ -36,7 +36,7 @@ const STEPS: Step[] = [
   {
     title: 'Your workspace',
     points: [
-      ['Overview', 'KPIs, the winrate × volume scatter, and your focus queue at a glance.'],
+      ['Overview', 'KPIs, the winrate × volume scatter, and your top priorities at a glance.'],
       ['Review', 'Add the human read to recent games — how they actually felt.'],
       ['Matches', 'Your recent game log.'],
       ['Maps', 'Winrate by game mode, then every map ranked best → worst.'],
@@ -46,7 +46,7 @@ const STEPS: Step[] = [
   {
     title: 'Insights',
     points: [
-      ['Focus', 'Net-losing maps ranked by deficit — what to work on first.'],
+      ['Focus', 'The maps, heroes and roles that cost you the most — what to work on first.'],
       ['Mental', 'Tilt / comms tracking and the tax tilt puts on your winrate.'],
       ['Trends', 'Winrate over time, split by role, mode and account.'],
       ['Targets', 'Build an improvement target and see if hitting it moves your winrate.'],

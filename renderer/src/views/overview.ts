@@ -148,9 +148,9 @@ function scatterCard(ctx: ViewContext): HTMLElement {
         ))
       : [h('div', { class: 'empty empty--good', style: { paddingTop: '10px' } }, 'No net-losing maps — clean season. 🎯')]),
     h('div', { style: { marginTop: 'auto', paddingTop: '12px' } },
-      h('div', { class: 'hint', style: { lineHeight: '1.55' } }, 'These are dragging your season. Queue them in practice before ranked and review one replay each.'),
+      h('div', { class: 'hint', style: { lineHeight: '1.55' } }, 'These are dragging your season. Practice them before ranked and review one replay each.'),
       h('div', { style: { marginTop: '10px' } },
-        button('Build a focus routine →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('focus') }),
+        button('Open Focus →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('focus') }),
       ),
     ),
   );
@@ -177,21 +177,13 @@ function scatterLegend(points: ScatterPoint[]): HTMLElement {
   );
 }
 
+/**
+ * Bottom row = Mental + Readiness. The old "Focus queue" card was removed
+ * deliberately (issue #71): the scatter's "Top priority" callout above is the
+ * Overview's single Focus tease — Focus itself is the hub.
+ */
 function bottomRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
-  const queue = d.focusMaps.filter((f) => f.net > 0).slice(0, 4);
-
-  const focusQueue = card({ title: 'Focus queue', style: { flex: '1.3' } },
-    ...(queue.length
-      ? queue.map((m) => h('div', { class: 'row', style: { padding: '6px 0' } },
-          h('span', { class: 'dot', style: { background: wrHsl(m.winrate) } }),
-          h('div', { class: 'row-main', style: { fontSize: '12.5px' } }, m.key),
-          h('span', { class: 'mono', style: { fontSize: '12px', color: wrColor(m.winrate) } }, pct(m.winrate)),
-          h('button', { class: 'btn btn--ghost', style: { padding: '3px 8px', fontSize: '10.5px' }, on: { click: () => ctx.navigate('focus') } }, '▶ queue'),
-        ))
-      : [h('div', { class: 'empty empty--good' }, 'Nothing losing right now.')]),
-  );
-
   const m = d.mental;
   const r = d.breakReminder;
   const mental = card({ title: 'Mental', style: { flex: '1' } },
@@ -205,7 +197,7 @@ function bottomRow(ctx: ViewContext): HTMLElement {
         : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Mental.')),
   );
 
-  return h('div', { class: 'overview-bottom' }, focusQueue, mental, readinessCard(ctx));
+  return h('div', { class: 'overview-bottom' }, mental, readinessCard(ctx));
 }
 
 const READINESS_META: Record<string, { label: string; color: string }> = {
