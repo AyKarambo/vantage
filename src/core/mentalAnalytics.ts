@@ -1,4 +1,4 @@
-import { winLoss, type GameRecord } from './analytics';
+import { dayKey, winLoss, type GameRecord } from './analytics';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isTilted } from './mental';
@@ -92,6 +92,72 @@ export function mentalCosts(games: GameRecord[]): MentalCosts {
     leaver: { none: winrateSide(leaverNone), myTeam: winrateSide(leaverMy), enemy: winrateSide(leaverEnemy) },
     performance: { calm: ratedSide(calm), tilted: ratedSide(tilted) },
   };
+}
+
+/** One day of the tilt-rate trend. */
+export interface TiltTrendPoint {
+  /** UTC calendar-day key (YYYY-MM-DD), the shared day-bucketing convention. */
+  date: string;
+  /** Games played that day. */
+  games: number;
+  /** Games flagged tilted that day (either source). */
+  tilted: number;
+  /** tilted / games, 0..1. */
+  rate: number;
+}
+
+/** Per-day tilt rate over an (already filtered) game set, ascending by date. */
+export function tiltTrend(games: GameRecord[]): TiltTrendPoint[] {
+  const byDay = new Map<string, { games: number; tilted: number }>();
+  for (const g of games) {
+    const key = dayKey(g.timestamp);
+    const slot = byDay.get(key) ?? { games: 0, tilted: 0 };
+    slot.games += 1;
+    if (isTilted(g)) slot.tilted += 1;
+    byDay.set(key, slot);
+  }
+  return [...byDay.entries()]
+    .map(([date, s]) => ({ date, games: s.games, tilted: s.tilted, rate: s.tilted / s.games }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** The coach's read of the tilt-rate trend; null = not enough data to claim one. */
+export type TiltTrendDirection = 'improving' | 'worsening' | 'flat';
+
+/** Tilt-rate move (0..1) the halves must differ by before the trend leaves 'flat'. */
+const TREND_DEAD_ZONE = 0.03;
+
+/**
+ * Compare the tilt rate of the earlier half of the range against the recent
+ * half (split by game count, on day boundaries). Both halves must carry at
+ * least `minGames` games — else null, no claim. Moves within the 3-point dead
+ * zone read as 'flat'; a lower recent rate is 'improving'.
+ */
+export function tiltTrendDirection(
+  points: TiltTrendPoint[],
+  minGames: number = COST_MIN_SAMPLE,
+): TiltTrendDirection | null {
+  if (points.length < 2) return null;
+  const total = points.reduce((n, p) => n + p.games, 0);
+  const early: TiltTrendPoint[] = [];
+  const late: TiltTrendPoint[] = [];
+  let seen = 0;
+  for (const p of points) {
+    (seen < total / 2 ? early : late).push(p);
+    seen += p.games;
+  }
+  const a = halfRate(early);
+  const b = halfRate(late);
+  if (a.games < minGames || b.games < minGames) return null;
+  const delta = b.rate - a.rate;
+  if (Math.abs(delta) <= TREND_DEAD_ZONE) return 'flat';
+  return delta < 0 ? 'improving' : 'worsening';
+}
+
+function halfRate(points: TiltTrendPoint[]): { games: number; rate: number } {
+  const games = points.reduce((n, p) => n + p.games, 0);
+  const tilted = points.reduce((n, p) => n + p.tilted, 0);
+  return { games, rate: games ? tilted / games : 0 };
 }
 
 function winrateSide(games: GameRecord[]): WinrateSide {

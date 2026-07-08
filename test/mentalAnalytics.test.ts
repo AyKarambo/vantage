@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mentalCosts, COST_MIN_SAMPLE } from '../src/core/mentalAnalytics';
+import { mentalCosts, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE } from '../src/core/mentalAnalytics';
 import { isTilted } from '../src/core/mental';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
@@ -176,5 +176,80 @@ describe('mentalCosts — empty input', () => {
 
   it('exports the tilt-tax gating convention (5 per side)', () => {
     expect(COST_MIN_SAMPLE).toBe(5);
+  });
+});
+
+// ---- tiltTrend ----------------------------------------------------------------
+
+/** ms epoch for a UTC calendar day + hour — dayKey buckets in UTC. */
+const utc = (day: string, hour = 12): number => Date.parse(`${day}T${String(hour).padStart(2, '0')}:00:00Z`);
+
+/** n games on one UTC day, the first `tilted` of them tilt-flagged. */
+function dayGames(day: string, n: number, tilted: number): GameRecord[] {
+  return Array.from({ length: n }, (_, i) =>
+    game({
+      result: 'Win',
+      timestamp: utc(day, 10) + i * 60_000,
+      ...(i < tilted ? { mental: { tilt: true } } : {}),
+    }));
+}
+
+describe('tiltTrend', () => {
+  it('buckets per UTC day, ascending, with tilted counts and rates', () => {
+    const games = [
+      ...dayGames('2026-07-02', 4, 1),
+      ...dayGames('2026-07-01', 2, 2), // out of order on purpose
+    ];
+    const t = tiltTrend(games);
+    expect(t).toEqual([
+      { date: '2026-07-01', games: 2, tilted: 2, rate: 1 },
+      { date: '2026-07-02', games: 4, tilted: 1, rate: 0.25 },
+    ]);
+  });
+
+  it('OR-merges the review tilt flag into the daily rate', () => {
+    const t = tiltTrend([reviewed('Loss', { tilt: true }, { timestamp: utc('2026-07-01') })]);
+    expect(t).toEqual([{ date: '2026-07-01', games: 1, tilted: 1, rate: 1 }]);
+  });
+
+  it('is empty for no games', () => {
+    expect(tiltTrend([])).toEqual([]);
+  });
+});
+
+describe('tiltTrendDirection', () => {
+  it('returns null when either half is thinner than the gate', () => {
+    // 4 + 4 games: both halves under the 5-game gate → no claim.
+    const thin = tiltTrend([...dayGames('2026-07-01', 4, 4), ...dayGames('2026-07-02', 4, 0)]);
+    expect(tiltTrendDirection(thin)).toBeNull();
+    // Single day → fewer than 2 points → no claim either.
+    expect(tiltTrendDirection(tiltTrend(dayGames('2026-07-01', 20, 10)))).toBeNull();
+  });
+
+  it('reads a clearly falling tilt rate as improving', () => {
+    const points = tiltTrend([...dayGames('2026-07-01', 6, 4), ...dayGames('2026-07-02', 6, 0)]);
+    expect(tiltTrendDirection(points)).toBe('improving');
+  });
+
+  it('reads a clearly rising tilt rate as worsening', () => {
+    const points = tiltTrend([...dayGames('2026-07-01', 6, 0), ...dayGames('2026-07-02', 6, 4)]);
+    expect(tiltTrendDirection(points)).toBe('worsening');
+  });
+
+  it('reads a move inside the dead zone as flat', () => {
+    // 1/6 vs 1/6 — identical halves, well inside the 3-point dead zone.
+    const points = tiltTrend([...dayGames('2026-07-01', 6, 1), ...dayGames('2026-07-02', 6, 1)]);
+    expect(tiltTrendDirection(points)).toBe('flat');
+  });
+
+  it('splits halves by game count, not by day count', () => {
+    // Day 1 carries 10 of 15 games — it IS the early half; days 2-3 form the
+    // late half (5 games). Early rate 0.5, late rate 0 → improving.
+    const points = tiltTrend([
+      ...dayGames('2026-07-01', 10, 5),
+      ...dayGames('2026-07-02', 1, 0),
+      ...dayGames('2026-07-03', 4, 0),
+    ]);
+    expect(tiltTrendDirection(points)).toBe('improving');
   });
 });
