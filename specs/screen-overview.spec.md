@@ -1,7 +1,7 @@
 # Screen spec: Overview (`overview`)
 
-**Source:** `renderer/src/views/overview.ts`, `src/core/analytics/session.ts` (`sessionRecap`) · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8)
-**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
+**Source:** `renderer/src/views/overview.ts`, `src/core/analytics/session.ts` (`sessionRecap`) · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8) · updated 2026-07-08 per issue #71 (SDD spec #75): Focus queue card + "▶ queue" removed
+**Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review; 2026-07-08 issue #71 scope call) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext` (`renderer/src/views/view.ts`); the global filter bar (Account · Role · Mode · Season) re-scopes it; demo dataset shows a "Demo data" badge. [qol 2026-07-04] Ctrl+K now opens the **command palette** (see `screen-shell.spec.md`), not the quick-log modal directly — the quick-log opens via this screen's **Log match** CTA or the palette's Log match action (the palette's empty-query default, so Ctrl+K → Enter still logs a match).
 
@@ -15,13 +15,14 @@
 - [qol 2026-07-04] **Session recap card** ("Yesterday's session", glow-variant, rendered above the KPI row): shown when yesterday (the previous calendar day) had games and today's recap hasn't been dismissed yet. Sub-line: game count · "toughest: `<worst map>`" (when known) · "tilt flagged ×N" (when any). Four stat boxes: `W–L` (tinted by net) with signed net, winrate, best map (or "—"), targets-hit rate (or "—"). A ✕ dismiss button persists the recap's day-key (`recapShown` pref) so the card renders once per day; it also disappears for the rest of the day once dismissed.
 - KPI row: **Winrate** (+ recent-form delta chip), **Games** (W·L split), **Rank**, **Streak** (accented, with "ride it" / "reset it" nudge). [fix 2026-07-05] The **Rank** KPI (and the sidebar rank line) show the player's **real anchored rank** — the calculated rank of the greeting account's most-played anchored role — with its within-division progress %. Only when that account has *no* rank anchor does it fall back to the winrate-derived heuristic (`progression`); previously it always showed the heuristic, so a just-set rank appeared wrong (e.g. "Platinum 1").
 - Scatter card: winrate × volume for every map in range; dot colour is a stable categorical per map; legend uses shortened map names with the full name on hover.
-- **Top priority** callouts: top 3 net-losing maps (net = losses − wins > 0) with games, signed net, winrate; CTA "Build a focus routine →" navigates to Focus.
-- Bottom row: **Focus queue** (top 4 net-losing maps; "▶ queue" navigates to Focus) and **Mental** snapshot (Calm/Tilted bars + break-reminder line — [implemented 2026-07-04] now truthful, reflecting the real per-user setting owned by `screen-mental.spec.md`).
+- **Top priority** callouts [confirmed 2026-07-08]: top 3 net-losing maps (net = losses − wins > 0, from `focusMaps`) with games, signed net, winrate; hint copy uses practice/review framing ("Practice them before ranked and review one replay each."); the CTA "Open Focus →" is the Overview's **single** entry to the Focus screen — Overview teases, Focus is the hub (hierarchy owned by `screen-focus.spec.md`).
+- Bottom row: **Mental** snapshot (Calm/Tilted bars + break-reminder line — [implemented 2026-07-04] truthful, reflecting the real per-user setting owned by `screen-mental.spec.md`) and the **Readiness** teaser (when enabled). [confirmed 2026-07-08] The former "Focus queue" card (top 4 net-losing maps with per-row "▶ queue" buttons) was removed per issue #71 — it triplicated the focus list, and "queue" read like an action while being pure navigation.
 
 ## Out-of-Scope
 
 - Drill-downs (no per-map or per-KPI navigation).
-- Actual practice queueing — [confirmed] "▶ queue" is intentionally navigation-only; no queue feature is planned.
+- Any practice-queue feature or copy — [confirmed 2026-07-08] no queue feature exists or is planned (GEP-only guardrail); no "queue" verb in the screen's copy.
+- The cross-dimension focus list itself (owned by `screen-focus.spec.md` — Overview only teases the top 3 maps).
 - The break-reminder mechanism itself (owned by `screen-mental.spec.md`).
 
 ## Constraints
@@ -36,7 +37,7 @@
 - Given maps with net > 0 in range, when Overview renders, then the 3 worst by net appear under "Top priority" with games, signed net, and winrate.
 - Given no net-losing maps, when Overview renders, then the callout shows "No net-losing maps — clean season. 🎯".
 - Given fewer than 3 trend buckets, when the KPI row renders, then the Winrate KPI has no delta chip.
-- Given a click on "Build a focus routine →" or "▶ queue", then the app navigates to the Focus screen.
+- Given a click on "Open Focus →", then the app navigates to the Focus screen — and no other Overview control navigates there.
 - Given a click on "Log match", then the quick-log modal opens.
 - Given games were played yesterday and no recap has been dismissed today, when Overview renders, then the "Yesterday's session" card shows W–L + net, winrate, best map, and targets-hit; clicking ✕ dismisses it for the rest of the day (and it stays gone across relaunches that day).
 - Given yesterday had no games, then no recap card renders.
@@ -47,4 +48,4 @@ None identified — behavior matches intent. [implemented 2026-07-04] The Mental
 
 ## Open Questions
 
-None — resolved 2026-07-04: "▶ queue" is navigation-only (label softening is optional polish, not a requirement).
+None — the 2026-07-04 "▶ queue is navigation-only" resolution was superseded 2026-07-08 by issue #71: the button and its card are gone; the scatter callout's "Open Focus →" is the single Focus entry.

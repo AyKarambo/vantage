@@ -21,7 +21,7 @@ Coaching), so a late-night session spanning past midnight still reads as one, an
 never shows stale data as "current."
 
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
-  *winrate × volume* scatter with a focus band, a focus queue and a mental snapshot.
+  *winrate × volume* scatter with a top-priority callout, and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**
   (scoreboard, per-hero tabs, competitive progress, player history, and an
   end-of-match screenshots gallery — each section degrades gracefully to whatever the
@@ -43,7 +43,9 @@ never shows stale data as "current."
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
   drill-down drawer (per-map winrate, recent games, aggregates).
-- **Focus** — net-losing maps ranked by deficit — the "what to work on" signal.
+- **Focus** — the "what to work on" hub: net-losing **maps, heroes and roles** in one
+  deficit-ranked list, each with a trend arrow (improving/declining) and — once you
+  track it as a target — the winrate movement since you flagged it.
 - **Mental** — calm/tilt state, the tilt tax on your winrate, flag counts, and a
   **break-reminder setting** (on/off + loss threshold) that fires a tray notification
   after N consecutive losses.
