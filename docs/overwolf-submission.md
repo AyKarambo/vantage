@@ -209,18 +209,13 @@ flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that'
 8. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
 
 **Code signing (required BEFORE Overwolf will review — the submission form gates on it).** The exe
-must carry a **trusted-CA** signature (self-signed is rejected). Chosen route: **Certum OV cert +
-SimplySign**, signed locally with `npm run sign:local` before each upload (no CI automation — see
-[docs/signing.md](signing.md) for why). For a local `.pfx` from any CA, ow-electron-builder
-is electron-builder under the hood, so **no `package.json` change is needed** — set the standard env
-vars at release time:
-
-```bash
-# .pfx path (or base64) + its password — electron-builder signs automatically
-export CSC_LINK="/path/to/cert.pfx"
-export CSC_KEY_PASSWORD="…"
-npm run release
-```
+must carry a **trusted-CA** signature (self-signed is rejected) — and per Overwolf's
+[App Signing guide](https://dev.overwolf.com/ow-electron/guides/dev-tools/app-signing/) the exe
+signature is now **required for the gaming packages (GEP) to load at runtime** in distributed
+builds. Chosen route: **SSL.com IV certificate + eSigner cloud signing** — the sign hook
+([scripts/esigner-sign.cjs](../scripts/esigner-sign.cjs)) signs the app exe, uninstaller and
+installer **during** `npm run release`, locally and in CI, whenever the `ES_*` env vars /
+GitHub secrets are set. Full runbook: [docs/signing.md](signing.md).
 
 Without a trusted-CA signature the app **cannot be submitted for review**. (A self-signed build only
 suppresses local warnings via *More info → Run anyway* and does not satisfy Overwolf.)
@@ -282,8 +277,9 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
 8. **Publish the legal docs** — push the repo to GitHub, enable Pages for `docs/`, and paste the
    public `docs/legal/privacy.html` + `docs/legal/terms.html` URLs into the console **and** the
    installer config. (Both must load without login — a hard Overwolf requirement.)
-9. **Obtain a code-signing certificate** from a trusted CA and add it to `build.win` (or sign the
-   OPK via `ow-cli opk sign`) before a public release.
+9. **Buy the SSL.com IV certificate + enroll eSigner** and add the four `ES_*` GitHub secrets —
+   CI then signs every release automatically (see [docs/signing.md](signing.md) for the
+   purchase/enrollment runbook). Required before a public release *and* for GEP to load.
 10. **Confirm ad-free with DevRel** — the app carries no ads by design; get explicit sign-off.
 
 Assets already generated in `assets/store/` (git-ignored — reproducible via the two

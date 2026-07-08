@@ -394,7 +394,8 @@ minor, `fix`/others → patch, `type!:`/`BREAKING CHANGE` → major), builds the
 runner, and publishes a tagged Release with it attached. It's **tag-driven** — the version is baked
 into the built installer but not committed back, so nothing pushes to the protected `main` branch
 (`package.json`'s version field stays at its floor; the tag/Release/installer carry the real version).
-CI installers are **unsigned**.
+CI signs the installer automatically when the SSL.com eSigner secrets are configured
+(unsigned otherwise — see [docs/signing.md](docs/signing.md)).
 
 To build locally:
 
@@ -402,10 +403,10 @@ To build locally:
 npm run release    # ow-electron-builder → release/Vantage-Setup-<ver>.exe
 ```
 
-Unsigned installer (fine for personal use — Windows SmartScreen → *More info → Run anyway*). To ship a
-**signed** build, download the artifact from the tag-triggered
-[`release`](.github/workflows/release.yml) workflow (or build locally), run `npm run sign:local` with
-the Certum cert (see [docs/signing.md](docs/signing.md)), and upload it to the release.
+Without the `ES_*` env vars this produces an unsigned installer (fine for personal use — Windows
+SmartScreen → *More info → Run anyway*). With them set, the same build signs the app exe, the
+uninstaller and the installer via SSL.com eSigner — required for the Overwolf gaming packages (GEP)
+to load in distributed builds. Setup and runbook: [docs/signing.md](docs/signing.md).
 
 ## Support
 
