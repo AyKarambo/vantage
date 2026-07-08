@@ -65,7 +65,7 @@ function identityCard(versionEl: HTMLElement): HTMLElement {
       h('span', { class: 'brand-mark', style: { width: '38px', height: '38px', flex: '0 0 auto' } }),
       h('div', { style: { minWidth: '0' } },
         h('div', { style: { fontSize: '20px', fontWeight: '700', lineHeight: '1.1' } }, 'Vantage'),
-        h('div', { class: 'u-muted', style: { fontSize: '12.5px', marginTop: '2px' } }, 'Account-safe Overwatch 2 stats coach'),
+        h('div', { class: 'u-muted', style: { fontSize: '12.5px', marginTop: '2px' } }, 'Account-safe Overwatch stats coach'),
       ),
       h('div', { style: { marginLeft: 'auto', textAlign: 'right' } }, versionEl),
     ),

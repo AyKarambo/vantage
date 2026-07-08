@@ -29,7 +29,7 @@ interface RawGepData {
 }
 
 /**
- * Wraps the Overwolf GEP package: waits for it to be ready, enables Overwatch 2
+ * Wraps the Overwolf GEP package: waits for it to be ready, enables Overwatch
  * when detected, requests all features, and re-emits normalized {@link GepMessage}s.
  *
  * Emits: 'message' (GepMessage), 'status' (GepStatus), 'log' (string, ...args).
@@ -142,7 +142,7 @@ export class GepService extends EventEmitter {
           'log',
           ow
             ? `gep: ✅ Overwatch (${this.overwatchGameId}) IS supported — waiting for game-detected`
-            : `gep: ⚠ Overwatch (${this.overwatchGameId}) is NOT in the supported list (enable OW2 for the app in the Overwolf console)`,
+            : `gep: ⚠ Overwatch (${this.overwatchGameId}) is NOT in the supported list (enable Overwatch for the app in the Overwolf console)`,
         );
       })
       .catch((err) => this.emit('log', 'gep: getSupportedGames failed/hung —', String(err)));

@@ -1,5 +1,5 @@
 /**
- * Overwatch 2 map → game-mode lookup. Shared by the sample generator and the
+ * Overwatch map → game-mode lookup. Shared by the sample generator and the
  * analytics/dashboard layer so "by game mode" grouping and per-match mode tags
  * come from one table. Pure data, no I/O.
  */
@@ -17,7 +17,7 @@ export const MAP_MODES: Record<string, MapMode> = {
 };
 
 /**
- * Maps that exist only in Overwatch 2's Stadium mode. They never appear in Quick
+ * Maps that exist only in Overwatch's Stadium mode. They never appear in Quick
  * Play / Competitive, so they're kept out of the competitive pool and are never
  * re-introduced by the online Update (Settings → "Update from online source").
  */

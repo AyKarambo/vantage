@@ -34,7 +34,7 @@ in vitest *and* in the browser preview unchanged. Keeping it pure is guardrail 3
 The single most useful thing to understand. From game to screen:
 
 ```
-Overwatch 2
+Overwatch
    │  sanctioned game events (GEP — the only allowed source, guardrail 1)
    ▼
 GepService                      src/main/gep.ts

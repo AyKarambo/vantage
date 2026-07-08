@@ -22,7 +22,7 @@ entire promise is honest, account-safe coaching.
    matches but no targets sees four fake targets they never created. **Why it matters:** it's
    confusing and dishonest; "no targets" should read as "no targets."
 
-3. **The rank model is out of date.** Overwatch 2 changed competitive months ago: every tier is
+3. **The rank model is out of date.** Overwatch changed competitive months ago: every tier is
    split into **divisions 1–5**, progress within a division is shown as a **percentage (0–100%)**
    rather than raw points, and there is a new top tier **Champion (1–5)** above Grandmaster. Vantage
    still models 7 tiers (Bronze→Grandmaster) and shows raw SR points. **Why it matters:** the rank
@@ -53,9 +53,9 @@ readout matches the live game; and manual tracking is correctable.
 - Empty-state UI on the Targets screen (and consistent messaging on Review) when there are no
   targets and demo mode is off.
 
-### C. Current OW2 rank model
+### C. Current Overwatch rank model
 - Add the **Champion** tier (divisions 1–5) as the top tier above Grandmaster.
-- Keep divisions **1–5** (5 = lowest in a tier, 1 = highest), matching OW2.
+- Keep divisions **1–5** (5 = lowest in a tier, 1 = highest), matching Overwatch.
 - Present within-division progress as a **percentage 0–100%** instead of raw SR points, everywhere
   rank/progress is shown (sidebar account card, Overview KPI, match detail competitive section).
 - Express the signed rank change (the "+/- elo") in the same percentage terms.
@@ -164,7 +164,7 @@ readout matches the live game; and manual tracking is correctable.
   Then an empty state invites the user to create their first target (instead of showing fake ones),
   and the Review screen shows no fabricated active targets.
 
-### C. Current OW2 rank model
+### C. Current Overwatch rank model
 
 - **C1 — Champion tier exists.**
   Given a rating at the very top of the ladder,

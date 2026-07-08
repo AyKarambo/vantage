@@ -2,7 +2,7 @@ import type { RankAnchor, RankMatchInput, RankPosition, RankState } from './type
 
 /**
  * The pure ladder engine: apply logged skill-rating deltas to an anchor and get
- * the live rank, including OW2-style rank protection. No I/O, no dates, no
+ * the live rank, including Overwatch-style rank protection. No I/O, no dates, no
  * randomness — fully unit-tested.
  */
 
@@ -92,7 +92,7 @@ export function applyMatch(state: RankState, match: RankMatchInput): RankState {
 
 /**
  * Start a fresh live state from an anchor position. A negative `progressPct` is
- * a rank-protection carry (the buffer OW2 shows as e.g. "-19%") — it is kept as
+ * a rank-protection carry (the buffer Overwatch shows as e.g. "-19%") — it is kept as
  * the true negative value and marks the state `protected`, so the next match's
  * delta pays it down exactly as a live protected loss does. Non-negative values
  * clamp into `[0,100]` and stay unprotected, as before.

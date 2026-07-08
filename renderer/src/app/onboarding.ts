@@ -21,7 +21,7 @@ const STEPS: Step[] = [
   {
     title: 'Welcome to Vantage',
     lead:
-      'Your Overwatch 2 stats coach. Vantage turns your match history into priority maps, exact ' +
+      'Your Overwatch stats coach. Vantage turns your match history into priority maps, exact ' +
       'per-hero stats, mental tracking and improvement targets — so you can see where the points are hiding.',
     note:
       'Account-safe by design: it uses only Overwolf’s official Game Events Provider — the same ' +

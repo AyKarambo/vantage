@@ -11,7 +11,7 @@ updated: 2026-07-06
 
 ## Intent (WHAT & WHY)
 
-Overwatch 2's rank-protection buffer lets a division-dropping loss go **negative**
+Overwatch's rank-protection buffer lets a division-dropping loss go **negative**
 instead of demoting (the in-game bar can show e.g. `-19%`). That negative value is a
 debt: the next match's SR delta is added *on top of it*, so a subsequent `+26%` win
 should land at `26 - 19 = 7%`.

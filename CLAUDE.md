@@ -1,6 +1,6 @@
 # Vantage — Project Constitution
 
-Vantage is an **account-safe Overwatch 2 stats coach**: it turns match history into
+Vantage is an **account-safe Overwatch stats coach**: it turns match history into
 priority maps, per-hero stats, mental tracking, and improvement targets, with optional
 Notion export. Built on **ow-electron** (Overwolf's Electron) — a frameless desktop app.
 

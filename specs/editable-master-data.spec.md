@@ -10,7 +10,7 @@ updated: 2026-07-06
 
 ## Intent (WHAT & WHY)
 
-Overwatch 2's master data — the roster of **heroes** (and roles), the list of **maps**
+Overwatch's master data — the roster of **heroes** (and roles), the list of **maps**
 (and game modes), and the **competitive seasons** — changes every few weeks. Today all
 three are hard-coded tables in `src/core/` (`heroes.ts`, `maps.ts`, `season.ts`), imported
 directly by both the main-process core (analytics, sample data, resolvers) *and* the
@@ -72,7 +72,7 @@ is catalog data, not match/account data) and without a forced automatic overwrit
 
 ## Out-of-Scope
 
-- **Fetching seasons.** No API exposes OW2 season start-dates. Seasons stay **manually
+- **Fetching seasons.** No API exposes Overwatch season start-dates. Seasons stay **manually
   editable**, and the existing 9-week auto-cadence extrapolation in `season.ts` is **kept** so
   "This season" keeps advancing if the user doesn't add the new one. (Resolved Q1.)
 - **Fetching `isActive`.** No official or community source exposes competitive-pool status as
@@ -114,7 +114,7 @@ is catalog data, not match/account data) and without a forced automatic overwrit
 - **Grounding / sources:** [OverFast API](https://overfast-api.tekrop.fr/) &
   [its OpenAPI schema](https://github.com/TeKrop/overfast-api) (MIT; `/maps` = name+gamemodes
   only, no pool field), [ow-api.com](https://ow-api.com/) (player-stats only),
-  [Blizzard forums "Overwatch 2 API"](https://us.forums.blizzard.com/en/blizzard/t/overwatch-2-api/19214)
+  [Blizzard forums "Overwatch API"](https://us.forums.blizzard.com/en/blizzard/t/overwatch-2-api/19214)
   (no official API), and Blizzard's April 2025 "Refining Hero Pools and Retiring Map Pools"
   update (pool rotation retired).
 

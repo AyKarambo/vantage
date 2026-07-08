@@ -31,7 +31,7 @@ This must be identical to the app you were whitelisted as, or GEP/console won't 
 | `appId` (installer) | `com.timoseikel.vantage` | package.json `build.appId` |
 | AppUserModelId | `com.timoseikel.vantage` | src/main/index.ts |
 | Overwolf packages | `["gep"]` | package.json `overwolf.packages` |
-| Target game | **Overwatch 2 — game id `10844`** | appsettings.json |
+| Target game | **Overwatch — game id `10844`** | appsettings.json |
 
 **➡ Action:** open the Developer Console and confirm the registered app name/author
 match the two values above. If the console shows anything different, change
@@ -58,9 +58,9 @@ Use these when filling the "Submit your app idea" form.
 - **App name:** Vantage
 - **Public or private:** Public
 - **Framework:** Overwolf Electron (ow-electron)
-- **Target game:** Overwatch 2 (10844)
+- **Target game:** Overwatch (10844)
 - **Category:** Stats / Statistics
-- **One-liner:** A personal Overwatch 2 stats coach — turns your match history into
+- **One-liner:** A personal Overwatch stats coach — turns your match history into
   priority maps, exact per-hero stats, mental tracking and improvement targets.
 - **Desktop window:** Yes — a frameless desktop dashboard (no in-game overlay). The
   app runs from a Windows tray icon and opens the dashboard window; relaunching it
@@ -88,14 +88,14 @@ Paste into the console's **Store listing** page.
 
 **Short description** (plain text, shown on the tile):
 ```
-Your Overwatch 2 stats coach — priority maps, exact hero stats, mental tracking and improvement targets, all in one dashboard.
+Your Overwatch stats coach — priority maps, exact hero stats, mental tracking and improvement targets, all in one dashboard.
 ```
 
 **Full description** (CommonMark, keep under ~2000 chars):
 ```markdown
 ## Vantage — see where the points are hiding
 
-Vantage turns your Overwatch 2 match history into a coaching dashboard that tells you
+Vantage turns your Overwatch match history into a coaching dashboard that tells you
 **what to actually work on** — not just another wall of numbers.
 
 ### What you get
@@ -122,7 +122,7 @@ One-click export of your tracked games to a Notion database.
 ```
 
 **Category:** Stats
-**Tags / keywords:** `overwatch 2`, `stats`, `tracker`, `win rate`, `hero stats`,
+**Tags / keywords:** `overwatch`, `stats`, `tracker`, `win rate`, `hero stats`,
 `coaching`, `improvement`, `competitive`
 **About the creator:** Solo dev building account-safe tools for Overwatch players. *(edit to taste)*
 **Support link:** `mailto:timo.seikel@gmail.com` *(swap for a GitHub Issues URL once the repo is public)*

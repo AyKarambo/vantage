@@ -212,7 +212,7 @@ Adversarial multi-agent review of the implementation surfaced two items:
    the effective post-edit role (`patch.role ?? game.role`), with regression tests.
 2. **Known limitation (by design) — forward demotion entry.** For a *forward* (`calculated`)
    match, the derived delta reproduces the entered rank exactly **except** when it would drive
-   the running % ≤ 0: OW2 rank protection (the forward engine) then shows a held/negative
+   the running % ≤ 0: Overwatch rank protection (the forward engine) then shows a held/negative
    buffer rather than the entered division, so an entered *demotion* won't reproduce exactly.
    Per resolved question 1 the anchor is deliberately **not** moved (a re-anchor would shift
    the live rank), so this stays a best-effort estimate. Documented in `srDeltaForSetRank`.

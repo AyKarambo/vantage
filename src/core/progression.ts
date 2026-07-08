@@ -6,7 +6,7 @@ import { winLoss, type GameRecord } from './analytics';
  * the UI, not ground truth, and is intentionally easy to swap out once a real
  * rank source exists.
  *
- * Modern Overwatch 2 shape: eight tiers Bronze→Champion, each split into five
+ * Modern Overwatch shape: eight tiers Bronze→Champion, each split into five
  * divisions (5 = lowest band, 1 = highest), with progress toward the next
  * division shown as a percentage (0–100%) rather than raw points. The internal
  * scalar below is an implementation detail and is never displayed.
