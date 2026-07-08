@@ -18,7 +18,7 @@ import type { AuthoredTarget } from '../../src/core/targets';
 import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
-import { computeDashboard, applyFilters } from '../../src/core/dashboardData';
+import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/core/dashboardData';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
 import {
@@ -159,6 +159,17 @@ const dataset = (): GameRecord[] =>
   });
 
 const findTarget = (id: string): AuthoredTarget | undefined => targets.find((t) => t.id === id);
+
+// Mirrors src/main/dataProvider.ts's eventual `eligibleForIgnore`: the pending
+// set matching the combined Role/account scope + the Review-only age cutoff,
+// computed fresh (not capped) so "Ignore all" can act on more than the 150
+// rendered rows just like the real app.
+const eligibleForIgnore = (input: { filters: DashboardFilters; minAgeDays: number }): GameRecord[] => {
+  const now = Date.now();
+  const seasonStarts = effectiveMasterData().seasons.map((s) => s.start);
+  return pendingReviewMatches(dataset(), input.filters, seasonStarts)
+    .filter((g) => input.minAgeDays <= 0 || g.timestamp <= now - input.minAgeDays * 86400000);
+};
 
 // Canned Notion picker data — the preview has no real Notion runtime, but the
 // database-picker card still needs something to list and select against.
@@ -674,6 +685,20 @@ const mock: OwStatsApi = {
   },
   clearReview: async (matchId: string) => {
     delete previewReviews[matchId];
+    save(REVIEWS_KEY, previewReviews);
+  },
+  previewPendingReviewIgnore: async (input) => ({ count: eligibleForIgnore(input).length }),
+  ignorePendingReviews: async (input) => {
+    const eligible = eligibleForIgnore(input);
+    const matchIds = eligible.map((g) => g.matchId);
+    if (matchIds.length) {
+      for (const g of eligible) previewReviews[g.matchId] = { at: Date.now(), grades: {}, flags: {} };
+      save(REVIEWS_KEY, previewReviews);
+    }
+    return { matchIds };
+  },
+  clearReviews: async (matchIds: string[]) => {
+    for (const id of matchIds) delete previewReviews[id];
     save(REVIEWS_KEY, previewReviews);
   },
   window: {

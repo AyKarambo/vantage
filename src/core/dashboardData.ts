@@ -67,9 +67,10 @@ export function computeDashboard(
   // shorter windows stay daily, matching the pre-'season' behavior of the old 90.
   const days = filters.days ?? 30;
   const weekly = days === 'all' || (typeof days === 'number' && days > 90);
-  // The review inbox is deliberately unfiltered: an ungraded game must stay
-  // visible (and counted in the badge) no matter how the range is narrowed.
-  const ungraded = all.filter((g) => !g.review).sort((a, b) => b.timestamp - a.timestamp);
+  // The review inbox honors Role/account (an ungraded game outside the active
+  // role/account scope hides, same as everywhere else) but is exempt from the
+  // Season/day-window value — see pendingReviewMatches.
+  const pending = pendingReviewMatches(allGames, filters, seasonStartsList);
   // Active measured targets auto-grade every inbox row (shown read-only on Review);
   // the same active set drives the staleness cue, counted over unfiltered history.
   const authoredTargets = manual?.targets ?? [];
@@ -125,8 +126,8 @@ export function computeDashboard(
     mental: mentalSummary(games),
     performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
-    reviewInbox: ungraded.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),
-    pendingReviews: ungraded.length,
+    reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),
+    pendingReviews: pending.length,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
     staleness: manual?.staleness ?? DEFAULT_STALENESS,
     // Readiness is a per-person verdict → computed over the UNFILTERED
@@ -177,6 +178,28 @@ export function applyFilters(
     }
   }
   return out;
+}
+
+/**
+ * Tracked games with no saved review, scoped by Role/account like every other
+ * screen — but deliberately exempt from the Season/day-window value, which is
+ * forced to `'all'` regardless of what the caller passes. The app's default
+ * day-window (30 days) would otherwise silently hide exactly the backlog the
+ * Review screen's bulk "Ignore all" exists to help clear. The explicit,
+ * off-by-default age cutoff (a renderer-local concern) is the only thing that
+ * narrows Review by date. Sorted newest-first; both `reviewInbox` (capped) and
+ * a future bulk-ignore computation derive from this same result so they can
+ * never disagree.
+ */
+export function pendingReviewMatches(
+  allGames: GameRecord[],
+  filters: DashboardFilters,
+  seasonStartsList?: readonly number[],
+): GameRecord[] {
+  const competitive = allGames.filter((g) => isCompetitive(g.gameType));
+  return applyFilters(competitive, { ...filters, days: 'all' }, seasonStartsList)
+    .filter((g) => !g.review)
+    .sort((a, b) => b.timestamp - a.timestamp);
 }
 
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
