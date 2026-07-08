@@ -1,6 +1,6 @@
 # Vantage
 
-A standalone **Overwatch 2 stats coach**. Vantage turns your match history into a
+A standalone **Overwatch stats coach**. Vantage turns your match history into a
 dashboard of priority maps, exact hero stats, mental tracking and flexible
 improvement targets — and tells you **where the points are hiding**. Built on
 **ow-electron** (Overwolf's Electron); a frameless desktop app (1300×840) that runs
@@ -81,7 +81,7 @@ never shows stale data as "current."
   framed as an evidence-informed **wellness nudge, not a diagnosis**. The screen itself stays
   data-first; all the explanation — a progressive-disclosure **help wiki** (plain → how it works
   → the real formulas), a personalized *"your readiness right now"* score walkthrough, and a
-  curated library of player scenarios — lives behind a **Help** button and a per-card **"?"**
+  curated library of player scenarios — lives behind a **Help** button
   (replacing the old single "How is this calculated?" modal), including its limits (e.g. a balance
   patch looks like a decline too). Optional opt-in tray reminder at launch; extends
   (doesn't replace) the Mental break reminder. It's the one screen that ignores the filter bar
@@ -119,7 +119,7 @@ never shows stale data as "current."
   Review and the match editor), rate your own **performance** on a 0-100 slider (colored on the same
   red→green scale as winrate elsewhere; also editable later from Review or a match's detail page), and
   grade active improvement targets inline.
-  Vantage then **calculates your live rank** from that anchor plus each logged %, including OW2
+  Vantage then **calculates your live rank** from that anchor plus each logged %, including Overwatch
   **rank protection** (a loss that would drop below 0% holds the division and keeps the true negative
   carry — matching the game's own negative display — until a win or draw pays it back above 0%; only
   a further loss demotes).
@@ -249,7 +249,7 @@ renderer stays a contained surface. External links open only through the main pr
   later in Settings). Demo data is badged "Demo data" and yields to real games automatically
   once tracking starts — the pipeline is identical. With no demo and no authored targets, the
   Targets screen stays honestly empty rather than showing sample targets.
-- Competitive **rank** follows the current Overwatch 2 model: eight tiers Bronze→**Champion**,
+- Competitive **rank** follows the current Overwatch model: eight tiers Bronze→**Champion**,
   five divisions each (5 = lowest, 1 = highest), with within-division progress shown as a
   **percentage (0–100%)**. It is a winrate-derived heuristic (GEP does not report rank), not a
   value read from the game.
@@ -303,7 +303,7 @@ database id is still supported as a fallback.)
 ## Architecture
 
 ```
-Overwatch 2 ─▶ GEP ─▶ aggregator ─▶ GameRecord ─▶ HistoryStore ─┐
+Overwatch ─▶ GEP ─▶ aggregator ─▶ GameRecord ─▶ HistoryStore ───┐
                                                                 ├─▶ core/dashboardData ─▶ IPC ─▶ renderer
                                                                 └─▶ Notion export (optional)
 ```

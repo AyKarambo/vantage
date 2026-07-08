@@ -1,5 +1,5 @@
 /**
- * The current Overwatch 2 competitive season window — a pure, clock-injected
+ * The current Overwatch competitive season window — a pure, clock-injected
  * helper so the "This season" filter uses Blizzard's real season boundaries
  * instead of a rolling day window. No I/O and no ambient clock: callers pass
  * `now`, which keeps it unit-testable and Electron-free (core Guardrail 3).
@@ -20,7 +20,7 @@
 export const SEASON_CADENCE_MS = 63 * 86_400_000;
 
 /**
- * Known OW2 competitive season start dates (UTC midnight), ascending. Grounded
+ * Known Overwatch competitive season start dates (UTC midnight), ascending. Grounded
  * against Blizzard's published schedule as of 2026-07; the last entry is the
  * current season. Append new seasons here as they are announced — anything past
  * the last entry is extrapolated by {@link SEASON_CADENCE_MS}.

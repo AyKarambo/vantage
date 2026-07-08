@@ -7,7 +7,7 @@ single ambiguous flag, and rank is a fuzzy winrate estimate with no way to log t
 competitive numbers the game shows you. This makes hand-logged data less trustworthy and
 less useful than it should be — the opposite of the product's promise. This spec turns
 manual tracking into a first-class, editable, per-account, per-role record that mirrors
-how OW2 actually ranks you, and makes **every** match (hand-logged *or* Overwolf-tracked)
+how Overwatch actually ranks you, and makes **every** match (hand-logged *or* Overwolf-tracked)
 editable after the fact.
 
 ## In-Scope

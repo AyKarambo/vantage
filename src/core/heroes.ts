@@ -1,5 +1,5 @@
 /**
- * The canonical Overwatch 2 hero list — the single source of truth for the
+ * The canonical Overwatch hero list — the single source of truth for the
  * quick-log typeahead and the sample-data generator's hero pools. Pure data;
  * heroes GEP reports that aren't listed here still flow through everywhere
  * (the list assists input, it never gates it).

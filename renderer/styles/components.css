@@ -1323,11 +1323,47 @@ table.data tbody tr:hover {
 .wiki-breadcrumb {
   display: flex;
   align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 2px 44px 16px 0; /* clear the built-in ✕ */
+}
+/* Prominent Back affordance — a ghost pill, not a faint inline link. */
+.wiki-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.wiki-back:hover {
+  border-color: var(--border);
+  background: var(--surface-3);
+}
+.wiki-trail {
+  display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  font-size: 11.5px;
+}
+.wiki-crumb {
+  color: var(--muted);
+  font-weight: 500;
+}
+.wiki-crumb-sep {
   color: var(--muted-2);
-  margin: 2px 40px 14px 0; /* clear the built-in ✕ */
+}
+.wiki-crumb-current {
+  color: var(--text);
+  font-weight: 600;
 }
 .wiki-title {
   font-family: var(--font-head);

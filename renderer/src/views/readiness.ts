@@ -2,7 +2,7 @@
  * Readiness / training-load coach screen. Shows the readiness verdict as a clear
  * traffic-light read + rest recommendation, the contributing signals, the
  * training-load numbers, and a trend chart. All explanation now lives in the
- * on-demand help wiki (global Help + a per-card "?"); the view itself stays
+ * on-demand help wiki, opened from a single global Help button; the view stays
  * data-first, keeping only the single honest "wellness heuristic, not a
  * diagnosis" line in its subtitle.
  */
@@ -13,7 +13,6 @@ import { badge, button, card, statBox } from '../components/primitives';
 import { readinessChart } from '../charts/plots';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
 import { openReadinessWiki } from '../app/readinessWiki';
-import type { WikiArticleId } from '../app/readinessWiki/types';
 import { viewHead, type ViewContext } from './view';
 
 const BAND: Record<ReadinessBand, { label: string; color: string }> = {
@@ -64,17 +63,6 @@ function globalHelp(ctx: ViewContext): HTMLElement {
   return button('Help', { variant: 'ghost', onClick: () => openReadinessWiki(ctx) });
 }
 
-/** A card's "?" — deep-links the readiness guide to that card's article (plain tier). */
-function cardHelp(ctx: ViewContext, id: WikiArticleId): HTMLElement {
-  return h('button', {
-    class: 'inline-link',
-    title: 'Open the readiness guide',
-    'aria-label': 'Open the readiness guide',
-    style: { fontSize: '13px', fontWeight: '600' },
-    on: { click: () => openReadinessWiki(ctx, { view: 'article', id, tier: 'plain' }) },
-  }, '?');
-}
-
 /** One family's pull on the composite: signed delta + a small magnitude bar.
  *  A bare track (not statBar) — statBar reserves fixed label/value gutters that
  *  would leave ~35% of the tile blank here (review finding). */
@@ -100,7 +88,7 @@ function subscoresCard(ctx: ViewContext): HTMLElement {
     ? `stat coverage ${Math.round((s.performance.coverage ?? 0) * 100)}%`
     : 'needs tracked games with stats';
   const subjNote = s.subjective.available ? '' : 'log mental state or rate your games';
-  return card({ title: 'What moves the score', sub: 'from a neutral 75', actions: cardHelp(ctx, 'what-moves-the-score') },
+  return card({ title: 'What moves the score', sub: 'from a neutral 75' },
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '4px' } },
       subscoreTile('Load balance', s.load, 40),
       subscoreTile('Performance vs your usual', s.performance, 45, statNote),
@@ -119,11 +107,8 @@ function verdictCard(ctx: ViewContext): HTMLElement {
   // When confidence is low we deliberately suppress the crisp number so it never
   // reads as more certain than it is.
   const showScore = r.score !== null && r.confidence !== 'low';
-  const help = cardHelp(ctx, 'verdict');
   return card(
-    // The "?" renders independently of the regime badge (which showRegime nulls
-    // for insufficient-data/rusty) — help must never vanish when it's most needed.
-    { title: 'Verdict', actions: showRegime(r.band) ? [badge(regime.label, regime.kind), help] : [help] },
+    { title: 'Verdict', actions: showRegime(r.band) ? badge(regime.label, regime.kind) : undefined },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' } },
       h('span', { style: { width: '14px', height: '14px', borderRadius: '50%', background: meta.color, flex: '0 0 auto' } }),
       h('span', { style: { fontSize: '20px', fontWeight: '700' } }, meta.label),
@@ -181,7 +166,7 @@ function whyCard(r: ReadinessSummary): HTMLElement {
 
 function loadCard(ctx: ViewContext): HTMLElement {
   const l = ctx.data.readiness.load;
-  return card({ title: 'Training load', sub: 'across all your accounts', actions: cardHelp(ctx, 'training-load') },
+  return card({ title: 'Training load', sub: 'across all your accounts' },
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginTop: '4px' } },
       statBox(String(l.acutePerDay), 'games/day (recent)'),
       statBox(`${l.ratio.toFixed(2)}×`, 'vs baseline'),
@@ -197,7 +182,7 @@ function loadCard(ctx: ViewContext): HTMLElement {
 }
 
 function chartCard(ctx: ViewContext): HTMLElement {
-  return card({ title: 'Readiness trend', sub: 'last 3 weeks · higher = fresher', actions: cardHelp(ctx, 'readiness-trend') },
+  return card({ title: 'Readiness trend', sub: 'last 3 weeks · higher = fresher' },
     readinessChart(ctx.data.readiness.trend),
   );
 }

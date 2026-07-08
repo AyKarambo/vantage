@@ -29,7 +29,7 @@ The sections below are amended so the two never diverge on shipped behavior.
    wrong account.
 
 3. **#22 — "This season" isn't a season.** The "This season" filter is a hardcoded
-   rolling 90-day window (`days: 90`), not the actual Overwatch 2 competitive
+   rolling 90-day window (`days: 90`), not the actual Overwatch competitive
    season. Both the duration (~90d vs ~9 weeks) and the alignment (rolling from
    "now" vs the season's real start date) are wrong, so "This season" silently
    mixes in the previous season's matches.
@@ -55,7 +55,7 @@ match history into trustworthy stats.
 - **#21** "Log match" prefills **Account** and **Role** from the active dashboard
   filter when those filters name a specific value; falls back to the existing
   last-used-prefs behavior when a filter is "all".
-- **#22** "This season" filters to matches within the **current OW2 competitive
+- **#22** "This season" filters to matches within the **current Overwatch competitive
   season's real start→now window**, derived from a table of known season start
   dates with a fixed 9-week (63-day) cadence formula fallback for future seasons.
   Implemented as pure, unit-tested `core/` logic.
@@ -150,7 +150,7 @@ match history into trustworthy stats.
   logs are always competitive; there is nothing left to prefill for Mode.
 
 ### #22 — real season window **(superseded 2026-07-06 — see Area D below)**
-- ~~Given today is within OW2 season *N* that started on date *S*, When I select "This
+- ~~Given today is within Overwatch season *N* that started on date *S*, When I select "This
   season", Then only matches with `timestamp >= S` (and `<= now`) are included — season *N-1*
   matches are excluded.~~
 - ~~Given a new season has started but the known-season table ends before it, When I select
@@ -189,7 +189,7 @@ match history into trustworthy stats.
 
 ## Resolved Questions
 
-- **#22 season source →** *Table + formula fallback.* Ship a table of known OW2
+- **#22 season source →** *Table + formula fallback.* Ship a table of known Overwatch
   season start dates; extrapolate future seasons via a fixed 63-day (9-week)
   cadence from the last known entry so "This season" never silently breaks between
   releases. Table dates grounded against Blizzard's published schedule at

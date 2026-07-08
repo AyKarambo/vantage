@@ -163,7 +163,7 @@ Load-bearing for the whole feature: the detection is built to respect this, and 
 
 ## Open Questions
 
-- **Concrete thresholds/windows for OW2.** No OW2/OW study exists; all streak/break evidence is League-of-Legends and tiny in effect. Proposed: conservative, centrally-tunable defaults (acute ≈ last 2–3 days, chronic ≈ last 3–4 weeks EWMA; "sustained" ≈ ≥5 consecutive days without a rest day) — finalized in the techplan, likely refined against real data.
+- **Concrete thresholds/windows for Overwatch.** No Overwatch study exists; all streak/break evidence is League-of-Legends and tiny in effect. Proposed: conservative, centrally-tunable defaults (acute ≈ last 2–3 days, chronic ≈ last 3–4 weeks EWMA; "sustained" ≈ ≥5 consecutive days without a rest day) — finalized in the techplan, likely refined against real data.
 - **Rest length & readiness-to-return.** 1–2 days extrapolates from the functional-overreaching timescale but isn't calibrated for gamers. Default "1–2 days off, then re-evaluate", or scale with how deep the hole is?
 - **Minimum-history threshold.** Concrete default for `insufficient-data` (proposed ~14 active days or ~N games) — confirm N in the techplan.
 - **Day-boundary reset hour.** Local midnight vs a configurable reset hour (e.g. 04:00) so a session ending at 01:00 still counts as the prior "day"?

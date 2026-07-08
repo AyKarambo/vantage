@@ -1,6 +1,6 @@
 # Onboarding — start here
 
-Welcome to **Vantage**, an account-safe Overwatch 2 stats coach built on ow-electron.
+Welcome to **Vantage**, an account-safe Overwatch stats coach built on ow-electron.
 These docs get you from "never seen this repo" to shipping a change. Read them in order;
 each one takes about ten minutes.
 
@@ -13,7 +13,7 @@ each one takes about ten minutes.
 
 ## The five-minute version
 
-- **What it is:** a frameless Windows desktop app that turns your Overwatch 2 match
+- **What it is:** a frameless Windows desktop app that turns your Overwatch match
   history into priority maps, per-hero stats, mental tracking, and improvement targets.
   Notion export is optional, everything else is local-first.
 - **The stack:** TypeScript (strict) everywhere. The Electron **main process** does

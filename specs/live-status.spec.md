@@ -16,7 +16,7 @@ but the feed has gone silent. Trust in the indicator is the product requirement;
 
 - A four-state connection model, surfaced in the status bar (dot + label) and mirrored by the
   **tray icon**:
-  1. **No game** — Overwatch 2 not running (or GEP package unavailable).
+  1. **No game** — Overwatch not running (or GEP package unavailable).
   2. **Connected** — game running, GEP attached, no live events recently (e.g. in menus / between
      matches). Explicitly labeled so it can't be read as "data flowing".
   3. **Live** — events received recently; the feed is demonstrably working.
@@ -53,7 +53,7 @@ but the feed has gone silent. Trust in the indicator is the product requirement;
 
 ## Acceptance Criteria
 
-- Given OW2 is not running, when the app is open, then the indicator shows **No game** and the tray
+- Given Overwatch is not running, when the app is open, then the indicator shows **No game** and the tray
   matches.
 - Given the game launches and GEP attaches but no events have arrived, then the state is
   **Connected** — and its label/tooltip explicitly does *not* claim data is flowing.

@@ -51,7 +51,7 @@ playing a match.
 
 ### 3. Desktop app with live/simulated data
 
-With Overwatch 2 running, GEP events flow in automatically. Without the game, use the
+With Overwatch running, GEP events flow in automatically. Without the game, use the
 dev flags below.
 
 ## Dev environment flags

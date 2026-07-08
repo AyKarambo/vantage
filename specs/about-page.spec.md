@@ -42,7 +42,7 @@ for three concrete reasons:
   It is a normal top-level view — restorable as the last-visited screen on relaunch, dedupe-safe,
   and account-agnostic (suppresses the global filter bar, like `readiness`).
 - **Identity block:** the Vantage brand mark, the "Vantage" wordmark, the product tagline
-  ("Account-safe Overwatch 2 stats coach"), and the **version number shown prominently** (e.g.
+  ("Account-safe Overwatch stats coach"), and the **version number shown prominently** (e.g.
   `Version 0.1.0`).
 - **Account-safety & privacy promises**, restated plainly: GEP-only / zero-ban-risk, and
   local-first / opt-in Notion export.

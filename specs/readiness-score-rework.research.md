@@ -1,4 +1,4 @@
-# Composite Readiness Score for Overwatch 2 Coaching — Research Report (2026-07-07)
+# Composite Readiness Score for Overwatch Coaching — Research Report (2026-07-07)
 
 ## 1. Commercial Readiness/Recovery Models: Structure & Weighting
 

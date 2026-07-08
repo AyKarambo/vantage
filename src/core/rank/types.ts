@@ -1,7 +1,7 @@
 import type { Role } from '../model';
 
 /**
- * Types for the calculated-rank engine. Overwatch 2 comp rank is a tier
+ * Types for the calculated-rank engine. Overwatch comp rank is a tier
  * (Bronze→Champion) × division (5 lowest … 1 highest) plus a 0–100% progress
  * within the division; wins add %, losses subtract %. Rank is tracked per
  * (account × role, Open Queue included), so each role/account pair carries its
@@ -36,7 +36,7 @@ export interface RankState extends RankPosition {
    * Holding the division after a loss that would have dropped it — `progressPct` carries
    * the true negative value instead of clamping to 0. A further loss demotes; a win or
    * draw adds its delta on top of the carry, clearing protection once the total is
-   * positive again. Mirrors OW2's rank-protection buffer (shown negative in-game).
+   * positive again. Mirrors Overwatch's rank-protection buffer (shown negative in-game).
    */
   protected: boolean;
   /**

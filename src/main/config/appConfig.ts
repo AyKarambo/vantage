@@ -86,7 +86,7 @@ export interface AppConfig {
 }
 
 const DEFAULTS: AppConfig = {
-  overwatchGameId: 10844, // kGepSupportedGameIds.Overwatch (Overwatch 2)
+  overwatchGameId: 10844, // kGepSupportedGameIds.Overwatch (Overwatch)
   runAtLogin: false,
   sensor: 'counterwatch',
   notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },

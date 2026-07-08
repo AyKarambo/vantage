@@ -1,8 +1,9 @@
 /**
  * Readiness charts — dependency-free SVG, colours from PALETTE.
  *
- * `readinessChart` plots the recent readiness score with green/amber/red band
- * zones behind it (the player's real trajectory). `supercompensationSchematic`
+ * `readinessChart` plots the recent readiness score in the house line-chart style
+ * (accent line + soft area fill + hover tooltips), over a faint green/amber/red
+ * band tint that marks the fresh→in-the-hole ranges. `supercompensationSchematic`
  * is a small, fixed, illustrative curve — labelled as such — of the training-
  * theory idea the feature borrows.
  */
@@ -10,6 +11,7 @@ import { h } from '../../dom';
 import type { ReadinessTrendPoint } from '../../../../src/shared/contract';
 import { PALETTE } from '../../theme';
 import { svgEl, svgRoot, svgText } from '../svg';
+import { tooltipLayer } from '../tooltip';
 
 export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
   const wrap = h('div', { class: 'chart-wrap' });
@@ -19,13 +21,14 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
     return wrap;
   }
 
-  const padL = 26, padR = 12, padT = 10, padB = 18, W = 720, H = 190;
+  const padL = 30, padR = 14, padT = 12, padB = 24, W = 720, H = 190;
   const n = points.length;
   const s = svgRoot(W, H);
   const xAt = (i: number): number => padL + (n === 1 ? 0 : (i / (n - 1)) * (W - padL - padR));
   const yAt = (v: number): number => padT + (1 - v / 100) * (H - padT - padB);
 
-  // Band zones: red (0–40), amber (40–70), green (70–100).
+  // Faint band zones — a quiet fresh→in-the-hole reference behind the line, not a
+  // dominant backdrop: red (0–40), amber (40–70), green (70–100).
   const zones: Array<{ from: number; to: number; color: string }> = [
     { from: 70, to: 100, color: PALETTE.win },
     { from: 40, to: 70, color: PALETTE.mid },
@@ -34,44 +37,56 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
   for (const z of zones) {
     s.appendChild(svgEl('rect', {
       x: padL, y: yAt(z.to), width: W - padL - padR, height: yAt(z.from) - yAt(z.to),
-      fill: z.color, 'fill-opacity': 0.07,
+      fill: z.color, 'fill-opacity': 0.05,
     }));
   }
 
-  // Rest-gap shading: days with zero games get a faint column so layoffs are
-  // visible at a glance (they're what drags the score down via rust).
-  const colW = n > 1 ? (W - padL - padR) / (n - 1) : 0;
-  points.forEach((p, i) => {
-    if (p.games > 0) return;
-    s.appendChild(svgEl('rect', {
-      x: xAt(i) - colW / 2, y: padT, width: colW, height: H - padT - padB,
-      fill: PALETTE.muted, 'fill-opacity': 0.08,
-    }));
-  });
   for (const v of [0, 50, 100]) {
     s.appendChild(svgEl('line', { x1: padL, y1: yAt(v), x2: W - padR, y2: yAt(v), stroke: PALETTE.grid }));
     s.appendChild(svgText(padL - 6, yAt(v) + 3, String(v), { anchor: 'end', size: 9, fill: PALETTE.dim }));
   }
 
-  const line = points
-    .map((p, i) => (p.score !== null ? `${xAt(i).toFixed(1)},${yAt(p.score).toFixed(1)}` : null))
-    .filter((v): v is string => v !== null)
-    .join(' ');
-  s.appendChild(svgEl('polyline', {
-    points: line, fill: 'none', stroke: PALETTE.accentBright, 'stroke-width': 2,
+  // Coordinates of the scored points (skipping no-history days), shared by the
+  // area fill and the line so they trace the same path.
+  const coords = points
+    .map((p, i) => (p.score !== null ? { x: xAt(i), y: yAt(p.score) } : null))
+    .filter((c): c is { x: number; y: number } => c !== null);
+
+  // Soft area fill beneath the line — accent at 0.10, matching the house line chart.
+  const base = yAt(0);
+  const area = `M${coords[0].x.toFixed(1)} ${base.toFixed(1)} `
+    + coords.map((c) => `L${c.x.toFixed(1)} ${c.y.toFixed(1)} `).join('')
+    + `L${coords[coords.length - 1].x.toFixed(1)} ${base.toFixed(1)} Z`;
+  s.appendChild(svgEl('path', { d: area, fill: 'rgba(124,108,245,0.10)' }));
+
+  const line = coords.map((c, i) => `${i ? 'L' : 'M'}${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ');
+  s.appendChild(svgEl('path', {
+    d: line, fill: 'none', stroke: PALETTE.accent, 'stroke-width': 2.5,
     'stroke-linejoin': 'round', 'stroke-linecap': 'round',
   }));
 
+  // Dots + generous invisible hit targets wired to the shared app tooltip.
+  const tips = tooltipLayer(wrap);
   points.forEach((p, i) => {
     if (p.score === null) return;
-    const dot = svgEl('circle', { cx: xAt(i), cy: yAt(p.score), r: 2.6, fill: PALETTE.accentBright });
-    const title = svgEl('title');
-    title.textContent = `${p.date} · readiness ${p.score} · ${p.games} game${p.games === 1 ? '' : 's'}`;
-    dot.appendChild(title);
-    s.appendChild(dot);
+    const cx = xAt(i), cy = yAt(p.score);
+    s.appendChild(svgEl('circle', { cx, cy, r: 3, fill: PALETTE.accentBright }));
+    const hit = svgEl('circle', { cx, cy, r: 11, fill: 'transparent' });
+    hit.style.cursor = 'pointer';
+    tips.attach(hit, `${p.date} · readiness ${p.score} · ${p.games} game${p.games === 1 ? '' : 's'}`);
+    s.appendChild(hit);
   });
 
-  wrap.append(s);
+  // X-axis date labels at a regular step plus the latest point (house strategy);
+  // drop a stepped label that would overprint the always-drawn last one.
+  const step = Math.ceil(n / 8);
+  const last = n - 1;
+  points.forEach((p, i) => {
+    const stepped = i % step === 0 && last - i >= step / 2;
+    if (stepped || i === last) s.appendChild(svgText(xAt(i), H - padB + 16, p.date.slice(5), { size: 9 }));
+  });
+
+  wrap.append(s, tips.tip);
   return wrap;
 }
 

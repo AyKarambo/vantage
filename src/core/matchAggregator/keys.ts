@@ -3,7 +3,7 @@
  * centralized in one place. Internal to the matchAggregator package — not part
  * of its public surface.
  *
- * NOTE: GEP feature/key spellings for Overwatch 2 can shift between game patches.
+ * NOTE: GEP feature/key spellings for Overwatch can shift between game patches.
  * All names we depend on are centralized in the `K` table below so they are easy to
  * adjust after inspecting a real capture (every raw message is logged by the app).
  */
