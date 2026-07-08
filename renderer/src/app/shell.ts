@@ -11,6 +11,7 @@ import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
+import { nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
 import { openModal } from '../components/overlay';
 import { mountToastHost } from '../components/toast';
@@ -534,6 +535,18 @@ export class App {
     if (idx >= 0 && next) store.setView('matchDetail', { matchId: next.matchId });
   }
 
+  /**
+   * Ctrl+Home/End & PageUp/Down — jump/page the ACTIVE view's real scroller.
+   * Resolved per keypress (Heroes' `.table-wrap` and Logs' `.log-lines` own
+   * their scrolling; everything else scrolls the content host) and assigned
+   * directly — the same idiom as renderContent's scroll restore, so per-route
+   * scroll memory keeps reading truthful positions.
+   */
+  private scrollContent(action: ScrollAction): void {
+    const el = resolveScroller(this.contentHost);
+    el.scrollTop = nextScrollTop(action, el);
+  }
+
   private bindGlobals(): void {
     initShortcuts();
     registerShortcut({
@@ -559,6 +572,25 @@ export class App {
     registerShortcut({
       combo: 'arrowright', description: 'Newer match (on a match detail)', group: 'Navigate',
       when: () => store.get().view === 'matchDetail', run: () => this.stepMatch(-1),
+    });
+    // List/scroll navigation (#72). No allowInInput, so the dispatcher's
+    // isTyping/overlayOpen guards keep caret Home/End and open modals intact.
+    // Plain Home/End stay unbound on purpose — only the ctrl variants + paging.
+    registerShortcut({
+      combo: 'ctrl+home', description: 'Jump to the top of the current view', group: 'Navigate',
+      run: () => this.scrollContent('top'),
+    });
+    registerShortcut({
+      combo: 'ctrl+end', description: 'Jump to the bottom of the current view', group: 'Navigate',
+      run: () => this.scrollContent('bottom'),
+    });
+    registerShortcut({
+      combo: 'pageup', description: 'Scroll up one page', group: 'Navigate',
+      run: () => this.scrollContent('page-up'),
+    });
+    registerShortcut({
+      combo: 'pagedown', description: 'Scroll down one page', group: 'Navigate',
+      run: () => this.scrollContent('page-down'),
     });
     // Window focus re-pulls newly tracked games (stale-while-revalidate).
     window.addEventListener('focus', () => void store.refresh());
@@ -607,9 +639,13 @@ function rankLine(d: DashboardData): string {
   return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }
 
+/** Keys whose cheatsheet label needs more than first-letter capitalization. */
+const KEY_LABELS: Record<string, string> = { pageup: 'PageUp', pagedown: 'PageDown' };
+
 function comboLabel(combo: string): string {
   return combo.split('+').map((part) =>
-    part === 'ctrl' ? 'Ctrl' : part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1),
+    part === 'ctrl' ? 'Ctrl'
+      : KEY_LABELS[part] ?? (part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)),
   ).join(' ');
 }
 
