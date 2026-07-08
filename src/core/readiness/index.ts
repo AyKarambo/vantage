@@ -47,6 +47,15 @@ export { detectSessions } from './sessions';
 export { localDayKey, dayOrdinal } from './day';
 export { EMPTY_CONTEXT } from './performance';
 export type { ReadinessContext } from './performance';
+// Readiness help wiki (readiness-help-docs) — curated scenario library, the
+// nearest-scenario matcher, and the personalized score walkthrough. Pure data +
+// derivations over ReadinessSummary; none of this touches the compute engine.
+export { CURATED_SCENARIOS, bandGroupFor } from './scenarios';
+export type { CuratedScenario, ScenarioGroup, ScenarioSignature, BandGroup } from './scenarios';
+export { matchScenarios } from './nearestScenario';
+export type { ScenarioMatch, ScenarioMatchResult } from './nearestScenario';
+export { deriveWalkthrough } from './walkthrough';
+export type { WalkthroughDerivation, FamilyPull, PullFamily, PullDirection } from './walkthrough';
 
 function pct(frac: number): string {
   return `${Math.round(frac * 100)}%`;

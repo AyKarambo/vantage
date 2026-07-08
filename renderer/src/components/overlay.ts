@@ -40,9 +40,13 @@ export function openModal(
   return handle;
 }
 
-/** Open a right-hand drawer with a built-in close button. */
-export function openDrawer(build: (close: () => void) => Node): OverlayHandle {
-  const panel = h('div', { class: 'drawer-panel' });
+/** Open a right-hand drawer with a built-in close button. `panelClass` adds a
+ *  modifier (e.g. `drawer-panel--wide`) for surfaces that need more room. */
+export function openDrawer(
+  build: (close: () => void) => Node,
+  opts?: { panelClass?: string },
+): OverlayHandle {
+  const panel = h('div', { class: `drawer-panel${opts?.panelClass ? ' ' + opts.panelClass : ''}` });
   const overlay = h('div', { class: 'overlay overlay--right' }, panel);
   const handle = mountOverlay(overlay, panel);
   const closeBtn = h('button', { class: 'overlay-close', title: 'Close', 'aria-label': 'Close', style: { position: 'absolute', top: '12px', right: '14px' } }, '✕');

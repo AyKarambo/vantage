@@ -1314,3 +1314,80 @@ table.data tbody tr:hover {
 .heatmap-wrap {
   position: relative;
 }
+
+/* Readiness help wiki ------------------------------------------------------- */
+/* A wider drawer for the article + scenario content and its breadcrumbs. */
+.drawer-panel--wide {
+  width: 560px;
+}
+.wiki-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--muted-2);
+  margin: 2px 40px 14px 0; /* clear the built-in ✕ */
+}
+.wiki-title {
+  font-family: var(--font-head);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+/* Overview index — one clickable row per article. */
+.wiki-index-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.wiki-index-item:hover {
+  border-color: var(--border);
+  background: var(--surface-3);
+}
+.wiki-index-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.wiki-group-title {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 16px 0 8px;
+}
+/* Scenario tiles — browsable library + "you're closest to" highlight. */
+.wiki-scenario {
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+}
+.wiki-scenario.is-closest {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+}
+.wiki-scenario-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+.wiki-scenario-teaches {
+  color: var(--muted-2);
+  font-size: 11.5px;
+  margin-top: 6px;
+}
+.wiki-closest-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-text, var(--accent));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

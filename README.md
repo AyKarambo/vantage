@@ -71,9 +71,12 @@ comms · toxicity · leavers · your improvement target).
   not an alarm); a thin weekly rhythm gets a consistency nudge **only on proven rank stagnation**
   (~2 weeks of logged SR changes with no account climbing) — the coach never encourages volume
   for its own sake. Deliberately conservative and
-  framed as an evidence-informed **wellness nudge, not a diagnosis** — the methodology (and
-  its limits, e.g. a balance patch looks like a decline too) lives behind the
-  **"How is this calculated?"** modal. Optional opt-in tray reminder at launch; extends
+  framed as an evidence-informed **wellness nudge, not a diagnosis**. The screen itself stays
+  data-first; all the explanation — a progressive-disclosure **help wiki** (plain → how it works
+  → the real formulas), a personalized *"your readiness right now"* score walkthrough, and a
+  curated library of player scenarios — lives behind a **Help** button and a per-card **"?"**
+  (replacing the old single "How is this calculated?" modal), including its limits (e.g. a balance
+  patch looks like a decline too). Optional opt-in tray reminder at launch; extends
   (doesn't replace) the Mental break reminder. It's the one screen that ignores the filter bar
   and account switcher entirely — readiness is about the person, not a slice of their history.
 - **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
