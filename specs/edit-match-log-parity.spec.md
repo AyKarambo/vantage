@@ -216,3 +216,26 @@ Adversarial multi-agent review of the implementation surfaced two items:
    buffer rather than the entered division, so an entered *demotion* won't reproduce exactly.
    Per resolved question 1 the anchor is deliberately **not** moved (a re-anchor would shift
    the live rank), so this stays a best-effort estimate. Documented in `srDeltaForSetRank`.
+
+## Follow-up (2026-07-08) — composition/label parity finished
+
+The **"composition over markup"** constraint (see Constraints above) was only partly met by
+the original implementation: the Change/Set-current toggle, the tier/division/% rank picker,
+and the SR number input were still hand-rolled twice, and several label/order divergences
+remained. Issue #69 tracked the gap; the follow-up spec issue **#85** (`match-entry-parity`)
+closed it:
+
+- **Shared components extracted** under `renderer/src/components/`: `srControls.ts` (SrMode,
+  mode toggle, signed SR input, rank picker — placeholders single-sourced), `mapPicker.ts`
+  (the strict recent-first map combobox + `resolveMapName`), `formField.ts`
+  (`field`/`optionalLabel`); `wheelStepper.ts` relocated from `app/` to `components/`;
+  `reviewControls.ts` now exports `mentalFlagChips` + `commsToneSwitch` (chip labels
+  reconciled to `Tilt` / `Toxic mates`); `resultChooser.ts` gained the shared
+  `bindResultKeys` W/L/D binding. Both surfaces compose these — no duplicated markup remains.
+- **Editor parity**: `keys: true` + W/L/D binding, the strict map typeahead (with the log
+  card's unresolved-map save guard), hero `{ shortlist, search: true }`, the log card's
+  field-label/optionalLabel convention and canonical field order (Result, Map, Role, Heroes,
+  Skill rating, Performance, Comms, Flags, Targets), identical SR copy, and Set-current
+  re-seeding on role change / mode entry.
+- **Still out of scope** (unchanged non-goal): the full two-column editor layout redesign —
+  the editor remains a single-column 460px stack.
