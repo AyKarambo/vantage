@@ -7,6 +7,7 @@ import { isCompetitive } from '../../core/matchFilter';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
+import type { SessionSettings } from '../../core/sessionSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
@@ -77,6 +78,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
         breakReminder: provider.getBreakReminder(),
         staleness: provider.getStaleness(),
         readiness: provider.getReadiness(),
+        sessionSettings: provider.getSessionSettings(),
         rankAnchors: provider.rankAnchorMap(),
       },
       provider.effectiveMasterData(),
@@ -180,6 +182,10 @@ export function registerDashboardIpc(provider: DataProvider): void {
   // Readiness feature settings.
   handle(ch.getReadiness, () => provider.getReadiness());
   handle(ch.setReadiness, (_e, input: ReadinessSettings) => provider.setReadiness(input));
+
+  // "Current session" gap threshold.
+  handle(ch.getSessionSettings, () => provider.getSessionSettings());
+  handle(ch.setSessionSettings, (_e, input: SessionSettings) => provider.setSessionSettings(input));
 
   // Release debug log (viewer ring, session level, renderer error forwarding).
   handle(ch.getLogEntries, () => provider.getLogEntries());

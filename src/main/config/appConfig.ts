@@ -4,6 +4,7 @@ import * as path from 'path';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/breakReminder';
 import { DEFAULT_STALENESS, type StalenessSettings } from '../../core/staleness';
 import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
+import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from '../../core/sessionSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 
 /**
@@ -63,6 +64,8 @@ export interface AppConfig {
   staleness: StalenessSettings;
   /** Readiness / training-load coach settings (feature toggle + opt-in launch toast). */
   readiness: ReadinessSettings;
+  /** The sidebar "Current session" card's gap threshold. */
+  sessionSettings: SessionSettings;
   /** Editable-master-data source config (the Update action's endpoint). */
   masterData: MasterDataConfig;
   /**
@@ -92,6 +95,7 @@ const DEFAULTS: AppConfig = {
   breakReminder: { ...DEFAULT_BREAK_REMINDER },
   staleness: { ...DEFAULT_STALENESS },
   readiness: { ...DEFAULT_READINESS },
+  sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: { closeToTray: true, demoPreference: 'unset' },
 };
@@ -132,6 +136,7 @@ export function loadConfig(): AppConfig {
     breakReminder: { ...DEFAULTS.breakReminder, ...(bundled.breakReminder ?? {}), ...(local.breakReminder ?? {}) },
     staleness: { ...DEFAULTS.staleness, ...(bundled.staleness ?? {}), ...(local.staleness ?? {}) },
     readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
+    sessionSettings: { ...DEFAULTS.sessionSettings, ...(bundled.sessionSettings ?? {}), ...(local.sessionSettings ?? {}) },
     masterData: { ...DEFAULTS.masterData, ...(bundled.masterData ?? {}), ...(local.masterData ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };

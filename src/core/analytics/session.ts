@@ -1,7 +1,8 @@
 /**
- * Session-level reads over the game list: the current streak, the latest-day
- * recap, the activity calendar, and the per-hero drill-down.
- * Pure and I/O-free — consumed by both main and the browser preview.
+ * Session-level reads over the game list: the current streak, the current
+ * (gap-based) sitting's recap, the activity calendar, and the per-hero
+ * drill-down. Pure and I/O-free — consumed by both main and the browser
+ * preview.
  */
 import type { GameRecord, Streak } from './types';
 import { byMap, dayKey, winLoss } from './grouping';
@@ -22,13 +23,28 @@ export function streak(games: GameRecord[]): Streak {
   return { type, count };
 }
 
-/** Recap for the most recent day that has games. */
-export function latestSession(games: GameRecord[]) {
+/**
+ * Recap of the current sitting: the trailing run of games with no gap longer
+ * than `gapMinutes` between consecutive games, ending at the most recent one.
+ * Null when there are no games, or when the most recent game is itself older
+ * than `gapMinutes` ago (the sitting has since closed).
+ */
+export function currentSession(
+  games: GameRecord[],
+  now: number = Date.now(),
+  gapMinutes: number = 180,
+) {
   if (!games.length) return null;
-  const latest = games.reduce((m, g) => Math.max(m, g.timestamp), 0);
-  const day = dayKey(latest);
-  const dayGames = games.filter((g) => dayKey(g.timestamp) === day);
-  return { date: day, ...winLoss(dayGames), streak: streak(dayGames), topMaps: byMap(dayGames).slice(0, 3) };
+  const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
+  const gapMs = gapMinutes * 60_000;
+  let trailing: GameRecord[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].timestamp - sorted[i - 1].timestamp > gapMs) trailing = [];
+    trailing.push(sorted[i]);
+  }
+  const last = trailing[trailing.length - 1];
+  if (now - last.timestamp > gapMs) return null; // the trailing sitting has since closed
+  return { date: dayKey(last.timestamp), ...winLoss(trailing), streak: streak(trailing), topMaps: byMap(trailing).slice(0, 3) };
 }
 
 /** Per-day games + winrate for the last `days` calendar days (heatmap). */

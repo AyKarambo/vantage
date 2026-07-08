@@ -4,6 +4,7 @@ import type { AuthoredTarget } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
+import type { SessionSettings } from '../../core/sessionSettings';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
@@ -93,6 +94,10 @@ export interface DataProvider {
   getReadiness(): ReadinessSettings;
   /** Persist new readiness feature settings; returns the persisted value. */
   setReadiness(input: ReadinessSettings): ReadinessSettings;
+  /** Current "Current session" gap threshold. */
+  getSessionSettings(): SessionSettings;
+  /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
+  setSessionSettings(input: SessionSettings): SessionSettings;
   /** Databases the Notion integration can see, for the picker. */
   listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
   /** Pages the Notion integration can see — candidate parents for auto-create. */

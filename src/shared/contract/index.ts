@@ -26,6 +26,7 @@ export type {
   ReadinessDriver, ReadinessRegime, ReadinessSubscore, ReadinessSubscores,
 } from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
+export type { SessionSettings } from '../../core/sessionSettings';
 
 // Dashboard payloads
 export type {

@@ -7,6 +7,7 @@
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
+import type { SessionSettings } from '../../core/sessionSettings';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
 import type {
@@ -92,6 +93,10 @@ export interface OwStatsApi {
   getReadiness(): Promise<ReadinessSettings>;
   /** Persist new readiness feature settings; returns the persisted value. */
   setReadiness(input: ReadinessSettings): Promise<ReadinessSettings>;
+  /** The currently persisted "Current session" gap threshold. */
+  getSessionSettings(): Promise<SessionSettings>;
+  /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
+  setSessionSettings(input: SessionSettings): Promise<SessionSettings>;
   /** Databases the Notion integration can see, for the picker. */
   listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
   /** Pages the Notion integration can see — candidate parents for auto-create. */
@@ -214,6 +219,8 @@ export const IPC_CHANNELS = {
   setBreakReminder: 'settings:set-break-reminder',
   getReadiness: 'settings:get-readiness',
   setReadiness: 'settings:set-readiness',
+  getSessionSettings: 'settings:get-session',
+  setSessionSettings: 'settings:set-session',
   listNotionDatabases: 'notion:list-databases',
   listNotionPages: 'notion:list-pages',
   selectNotionDatabase: 'notion:select-database',

@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar,
-  focusBy, heroStats, latestSession, performanceStats, sessionRecap, streak, trend, winLoss, groupBy,
+  currentSession, focusBy, heroStats, performanceStats, sessionRecap, streak, trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
@@ -16,6 +16,7 @@ import { buildTargets, evaluateMeasured, NOTION_IMPROVEMENT_TARGET_ID, type Auth
 import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
+import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { currentRank, rankKey, type RankAnchorMap } from './rank';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
@@ -31,6 +32,8 @@ export interface ManualData {
   staleness?: StalenessSettings;
   /** Effective readiness feature settings; defaults when absent. */
   readiness?: ReadinessSettings;
+  /** Effective "Current session" gap threshold; defaults when absent. */
+  sessionSettings?: SessionSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
   rankAnchors?: RankAnchorMap;
 }
@@ -73,6 +76,15 @@ export function computeDashboard(
   const activeMeasured = authoredTargets.filter(
     (t) => t.mode === 'measured' && t.isActive && !t.archivedAt && t.id !== NOTION_IMPROVEMENT_TARGET_ID,
   );
+  // The "Current session" card is scoped by account (a real sitting doesn't
+  // span two different tracked accounts) but NOT by role/date — a role switch
+  // or an unrelated date-range filter must not fragment or hide an in-progress
+  // sitting. Mirrors the primaryAccount ternary above, keeping the account's
+  // games rather than resolving to a single account name.
+  const sessionGames = filters.account && filters.account !== 'all'
+    ? all.filter((g) => g.account === filters.account)
+    : all;
+  const sessionSettings = manual?.sessionSettings ?? DEFAULT_SESSION_SETTINGS;
 
   return {
     isSample: demo.active,
@@ -95,7 +107,7 @@ export function computeDashboard(
     streak: streak(games),
     progression: progression(games),
     ...(primaryRank ? { primaryRank } : {}),
-    session: latestSession(games),
+    session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
     byRole: byRole(games),
     byAccount: byAccount(games),
     byMap: byMap(games),
@@ -125,6 +137,7 @@ export function computeDashboard(
     // readiness bug can never blank the whole dashboard.
     readiness: safeReadiness(all, Date.now(), { targets: manual?.targets ?? [], rankAnchors: manual?.rankAnchors }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
+    sessionSettings,
     totalGamesAllTime: all.length,
     masterData,
     ...(recapOf(all) ?? {}),
