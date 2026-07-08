@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { byTimeOfDay, bySessionPosition, sessionFade } from '../src/core/analytics';
+import { byTimeOfDay, bySessionPosition, sessionPositionGroups, sessionFade } from '../src/core/analytics';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 
@@ -93,6 +93,15 @@ describe('bySessionPosition', () => {
 
   it('empty input → empty output', () => {
     expect(bySessionPosition([])).toEqual([]);
+  });
+
+  it('exposes its raw position groups via sessionPositionGroups (same numbering)', () => {
+    const games = run(0, 18, 3);
+    const groups = sessionPositionGroups(games);
+    expect(groups.map((g) => g.key)).toEqual(['1', '2', '3']);
+    expect(groups.map((g) => g.games.length)).toEqual([1, 1, 1]);
+    // The winrate view is exactly winLoss over those groups.
+    expect(bySessionPosition(games).map((b) => b.games)).toEqual([1, 1, 1]);
   });
 
   it('include keeps true positions: filters scope the count, never renumber the sitting', () => {

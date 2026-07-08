@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mentalCosts, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE } from '../src/core/mentalAnalytics';
+import { mentalCosts, tiltBySessionPosition, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE } from '../src/core/mentalAnalytics';
 import { isTilted } from '../src/core/mental';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
@@ -251,5 +251,72 @@ describe('tiltTrendDirection', () => {
       ...dayGames('2026-07-03', 4, 0),
     ]);
     expect(tiltTrendDirection(points)).toBe('improving');
+  });
+});
+
+// ---- tiltBySessionPosition -----------------------------------------------------
+
+const MIN = 60_000;
+const T0 = Date.parse('2026-07-01T18:00:00Z');
+
+/** A sitting: games spaced 30 min apart starting at `start`; `tiltedAt` = 1-based positions flagged tilted. */
+function sitting(start: number, n: number, tiltedAt: number[] = [], idPrefix = 's'): GameRecord[] {
+  return Array.from({ length: n }, (_, i) =>
+    game({
+      result: 'Win',
+      matchId: `${idPrefix}${start}-${i + 1}`,
+      timestamp: start + i * 30 * MIN,
+      ...(tiltedAt.includes(i + 1) ? { mental: { tilt: true } } : {}),
+    }));
+}
+
+describe('tiltBySessionPosition', () => {
+  it('rates tilt per position across sittings, in 1 → 6+ order', () => {
+    const games = [
+      ...sitting(T0, 3, [3], 'a'), // sitting 1: tilt at game 3
+      ...sitting(T0 + 24 * 60 * MIN, 3, [3], 'b'), // sitting 2 (next day): tilt at game 3
+    ];
+    const t = tiltBySessionPosition(games);
+    expect(t.map((b) => b.key)).toEqual(['1', '2', '3']);
+    expect(t[0]).toEqual({ key: '1', games: 2, tilted: 0, rate: 0 });
+    expect(t[2]).toEqual({ key: '3', games: 2, tilted: 2, rate: 1 });
+  });
+
+  it('a gap larger than 90 minutes starts a new sitting; up to 90 continues it', () => {
+    const games = [
+      // Game A, then B exactly 90 min later (same sitting), then C 91 min after B (new sitting).
+      game({ result: 'Win', matchId: 'A', timestamp: T0 }),
+      game({ result: 'Win', matchId: 'B', timestamp: T0 + 90 * MIN, mental: { tilt: true } }),
+      game({ result: 'Win', matchId: 'C', timestamp: T0 + 181 * MIN }),
+    ];
+    const t = tiltBySessionPosition(games);
+    expect(t).toEqual([
+      { key: '1', games: 2, tilted: 0, rate: 0 }, // A and C both sit at position 1
+      { key: '2', games: 1, tilted: 1, rate: 1 }, // B continues A's sitting
+    ]);
+  });
+
+  it('pools positions 6 and beyond into the 6+ bucket', () => {
+    const t = tiltBySessionPosition(sitting(T0, 8, [6, 7, 8]));
+    const last = t[t.length - 1];
+    expect(last.key).toBe('6+');
+    expect(last).toEqual({ key: '6+', games: 3, tilted: 3, rate: 1 });
+  });
+
+  it('numbers positions over ALL games while include scopes aggregation', () => {
+    const all = sitting(T0, 3, [3]);
+    // Filter keeps only the third game of the sitting: it must still count at
+    // position 3 — never renumbered to 1 — and the other buckets must vanish.
+    const t = tiltBySessionPosition(all, { include: new Set([all[2].matchId]) });
+    expect(t).toEqual([{ key: '3', games: 1, tilted: 1, rate: 1 }]);
+  });
+
+  it('OR-merges the review tilt flag', () => {
+    const t = tiltBySessionPosition([reviewed('Loss', { tilt: true }, { timestamp: T0 })]);
+    expect(t).toEqual([{ key: '1', games: 1, tilted: 1, rate: 1 }]);
+  });
+
+  it('is empty for no games', () => {
+    expect(tiltBySessionPosition([])).toEqual([]);
   });
 });

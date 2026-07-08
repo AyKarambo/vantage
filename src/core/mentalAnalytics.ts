@@ -1,4 +1,4 @@
-import { dayKey, winLoss, type GameRecord } from './analytics';
+import { dayKey, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts } from './analytics';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isTilted } from './mental';
@@ -158,6 +158,34 @@ function halfRate(points: TiltTrendPoint[]): { games: number; rate: number } {
   const games = points.reduce((n, p) => n + p.games, 0);
   const tilted = points.reduce((n, p) => n + p.tilted, 0);
   return { games, rate: games ? tilted / games : 0 };
+}
+
+/** Tilt rate at one session position ('1'..'5', '6+'). */
+export interface TiltPositionBucket {
+  key: string;
+  /** Games aggregated at this position. */
+  games: number;
+  /** How many of them were flagged tilted (either source). */
+  tilted: number;
+  /** tilted / games, 0..1. */
+  rate: number;
+}
+
+/**
+ * Tilt rate by game number within a sitting — the "stop after game N" read
+ * (issue #70 C). Same numbering as the winrate analytic
+ * ({@link sessionPositionGroups}): pass the UNFILTERED history plus
+ * `opts.include` so filters scope which games aggregate without renumbering
+ * anyone's sittings. Empty buckets omitted; order 1 → 6+.
+ */
+export function tiltBySessionPosition(
+  games: GameRecord[],
+  opts: SessionPositionOpts = {},
+): TiltPositionBucket[] {
+  return sessionPositionGroups(games, opts).map(({ key, games: gs }) => {
+    const tilted = gs.reduce((n, g) => n + (isTilted(g) ? 1 : 0), 0);
+    return { key, games: gs.length, tilted, rate: tilted / gs.length };
+  });
 }
 
 function winrateSide(games: GameRecord[]): WinrateSide {
