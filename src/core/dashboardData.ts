@@ -205,6 +205,7 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     durationMinutes: g.durationMinutes,
     ...(g.srDelta !== undefined ? { srDelta: g.srDelta } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
+    ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
   };

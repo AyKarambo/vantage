@@ -61,6 +61,13 @@ export interface MatchRow {
   srDelta?: number;
   /** Final score as recorded (e.g. '3–1'), when known. */
   finalScore?: string;
+  /**
+   * Self-rated performance for this match, 0-100, when the player (or an import)
+   * set one. Carried so the Review card's "How you played" slider seeds from an
+   * already-rated match instead of reading "Not rated" — a rating can exist
+   * without a target-grade review (file/Notion imports set only this).
+   */
+  performance?: number;
   /** Merged mental flags (quick-log OR review source) — only true keys are present. */
   flags?: Partial<Record<MatchFlagKey, true>>;
   /**

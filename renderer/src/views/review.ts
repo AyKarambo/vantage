@@ -102,7 +102,9 @@ function collapsed(m: MatchRow, onGrade: () => void): HTMLElement {
 function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onSkip: () => void): HTMLElement {
   const grades: Record<string, TargetGrade> = {};
   const flags: MatchMental = {};
-  let performance: number | undefined;
+  // Seed from any already-stored rating (mirrors the match-detail editor) so an
+  // imported / previously-rated game shows its value here instead of "Not rated".
+  let performance: number | undefined = m.performance;
 
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
