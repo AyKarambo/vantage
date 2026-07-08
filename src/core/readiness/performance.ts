@@ -143,19 +143,44 @@ export function perfState(
     const trust = trustFor(base.n);
     if (trust <= 0) continue;
 
-    let weighted = 0;
-    let weightSum = 0;
+    // Pass 1: aligned z per active metric (deaths sign-flipped: lower is better).
+    const active: Array<{ m: MetricKey; aligned: number; w: number }> = [];
     for (const m of METRIC_KEYS) {
       const b = base.metrics[m];
       if (b.mean < T.metricSkipMin[m]) continue; // role-inapplicable / degenerate metric
       const z = winsorizedZ(q.per10[m], b, T.sdFloorFrac, T.zWinsor);
       const aligned = m === 'deaths' ? -z : z; // deaths: lower is better
-      const w = T.metricWeights[m];
-      weighted += aligned * w;
-      weightSum += w;
+      active.push({ m, aligned, w: T.metricWeights[m] });
       const slot = (metricSums[m] ??= { sum: 0, n: 0 });
-      slot.sum += aligned;
+      slot.sum += aligned; // raw, ungated — the decline label must stay truthful about direction
       slot.n += 1;
+    }
+    if (active.length === 0) continue;
+
+    // Passivity guard (spec §7a): deaths' FAVORABLE credit only holds while output holds.
+    // outputZ = weight-normalized mean of the non-death active metrics; the credit ramps
+    // 1 → 0 as outputZ falls 0 → −passivityRampZ (graduated — no per-game cliff), and the
+    // deaths WEIGHT leaves the blend with it, so a scared game scores as its pure output
+    // decline. Deaths above baseline keeps full adverse weight in every context; with no
+    // active output metrics there is no evidence of passivity, so credit stands.
+    let outWeighted = 0;
+    let outWeightSum = 0;
+    for (const a of active) {
+      if (a.m === 'deaths') continue;
+      outWeighted += a.aligned * a.w;
+      outWeightSum += a.w;
+    }
+    const outputZ = outWeightSum > 0 ? outWeighted / outWeightSum : 0;
+
+    let weighted = 0;
+    let weightSum = 0;
+    for (const a of active) {
+      const factor =
+        a.m === 'deaths' && a.aligned > 0 && outWeightSum > 0
+          ? clamp(1 + outputZ / T.passivityRampZ, 0, 1)
+          : 1;
+      weighted += a.aligned * a.w * factor;
+      weightSum += a.w * factor;
     }
     if (weightSum === 0) continue;
 

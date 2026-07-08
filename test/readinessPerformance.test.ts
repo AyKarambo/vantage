@@ -216,3 +216,53 @@ describe('perfDelta bounds', () => {
     expect(p.delta).toBeLessThanOrEqual(T.perfDeltaMax);
   });
 });
+
+describe('passivity guard — output-gated deaths credit (owner revision 2026-07-08)', () => {
+  // Full-trust Tracer baseline: 8000 dmg / 5 deaths / 20 elims per 10.
+  const baseline = statSpan(5, 28, { perDay: 3, ...HEALTHY });
+
+  it('"playing scared" (damage down 30%, deaths down, elims held) now FIRES the decline index', () => {
+    // Pre-revision this cancelled out (deaths credit offset the damage drop → weighted −0.24 < slack).
+    // With output below baseline the deaths credit is gated to zero, so the game score IS the pure
+    // damage decline and the CUSUM accrues.
+    const scared = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 4, elims: 20 });
+    const p = perfAt([...baseline, ...scared], 35);
+    expect(p.declineFired).toBe(true);
+    expect(p.statPenalty).toBeGreaterThan(0);
+    expect(p.objectiveAdverse).toBe(true);
+  });
+
+  it('deaths down while output HOLDS keeps full credit — genuine positioning improvement, no decline', () => {
+    const better = statSpan(29, 35, { perDay: 3, damage: 8000, deaths: 4, elims: 20 });
+    const p = perfAt([...baseline, ...better], 35);
+    expect(p.declineFired).toBe(false);
+    expect(p.cusumMax).toBe(0);
+  });
+
+  it('aggression (damage up, slightly more deaths) still nets fine — no rule change', () => {
+    const aggressive = statSpan(29, 35, { perDay: 3, damage: 10000, deaths: 6, elims: 22 });
+    const p = perfAt([...baseline, ...aggressive], 35);
+    expect(p.declineFired).toBe(false);
+  });
+
+  it('deaths UP stays fully adverse even while output is down (no gating on the adverse side)', () => {
+    const worse = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 8, elims: 14 });
+    const p = perfAt([...baseline, ...worse], 35);
+    expect(p.declineFired).toBe(true);
+    expect(p.metricMeans.deaths ?? 0).toBeLessThan(0); // raw metric mean stays truthful
+  });
+
+  it('the gate is graduated: deeper output decline ⇒ monotonically more accrual (no cliff)', () => {
+    const mk = (damage: number) => perfAt([...baseline, ...statSpan(29, 35, { perDay: 3, damage, deaths: 4, elims: 20 })], 35).cusumMax;
+    const shallow = mk(7450); // output z ≈ −0.25 → deaths credit half-applies → game score still ≥ 0-ish
+    const deep = mk(5600); // output z ≈ −1.09 → credit fully gated → accrues hard
+    expect(deep).toBeGreaterThan(shallow);
+    expect(shallow).toBeGreaterThanOrEqual(0);
+  });
+
+  it('metricMeans keeps the RAW deaths direction even when the credit is gated (label truthfulness)', () => {
+    const scared = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 4, elims: 20 });
+    const p = perfAt([...baseline, ...scared], 35);
+    expect(p.metricMeans.deaths ?? 0).toBeGreaterThan(0); // fewer deaths still reads as its true direction
+  });
+});

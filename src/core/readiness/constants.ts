@@ -173,6 +173,8 @@ export const READINESS_TUNING = {
   metricWeights: { damage: 0.3, deaths: 0.3, eliminations: 0.25, healing: 0.15 },
   /** A metric with a baseline mean below its floor is skipped (e.g. healing on a DPS baseline). */
   metricSkipMin: { damage: 50, healing: 50, eliminations: 0.5, deaths: 0.5 },
+  /** Passivity guard: deaths' FAVORABLE credit ramps to zero as output falls from baseline (z 0) to −this — "playing scared" (damage+elims down, deaths down) must read as the output decline it is, not cancel out. Deaths above baseline stays fully adverse in every context. */
+  passivityRampZ: 0.5,
   /** One-sided CUSUM slack: only game-scores worse than baseline by more than this accumulate. */
   cusumSlack: 0.25,
   /** CUSUM decision threshold (in cumulative z units). One winsorized game ≤ 2.25 < this by construction. */

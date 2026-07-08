@@ -270,12 +270,26 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "deaths-improve-damage-fall",
-    story: "Damage down, deaths down: sign alignment cancels the 'decline'",
-    expect: {"score":75,"band":"fresh","regime":"stats","confidence":"high"},
+    story: "Playing scared (damage down 30%, deaths down): the passivity guard reads it as decline (owner revision 2026-07-08)",
+    expect: {"score":45,"band":"loaded","regime":"stats","confidence":"high"},
     fixture: () => {
       const games = [
         ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 5, elims: 20 }),
         ...statSpan(28, 34, { perDay: 3, hero: 'Tracer', damage: 5600, deaths: 4, elims: 20 }),
+      ];
+      const now = ts(34, 20);
+      const targets = [];
+      return { games, now, targets };
+    },
+  },
+  {
+    id: "deaths-improve-output-holds",
+    story: "Deaths down while output HOLDS: genuine positioning improvement keeps full credit",
+    expect: {"score":75,"band":"fresh","regime":"stats","confidence":"high"},
+    fixture: () => {
+      const games = [
+        ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 5, elims: 20 }),
+        ...statSpan(28, 34, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 4, elims: 20 }),
       ];
       const now = ts(34, 20);
       const targets = [];
