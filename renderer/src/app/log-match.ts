@@ -71,9 +71,9 @@ export interface LogCarry {
 // Cheatsheet entries only — the dialog binds these keys itself (the global
 // dispatcher never fires over an open overlay), so `when` keeps them inert.
 const never = (): boolean => false;
-registerShortcut({ combo: 'w', description: 'Result: Win (in the log dialog)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'l', description: 'Result: Loss (in the log dialog)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'd', description: 'Result: Draw (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'w', description: 'Result: Win (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'l', description: 'Result: Loss (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'd', description: 'Result: Draw (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'enter', description: 'Save the match (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 

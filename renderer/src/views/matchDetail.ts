@@ -275,12 +275,27 @@ function normalizeFlags(m: MatchMental): MatchMental {
  * target grades) can change. Saves go through `editMatch`; `ctx.refresh()`
  * re-pulls the detail so every dependent view reflects the change.
  */
+// Guards the async preload below: a rapid double-click on "Edit match" (or a
+// second click before the first IPC round-trip resolves) would otherwise fire
+// two preload chains and stack two independently-mounted editor modals — the
+// buried one seeded with the pre-edit detail, able to silently revert a save.
+let editorOpening = false;
+
 function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
+  if (editorOpening) return;
+  editorOpening = true;
   // Preload mirrors the log card: current ranks feed the Set-current re-seed
   // on a role switch; per-account most-played heroes feed the picker shortlist.
-  void Promise.all([bridge.getRanks(), bridge.mostPlayedHeroes()]).then(([ranks, mostPlayed]) => {
-    buildMatchEditor(ctx, d, ranks, mostPlayed);
-  });
+  void Promise.all([bridge.getRanks(), bridge.mostPlayedHeroes()]).then(
+    ([ranks, mostPlayed]) => {
+      editorOpening = false;
+      buildMatchEditor(ctx, d, ranks, mostPlayed);
+    },
+    (err) => {
+      editorOpening = false;
+      throw err;
+    },
+  );
 }
 
 function buildMatchEditor(
