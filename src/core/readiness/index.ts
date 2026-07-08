@@ -34,6 +34,7 @@ export type {
   ReadinessDriver,
   ReadinessLoad,
   ReadinessRecommendation,
+  ReadinessRegime,
   ReadinessSignal,
   ReadinessSettings,
   ReadinessSubscore,
@@ -87,7 +88,7 @@ function toLoad(state: StateAt): ReadinessLoad {
 
 function toSubscores(state: StateAt): ReadinessSubscores {
   return {
-    load: { delta: round1(state.deltas.load), available: true },
+    load: { delta: round1(state.deltas.load), available: true, coverage: round2(state.blend) },
     performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.perf.statCoverage) },
     subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.mental.coverage },
   };
@@ -103,12 +104,16 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  */
 function confidenceFor(state: StateAt): ReadinessConfidence {
   const statCoverage = state.perf.statCoverage;
-  if (
+  const high =
     state.load.chronicActiveDays >= T.confidenceActiveDays &&
     statCoverage >= T.statCoverageHigh &&
     state.perf.wrDip !== null &&
-    state.perf.maxAccountShare >= T.accountMixBar
-  ) {
+    state.perf.maxAccountShare >= T.accountMixBar;
+  // Manual regime caps confidence at medium, whatever the mental-log coverage — high confidence is
+  // something only live match stats can buy. Structurally redundant today ('high' already requires
+  // statCoverage ≥ statCoverageHigh ⇒ b = 1, never 'manual'), but a pinned invariant that survives any
+  // future confidence retuning where wr-sample adequacy alone might otherwise lift a stats-free read.
+  if (high && state.regime !== 'manual') {
     return 'high';
   }
   if (statCoverage < T.statCoverageLow && state.mental.coverage < T.mentalMinCoverage && state.subj.sliderDiff === null) {
@@ -268,19 +273,26 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   // Undertraining — the inverse risk. A long gap decays sharpness; a thin weekly
   // rhythm is not enough stimulus to actually improve. Never fired together: the
   // gap signal owns the layoff case, the frequency nudge the "plays rarely" case.
+  // The frequency nudge additionally requires PROVEN rank stagnation (spec §7b):
+  // with no rank evidence, or while any account is climbing, it stays silent —
+  // the app never encourages volume for its own sake.
   if (state.restDays >= T.rustDays) {
     out.push({
       key: 'rust-gap',
       label: `${state.restDays} days since your last game — sharpness decays after ~4`,
       severity: state.restDays >= T.rustSevereDays ? 'high' : 'watch',
     });
-  } else if (load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek) {
+  } else if (
+    state.rankTrend === 'stagnant' &&
+    load.chronicActiveDays > 0 &&
+    load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
+  ) {
     // One decimal, not Math.round — rounding 2.7 up to the threshold value (3)
     // would flag the exact frequency the tuning calls sufficient.
     const rate = load.activeDaysPerWeek.toFixed(1).replace(/\.0$/, '');
     out.push({
       key: 'low-frequency',
-      label: `only ~${rate} active day${rate === '1' ? '' : 's'}/week — consistency builds skill faster than bingeing`,
+      label: `ranks not climbing over ~2 weeks at only ~${rate} active day${rate === '1' ? '' : 's'}/week — a bit more regular practice may be the missing stimulus`,
       severity: load.activeDaysPerWeek < T.lowFrequencyWatchPerWeek ? 'watch' : 'ok',
     });
   }
@@ -312,6 +324,7 @@ function insufficientSummary(headline: string, trend: ReadinessTrendPoint[]): Re
     load: emptyLoad(),
     subscores: emptySubscores(),
     driver: 'neutral',
+    regime: 'manual',
     trend,
   };
 }
@@ -335,6 +348,7 @@ function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): Readiness
     load: emptyLoad(restDays),
     subscores: emptySubscores(),
     driver: 'rust',
+    regime: 'manual',
     trend,
   };
 }
@@ -391,6 +405,7 @@ export function computeReadiness(
     load: toLoad(state),
     subscores: toSubscores(state),
     driver: state.driver,
+    regime: state.regime,
     trend,
   };
 }

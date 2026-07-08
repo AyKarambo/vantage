@@ -4,6 +4,7 @@ import {
   safeReadiness,
   DEFAULT_READINESS,
   normalizeReadiness,
+  READINESS_TUNING as T,
 } from '../src/core/readiness';
 import { restEffectFor } from '../src/core/readiness/score';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
@@ -216,15 +217,18 @@ describe('undertraining — rust after a layoff', () => {
 // ---- undertraining: low weekly frequency -----------------------------------
 
 describe('undertraining — low play frequency', () => {
-  it('a weekends-only player gets the consistency nudge while staying green', () => {
+  it('a weekends-only player stays green — and the nudge stays SILENT without rank evidence (revision 2026-07-08)', () => {
     // Two active days per week (Sat/Sun pattern) over five weeks, playing "today".
+    // The consistency nudge is rank-gated: with no rank anchors/SR data it must not
+    // fire (the app never encourages volume on zero evidence) — the with-evidence
+    // paths are pinned in test/readinessRankGate.test.ts.
     const games: GameRecord[] = [];
     for (const d of [0, 1, 7, 8, 14, 15, 21, 22, 28, 29]) {
       games.push(...span(d, d, { perDay: 4, mental: CALM }));
     }
     const r = computeReadiness(games, ts(29, 20));
     expect(['fresh', 'steady']).toContain(r.band);
-    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(true);
+    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(false);
     expect(r.load.activeDaysPerWeek).toBeLessThan(3);
   });
 
@@ -610,9 +614,15 @@ describe('composite — losing streak alone (winrate gates MET) is bounded and n
       ...span(32, 35, { perDay: 3, mental: CALM, result: 'Loss' }), // 12 losses; acute decided ≈ 21
     ];
     const r = computeReadiness(games, ts(35, 20));
+    // Re-baselined for readiness-data-regimes. Two things changed for this MANUAL fixture (b=0):
+    //   1. the results arm is promoted (cap 15 → 30), so the outcome penalty is now bounded by 30;
+    //   2. it never rests (7 active days/week), so a small rest-scarcity nudge also applies.
+    // The guarantees that actually matter are unchanged: the outcome penalty stays CAPPED (≥ −30,
+    // not unbounded) and red is UNREACHABLE at this volume — acutePerDay 3 ⇒ no sustainedLoad
+    // corroboration ⇒ the two-family red gate can never open, whatever the score.
     expect(r.band).not.toBe('in-the-hole');
-    expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(-15); // the named outcome cap
-    expect(r.score!).toBeGreaterThanOrEqual(60);
+    expect(r.subscores.performance.delta).toBeGreaterThanOrEqual(-30); // promoted manual outcome cap
+    expect(r.score!).toBeGreaterThan(T.redCut); // numerically above red, too
   });
 });
 

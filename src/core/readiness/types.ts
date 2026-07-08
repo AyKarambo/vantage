@@ -56,6 +56,14 @@ export interface ReadinessTrendPoint {
 /** What dominates a sub-100 score: grinding (overload) or a layoff (rust). Bands read differently per driver. */
 export type ReadinessDriver = 'overload' | 'rust' | 'neutral';
 
+/**
+ * Which evidence family the verdict rests on, derived from the acute window's objective (GEP)
+ * coverage blend `b`: 'stats' (b≈1 — exactly today's model), 'hybrid' (partial coverage, weights
+ * interpolating), 'manual' (b≈0 — no usable per-10/duration data). Display-only: never feeds the
+ * math, only the badge and methodology copy (mirrors ReadinessDriver).
+ */
+export type ReadinessRegime = 'stats' | 'hybrid' | 'manual';
+
 /** One signal family's pull on the composite score. */
 export interface ReadinessSubscore {
   /** Signed contribution to the score (0 = neutral). Bounds double as the family's weight. */
@@ -91,6 +99,8 @@ export interface ReadinessSummary {
   subscores: ReadinessSubscores;
   /** Dominant driver behind a sub-neutral score (overload vs rust). */
   driver: ReadinessDriver;
+  /** Which evidence family the verdict rests on (display-only). 'manual' caps confidence at medium. */
+  regime: ReadinessRegime;
   trend: ReadinessTrendPoint[];
 }
 

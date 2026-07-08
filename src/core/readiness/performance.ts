@@ -14,6 +14,7 @@
 
 import type { GameRecord, TargetGrade } from '../analytics';
 import type { AuthoredTarget } from '../targets/types';
+import type { RankAnchorMap } from '../rank/types';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 import { winLoss } from '../analytics';
 import { READINESS_TUNING as T } from './constants';
@@ -29,11 +30,17 @@ import {
   type QualifyingGame,
 } from './baselines';
 import { clamp, winsorizedZ } from './stats';
+import { blendFor } from './regime';
 
 /** The pure inputs the readiness engine needs beyond the games themselves. */
 export interface ReadinessContext {
   /** The player's authored improvement targets (active-ness/creation filtered inside). */
   targets: AuthoredTarget[];
+  /**
+   * Per-(account::role) rank anchors — evidence input for the rank-gated undertraining
+   * nudge (spec §7b). Absent ⇒ trend `unknown` ⇒ the nudge stays silent.
+   */
+  rankAnchors?: RankAnchorMap;
 }
 
 export const EMPTY_CONTEXT: ReadinessContext = { targets: [] };
@@ -65,6 +72,10 @@ export interface PerfState {
   metricMeans: Partial<Record<MetricKey, number>>;
   /** Objective decline detected — gates the subjective agree/disagree split. */
   objectiveAdverse: boolean;
+  /** Regime blend b ∈ [0,1]: share of the acute window with comparable per-10 coverage (1 = full stats, 0 = manual). */
+  blend: number;
+  /** Sum of per-game trust weights behind `blend` (the continuous coverage numerator). */
+  blendCoverage: number;
   /** Final perfDelta ∈ [perfDeltaMin, perfDeltaMax]. */
   delta: number;
 }
@@ -72,7 +83,7 @@ export interface PerfState {
 export const EMPTY_PERF: PerfState = {
   available: false, statCoverage: 0, maxAccountShare: 1, declineFired: false, cusumMax: 0,
   countedGames: 0, statPenalty: 0, wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false,
-  dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, delta: 0,
+  dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
 
 const GRADE_CREDIT: Record<TargetGrade, number> = { hit: 1, partial: 0.5, missed: 0 };
@@ -116,6 +127,7 @@ export function perfState(
   let cusum = 0;
   let cusumMax = 0;
   let countedGames = 0;
+  let blendCoverage = 0;
   let gameScoreSum = 0;
   const stillLearning = new Set<string>();
   const metricSums: Partial<Record<MetricKey, { sum: number; n: number }>> = {};
@@ -137,24 +149,67 @@ export function perfState(
     const trust = trustFor(base.n);
     if (trust <= 0) continue;
 
-    let weighted = 0;
-    let weightSum = 0;
+    // Pass 1: aligned z per active metric (deaths sign-flipped: lower is better).
+    const active: Array<{ m: MetricKey; aligned: number; w: number }> = [];
     for (const m of METRIC_KEYS) {
       const b = base.metrics[m];
       if (b.mean < T.metricSkipMin[m]) continue; // role-inapplicable / degenerate metric
       const z = winsorizedZ(q.per10[m], b, T.sdFloorFrac, T.zWinsor);
       const aligned = m === 'deaths' ? -z : z; // deaths: lower is better
-      const w = T.metricWeights[m];
-      weighted += aligned * w;
-      weightSum += w;
+      active.push({ m, aligned, w: T.metricWeights[m] });
       const slot = (metricSums[m] ??= { sum: 0, n: 0 });
-      slot.sum += aligned;
+      slot.sum += aligned; // raw, ungated — the decline label must stay truthful about direction
       slot.n += 1;
+    }
+    if (active.length === 0) continue;
+
+    // Passivity guard (spec §7a): deaths' FAVORABLE credit only holds while output holds.
+    // outputZ = weight-normalized mean of the non-death active metrics; the credit ramps
+    // 1 → 0 as outputZ falls 0 → −passivityRampZ, and the deaths WEIGHT leaves the blend
+    // with it, so a scared game scores as its pure output decline. Graduated in BOTH
+    // dimensions: over output (the ramp above) and over deaths-favorability (0 → full as
+    // deathsAligned grows 0 → passivityDeathsRampZ) — deaths exactly at baseline keeps
+    // full weight, so strictly-fewer deaths can never score worse than baseline deaths
+    // (review finding: a binary aligned>0 gate flipped verdicts on 0.01 deaths/10).
+    // Deaths above baseline keeps full adverse weight in every context. For SUPPORT games
+    // (healing active) the healing channel alone can vouch for output: a Mercy whose
+    // healing holds at baseline while she stops battle-dueling is doing her job, not
+    // playing scared — without this, a floor-inflated damage z fires a false decline on
+    // a genuine style shift (the exact false alarm Resolved #8 rejected). With no active
+    // output metrics there is no evidence of passivity, so credit stands.
+    let outWeighted = 0;
+    let outWeightSum = 0;
+    let healingAligned: number | null = null;
+    for (const a of active) {
+      if (a.m === 'deaths') continue;
+      if (a.m === 'healing') healingAligned = a.aligned;
+      outWeighted += a.aligned * a.w;
+      outWeightSum += a.w;
+    }
+    const outputZ = outWeightSum > 0 ? outWeighted / outWeightSum : 0;
+    const outputHoldZ = healingAligned !== null ? Math.max(outputZ, healingAligned) : outputZ;
+
+    let weighted = 0;
+    let weightSum = 0;
+    for (const a of active) {
+      let factor = 1;
+      if (a.m === 'deaths' && a.aligned > 0 && outWeightSum > 0) {
+        const outFactor = clamp(1 + outputHoldZ / T.passivityRampZ, 0, 1);
+        const deathsEngage = clamp(a.aligned / T.passivityDeathsRampZ, 0, 1);
+        factor = 1 - (1 - outFactor) * deathsEngage;
+      }
+      weighted += a.aligned * a.w * factor;
+      weightSum += a.w * factor;
     }
     if (weightSum === 0) continue;
 
     const g = (weighted / weightSum) * trust;
     countedGames += 1;
+    // Blend numerator: the game's own trust weight (not a binary +1), so a hero crossing the
+    // baseline trust floor bleeds coverage in gradually instead of reclassifying its whole cohort
+    // at once — keeps b continuous in the day index (R1). At full coverage trust=1 ⇒ this equals
+    // countedGames ⇒ b is unchanged, preserving the b=1 bit-identity.
+    blendCoverage += trust;
     gameScoreSum += g;
     cusum = Math.max(0, cusum + (-g - T.cusumSlack));
     cusumMax = Math.max(cusumMax, cusum);
@@ -164,6 +219,7 @@ export function perfState(
   // learning window) — not merely stat-carrying. A flex player whose buckets
   // never fill must read as low-coverage, not high-confidence.
   const statCoverage = countedGames / acuteGames.length;
+  const blend = blendFor(blendCoverage, acuteGames.length);
 
   const declineFired = cusumMax >= T.cusumThreshold && countedGames >= T.evidenceMinGames;
   const statPenalty = declineFired
@@ -195,9 +251,14 @@ export function perfState(
     dipWeight += acuteDecided;
   }
   const wrDip = dipWeight > 0 ? dipWeighted / dipWeight : null;
+  // Manual regime PROMOTES the results arm — cap only. The ceiling lerps 15 → 30 by (1−b); the
+  // firing threshold (wrDipMin) and slope (wrPenaltySlope) stay regime-invariant, so `objectiveAdverse`
+  // never flips with b and ordinary winrate noise never reddens (only a genuinely deep, sustained dip
+  // reaches the promoted ceiling). At b=1: cap = wrPenaltyCap exactly ⇒ bit-identical.
+  const wrCap = T.wrPenaltyCap + T.wrManualCapBoost * (1 - blend);
   const wrPenalty =
     wrDip !== null && wrDip >= T.wrDipMin
-      ? Math.min(T.wrPenaltyCap, (wrDip - 0.05) * T.wrPenaltySlope)
+      ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope)
       : 0;
 
   // --- target-focus dampener (deliberate-practice exemption) ---
@@ -263,6 +324,8 @@ export function perfState(
     stillLearning: [...stillLearning],
     metricMeans,
     objectiveAdverse: declineFired || wrPenalty > 0,
+    blend,
+    blendCoverage,
     delta,
   };
 }

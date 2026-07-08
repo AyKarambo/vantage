@@ -143,7 +143,7 @@ describe('winrate component (per-account, sample-gated)', () => {
     expect(p.wrPenalty).toBe(0);
   });
 
-  it('a real dip over enough games engages, capped at wrPenaltyCap', () => {
+  it('a real dip over enough games engages, capped at its regime ceiling', () => {
     const games = [
       ...span(5, 28, { perDay: 3 }), // wins, base ≥ 30 decided
       ...span(29, 35, { perDay: 4, result: 'Loss' }), // 28 acute decided losses
@@ -151,7 +151,9 @@ describe('winrate component (per-account, sample-gated)', () => {
     const p = perfAt(games, 35);
     expect(p.wrDip).not.toBeNull();
     expect(p.wrPenalty).toBeGreaterThan(0);
-    expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap);
+    // Manual fixture (no per-10 stats) ⇒ b=0 ⇒ the promoted manual ceiling (readiness-data-regimes).
+    // The invariant that matters is unchanged: the penalty is CAPPED, never unbounded.
+    expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap + T.wrManualCapBoost);
   });
 
   it("per-account isolation: a smurf's stable results never mask the main account's dip", () => {
@@ -186,7 +188,11 @@ describe('flex player (buckets never fill)', () => {
     const p = perfAt(games, 35);
     expect(p.countedGames).toBe(0);
     expect(p.statCoverage).toBe(0);
-    expect(p.delta).toBeGreaterThanOrEqual(-T.wrPenaltyCap); // winrate never absorbs the freed stat weight
+    // readiness-data-regimes SUPERSEDES the prior "winrate never absorbs the freed stat weight" rule:
+    // with no per-10 coverage (b=0) the results arm is deliberately PROMOTED to the manual ceiling.
+    // The surviving invariant is that it stays bounded by that ceiling (and still can't red without
+    // load corroboration — verified in the composite suite), not that it shrinks.
+    expect(p.delta).toBeGreaterThanOrEqual(-(T.wrPenaltyCap + T.wrManualCapBoost));
   });
 
   it('a STABLE flex rotation is covered by the role fallback by design (mix overlap high)', () => {
@@ -208,5 +214,90 @@ describe('perfDelta bounds', () => {
     const p = perfAt([...baseline, ...collapse], 35);
     expect(p.delta).toBeGreaterThanOrEqual(T.perfDeltaMin);
     expect(p.delta).toBeLessThanOrEqual(T.perfDeltaMax);
+  });
+});
+
+describe('passivity guard — output-gated deaths credit (owner revision 2026-07-08)', () => {
+  // Full-trust Tracer baseline: 8000 dmg / 5 deaths / 20 elims per 10.
+  const baseline = statSpan(5, 28, { perDay: 3, ...HEALTHY });
+
+  it('"playing scared" (damage down 30%, deaths down, elims held) now FIRES the decline index', () => {
+    // Pre-revision this cancelled out (deaths credit offset the damage drop → weighted −0.24 < slack).
+    // With output below baseline the deaths credit is gated to zero, so the game score IS the pure
+    // damage decline and the CUSUM accrues.
+    const scared = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 4, elims: 20 });
+    const p = perfAt([...baseline, ...scared], 35);
+    expect(p.declineFired).toBe(true);
+    expect(p.statPenalty).toBeGreaterThan(0);
+    expect(p.objectiveAdverse).toBe(true);
+  });
+
+  it('deaths down while output HOLDS keeps full credit — genuine positioning improvement, no decline', () => {
+    const better = statSpan(29, 35, { perDay: 3, damage: 8000, deaths: 4, elims: 20 });
+    const p = perfAt([...baseline, ...better], 35);
+    expect(p.declineFired).toBe(false);
+    expect(p.cusumMax).toBe(0);
+  });
+
+  it('aggression (damage up, slightly more deaths) still nets fine — no rule change', () => {
+    const aggressive = statSpan(29, 35, { perDay: 3, damage: 10000, deaths: 6, elims: 22 });
+    const p = perfAt([...baseline, ...aggressive], 35);
+    expect(p.declineFired).toBe(false);
+  });
+
+  it('deaths UP stays fully adverse even while output is down (no gating on the adverse side)', () => {
+    const worse = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 8, elims: 14 });
+    const p = perfAt([...baseline, ...worse], 35);
+    expect(p.declineFired).toBe(true);
+    expect(p.metricMeans.deaths ?? 0).toBeLessThan(0); // raw metric mean stays truthful
+  });
+
+  it('the gate is graduated: deeper output decline ⇒ monotonically more accrual (no cliff)', () => {
+    const mk = (damage: number) => perfAt([...baseline, ...statSpan(29, 35, { perDay: 3, damage, deaths: 4, elims: 20 })], 35).cusumMax;
+    const shallow = mk(7450); // output z ≈ −0.25 → deaths credit half-applies → game score still ≥ 0-ish
+    const deep = mk(5600); // output z ≈ −1.09 → credit fully gated → accrues hard
+    expect(deep).toBeGreaterThan(shallow);
+    expect(shallow).toBeGreaterThanOrEqual(0);
+  });
+
+  it('metricMeans keeps the RAW deaths direction even when the credit is gated (label truthfulness)', () => {
+    const scared = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 4, elims: 20 });
+    const p = perfAt([...baseline, ...scared], 35);
+    expect(p.metricMeans.deaths ?? 0).toBeGreaterThan(0); // fewer deaths still reads as its true direction
+  });
+});
+
+describe('passivity guard — review hardening (2026-07-08)', () => {
+  const baseline = statSpan(5, 28, { perDay: 3, ...HEALTHY });
+
+  it('MONOTONE at the deaths baseline: marginally fewer deaths can never flip a verdict', () => {
+    // With output down, deaths exactly at baseline vs one-hundredth better must behave
+    // near-identically — the guard engages gradually over the deaths dimension too. The
+    // binary aligned>0 gate this pins against flipped declineFired on a 0.01 deaths/10 change.
+    const at = (deaths: number) =>
+      perfAt([...baseline, ...statSpan(29, 35, { perDay: 3, damage: 6800, deaths, elims: 20 })], 35);
+    const atBaseline = at(5);
+    const hairBetter = at(4.99);
+    expect(hairBetter.declineFired).toBe(atBaseline.declineFired);
+    expect(Math.abs(hairBetter.cusumMax - atBaseline.cusumMax)).toBeLessThan(0.35);
+    // And clearly-fewer deaths with output down still engages the guard fully (scared fires).
+    expect(at(4).declineFired).toBe(true);
+  });
+
+  it('SUPPORT: healing holding at baseline vouches for output — a heal-focused style shift is not "scared"', () => {
+    // Battle-Mercy stops dueling: damage halves, deaths halve, but healing (her actual job)
+    // holds exactly at baseline. Resolved #8 rejected punishing genuine efficiency shifts.
+    const mercyBase = statSpan(5, 28, { perDay: 3, hero: 'Mercy', role: 'support', damage: 1200, deaths: 3, elims: 8, healing: 9000 });
+    const healBot = statSpan(29, 35, { perDay: 3, hero: 'Mercy', role: 'support', damage: 600, deaths: 1.5, elims: 8, healing: 9000 });
+    const p = perfAt([...mercyBase, ...healBot], 35);
+    expect(p.declineFired).toBe(false);
+    expect(p.statPenalty).toBe(0);
+  });
+
+  it('SUPPORT: healing ALSO down + deaths down = a scared support — fires', () => {
+    const mercyBase = statSpan(5, 28, { perDay: 3, hero: 'Mercy', role: 'support', damage: 1200, deaths: 3, elims: 8, healing: 9000 });
+    const scared = statSpan(29, 35, { perDay: 3, hero: 'Mercy', role: 'support', damage: 600, deaths: 1.5, elims: 5, healing: 6000 });
+    const p = perfAt([...mercyBase, ...scared], 35);
+    expect(p.declineFired).toBe(true);
   });
 });

@@ -11,8 +11,10 @@ const mental = (p: Partial<MentalState>): MentalState => ({ ...NO_MENTAL, ...p }
 const rated = (games: GameRecord[], rating: number): GameRecord[] =>
   games.map((g) => ({ ...g, performance: rating }));
 
-const at35 = (games: GameRecord[], m: MentalState, objectiveAdverse = false) =>
-  subjState([...games].sort((a, b) => a.timestamp - b.timestamp), dayOrdinal(ts(35)), m, objectiveAdverse);
+// blend defaults to 1 (stats regime) — at b=1 the caps collapse to their shipped values, so every
+// pre-regime assertion below is unchanged; the manual widening (b=0) is exercised in its own block.
+const at35 = (games: GameRecord[], m: MentalState, objectiveAdverse = false, blend = 1) =>
+  subjState([...games].sort((a, b) => a.timestamp - b.timestamp), dayOrdinal(ts(35)), m, objectiveAdverse, blend);
 
 describe('subjective subscore', () => {
   it('no mental logs and no slider usage → exactly zero, unavailable', () => {
@@ -87,5 +89,32 @@ describe('subjective subscore', () => {
     expect(s.raw).toBeGreaterThanOrEqual(T.subjDeltaMin);
     expect(s.raw).toBeLessThanOrEqual(T.subjDeltaMax);
     expect(s.delta).toBeGreaterThanOrEqual(T.subjDeltaMin);
+  });
+});
+
+describe('T6 — manual-regime widening (b lerps the caps, slopes stay invariant)', () => {
+  const HEAVY_TILT = mental({ coverage: 1, tiltKnown: true, acuteTilt: 1, baseTilt: 0, fatigued: true });
+
+  it('a sub-cap penalty is IDENTICAL at every b (slopes are regime-invariant)', () => {
+    const m = mental({ coverage: 1, tiltKnown: true, acuteTilt: 0.28, baseTilt: 0.23 });
+    const atStats = at35(span(5, 35, { perDay: 2 }), m, false, 1);
+    const atManual = at35(span(5, 35, { perDay: 2 }), m, false, 0);
+    expect(atManual.tiltPen).toBeCloseTo(atStats.tiltPen, 10); // widening only lifts the ceiling
+  });
+
+  it('max tilt reaches the widened manual tilt cap (16) at b=0 vs the shipped 10 at b=1', () => {
+    const atStats = at35(span(5, 35, { perDay: 2 }), HEAVY_TILT, false, 1);
+    const atManual = at35(span(5, 35, { perDay: 2 }), HEAVY_TILT, false, 0);
+    expect(atStats.tiltPen).toBeCloseTo(T.tiltPenCap, 10); // 10
+    expect(atManual.tiltPen).toBeCloseTo(T.tiltPenCapManual, 10); // 16
+  });
+
+  it('max adverse subjective at b=0 is bounded by the widened −25 floor and never lower', () => {
+    const base = rated(span(5, 30, { perDay: 1 }), 90);
+    const acute = rated(span(33, 35, { perDay: 3 }), 5); // slider far below own average
+    const s = at35([...base, ...acute], HEAVY_TILT, false, 0);
+    expect(s.raw).toBeGreaterThanOrEqual(T.subjDeltaMinManual); // ≥ −25
+    expect(s.raw).toBeLessThan(T.subjDeltaMin); // strictly beyond the b=1 floor of −15 (widening is real)
+    expect(s.delta).toBeGreaterThanOrEqual(T.subjDeltaMinManual);
   });
 });

@@ -23,7 +23,9 @@ import { loadState, mentalState, outcomeState, type LoadState, type MentalState,
 import { EMPTY_CONTEXT, EMPTY_PERF, perfState, type PerfState, type ReadinessContext } from './performance';
 import { EMPTY_SUBJ, subjState, type SubjState } from './subjective';
 import { clamp } from './stats';
-import type { ReadinessBand, ReadinessDriver } from './types';
+import { regimeFor } from './regime';
+import { rankTrendFor, type RankTrend } from './rankTrend';
+import type { ReadinessBand, ReadinessDriver, ReadinessRegime } from './types';
 
 export interface StateAt {
   hasData: boolean;
@@ -43,6 +45,12 @@ export interface StateAt {
   /** Fade-adjusted overload penalty (drives the `overload` driver tag). */
   overloadPen: number;
   driver: ReadinessDriver;
+  /** Regime blend b ∈ [0,1] (from perf.blend) — how much of the acute window has comparable per-10 coverage. */
+  blend: number;
+  /** Display-only regime label derived from `blend`. */
+  regime: ReadinessRegime;
+  /** Rank evidence over the stagnation window — gates the undertraining nudge (spec §7b). */
+  rankTrend: RankTrend;
 }
 
 const EMPTY_STATE: StateAt = {
@@ -52,7 +60,7 @@ const EMPTY_STATE: StateAt = {
   load: {
     acutePerDay: 0, chronicPerDay: 0, ratio: 1, ratioTrusted: false, consecutiveDays: 0,
     chronicActiveDays: 0, activeDaysPerWeek: 0, recentLongSession: false, lastSessionGames: 0,
-    lastSessionMinutes: null, highLoad: false, sustainedLoad: false,
+    lastSessionMinutes: null, highLoad: false, sustainedLoad: false, historySpanDays: 0,
   },
   mental: { coverage: 0, tiltKnown: false, acuteTilt: 0, baseTilt: 0, acutePositive: 0, fatigued: false },
   outcome: { lossStreak: 0 },
@@ -63,6 +71,9 @@ const EMPTY_STATE: StateAt = {
   deltas: { load: 0, perf: 0, subj: 0 },
   overloadPen: 0,
   driver: 'neutral',
+  blend: 0,
+  regime: 'manual',
+  rankTrend: 'unknown',
 };
 
 /**
@@ -83,10 +94,25 @@ export function restEffectFor(restDays: number): number {
  * relative (habit is not risk — a stable 10-games/day rhythm reads neutral;
  * only surges above the player's own baseline accrue penalty), trust-gated on
  * a populated chronic window, faded by real rest days, and joined by the
- * supercompensation rest curve. Absolute-volume arms live only in the red
- * corroboration gate (`sustainedLoad`), not here.
+ * supercompensation rest curve. Own-norm absolute-volume arms live only in the
+ * red corroboration gate (`sustainedLoad`), not here.
+ *
+ * The manual-regime ABSOLUTE-load arm (`absArm`) is the one exception: when the
+ * objective family can't see outcomes (blend b < 1), raw exposure — days without
+ * rest, absolute daily volume, rest-day scarcity — becomes evidence on its own,
+ * scaled by (1−b). It is volume-gated (a calm daily player stays green) and
+ * tenure-gated (a newcomer isn't flagged in week 3), joins the SAME `overloadPen`
+ * sum (inheriting its cap, the outer trust gate, the rest-day fade, and the
+ * `overload` driver), and is EXACTLY zero at b=1 — so `loadParts` is bit-identical
+ * to the shipped engine in the stats regime. It never feeds a red gate: max
+ * abs-only load (24 + longSession 8) leaves the score at 43 > redCut.
  */
-function loadParts(load: LoadState, restDays: number): { delta: number; overloadPen: number } {
+export function loadParts(
+  load: LoadState,
+  restDays: number,
+  blend: number,
+  rankTrend: RankTrend = 'unknown',
+): { delta: number; overloadPen: number } {
   const trust = Math.min(1, load.chronicActiveDays / T.minChronicActiveDays);
   const ratioPen = load.ratio > T.ratioElevated ? Math.min((load.ratio - T.ratioElevated) * 30, T.ratioPenCap) : 0;
   const habitBar = Math.max(T.absElevatedPerDay, T.habitFactor * load.chronicPerDay);
@@ -95,9 +121,37 @@ function loadParts(load: LoadState, restDays: number): { delta: number; overload
   const streakPen = surging ? Math.min(T.streakPenCap, Math.max(0, load.consecutiveDays - T.sustainedDays) * 3) : 0;
   const longPen = load.recentLongSession ? T.longSessionPen : 0;
   const fade = Math.max(0, 1 - restDays / (T.restFullRecoverDays + 1));
-  const overloadPen = Math.min(T.overloadPenCap, ratioPen + volPen + streakPen + longPen) * trust * fade;
+
+  // Absolute-load arm (manual regime). absTrust ramps on BOTH active-day density and
+  // uncapped history span, so norm-free claims need a genuinely established player.
+  const absTrust =
+    clamp((load.chronicActiveDays - T.minChronicActiveDays) / T.absTrustRampDays, 0, 1) *
+    clamp((load.historySpanDays - T.minSpanDays) / T.absTenureRampDays, 0, 1);
+  // Volume-gated: the streak arm only fires above a real daily volume — a calm 4-games/day daily
+  // habit accrues nothing here (only own-norm surges or rest scarcity can), preventing a false alarm
+  // on mere consistency. `surging` is deliberately NOT set by this arm (it must not trip the own-norm
+  // streak arm above).
+  const restlessPen =
+    load.acutePerDay >= T.absElevatedPerDay
+      ? Math.min(T.absStreakPenCap, Math.max(0, load.consecutiveDays - T.absStreakFreeDays) * T.absStreakSlope)
+      : 0;
+  const absVolPen = Math.min(T.absVolPenCap, Math.max(0, load.acutePerDay - T.absElevatedPerDay) * T.absVolSlope);
+  const scarcityPen = Math.min(T.restScarcityPenCap, Math.max(0, load.activeDaysPerWeek - T.restScarcityFreePerWeek) * T.restScarcitySlope);
+  const absRaw = Math.min(T.absArmCap, restlessPen + absVolPen + scarcityPen);
+  const absArm = blend >= 1 ? 0 : (1 - blend) * absTrust * absRaw; // exact 0 at b=1 (bit-identity)
+
+  const overloadPen = Math.min(T.overloadPenCap, ratioPen + volPen + streakPen + longPen + absArm) * trust * fade;
+  // The low-frequency nudge fires only on PROVEN rank stagnation (spec §7b): with the trend
+  // unknown (no rank data) or climbing, both the penalty and its signal stay silent — the app
+  // never encourages volume on zero evidence, and low-volume climbing is the healthy pattern.
+  // Rust days are excluded exactly like the signal (the rust-gap owns a layoff, and
+  // restEffectFor already charges it) — pen and signal share the FULL gate, so the score
+  // can never dip without its explanation showing.
   const freqPen =
-    load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
+    rankTrend === 'stagnant' &&
+    restDays < T.rustDays &&
+    load.chronicActiveDays > 0 &&
+    load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
       ? Math.min(T.freqPenCap, (T.lowFrequencyDaysPerWeek - load.activeDaysPerWeek) * 3)
       : 0;
   return {
@@ -122,13 +176,14 @@ export function computeStateAt(
   const mental = mentalState(upTo, lastActiveOrdinal);
   const outcome = outcomeState(upTo, lastActiveOrdinal);
   const perf = perfState(upTo, lastActiveOrdinal, ctx, mental.fatigued);
-  const subj = subjState(upTo, lastActiveOrdinal, mental, perf.objectiveAdverse);
+  const subj = subjState(upTo, lastActiveOrdinal, mental, perf.objectiveAdverse, perf.blend);
   const heavy = (load.sustainedLoad && mental.fatigued) || load.highLoad || mental.fatigued;
   const marathonSession = detectSessions(upTo).some(
     (s) => s.endOrdinal === lastActiveOrdinal && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
   );
 
-  const lp = loadParts(load, restDays);
+  const rankTrend = rankTrendFor(upTo, refOrdinal, ctx.rankAnchors);
+  const lp = loadParts(load, restDays, perf.blend, rankTrend);
   const driver: ReadinessDriver =
     restDays >= T.rustSignalDays ? 'rust' : restDays === 0 && lp.overloadPen >= T.driverBar ? 'overload' : 'neutral';
 
@@ -151,6 +206,9 @@ export function computeStateAt(
     deltas: { load: lp.delta, perf: perf.delta * fade, subj: subj.delta * fade },
     overloadPen: lp.overloadPen,
     driver,
+    blend: perf.blend,
+    regime: regimeFor(perf.blend),
+    rankTrend,
   };
 }
 

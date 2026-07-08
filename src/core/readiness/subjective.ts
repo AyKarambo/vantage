@@ -6,7 +6,7 @@
  */
 
 import type { GameRecord } from '../analytics';
-import { READINESS_TUNING as T } from './constants';
+import { READINESS_TUNING as T, manualLerp } from './constants';
 import { dayOrdinal } from './day';
 import type { MentalState } from './signals';
 import { clamp } from './stats';
@@ -30,12 +30,18 @@ export const EMPTY_SUBJ: SubjState = {
   available: false, tiltPen: 0, sliderDiff: null, sliderPen: 0, sliderBon: 0, raw: 0, delta: 0,
 };
 
-/** Evaluate the subjective subscore as-of `refOrdinal`. */
+/**
+ * Evaluate the subjective subscore as-of `refOrdinal`. `blend` widens the hard caps (only) toward
+ * their manual endpoints via `(1−b)`: when self-report is the best evidence available it gets more
+ * range, but the SLOPES stay regime-invariant — so every sub-cap penalty (e.g. an everyday tilt of
+ * −2.6) is identical at every b, and at b=1 the caps collapse to their shipped values (bit-identical).
+ */
 export function subjState(
   games: GameRecord[],
   refOrdinal: number,
   mental: MentalState,
   objectiveAdverse: boolean,
+  blend: number,
 ): SubjState {
   const acuteStart = refOrdinal - T.acuteMentalDays + 1;
 
@@ -44,7 +50,7 @@ export function subjState(
   const tiltUsable = mental.coverage >= T.mentalMinCoverage && mental.tiltKnown;
   const tiltPen = tiltUsable
     ? Math.min(
-        T.tiltPenCap,
+        manualLerp(T.tiltPenCap, T.tiltPenCapManual, blend),
         mental.acuteTilt * T.tiltPenSlope + Math.max(0, mental.acuteTilt - mental.baseTilt) * T.tiltPenSlope,
       )
     : 0;
@@ -63,11 +69,11 @@ export function subjState(
   let sliderBon = 0;
   if (before.length >= T.sliderMinBase && acute.length >= T.sliderMinAcute) {
     sliderDiff = mean(before) - mean(acute); // positive = rating below own average
-    if (sliderDiff >= T.sliderDipMin) sliderPen = Math.min(T.sliderPenCap, (sliderDiff - 5) * 0.4);
+    if (sliderDiff >= T.sliderDipMin) sliderPen = Math.min(manualLerp(T.sliderPenCap, T.sliderPenCapManual, blend), (sliderDiff - 5) * 0.4);
     else if (sliderDiff <= -T.sliderDipMin) sliderBon = Math.min(T.sliderBonCap, (-sliderDiff - 5) * 0.4);
   }
 
-  const raw = clamp(-(tiltPen + sliderPen) + sliderBon, T.subjDeltaMin, T.subjDeltaMax);
+  const raw = clamp(-(tiltPen + sliderPen) + sliderBon, manualLerp(T.subjDeltaMin, T.subjDeltaMinManual, blend), T.subjDeltaMax);
 
   // Disagreement gating (research): full weight only when subjective DISAGREES
   // with the objective read; mostly-redundant when it agrees.
