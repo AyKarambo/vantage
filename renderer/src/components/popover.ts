@@ -37,11 +37,19 @@ export function openPopover(
 
   // Position after mount so the panel's size is known.
   const a = anchor.getBoundingClientRect();
-  const p = panel.getBoundingClientRect();
+  const margin = 8;
   const below = a.top < window.innerHeight / 2;
-  const top = below ? a.bottom + 8 : a.top - p.height - 8;
-  const left = Math.max(8, Math.min(a.left, window.innerWidth - p.width - 8));
-  panel.style.top = `${Math.max(8, top)}px`;
+  // Clamp the panel to whichever side it opens on so it can never render
+  // past the viewport edge; content beyond that scrolls within the panel.
+  // Two margins: one gap between anchor and panel, one between panel and
+  // the far viewport edge.
+  const available = (below ? window.innerHeight - a.bottom : a.top) - margin * 2;
+  panel.style.maxHeight = `${Math.max(120, available)}px`;
+  panel.style.overflowY = 'auto';
+  const p = panel.getBoundingClientRect();
+  const top = below ? a.bottom + margin : a.top - p.height - margin;
+  const left = Math.max(margin, Math.min(a.left, window.innerWidth - p.width - margin));
+  panel.style.top = `${Math.max(margin, top)}px`;
   panel.style.left = `${left}px`;
 
   return { close };
