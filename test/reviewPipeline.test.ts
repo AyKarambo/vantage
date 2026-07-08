@@ -181,8 +181,8 @@ describe('mentalSummary — review-flag merge', () => {
   });
 });
 
-describe('computeDashboard — review inbox decoupled from filters', () => {
-  it('keeps old ungraded games in the inbox and badge while matches respects the range', () => {
+describe('computeDashboard — review inbox scoped by role/account, exempt from days', () => {
+  it('keeps old ungraded games in the inbox and badge while matches respects the day-window range', () => {
     const old = game({ result: 'Win', timestamp: Date.now() - 30 * 86400000 });
     const gradedRecent = game({ result: 'Win', timestamp: Date.now() - 1000, review: review({}) });
     const recent = game({ result: 'Loss', timestamp: Date.now() - 2000 });
@@ -195,6 +195,25 @@ describe('computeDashboard — review inbox decoupled from filters', () => {
     expect(inboxIds).not.toContain(gradedRecent.matchId); // graded games leave the inbox
     expect(d.pendingReviews).toBe(2);
     expect(d.reviewInbox[0].matchId).toBe(recent.matchId); // newest first
+  });
+
+  it('narrows the inbox and badge by role and account, unlike the day window', () => {
+    const wantedRole = game({ result: 'Loss', role: 'damage', account: 'Main' });
+    const otherRole = game({ result: 'Loss', role: 'tank', account: 'Main' });
+    const otherAccount = game({ result: 'Loss', role: 'damage', account: 'Smurf' });
+    const games = [wantedRole, otherRole, otherAccount];
+
+    const byRole = computeDashboard(games, { role: 'damage' }, { active: false, preference: 'off', hasRealHistory: true });
+    expect(byRole.reviewInbox.map((m) => m.matchId).sort()).toEqual([wantedRole.matchId, otherAccount.matchId].sort());
+    expect(byRole.pendingReviews).toBe(2);
+
+    const byAccount = computeDashboard(games, { account: 'Main' }, { active: false, preference: 'off', hasRealHistory: true });
+    expect(byAccount.reviewInbox.map((m) => m.matchId).sort()).toEqual([wantedRole.matchId, otherRole.matchId].sort());
+    expect(byAccount.pendingReviews).toBe(2);
+
+    const byBoth = computeDashboard(games, { role: 'damage', account: 'Main' }, { active: false, preference: 'off', hasRealHistory: true });
+    expect(byBoth.reviewInbox.map((m) => m.matchId)).toEqual([wantedRole.matchId]);
+    expect(byBoth.pendingReviews).toBe(1);
   });
 
   it('counts pendingReviews past the inbox row cap', () => {

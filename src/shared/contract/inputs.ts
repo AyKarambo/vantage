@@ -7,6 +7,7 @@
 import type { Role, Result } from '../../core/model';
 import type { MatchMental, TargetGrade } from '../../core/analytics';
 import type { TargetMode } from '../../core/targets';
+import type { DashboardFilters } from './dashboard';
 
 /** A manually-logged match, captured in the Log Match card. */
 export interface ManualMatchInput {
@@ -90,4 +91,17 @@ export interface ReviewInput {
   flags: MatchMental;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
+}
+
+/**
+ * A bulk "Ignore all" request: every pending (ungraded) match matching this
+ * Role/account scope (Season/day-window is ignored — same exemption
+ * `pendingReviewMatches` applies) and the Review-only age cutoff gets an empty
+ * review. `minAgeDays` is never part of {@link DashboardFilters} itself — it's
+ * a renderer-local preference, passed explicitly wherever it's needed.
+ */
+export interface IgnorePendingReviewsInput {
+  filters: DashboardFilters;
+  /** Only ignore matches at least this many days old; 0 = no cutoff. */
+  minAgeDays: number;
 }

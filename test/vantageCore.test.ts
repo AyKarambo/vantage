@@ -5,7 +5,7 @@ import { mapMode } from '../src/core/maps';
 import { mentalSummary } from '../src/core/mental';
 import { progression, winrateToSr, tierOf } from '../src/core/progression';
 import { sampleTargets } from '../src/core/targets';
-import { computeDashboard, applyFilters } from '../src/core/dashboardData';
+import { computeDashboard, applyFilters, pendingReviewMatches } from '../src/core/dashboardData';
 import { currentSeasonWindow } from '../src/core/season';
 import { isCompetitive } from '../src/core/matchFilter';
 import { generateSampleGames } from '../src/core/sampleData';
@@ -298,6 +298,38 @@ describe('computeDashboard', () => {
     const cutoff = Date.now() - 7 * 86400000;
     expect(recent.every((g) => g.timestamp >= cutoff)).toBe(true);
     expect(recent.length).toBeLessThanOrEqual(all.length);
+  });
+
+  it('reviewInbox/pendingReviews are scoped by role/account but exempt from the day window', () => {
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const now = Date.now();
+    const oldUngraded = game({ result: 'Loss', map: 'Ilios', role: 'damage', account: 'Main', timestamp: now - 200 * 86400000 });
+    const wrongRole = game({ result: 'Loss', map: 'Ilios', role: 'tank', account: 'Main', timestamp: now - 5 * 86400000 });
+    const wrongAccount = game({ result: 'Loss', map: 'Ilios', role: 'damage', account: 'Smurf', timestamp: now - 5 * 86400000 });
+    const games = [oldUngraded, wrongRole, wrongAccount];
+
+    const d = computeDashboard(games, { role: 'damage', account: 'Main', days: 7 }, demo);
+
+    // Role/account narrow the inbox and badge exactly like every other stat...
+    const inboxIds = d.reviewInbox.map((m) => m.matchId);
+    expect(inboxIds).toContain(oldUngraded.matchId);
+    expect(inboxIds).not.toContain(wrongRole.matchId);
+    expect(inboxIds).not.toContain(wrongAccount.matchId);
+    expect(d.pendingReviews).toBe(1);
+
+    // ...but the day window (7 days) does NOT exclude the 200-day-old match from
+    // the inbox/badge, even though it excludes it from every other stat.
+    expect(d.matches.map((m) => m.matchId)).not.toContain(oldUngraded.matchId);
+  });
+
+  it('pendingReviewMatches forces the day window to "all", ignoring whatever days value is passed', () => {
+    const now = Date.now();
+    const old = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: now - 400 * 86400000 });
+    const recent = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now - 1000 });
+    const graded = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now, review: { at: now, grades: {}, flags: {} } });
+
+    const res = pendingReviewMatches([old, recent, graded], { days: 7 });
+    expect(res.map((g) => g.matchId)).toEqual([recent.matchId, old.matchId]); // newest first, uncapped
   });
 
   it('narrows to a specific season via { season: id } ([start, end) boundary)', () => {

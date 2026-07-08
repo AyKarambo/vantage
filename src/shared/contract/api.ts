@@ -14,7 +14,10 @@ import type {
   ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress,
   CleanupDuplicatesResult,
 } from './notion';
-import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
+import type {
+  ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput,
+  IgnorePendingReviewsInput,
+} from './inputs';
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 import type { ImportFileResult } from './importFile';
 import type { Role } from '../../core/model';
@@ -134,6 +137,12 @@ export interface OwStatsApi {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
+  /** Read-only: how many pending matches "Ignore all" would affect right now (beyond the capped inbox rows). */
+  previewPendingReviewIgnore(input: IgnorePendingReviewsInput): Promise<{ count: number }>;
+  /** Bulk-saves an empty review for every matching pending match; returns their ids for Undo. */
+  ignorePendingReviews(input: IgnorePendingReviewsInput): Promise<{ matchIds: string[] }>;
+  /** Undo of ignorePendingReviews: clears reviews on exactly these matchIds. */
+  clearReviews(matchIds: string[]): Promise<void>;
   /** The effective master data (defaults ⊕ overrides), for the Master Data editor. */
   masterDataGet(): Promise<MasterData>;
   /** Add or edit a hero; returns the new effective master data. */
@@ -239,6 +248,9 @@ export const IPC_CHANNELS = {
   setDataFolder: 'settings:set-data-folder',
   chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
   clearReview: 'manual:clear-review',
+  previewPendingReviewIgnore: 'manual:preview-ignore-pending-reviews',
+  ignorePendingReviews: 'manual:ignore-pending-reviews',
+  clearReviews: 'manual:clear-reviews',
   masterDataGet: 'master:get',
   masterDataUpsertHero: 'master:upsert-hero',
   masterDataRemoveHero: 'master:remove-hero',
