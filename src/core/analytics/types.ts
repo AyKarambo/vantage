@@ -99,12 +99,22 @@ export interface GameRecord {
   /** The saved Review-screen read (target grades + feel flags), if graded. */
   review?: MatchReview;
   /**
-   * Epoch ms of the Notion import that brought this record into local history —
-   * set only on games pulled from Notion (never on live-tracked or hand-logged
-   * ones). Flags the record so an import can be wiped and re-run cleanly without
-   * touching real history ({@link ../../store/history HistoryStore.removeImported}).
+   * Epoch ms of the import that brought this record into local history — set
+   * only on imported games (never on live-tracked or hand-logged ones). Flags
+   * the record so an import can be wiped and re-run cleanly without touching real
+   * history ({@link ../../store/history HistoryStore.removeImported}). Pair with
+   * {@link importSource} to tell which importer it came from.
    */
   importedAt?: number;
+  /**
+   * Which importer brought this record in — the provenance discriminator that
+   * lets one import channel be cleared without disturbing another (e.g. wipe
+   * file-imports while keeping Notion imports). Absent on live-tracked and
+   * hand-logged records; also absent on legacy Notion imports that predate this
+   * field, which are treated as `'notion'` (see `COALESCE(importSource,'notion')`
+   * in {@link ../../store/history HistoryStore}).
+   */
+  importSource?: 'notion' | 'file';
 }
 
 /** Win/loss tally over a set of games — the unit every chart aggregates. */

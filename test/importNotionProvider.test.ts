@@ -71,8 +71,8 @@ function harness(
         }
         return { merged, skipped };
       },
-      removeImported: () => {
-        const removed = stored.filter((g) => g.importedAt != null);
+      removeImported: (source: 'notion' | 'file') => {
+        const removed = stored.filter((g) => g.importedAt != null && (g.importSource ?? 'notion') === source);
         for (const r of removed) stored.splice(stored.indexOf(r), 1);
         return removed;
       },

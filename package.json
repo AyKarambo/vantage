@@ -26,6 +26,7 @@
     "test:watch": "vitest",
     "release": "npm run make-icon && npm run build && ow-electron-builder --win --x64 --publish=never",
     "sign:local": "powershell -ExecutionPolicy Bypass -File scripts/sign-local.ps1",
+    "import:obsidian": "powershell -ExecutionPolicy Bypass -File scripts/import-obsidian.ps1",
     "pack:opk": "node scripts/pack-opk.mjs"
   },
   "build": {

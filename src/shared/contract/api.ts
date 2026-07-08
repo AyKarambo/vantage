@@ -15,6 +15,7 @@ import type {
 } from './notion';
 import type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput } from './inputs';
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
+import type { ImportFileResult } from './importFile';
 import type { Role } from '../../core/model';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
@@ -51,6 +52,12 @@ export interface OwStatsApi {
   importNotion(): Promise<ImportResult>;
   /** Delete every match that came from a Notion import (for a clean re-import); returns how many were removed. */
   deleteImportedMatches(): Promise<{ deleted: number }>;
+  /** Pick a Vantage import file and ingest it into history (marked as file-imported); returns a summary. */
+  importFromFile(): Promise<ImportFileResult>;
+  /** Delete every file-imported match (independently of Notion imports); returns how many were removed. */
+  deleteFileImports(): Promise<{ deleted: number }>;
+  /** How many file-imported matches are currently stored (for the Settings → Data status line). */
+  fileImportedCount(): Promise<number>;
   /**
    * Explicit action: archives redundant duplicate rows (Notion trash,
    * restorable) in the configured Gametracker database, keeping one canonical
@@ -190,6 +197,9 @@ export const IPC_CHANNELS = {
   importNotion: 'notion:import',
   deleteImportedMatches: 'notion:delete-imported',
   cleanupNotionDuplicates: 'notion:cleanup-duplicates',
+  importFromFile: 'import:from-file',
+  deleteFileImports: 'import:delete-file',
+  fileImportedCount: 'import:file-count',
   saveTarget: 'manual:save-target',
   saveReview: 'manual:save-review',
   importReviews: 'manual:import-reviews',

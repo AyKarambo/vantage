@@ -53,6 +53,9 @@ export type { ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditI
 // Accounts + rank
 export type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 
+// Local file import (Settings → Data)
+export type { ImportFileResult } from './importFile';
+
 // Logging payloads (release debug log + in-app viewer)
 export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 

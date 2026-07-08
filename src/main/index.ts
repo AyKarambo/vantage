@@ -218,13 +218,28 @@ function main(): void {
     return res.filePaths[0];
   }
 
+  /**
+   * Native file picker for the Settings → Data "Import from file" action:
+   * returns the parsed JSON of the chosen file, or `undefined` when cancelled.
+   * Read/parse failures throw — the provider turns them into an error result.
+   */
+  async function pickImportFile(): Promise<unknown | undefined> {
+    const res = await dialog.showOpenDialog({
+      title: 'Choose a Vantage import file',
+      properties: ['openFile'],
+      filters: [{ name: 'Vantage import', extensions: ['json'] }],
+    });
+    if (res.canceled || !res.filePaths.length) return undefined;
+    return JSON.parse(fs.readFileSync(res.filePaths[0], 'utf8'));
+  }
+
   let pushSyncProgress: (done: number, total: number) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
     reloadConfig: () => (config = loadConfig()),
     trackedGames: () => history.count(),
-    importedMatches: () => history.importedCount(),
+    importedMatches: () => history.importedCount('notion'),
     onTokenState: (tokenSet) => tray.setState({ tokenSet }),
     onError: (title, body) => {
       log.error('notion', `${title}: ${body}`);
@@ -279,6 +294,7 @@ function main(): void {
       saveLocalAccounts(accounts);
       config = loadConfig();
     },
+    importFile: { pick: pickImportFile },
     persistBreakReminder: (breakReminder) => saveLocalConfig({ breakReminder }),
     persistStaleness: (staleness) => saveLocalConfig({ staleness }),
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
