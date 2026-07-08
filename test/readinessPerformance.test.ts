@@ -266,3 +266,38 @@ describe('passivity guard — output-gated deaths credit (owner revision 2026-07
     expect(p.metricMeans.deaths ?? 0).toBeGreaterThan(0); // fewer deaths still reads as its true direction
   });
 });
+
+describe('passivity guard — review hardening (2026-07-08)', () => {
+  const baseline = statSpan(5, 28, { perDay: 3, ...HEALTHY });
+
+  it('MONOTONE at the deaths baseline: marginally fewer deaths can never flip a verdict', () => {
+    // With output down, deaths exactly at baseline vs one-hundredth better must behave
+    // near-identically — the guard engages gradually over the deaths dimension too. The
+    // binary aligned>0 gate this pins against flipped declineFired on a 0.01 deaths/10 change.
+    const at = (deaths: number) =>
+      perfAt([...baseline, ...statSpan(29, 35, { perDay: 3, damage: 6800, deaths, elims: 20 })], 35);
+    const atBaseline = at(5);
+    const hairBetter = at(4.99);
+    expect(hairBetter.declineFired).toBe(atBaseline.declineFired);
+    expect(Math.abs(hairBetter.cusumMax - atBaseline.cusumMax)).toBeLessThan(0.35);
+    // And clearly-fewer deaths with output down still engages the guard fully (scared fires).
+    expect(at(4).declineFired).toBe(true);
+  });
+
+  it('SUPPORT: healing holding at baseline vouches for output — a heal-focused style shift is not "scared"', () => {
+    // Battle-Mercy stops dueling: damage halves, deaths halve, but healing (her actual job)
+    // holds exactly at baseline. Resolved #8 rejected punishing genuine efficiency shifts.
+    const mercyBase = statSpan(5, 28, { perDay: 3, hero: 'Mercy', role: 'support', damage: 1200, deaths: 3, elims: 8, healing: 9000 });
+    const healBot = statSpan(29, 35, { perDay: 3, hero: 'Mercy', role: 'support', damage: 600, deaths: 1.5, elims: 8, healing: 9000 });
+    const p = perfAt([...mercyBase, ...healBot], 35);
+    expect(p.declineFired).toBe(false);
+    expect(p.statPenalty).toBe(0);
+  });
+
+  it('SUPPORT: healing ALSO down + deaths down = a scared support — fires', () => {
+    const mercyBase = statSpan(5, 28, { perDay: 3, hero: 'Mercy', role: 'support', damage: 1200, deaths: 3, elims: 8, healing: 9000 });
+    const scared = statSpan(29, 35, { perDay: 3, hero: 'Mercy', role: 'support', damage: 600, deaths: 1.5, elims: 5, healing: 6000 });
+    const p = perfAt([...mercyBase, ...scared], 35);
+    expect(p.declineFired).toBe(true);
+  });
+});

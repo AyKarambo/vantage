@@ -56,10 +56,9 @@ export function rankTrendFor(games: GameRecord[], refOrdinal: number, anchors: R
     if (anchorOrdinal > refOrdinal) continue; // anchor from the future of this trend day
     // The measurable sub-window starts where the anchor's ground truth begins.
     const measurableStart = Math.max(windowStart, anchorOrdinal);
-    if (refOrdinal - measurableStart + 1 < T.rankEvidenceMinDays) continue;
 
-    // Evidence bar: the engine moves by srDelta, so stagnation needs logged deltas
-    // inside the measurable sub-window — a delta-free window is unlogged, not flat.
+    // Evidence: the engine moves by srDelta, so stagnation needs logged deltas inside the
+    // measurable sub-window — a delta-free window is unlogged, not flat.
     const measurableDeltas = games.filter(
       (g) =>
         g.account === account &&
@@ -70,14 +69,26 @@ export function rankTrendFor(games: GameRecord[], refOrdinal: number, anchors: R
         dayOrdinal(g.timestamp) >= measurableStart &&
         dayOrdinal(g.timestamp) <= refOrdinal,
     ).length;
-    if (measurableDeltas < T.rankEvidenceMinDeltas) continue;
+    if (measurableDeltas === 0) continue; // nothing measurable on this track at all
 
     const start = computeRank(anchor, comps(games, account, role, anchor.setAt, measurableStart - 1));
     const end = computeRank(anchor, comps(games, account, role, anchor.setAt, refOrdinal));
-    if (start.needsReanchor || end.needsReanchor) continue; // progress % unknown — not usable evidence
+    // Forward-defensive: the current engine never emits needsReanchor=true from computeRank
+    // (every applyMatch/stateFromAnchor branch sets it false) — the guard exists so a future
+    // engine change degrades to silence rather than fabricated evidence.
+    if (start.needsReanchor || end.needsReanchor) continue;
 
-    evidenced = true;
+    // ASYMMETRIC bars (err toward silence): CLIMBING silences on any net-positive movement,
+    // however thin the sample — nagging a provably-climbing player is the one outcome the
+    // owner vetoed outright. STAGNANT (the only state that lets the nudge fire) requires the
+    // full evidence bar: enough span AND enough logged deltas.
     if (rankToPoints(end) - rankToPoints(start) >= T.rankClimbMinPoints) climbing = true;
+    if (
+      refOrdinal - measurableStart + 1 >= T.rankEvidenceMinDays &&
+      measurableDeltas >= T.rankEvidenceMinDeltas
+    ) {
+      evidenced = true;
+    }
   }
 
   if (climbing) return 'climbing';

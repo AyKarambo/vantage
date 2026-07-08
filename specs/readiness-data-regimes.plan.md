@@ -205,7 +205,7 @@ New pure `src/core/readiness/rankTrend.ts` (imports `../rank` — core-pure): fo
 - `ReadinessContext` gains `rankAnchors?: RankAnchorMap` (dashboard read-model already receives them; the launch toast passes the store's map). `EMPTY_CONTEXT` unchanged shape (absent ⇒ `unknown` ⇒ silent).
 - `StateAt` gains `rankTrend: 'climbing' | 'stagnant' | 'unknown'`, computed per `refOrdinal` in `computeStateAt` ⇒ trend days apply the gate as-of each day for free.
 - `loadParts` gains the gate: `freqPen` applies only when `rankTrend === 'stagnant'` (signal and penalty move together).
-- `buildSignals` low-frequency branch requires `stagnant` and gets the stagnation-aware copy: *"ranks flat over ~2 weeks at only ~N active days/week — a bit more regular practice may be the missing stimulus"* (severity logic unchanged).
+- `buildSignals` low-frequency branch requires `stagnant` and gets the stagnation-aware copy: *"ranks not climbing over ~2 weeks at only ~N active days/week — a bit more regular practice may be the missing stimulus"* (severity logic unchanged; direction-neutral so it stays truthful for derankers — review fix 2026-07-08).
 - Constants: `rankStagnationWindowDays 14`, `rankEvidenceMinDays 7`, `rankEvidenceMinDeltas 5`, `rankClimbMinPoints 1` (any net-positive movement counts — generous bar, err toward silence).
 - Perf: O(anchor-keys × comps) per state evaluation, trivially within budget.
 

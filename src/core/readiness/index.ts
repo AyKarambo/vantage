@@ -292,7 +292,7 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
     const rate = load.activeDaysPerWeek.toFixed(1).replace(/\.0$/, '');
     out.push({
       key: 'low-frequency',
-      label: `ranks flat over ~2 weeks at only ~${rate} active day${rate === '1' ? '' : 's'}/week — a bit more regular practice may be the missing stimulus`,
+      label: `ranks not climbing over ~2 weeks at only ~${rate} active day${rate === '1' ? '' : 's'}/week — a bit more regular practice may be the missing stimulus`,
       severity: load.activeDaysPerWeek < T.lowFrequencyWatchPerWeek ? 'watch' : 'ok',
     });
   }

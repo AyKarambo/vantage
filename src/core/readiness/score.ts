@@ -144,8 +144,14 @@ export function loadParts(
   // The low-frequency nudge fires only on PROVEN rank stagnation (spec §7b): with the trend
   // unknown (no rank data) or climbing, both the penalty and its signal stay silent — the app
   // never encourages volume on zero evidence, and low-volume climbing is the healthy pattern.
+  // Rust days are excluded exactly like the signal (the rust-gap owns a layoff, and
+  // restEffectFor already charges it) — pen and signal share the FULL gate, so the score
+  // can never dip without its explanation showing.
   const freqPen =
-    rankTrend === 'stagnant' && load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
+    rankTrend === 'stagnant' &&
+    restDays < T.rustDays &&
+    load.chronicActiveDays > 0 &&
+    load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
       ? Math.min(T.freqPenCap, (T.lowFrequencyDaysPerWeek - load.activeDaysPerWeek) * 3)
       : 0;
   return {

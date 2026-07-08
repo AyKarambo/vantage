@@ -165,26 +165,39 @@ export function perfState(
 
     // Passivity guard (spec §7a): deaths' FAVORABLE credit only holds while output holds.
     // outputZ = weight-normalized mean of the non-death active metrics; the credit ramps
-    // 1 → 0 as outputZ falls 0 → −passivityRampZ (graduated — no per-game cliff), and the
-    // deaths WEIGHT leaves the blend with it, so a scared game scores as its pure output
-    // decline. Deaths above baseline keeps full adverse weight in every context; with no
-    // active output metrics there is no evidence of passivity, so credit stands.
+    // 1 → 0 as outputZ falls 0 → −passivityRampZ, and the deaths WEIGHT leaves the blend
+    // with it, so a scared game scores as its pure output decline. Graduated in BOTH
+    // dimensions: over output (the ramp above) and over deaths-favorability (0 → full as
+    // deathsAligned grows 0 → passivityDeathsRampZ) — deaths exactly at baseline keeps
+    // full weight, so strictly-fewer deaths can never score worse than baseline deaths
+    // (review finding: a binary aligned>0 gate flipped verdicts on 0.01 deaths/10).
+    // Deaths above baseline keeps full adverse weight in every context. For SUPPORT games
+    // (healing active) the healing channel alone can vouch for output: a Mercy whose
+    // healing holds at baseline while she stops battle-dueling is doing her job, not
+    // playing scared — without this, a floor-inflated damage z fires a false decline on
+    // a genuine style shift (the exact false alarm Resolved #8 rejected). With no active
+    // output metrics there is no evidence of passivity, so credit stands.
     let outWeighted = 0;
     let outWeightSum = 0;
+    let healingAligned: number | null = null;
     for (const a of active) {
       if (a.m === 'deaths') continue;
+      if (a.m === 'healing') healingAligned = a.aligned;
       outWeighted += a.aligned * a.w;
       outWeightSum += a.w;
     }
     const outputZ = outWeightSum > 0 ? outWeighted / outWeightSum : 0;
+    const outputHoldZ = healingAligned !== null ? Math.max(outputZ, healingAligned) : outputZ;
 
     let weighted = 0;
     let weightSum = 0;
     for (const a of active) {
-      const factor =
-        a.m === 'deaths' && a.aligned > 0 && outWeightSum > 0
-          ? clamp(1 + outputZ / T.passivityRampZ, 0, 1)
-          : 1;
+      let factor = 1;
+      if (a.m === 'deaths' && a.aligned > 0 && outWeightSum > 0) {
+        const outFactor = clamp(1 + outputHoldZ / T.passivityRampZ, 0, 1);
+        const deathsEngage = clamp(a.aligned / T.passivityDeathsRampZ, 0, 1);
+        factor = 1 - (1 - outFactor) * deathsEngage;
+      }
       weighted += a.aligned * a.w * factor;
       weightSum += a.w * factor;
     }

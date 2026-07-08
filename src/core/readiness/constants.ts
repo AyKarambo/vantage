@@ -186,6 +186,8 @@ export const READINESS_TUNING = {
   metricSkipMin: { damage: 50, healing: 50, eliminations: 0.5, deaths: 0.5 },
   /** Passivity guard: deaths' FAVORABLE credit ramps to zero as output falls from baseline (z 0) to −this — "playing scared" (damage+elims down, deaths down) must read as the output decline it is, not cancel out. Deaths above baseline stays fully adverse in every context. */
   passivityRampZ: 0.5,
+  /** The guard engages gradually over the DEATHS dimension too (0 → full as deaths-favorable z grows 0 → this): deaths exactly at baseline must keep full weight, or one-hundredth fewer deaths could flip a whole verdict (strictly better play must never score worse). */
+  passivityDeathsRampZ: 0.25,
   /** One-sided CUSUM slack: only game-scores worse than baseline by more than this accumulate. */
   cusumSlack: 0.25,
   /** CUSUM decision threshold (in cumulative z units). One winsorized game ≤ 2.25 < this by construction. */
