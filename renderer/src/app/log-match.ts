@@ -13,7 +13,7 @@ import { time, roleLabel } from '../format';
 import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { typeahead } from '../components/typeahead';
+import { mapPicker, resolveMapName } from '../components/mapPicker';
 import { targetGradeRow } from '../components/reviewControls';
 import { resultChooser } from '../components/resultChooser';
 import { commsSwitch } from '../components/commsSwitch';
@@ -154,17 +154,9 @@ function buildForm(
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
 
-  /**
-   * Resolve free-typed map text onto the known map list (case-insensitive).
-   * Resolution is NOT gated by `isActive`: a user backfilling a game on a map
-   * that has since rotated out of the pool must still be able to type it and log
-   * it (spec AC 22) — only the browse suggestions hide inactive maps.
-   */
-  const resolveMap = (): string | null => {
-    const q = state.map.trim().toLowerCase();
-    if (!q) return null;
-    return ctx.data.masterData.maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
-  };
+  // Free-typed map text resolves case-insensitively onto the known map list
+  // (spec AC 22 — inactive maps stay loggable); see resolveMapName.
+  const resolveMap = (): string | null => resolveMapName(state.map, ctx.data.masterData.maps);
 
   // The map combobox is strict (see mapField below): its committed value can
   // only ever be an exact known map name or empty. Save stays disabled the
@@ -276,17 +268,11 @@ function buildForm(
   );
 
   const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
-  const mutedMapNames = new Set(ctx.data.masterData.maps.filter((m) => !m.isActive).map((m) => m.name));
   const mapField = field('Map',
-    typeahead({
+    mapPicker({
       value: state.map,
-      placeholder: 'start typing — recent maps listed first',
-      suggestions: mapSuggestions(ctx),
-      searchSuggestions: allMapNames(ctx),
-      mutedItems: mutedMapNames,
-      strict: true,
-      showOnFocus: true,
-      inputClass: 'vt-input',
+      maps: ctx.data.masterData.maps,
+      recentMaps: ctx.data.matches.map((m) => m.map),
       onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
     }),
   );
@@ -483,33 +469,6 @@ function buildForm(
 }
 
 // --- little local builders --------------------------------------------------
-
-/**
- * Browse order for the map typeahead: recently-played first, then the rest —
- * built from the ACTIVE competitive pool only, so a map rotated out of the pool
- * is hidden from suggestions (spec AC 21). It stays type-resolvable via
- * {@link resolveMap} (AC 22), so history on it is never blocked.
- */
-function mapSuggestions(ctx: ViewContext): string[] {
-  const active = ctx.data.masterData.maps
-    .filter((m) => m.isActive)
-    .map((m) => m.name)
-    .sort((a, b) => a.localeCompare(b));
-  const activeSet = new Set(active);
-  const recent: string[] = [];
-  for (const m of ctx.data.matches) if (activeSet.has(m.map) && !recent.includes(m.map)) recent.push(m.map);
-  const rest = active.filter((m) => !recent.includes(m));
-  return [...recent, ...rest];
-}
-
-/**
- * Every known map (active + inactive), sorted — the locked combobox's search
- * pool, so a rotated-out map is still reachable by typing its name (spec AC
- * 21/22), just deprioritized/muted rather than hidden.
- */
-function allMapNames(ctx: ViewContext): string[] {
-  return ctx.data.masterData.maps.map((m) => m.name).sort((a, b) => a.localeCompare(b));
-}
 
 /** Compact segmented choice (Role, Mode). */
 function choiceSegment(options: string[], initial: string, onPick: (value: string) => void): HTMLElement {
