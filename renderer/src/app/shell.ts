@@ -11,7 +11,7 @@ import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
-import { nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
+import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
 import { openModal } from '../components/overlay';
 import { mountToastHost } from '../components/toast';
@@ -30,7 +30,7 @@ import { readiness } from '../views/readiness';
 import { targets } from '../views/targets';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
-import { logViewer } from '../views/logViewer';
+import { logViewer, pauseFollow } from '../views/logViewer';
 import { settings } from '../views/settings';
 import { about } from '../views/about';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
@@ -541,9 +541,14 @@ export class App {
    * their scrolling; everything else scrolls the content host) and assigned
    * directly — the same idiom as renderContent's scroll restore, so per-route
    * scroll memory keeps reading truthful positions.
+   *
+   * An upward jump on the Logs tail pauses live-follow first — otherwise the
+   * next streamed entry immediately re-pins `.log-lines` to the bottom,
+   * silently undoing the Ctrl+Home/PageUp the user just pressed.
    */
   private scrollContent(action: ScrollAction): void {
     const el = resolveScroller(this.contentHost);
+    if (isUpwardAction(action) && el.classList.contains('log-lines')) pauseFollow();
     el.scrollTop = nextScrollTop(action, el);
   }
 

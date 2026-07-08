@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PAGE_OVERLAP,
+  isUpwardAction,
   nextScrollTop,
   pageStep,
   pickScroller,
@@ -96,5 +97,17 @@ describe('pickScroller', () => {
 
   it('falls back to the host when no inner candidate exists', () => {
     expect(pickScroller([], snugHost)).toBe(snugHost);
+  });
+});
+
+describe('isUpwardAction', () => {
+  it('top and page-up move toward the top', () => {
+    expect(isUpwardAction('top')).toBe(true);
+    expect(isUpwardAction('page-up')).toBe(true);
+  });
+
+  it('bottom and page-down do not', () => {
+    expect(isUpwardAction('bottom')).toBe(false);
+    expect(isUpwardAction('page-down')).toBe(false);
   });
 });

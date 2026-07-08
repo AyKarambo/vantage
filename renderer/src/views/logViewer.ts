@@ -19,6 +19,20 @@ let minLevel: LogLevel = 'debug'; // 'debug' = show everything the main process 
 let follow = true;
 let feedStarted = false;
 let activeList: HTMLElement | null = null;
+let redrawFollow: (() => void) | null = null;
+
+/**
+ * Pause the live tail without touching scroll position — for the shell's
+ * Ctrl+Home/PageUp handling (spec #73): an upward jump on `.log-lines` would
+ * otherwise be immediately undone by the next streamed entry re-pinning the
+ * scroller to the bottom (`onLogEntry` below). A no-op if already paused or
+ * the view isn't mounted.
+ */
+export function pauseFollow(): void {
+  if (!follow) return;
+  follow = false;
+  redrawFollow?.();
+}
 
 function ensureFeed(): void {
   if (feedStarted) return;
@@ -68,6 +82,7 @@ export function logViewer(_ctx: ViewContext): HTMLElement {
       },
     }));
   };
+  redrawFollow = drawFollow;
   drawFollow();
 
   const filter = segmented<LogLevel>({

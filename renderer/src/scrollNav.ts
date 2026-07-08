@@ -33,6 +33,16 @@ export function pageStep(clientHeight: number): number {
   return Math.max(clientHeight - PAGE_OVERLAP, Math.ceil(clientHeight / 2));
 }
 
+/**
+ * Whether an action moves the scroller upward (toward the top). Used by the
+ * shell to pause the Logs view's live-tail follow before an up action runs —
+ * otherwise the next streamed entry immediately re-pins the scroller to the
+ * bottom, making `top`/`page-up` appear to do nothing on that view.
+ */
+export function isUpwardAction(action: ScrollAction): boolean {
+  return action === 'top' || action === 'page-up';
+}
+
 /** The clamped target `scrollTop` for an action — never negative, never past the end. */
 export function nextScrollTop(action: ScrollAction, m: ScrollMetrics): number {
   const max = Math.max(0, m.scrollHeight - m.clientHeight);
