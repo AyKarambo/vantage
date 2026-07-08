@@ -126,12 +126,21 @@ function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntr
   return items.map((i) => ({ ...i, dimension }));
 }
 
-/** Most recently flagged candidate whose name mentions the key (case-insensitive). */
+/**
+ * Most recently flagged candidate whose name mentions the key. Both sides are
+ * normalized to lowercase alphanumerics before the substring test, so casing,
+ * apostrophe styles ("King’s Row" vs "King's Row") and spacing never break the
+ * link — and a role prefill written with the display label ("Open Q") still
+ * links the `openQ` role key.
+ */
 function linkedTarget(key: string, candidates: AuthoredTarget[]): AuthoredTarget | undefined {
-  const needle = key.toLowerCase();
+  const needle = normalize(key);
+  if (!needle) return undefined;
   return candidates
-    .filter((t) => t.name.toLowerCase().includes(needle))
+    .filter((t) => normalize(t.name).includes(needle))
     .sort((a, b) => (b.activatedAt ?? b.createdAt) - (a.activatedAt ?? a.createdAt))[0];
 }
+
+const normalize = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 const decided = (wl: WinLoss): number => wl.wins + wl.losses;

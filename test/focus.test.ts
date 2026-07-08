@@ -219,6 +219,18 @@ describe('linkFocusTargets', () => {
     expect(linked.progress?.deltaPts).toBeUndefined();
   });
 
+  it('matches across apostrophe styles and role display labels', () => {
+    // Curly apostrophe in the target name still links the straight-quoted key…
+    const mapGames = [0, 1, 2].map((i) => at(i, 'Loss', { map: "King's Row" }));
+    const curly = target('Practice King’s Row: warm up unranked');
+    expect(linkFocusTargets(entriesFor(mapGames), [curly], mapGames)[0].progress?.targetId).toBe(curly.id);
+    // …and a role prefill written with the display label links the openQ key.
+    const roleGames = [0, 1, 2, 3, 4].map((i) => at(i, 'Loss', { role: 'openQ', map: `M${i}` }));
+    const label = target('Practice Open Q: warm up unranked + review one replay');
+    const entries = focusEntries(roleGames).filter((e) => e.dimension === 'role');
+    expect(linkFocusTargets(entries, [label], roleGames)[0].progress?.targetId).toBe(label.id);
+  });
+
   it('links hero and role entries too', () => {
     const games = [
       ...[0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Ana'], map: `H${i}` })),
