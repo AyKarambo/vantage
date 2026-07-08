@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { focusEntries, focusTrend, linkFocusTargets, type GameRecord } from '../src/core/analytics';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
+import { computeDashboard } from '../src/core/dashboardData';
 import type { Result } from '../src/core/model';
 
 const T0 = Date.parse('2026-06-01T12:00:00Z');
@@ -228,5 +229,48 @@ describe('linkFocusTargets', () => {
     expect(linked.find((e) => e.dimension === 'hero' && e.key === 'Ana')?.progress).toBeDefined();
     expect(linked.find((e) => e.dimension === 'role' && e.key === 'support')?.progress).toBeDefined();
     expect(linked.find((e) => e.dimension === 'map')?.progress).toBeUndefined();
+  });
+});
+
+describe('dashboard focusItems payload', () => {
+  const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+  const at = (i: number, result: Result, p: Partial<GameRecord> = {}): GameRecord =>
+    game({ result, timestamp: T0 + i * HOUR, ...p });
+
+  it('ships the cross-dimension list on DashboardData', () => {
+    const games = run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], {
+      map: 'Midtown', role: 'tank', heroes: ['Reinhardt'],
+    });
+    const d = computeDashboard(games, { days: 'all' }, demo);
+    expect(d.focusItems.map((e) => e.dimension).sort()).toEqual(['hero', 'map', 'role']);
+    expect(d.focusItems.every((e) => e.net > 0)).toBe(true);
+  });
+
+  it('ranks over the filtered range but tracks progress over the full history', () => {
+    const now = Date.now();
+    const DAY = 86400000;
+    const rec = (daysAgo: number, result: Result): GameRecord =>
+      game({ result, map: 'Colosseo', heroes: [], timestamp: now - daysAgo * DAY });
+    const games = [
+      // Old games (outside a 7-day window): 4 decided losses before the flag.
+      rec(40, 'Loss'), rec(39, 'Loss'), rec(38, 'Loss'), rec(37, 'Loss'),
+      // Recent games (inside the window): 1W3L → in-range net 2.
+      rec(3, 'Win'), rec(2, 'Loss'), rec(1, 'Loss'), rec(0.5, 'Loss'),
+    ];
+    const target: AuthoredTarget = {
+      id: 'tg1', name: 'Practice Colosseo: warm up unranked', mode: 'self', rule: 'You grade it',
+      createdAt: now - 30 * DAY, isActive: true,
+    };
+    const d = computeDashboard(games, { days: 7 }, demo, { targets: [target] });
+    const entry = d.focusItems.find((e) => e.key === 'Colosseo');
+    // Ranking sees only the 4 in-range games…
+    expect(entry).toMatchObject({ dimension: 'map', games: 4, net: 2 });
+    // …but the linked-target progress runs over the full history.
+    expect(entry?.progress).toMatchObject({ targetId: 'tg1', gamesSince: 4, deltaPts: 25 });
+  });
+
+  it('is empty when nothing is net-losing', () => {
+    const d = computeDashboard(run(4, ['Win'], { map: 'Esperanca' }), { days: 'all' }, demo);
+    expect(d.focusItems).toEqual([]);
   });
 });
