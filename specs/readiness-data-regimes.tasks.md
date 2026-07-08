@@ -62,6 +62,24 @@ Derived from `specs/readiness-data-regimes.plan.md`. Ordered dependencies-first.
   - **Check:** docs describe regimes, the patch-day note, "load alone never red", and confidence cap; superseded note present.
   - **Size:** S
 
+- [ ] **T11 — Passivity guard: output-gated deaths credit** *(revision 2026-07-08)*
+  - **Goal:** Deaths' favorable credit scaled by `clamp(1 + outputZ/passivityRampZ, 0, 1)` (weight leaves the blend with it); deaths-adverse unchanged; raw `metricSums` kept; `passivityRampZ = 0.5` constant.
+  - **Files:** `src/core/readiness/performance.ts`, `constants.ts`, tests.
+  - **Check:** scared-play fixture (damage+elims down, deaths down) fires the decline index; deaths-down-while-output-holds still favorable (T9 pin unchanged); deaths-up unchanged in every context; graduated boundary (no cliff at outputZ 0); `deaths-improve-damage-fall` scenario re-pinned.
+  - **Size:** M
+
+- [ ] **T12 — Rank-gated undertraining nudge** *(revision 2026-07-08)*
+  - **Goal:** New pure `rankTrend.ts` (`'climbing'|'stagnant'|'unknown'` from anchors + srDelta-carrying comps over a 14-day window, evidence-gated); `ReadinessContext.rankAnchors`; `StateAt.rankTrend`; `freqPen` + low-frequency signal fire only on `stagnant` with new copy; both call sites pass anchors; methodology + README lines.
+  - **Files:** `src/core/readiness/rankTrend.ts` (new), `constants.ts`, `score.ts`, `performance.ts` (ctx type), `index.ts`, `src/core/dashboardData.ts`, `src/main/index.ts`, `renderer/src/views/readiness.ts`, docs, tests.
+  - **Check:** no rank data ⇒ nudge+penalty silent; evidenced climbing ⇒ silent; evidenced stagnation ⇒ signal (new copy) + capped freqPen; unlogged-srDelta window reads `unknown`, never `stagnant`; per-day gate on trend days; typecheck clean across ctx change.
+  - **Size:** L
+
+- [ ] **T13 — Catalog + docs re-pins for the revision**
+  - **Goal:** Re-pin affected scenario rows (`deaths-improve-damage-fall` → scared-play decline; weekend scenarios → 75 silent); add two new rows (scared-play; weekend + proven stagnation → hint); refresh `.scenarios.md` tables; full suite green.
+  - **Files:** `test/readinessScenarios.test.ts`, `specs/readiness-data-regimes.scenarios.md`, affected `readiness*.test.ts`.
+  - **Check:** `npm test` green; catalog tables match engine output; scenario count ≥ 28.
+  - **Size:** M
+
 ---
 
 ## Consistency check (every spec AC → task)
@@ -70,7 +88,8 @@ Derived from `specs/readiness-data-regimes.plan.md`. Ordered dependencies-first.
 **GEP-outage resilience:** smooth down/up, label passes through hybrid, no adverse from missing stats → T2/T4/T9 (outage trace, incl. non-uniform volume). ✓
 **Manual dynamic range:** real fixture ⇒ loaded → T4; +winrate/+tilt ⇒ red reachable → T5/T6; one-family grind ≤ loaded → T4; moderate rested play stays green → T4/T9 (green + hobbyist + newcomer pins). ✓
 **Promoted results arm:** manual dip may exceed −15/sets objectiveAdverse → T5; b=1 unchanged → T5; sub-gate inert → T5. ✓
-**Metric direction (owner amendment):** deaths/10 lower=favorable pin → T9. ✓
+**Metric direction & passivity (owner amendment, revised 2026-07-08):** deaths lower=favorable-while-output-holds + scared-play fires decline + graduated boundary → T9 (original pin) / T11. ✓
+**Rank-gated undertraining nudge (revision 2026-07-08):** all four ACs (no-data silent / climbing silent / stagnation fires with copy+penalty / per-day gate) → T12; catalog rows → T13. ✓
 **Subjective & grades:** max adverse bounded −25, no solo red → T6; b=1 keeps −15 → T6; all-`missed` grades add no penalty → T6/T9. ✓
 **Confidence:** b=0 ≤ medium whatever mental coverage → T7. ✓
 **Contract & screen:** regime present & typed on all producers → T3; badge + methodology per regime, guard → T8; degenerate inputs never throw → T3/T9. ✓

@@ -174,6 +174,43 @@ New `test/readinessRegime.test.ts` + extensions, using `test/readinessFixtures.t
 
 **Rejected alternatives:** two-mode hard switch (score cliff at flip; rejected in spec); winrate slope-150 additive extra (R4 — reddens on noise); `b` from binary `countedGames` (R1 — day-index cliff); ungated streak arm (R2 — hobbyist false-amber); shaped/`(1−b)²` fade and residual-at-b=1 floor (curvature is an evidence-free knob; residual breaks bit-identity or double-counts); a manual-specific/`b`-dependent red-gate predicate (fresh false-alarm surface + gate flips discontinuously on one game — `sustainedLoad`'s absolute branch already fires on the fixture); winrate-adequacy as a `b` input (breaks the b=0 AC on the 1,538-manual-game fixture, violates absence-neutrality).
 
+---
+
+## 9. Revision delta 2026-07-08 — coaching refinements (spec §7, Resolved #8–#11)
+
+### 9a. Passivity guard — output-gated deaths credit (`performance.ts`)
+
+The per-game metric loop computes each active metric's `aligned` z as today, then derives **`outputZ`** = weight-normalized mean of the *non-death* active metrics' aligned z. The deaths metric's contribution is scaled by a **credit factor** only when it is favorable:
+
+```
+deathsFactor = deathsAligned > 0
+  ? clamp(1 + outputZ / T.passivityRampZ, 0, 1)   // 1 at outputZ ≥ 0; 0 at outputZ ≤ −passivityRampZ; linear between
+  : 1                                              // deaths ABOVE baseline: full adverse weight, always
+weighted  += deathsAligned * w * deathsFactor
+weightSum += w * deathsFactor                      // at factor 0 deaths leaves the blend entirely →
+                                                   // the game score IS the pure output decline (spec intent)
+```
+
+- `passivityRampZ = 0.5` — graduated boundary (no per-game cliff at outputZ = 0; continuity discipline).
+- No active output metrics (degenerate) ⇒ factor 1 (benefit of the doubt — can't prove scared).
+- `metricSums`/`metricMeans` keep the RAW aligned values (the decline label stays truthful about direction).
+- Regime-independent by design (owner revision applies at every b). Audited against existing pins: the b=1 goldens are unaffected (healthy fixture: aligned 0 ⇒ no favorable credit in play; active-decline fixture: deaths UP ⇒ factor 1); the T9 "deaths below while others hold" pin has outputZ = 0 ⇒ factor 1 ⇒ unchanged. Only the `deaths-improve-damage-fall` scenario legitimately re-pins (that's the point).
+
+### 9b. Rank-gated undertraining nudge (`rankTrend.ts` new + `score.ts`/`index.ts`/ctx)
+
+**Evidence model (the load-bearing subtlety):** the rank engine moves by `srDelta ?? 0`, so a window full of comps *without* logged srDelta reads flat — which is *unlogged*, not *stagnant*. Stagnation therefore requires **real movement data**: per anchor key (account::role), the measurable sub-window must span ≥ `rankEvidenceMinDays` AND contain ≥ `rankEvidenceMinDeltas` srDelta-carrying competitive games. Keys failing that contribute no evidence; if NO key has evidence, the trend is `unknown` and the nudge + `freqPen` are silent (spec: never encourage volume on zero evidence).
+
+New pure `src/core/readiness/rankTrend.ts` (imports `../rank` — core-pure): for each anchor key, `startState = computeRank(anchor, comps with ord < windowStart & ts > setAt)`, `endState = computeRank(anchor, comps with ord ≤ refOrdinal & ts > setAt)` (ordinal-filtered comps mirroring `competitiveComps`' competitive-only classification — avoids ts↔ordinal inversion; an anchor set inside the window automatically starts from its own ground truth). `delta = rankToPoints(end) − rankToPoints(start)`. Trend = `'climbing'` if any evidenced key's delta ≥ `rankClimbMinPoints`, else `'stagnant'` if ≥ 1 evidenced key, else `'unknown'`.
+
+- `ReadinessContext` gains `rankAnchors?: RankAnchorMap` (dashboard read-model already receives them; the launch toast passes the store's map). `EMPTY_CONTEXT` unchanged shape (absent ⇒ `unknown` ⇒ silent).
+- `StateAt` gains `rankTrend: 'climbing' | 'stagnant' | 'unknown'`, computed per `refOrdinal` in `computeStateAt` ⇒ trend days apply the gate as-of each day for free.
+- `loadParts` gains the gate: `freqPen` applies only when `rankTrend === 'stagnant'` (signal and penalty move together).
+- `buildSignals` low-frequency branch requires `stagnant` and gets the stagnation-aware copy: *"ranks flat over ~2 weeks at only ~N active days/week — a bit more regular practice may be the missing stimulus"* (severity logic unchanged).
+- Constants: `rankStagnationWindowDays 14`, `rankEvidenceMinDays 7`, `rankEvidenceMinDeltas 5`, `rankClimbMinPoints 1` (any net-positive movement counts — generous bar, err toward silence).
+- Perf: O(anchor-keys × comps) per state evaluation, trivially within budget.
+
+**Affected pins:** `weekend-warrior` and `weekend-only-consistency-nudge` scenarios lose their −3 freqPen (no rank data ⇒ silent) → re-pin at 75; methodology + README lines updated; two new catalog rows (scared-play decline; weekend player with proven stagnation → hint shows).
+
 **Open risks (carried forward):**
 1. **Knife-edge red variants** land at pre-round 40.4–40.5. Every red fixture is an exact-score assertion; any future retune of `absArmCap`, `dampFactor`, `subjAgreeFactor`, or `tiltPenSlope` must re-run §6.
 2. **Tilt-alone red needs ~0.45**, marginally above the 0.40 elevated bar (baseTilt drifts up as acute tilt rises, since the base window contains the acute window). Spec AC ("at/above the elevated bar ⇒ reachable") is satisfied but tight — fixtures use 0.45. *A genuine product call the owner may want to revisit* (widening the manual tilt slope would lower it, at the cost of taxing everyday tilt — deliberately not done). **Flagged, defaulted conservative.**

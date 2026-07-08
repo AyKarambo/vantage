@@ -1,6 +1,6 @@
 # Feature spec: Readiness data regimes — graceful stats↔manual blending (`readiness-data-regimes`)
 
-**Source:** Live-data diagnosis 2026-07-07 (real `history.db`, 1,538 games: 0% per-10 qualification, 100% mental/grades coverage, score pinned at 64/"steady" through a 21-day no-rest grind) + spec interview 2026-07-07. **Approved 2026-07-07** with two owner amendments: GEP patch-day outage resilience (in scope) and a metric-direction regression pin (deaths/10 lower = better, verified already implemented).
+**Source:** Live-data diagnosis 2026-07-07 (real `history.db`, 1,538 games: 0% per-10 qualification, 100% mental/grades coverage, score pinned at 64/"steady" through a 21-day no-rest grind) + spec interview 2026-07-07. **Approved 2026-07-07** with two owner amendments: GEP patch-day outage resilience (in scope) and a metric-direction regression pin (deaths/10 lower = better, verified already implemented). **Owner revision 2026-07-08 (approved via interview):** passivity guard (output-gated deaths credit) + rank-gated undertraining hint — see In-Scope §7 and Resolved #8–#11.
 **Related specs:** `readiness-score-rework.spec.md` (the current model — this spec **supersedes exactly one of its resolved decisions**: *"weight is never reallocated to noise"*; every other decision, gate, exemption, and honesty constraint carries over unchanged), `supercompensation-detection.spec.md` (already superseded), `screen-review.spec.md` / `screen-targets.spec.md` (grades feeding the dampener).
 
 ## Intent (WHAT & WHY)
@@ -56,6 +56,12 @@ Unchanged in spirit: evidence-informed wellness nudge, not a diagnosis; anti-fal
 - README + methodology copy; **superseded-decision note** added to `readiness-score-rework.spec.md` §objective-performance pointing here.
 - Full vitest coverage for the dial, the new arm, the promoted winrate ceiling, gates, and blending continuity — including a **real-data-shaped regression fixture**: manual-only history, 21 consecutive active days at 12+ games/day, results at baseline, tilt below the bar ⇒ must read `loaded` (amber), not `steady`; add an elevated-tilt or winrate-dip variant ⇒ red reachable; plus a **patch-day outage fixture** (stats-rich history, multi-day coverage gap, recovery).
 
+### 7. Coaching refinements *(owner revision 2026-07-08)*
+
+**7a. Passivity guard — output-gated deaths credit.** In the per-10 decline blend, the deaths metric's *favorable* direction (fewer deaths than baseline) earns credit **only while the game's output holds**: when the active non-death metrics (damage/elims — healing where applicable) are in aggregate at/above the player's baseline, fewer deaths counts as improvement exactly as today; when output is *below* baseline, the deaths improvement earns **zero credit** (never negative) — so a "playing scared" stretch (damage+elims down, deaths down) reads as the pure output decline it is, instead of cancelling out. Deaths *above* baseline stays adverse in every context (unchanged). The aggressive direction is deliberately untouched: damage+elims up with slightly more deaths already nets positive through the existing weighted blend. The gate must follow the model's continuity discipline (no hard per-game cliff at output z = 0 — graduated near the boundary, mechanism in techplan).
+
+**7b. Rank-gated undertraining hint.** The low-frequency nudge (signal **and** its small `freqPen`, gated together — the score never dips invisibly) fires only when **all** hold: (a) low play frequency as today (`activeDaysPerWeek < lowFrequencyDaysPerWeek`); (b) **rank evidence exists** — at least one account(::role) has enough rank data to compute a net movement across the stagnation window (~14 days, constant in techplan); (c) **no account is climbing** — none shows net-positive rank movement over that window. No rank data ⇒ both stay **silent**: the app never encourages volume on zero evidence. A low-frequency player who *is* climbing is the healthy high-focus + supercompensation pattern working — the model says nothing. Signal copy shifts from "consistency builds skill faster" toward "your ranks have been flat for ~2 weeks — a bit more regular practice might be the missing stimulus" (final copy in techplan). Rank movement is computed per-day-consistently (trend days included) via the pure `core/rank` engine; `ReadinessContext` gains the rank input (anchors or precomputed trends — techplan decides the shape). The `rusty`/stale bands and rest curve are untouched.
+
 ## Out-of-Scope
 
 - Any capture-UX change (slider prompts, mental-log nudges) — coverage grows or it doesn't; the model adapts either way.
@@ -71,6 +77,7 @@ Unchanged in spirit: evidence-informed wellness nudge, not a diagnosis; anti-fal
 - **Anti-false-alarm bias stays paramount**: every promoted or new arm keeps own-baseline comparison where an outcome exists, minimum samples, sustained-evidence accumulation, and central tuning with rationale lines. The absolute-load arm is the sole deliberately norm-free mechanism, and it alone can never produce red.
 - **Absence-of-data neutrality**: a game (or day) lacking per-10 stats contributes nothing to any adverse index — missing data lowers coverage and confidence, never the score directly.
 - **Continuity of the blend**: score is continuous and monotone in `b` — adding one qualifying GEP game may only move the score by a bounded epsilon (no regime cliff), in both directions (coverage rising *or* falling).
+- **Never encourage volume on zero evidence** *(owner revision 2026-07-08)*: the undertraining nudge requires positive proof of rank stagnation; missing rank data silences it entirely.
 - **Deterministic & total**; `safeReadiness` stays; O(n) per refresh.
 - Score continuity across the release is **not promised** (trend reshapes once; release-notes worthy).
 
@@ -102,9 +109,19 @@ Unchanged in spirit: evidence-informed wellness nudge, not a diagnosis; anti-fal
 - Given the identical decline at `b = 1`, when computed, then the results arm behaves exactly as today (cap −15, corroboration role).
 - Given samples below the winrate gates, when computed, then the arm is silently inert in every regime.
 
-**Metric direction (regression pin — owner amendment):**
+**Metric direction & passivity guard (owner amendment 2026-07-07, revised 2026-07-08):**
 
-- Given acute games whose deaths/10 run *below* the player's baseline (fewer deaths) while other metrics hold at baseline, when the decline index is computed, then the deaths contribution is favorable (sign-aligned: lower deaths = better) and no decline fires from it; symmetrically, deaths/10 above baseline contributes adversely. *(Pins the existing `aligned = −z` deaths flip in `performance.ts` so it can never silently invert.)*
+- Given acute games whose deaths/10 run *below* the player's baseline (fewer deaths) **while output metrics hold at/above baseline**, when the decline index is computed, then the deaths contribution is favorable (sign-aligned: lower deaths = better) and no decline fires from it. *(The original pin, now conditional on output holding.)*
+- Given acute games where damage+elims run *below* baseline **and** deaths/10 also run below baseline ("playing scared"), when computed, then the deaths improvement contributes **no** favorable credit and the sustained output decline can fire the decline index on its own.
+- Given deaths/10 above baseline, in any output context and any regime, then the deaths contribution is adverse (unchanged; pins the `aligned = −z` flip so it can never silently invert).
+- Given output near the baseline boundary, then the deaths-credit gate is graduated (no hard per-game cliff at output z = 0).
+
+**Rank-gated undertraining nudge (owner revision 2026-07-08):**
+
+- Given a low-frequency player with no rank data on any account, when computed, then neither the low-frequency signal nor `freqPen` applies, in any regime.
+- Given a low-frequency player where at least one account has rank data and **some** account moved net-positive over the stagnation window, when computed, then the nudge and penalty stay silent.
+- Given a low-frequency player with rank data and **no** account climbing over the window, when computed, then the signal appears with the stagnation-aware copy and the small `freqPen` applies — capped as today, never escalating the band on its own.
+- Given the trend chart over a mixed period, then each day applies the gate as-of that day's rank evidence.
 
 **Subjective & grades:**
 
@@ -129,7 +146,11 @@ Unchanged in spirit: evidence-informed wellness nudge, not a diagnosis; anti-fal
 4. **Grades stay dampener-only** — self-graded misses never count as adverse evidence (anti-gaming, anti-self-punishment). *(Brainstorm 2026-07-07, unchallenged.)*
 5. **Supersession scope** — exactly one prior decision reversed ("weight is never reallocated to noise" → regime-aware reallocation, priced in confidence + label); all other `readiness-score-rework` decisions stand.
 6. **GEP outages are a first-class recurring scenario** *(owner amendment 2026-07-07)* — game updates take GEP down for days while manual logging continues; the blend must smooth through outage and recovery, and absence of stats is never adverse evidence.
-7. **Deaths direction already correct** *(owner amendment 2026-07-07)* — verified in `performance.ts` (`aligned = m === 'deaths' ? −z : z`); pinned by a regression AC rather than re-specified.
+7. **Deaths direction already correct** *(owner amendment 2026-07-07)* — verified in `performance.ts` (`aligned = m === 'deaths' ? −z : z`); pinned by a regression AC rather than re-specified. *(Revised 2026-07-08 by #8 — the favorable direction is now output-gated.)*
+8. **Passivity guard — output-gated deaths credit** *(interview 2026-07-08)* — fewer deaths earns credit only while output holds; when output is also down the credit is zero (never negative). Chosen over "passivity actively adverse" (false-alarm risk on genuine efficiency shifts) and "deaths never earn credit" (loses a real positioning-improvement signal).
+9. **Aggression unchanged** *(interview 2026-07-08)* — damage+elims up with slightly more deaths already nets positive through the weighted blend; no explicit exemption added.
+10. **Undertraining hint gated on proven rank stagnation** *(interview 2026-07-08)* — signal and `freqPen` gated together; silence when rank data is missing; philosophy: the app never encourages volume for its own sake — low-volume climbing is the healthy pattern working.
+11. **Scope** *(interview 2026-07-08)* — both refinements land on the same branch under this spec; plan and tasks delta-updated.
 
 ## Open Questions (techplan)
 
