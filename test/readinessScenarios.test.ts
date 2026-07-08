@@ -1,5 +1,5 @@
 /**
- * Scenario catalog — 26 engine-verified player stories pinning WHEN the readiness
+ * Scenario catalog — engine-verified player stories pinning WHEN the readiness
  * model produces WHICH score. Each was hand-computed from READINESS_TUNING first,
  * then verified against the real engine (twice: by its designing agent and by an
  * independent re-run) — so a failure here means the CALCULATION changed, not the
@@ -10,13 +10,14 @@ import { computeReadiness } from '../src/core/readiness';
 import { ts, span, statSpan, graded, target, TILT, CALM } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
 import type { AuthoredTarget } from '../src/core/targets';
+import type { RankAnchorMap } from '../src/core/rank';
 
 interface Scenario {
   id: string;
   /** One-line player story (see the scenarios doc for the full narrative). */
   story: string;
   expect: { score: number | null; band: string; regime: string; confidence: string };
-  fixture: () => { games: GameRecord[]; now: number; targets: AuthoredTarget[] };
+  fixture: () => { games: GameRecord[]; now: number; targets: AuthoredTarget[]; rankAnchors?: RankAnchorMap };
 }
 
 const SCENARIOS: Scenario[] = [
@@ -116,8 +117,8 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "weekend-only-consistency-nudge",
-    story: "Weekend-only player: consistency nudge",
-    expect: {"score":72,"band":"fresh","regime":"manual","confidence":"medium"},
+    story: "Weekend-only player, no rank data: nudge stays silent (rank-gated, revision 2026-07-08)",
+    expect: {"score":75,"band":"fresh","regime":"manual","confidence":"medium"},
     fixture: () => {
       const weekendDays = [5, 6, 12, 13, 19, 20, 26, 27];
       const games = weekendDays.flatMap((d) => span(d, d, { perDay: 5, mental: CALM }));
@@ -140,8 +141,8 @@ const SCENARIOS: Scenario[] = [
   // --- everyday-green ---
   {
     id: "weekend-warrior",
-    story: "Weekend-only player stays fresh, with a tiny consistency nudge",
-    expect: {"score":72,"band":"fresh","regime":"manual","confidence":"low"},
+    story: "Weekend-only player stays fresh — nudge silent without rank evidence (rank-gated, revision 2026-07-08)",
+    expect: {"score":75,"band":"fresh","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = [5, 6, 12, 13, 19, 20, 26, 27].flatMap((d) => span(d, d, { perDay: 5 }));
       const now = ts(27, 20);
@@ -368,13 +369,31 @@ const SCENARIOS: Scenario[] = [
       return { games, now, targets: [] };
     },
   },
+  {
+    id: "weekend-stagnant-nudge-fires",
+    story: "Weekend player with PROVEN rank stagnation: the consistency nudge fires (revision 2026-07-08)",
+    expect: {"score":72,"band":"fresh","regime":"manual","confidence":"medium"},
+    fixture: () => {
+      // Same weekend-only pattern, but every game carries a logged SR change netting flat,
+      // against an anchor set before the window — evidence of stagnation, so the nudge speaks.
+      const days = [5, 6, 12, 13, 19, 20, 26, 27];
+      const games = days
+        .flatMap((d) => span(d, d, { perDay: 5, mental: CALM }))
+        .map((g, i) => ({ ...g, srDelta: i % 2 === 0 ? 20 : -20 }));
+      const rankAnchors: RankAnchorMap = {
+        'Main::damage': { tier: 'Gold', division: 3, progressPct: 50, setAt: ts(0, 9) },
+      };
+      const now = ts(27, 20);
+      return { games, now, targets: [], rankAnchors };
+    },
+  },
 ];
 
 describe('readiness scenario catalog (engine-verified)', () => {
   for (const s of SCENARIOS) {
     it(`${s.id} — ${s.story}`, () => {
-      const { games, now, targets } = s.fixture();
-      const r = computeReadiness(games, now, { targets });
+      const { games, now, targets, rankAnchors } = s.fixture();
+      const r = computeReadiness(games, now, { targets, rankAnchors });
       expect(r.score).toBe(s.expect.score);
       expect(r.band).toBe(s.expect.band);
       expect(r.regime).toBe(s.expect.regime);

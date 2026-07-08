@@ -216,6 +216,15 @@ function readinessMethodology(close: () => void): HTMLElement {
         'ratings still count in full.'),
     ),
     h('div', null,
+      h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'The consistency nudge never pushes volume'),
+      h('div', { class: 'hint', style: { lineHeight: '1.6' } },
+        'Playing few days a week only earns a nudge when your tracked ranks have provably been flat ' +
+        'for about two weeks (it needs your rank anchors plus logged SR changes to say so). If your ' +
+        'ranks are climbing on low volume — the healthy high-focus + recovery pattern — or there ' +
+        'simply isn’t enough rank data to tell, the coach says nothing. Short, focused sessions ' +
+        'with real rest beat playing more for its own sake.'),
+    ),
+    h('div', null,
       h('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' } }, 'Training-load model'),
       h('div', { class: 'hint', style: { lineHeight: '1.6' } },
         'Recent volume is compared against YOUR OWN norm — a stable 10-games-a-day rhythm is habit, ' +

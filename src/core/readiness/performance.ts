@@ -14,6 +14,7 @@
 
 import type { GameRecord, TargetGrade } from '../analytics';
 import type { AuthoredTarget } from '../targets/types';
+import type { RankAnchorMap } from '../rank/types';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 import { winLoss } from '../analytics';
 import { READINESS_TUNING as T } from './constants';
@@ -35,6 +36,11 @@ import { blendFor } from './regime';
 export interface ReadinessContext {
   /** The player's authored improvement targets (active-ness/creation filtered inside). */
   targets: AuthoredTarget[];
+  /**
+   * Per-(account::role) rank anchors — evidence input for the rank-gated undertraining
+   * nudge (spec §7b). Absent ⇒ trend `unknown` ⇒ the nudge stays silent.
+   */
+  rankAnchors?: RankAnchorMap;
 }
 
 export const EMPTY_CONTEXT: ReadinessContext = { targets: [] };

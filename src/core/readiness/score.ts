@@ -24,6 +24,7 @@ import { EMPTY_CONTEXT, EMPTY_PERF, perfState, type PerfState, type ReadinessCon
 import { EMPTY_SUBJ, subjState, type SubjState } from './subjective';
 import { clamp } from './stats';
 import { regimeFor } from './regime';
+import { rankTrendFor, type RankTrend } from './rankTrend';
 import type { ReadinessBand, ReadinessDriver, ReadinessRegime } from './types';
 
 export interface StateAt {
@@ -48,6 +49,8 @@ export interface StateAt {
   blend: number;
   /** Display-only regime label derived from `blend`. */
   regime: ReadinessRegime;
+  /** Rank evidence over the stagnation window — gates the undertraining nudge (spec §7b). */
+  rankTrend: RankTrend;
 }
 
 const EMPTY_STATE: StateAt = {
@@ -70,6 +73,7 @@ const EMPTY_STATE: StateAt = {
   driver: 'neutral',
   blend: 0,
   regime: 'manual',
+  rankTrend: 'unknown',
 };
 
 /**
@@ -103,7 +107,12 @@ export function restEffectFor(restDays: number): number {
  * to the shipped engine in the stats regime. It never feeds a red gate: max
  * abs-only load (24 + longSession 8) leaves the score at 43 > redCut.
  */
-export function loadParts(load: LoadState, restDays: number, blend: number): { delta: number; overloadPen: number } {
+export function loadParts(
+  load: LoadState,
+  restDays: number,
+  blend: number,
+  rankTrend: RankTrend = 'unknown',
+): { delta: number; overloadPen: number } {
   const trust = Math.min(1, load.chronicActiveDays / T.minChronicActiveDays);
   const ratioPen = load.ratio > T.ratioElevated ? Math.min((load.ratio - T.ratioElevated) * 30, T.ratioPenCap) : 0;
   const habitBar = Math.max(T.absElevatedPerDay, T.habitFactor * load.chronicPerDay);
@@ -132,8 +141,11 @@ export function loadParts(load: LoadState, restDays: number, blend: number): { d
   const absArm = blend >= 1 ? 0 : (1 - blend) * absTrust * absRaw; // exact 0 at b=1 (bit-identity)
 
   const overloadPen = Math.min(T.overloadPenCap, ratioPen + volPen + streakPen + longPen + absArm) * trust * fade;
+  // The low-frequency nudge fires only on PROVEN rank stagnation (spec §7b): with the trend
+  // unknown (no rank data) or climbing, both the penalty and its signal stay silent — the app
+  // never encourages volume on zero evidence, and low-volume climbing is the healthy pattern.
   const freqPen =
-    load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
+    rankTrend === 'stagnant' && load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
       ? Math.min(T.freqPenCap, (T.lowFrequencyDaysPerWeek - load.activeDaysPerWeek) * 3)
       : 0;
   return {
@@ -164,7 +176,8 @@ export function computeStateAt(
     (s) => s.endOrdinal === lastActiveOrdinal && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
   );
 
-  const lp = loadParts(load, restDays, perf.blend);
+  const rankTrend = rankTrendFor(upTo, refOrdinal, ctx.rankAnchors);
+  const lp = loadParts(load, restDays, perf.blend, rankTrend);
   const driver: ReadinessDriver =
     restDays >= T.rustSignalDays ? 'rust' : restDays === 0 && lp.overloadPen >= T.driverBar ? 'overload' : 'neutral';
 
@@ -189,6 +202,7 @@ export function computeStateAt(
     driver,
     blend: perf.blend,
     regime: regimeFor(perf.blend),
+    rankTrend,
   };
 }
 

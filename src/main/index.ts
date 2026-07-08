@@ -451,7 +451,7 @@ function main(): void {
     const readiness = safeReadiness(
       history.all().filter((g) => isCompetitive(g.gameType)),
       Date.now(),
-      { targets: manual.targets() },
+      { targets: manual.targets(), rankAnchors: rankAnchors.map() },
     );
     if (readiness.band === 'in-the-hole') {
       tray.notify(

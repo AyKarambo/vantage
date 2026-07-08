@@ -65,8 +65,12 @@ comms · toxicity · leavers · your improvement target).
   missing stats are never counted against you). On manual logs alone (today's norm, pending Overwolf
   approval) results-vs-your-own-baseline are promoted and a norm-free absolute training-load read
   (consecutive days, daily volume, marathon sessions) fills in for unmeasurable outcomes, with
-  confidence capped at medium; **load alone still never reads red in any regime**. A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
-  not an alarm), a thin weekly rhythm gets a consistency signal. Deliberately conservative and
+  confidence capped at medium; **load alone still never reads red in any regime**. A simultaneous
+  drop in output *and* deaths reads as playing scared, not as improvement (deaths only earn credit
+  while output holds). A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
+  not an alarm); a thin weekly rhythm gets a consistency nudge **only on proven rank stagnation**
+  (~2 weeks of logged SR changes with no account climbing) — the coach never encourages volume
+  for its own sake. Deliberately conservative and
   framed as an evidence-informed **wellness nudge, not a diagnosis** — the methodology (and
   its limits, e.g. a balance patch looks like a decline too) lives behind the
   **"How is this calculated?"** modal. Optional opt-in tray reminder at launch; extends

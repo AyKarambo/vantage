@@ -217,15 +217,18 @@ describe('undertraining — rust after a layoff', () => {
 // ---- undertraining: low weekly frequency -----------------------------------
 
 describe('undertraining — low play frequency', () => {
-  it('a weekends-only player gets the consistency nudge while staying green', () => {
+  it('a weekends-only player stays green — and the nudge stays SILENT without rank evidence (revision 2026-07-08)', () => {
     // Two active days per week (Sat/Sun pattern) over five weeks, playing "today".
+    // The consistency nudge is rank-gated: with no rank anchors/SR data it must not
+    // fire (the app never encourages volume on zero evidence) — the with-evidence
+    // paths are pinned in test/readinessRankGate.test.ts.
     const games: GameRecord[] = [];
     for (const d of [0, 1, 7, 8, 14, 15, 21, 22, 28, 29]) {
       games.push(...span(d, d, { perDay: 4, mental: CALM }));
     }
     const r = computeReadiness(games, ts(29, 20));
     expect(['fresh', 'steady']).toContain(r.band);
-    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(true);
+    expect(r.signals.some((s) => s.key === 'low-frequency')).toBe(false);
     expect(r.load.activeDaysPerWeek).toBeLessThan(3);
   });
 

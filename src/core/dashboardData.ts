@@ -120,9 +120,10 @@ export function computeDashboard(
     // Readiness is a per-person verdict → computed over the UNFILTERED
     // (but now competitive-only, plan D1) history, like reviewInbox/recap.
     // The target context feeds the target-focus dampener (active targets are
-    // not derivable from GameRecord alone). safeReadiness never throws, so a
+    // not derivable from GameRecord alone); the rank anchors feed the
+    // rank-gated undertraining nudge. safeReadiness never throws, so a
     // readiness bug can never blank the whole dashboard.
-    readiness: safeReadiness(all, Date.now(), { targets: manual?.targets ?? [] }),
+    readiness: safeReadiness(all, Date.now(), { targets: manual?.targets ?? [], rankAnchors: manual?.rankAnchors }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     totalGamesAllTime: all.length,
     masterData,

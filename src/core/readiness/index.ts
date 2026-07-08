@@ -273,19 +273,26 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   // Undertraining — the inverse risk. A long gap decays sharpness; a thin weekly
   // rhythm is not enough stimulus to actually improve. Never fired together: the
   // gap signal owns the layoff case, the frequency nudge the "plays rarely" case.
+  // The frequency nudge additionally requires PROVEN rank stagnation (spec §7b):
+  // with no rank evidence, or while any account is climbing, it stays silent —
+  // the app never encourages volume for its own sake.
   if (state.restDays >= T.rustDays) {
     out.push({
       key: 'rust-gap',
       label: `${state.restDays} days since your last game — sharpness decays after ~4`,
       severity: state.restDays >= T.rustSevereDays ? 'high' : 'watch',
     });
-  } else if (load.chronicActiveDays > 0 && load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek) {
+  } else if (
+    state.rankTrend === 'stagnant' &&
+    load.chronicActiveDays > 0 &&
+    load.activeDaysPerWeek < T.lowFrequencyDaysPerWeek
+  ) {
     // One decimal, not Math.round — rounding 2.7 up to the threshold value (3)
     // would flag the exact frequency the tuning calls sufficient.
     const rate = load.activeDaysPerWeek.toFixed(1).replace(/\.0$/, '');
     out.push({
       key: 'low-frequency',
-      label: `only ~${rate} active day${rate === '1' ? '' : 's'}/week — consistency builds skill faster than bingeing`,
+      label: `ranks flat over ~2 weeks at only ~${rate} active day${rate === '1' ? '' : 's'}/week — a bit more regular practice may be the missing stimulus`,
       severity: load.activeDaysPerWeek < T.lowFrequencyWatchPerWeek ? 'watch' : 'ok',
     });
   }

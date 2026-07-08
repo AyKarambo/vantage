@@ -95,6 +95,17 @@ export const READINESS_TUNING = {
   /** Cap on the low-frequency penalty (a thin weekly rhythm is a nudge, not an alarm). */
   freqPenCap: 5,
 
+  // --- rank-gated undertraining nudge (owner revision 2026-07-08: never encourage volume on zero evidence) ---
+
+  /** Days over which net rank movement decides climbing vs stagnant ("a couple weeks"). */
+  rankStagnationWindowDays: 14,
+  /** A key's measurable sub-window (anchor-clipped) must span at least this many days to count as evidence. */
+  rankEvidenceMinDays: 7,
+  /** ...and contain at least this many srDelta-carrying competitive games — the engine moves by srDelta, so a window without logged deltas is UNLOGGED, not stagnant. */
+  rankEvidenceMinDeltas: 5,
+  /** Net rank-scalar gain (100 pts = one division) at/above this counts as climbing — any real net-positive movement silences the nudge (generous bar, err toward silence). */
+  rankClimbMinPoints: 1,
+
   // --- composite anchors (score = baseScore + loadDelta + perfDelta + subjDelta) ---
 
   /** Neutral anchor: a healthy, in-rhythm player with no signals sits here-ish (plus rest bonus). */
