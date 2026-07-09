@@ -282,6 +282,67 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
    `npm run publish:release` (see [docs/signing.md](signing.md)). No GitHub secrets; the Certum
    cloud key can't sign on CI runners. Required before a public release *and* for GEP to load.
 10. **Confirm ad-free with DevRel** — the app carries no ads by design; get explicit sign-off.
+11. **Fill in the QA review form's per-window instructions** (§9) — paste the ready-made text
+    and attach the screenshots from `docs/overwolf-review/screenshots/`.
 
 Assets already generated in `assets/store/` (git-ignored — reproducible via the two
 `npm run assets:*` commands above).
+
+---
+
+## 9. QA review form — per-window/tab instructions
+
+Overwolf's submission form asks, separately from the store listing (§4): *"specific
+instructions for each window/tab your app contains"* (one text field, 2000 characters,
+required) plus matching screenshots attached alongside it. Unlike `assets/store/screenshots/`
+(§5, git-ignored, captured from the **browser-preview harness** for the store *listing* tiles),
+the screenshots below are captured from the **real packaged app** — a real frameless
+`BrowserWindow` running the compiled `dist/` output with its real preload/CSP/IPC, not a
+browser tab — because that's what a reviewer actually runs. They're committed to the repo at
+`docs/overwolf-review/screenshots/` (not git-ignored) since they're QA documentation, not a
+regenerate-on-release build artifact.
+
+**Regenerate anytime:**
+```bash
+npm run assets:app-screens   # builds dist/, then walks every screen for real, 19 screenshots
+```
+`scripts/capture-app-screenshots.cjs` boots the same `createDataProvider`/IPC wiring
+`src/main/index.ts` uses, against an isolated, disposable `userData` folder seeded with the
+app's own "Show demo data" feature (`generateSampleGames` — the exact fallback dataset a
+fresh install shows) so every screen has realistic content with no game or Overwolf runtime
+needed. Tray, the live GEP sensor, and Notion's network calls are swapped for no-op stand-ins
+(none affect what's on screen); everything else — window chrome, CSP, contextIsolation,
+sandbox — is the shipped configuration.
+
+**Paste this into the form's instructions field** (1582/2000 chars):
+
+```text
+Vantage is a single frameless desktop window (no in-game overlay, no browser tabs) — a left sidebar switches between screens; the active one is always highlighted. No ad container anywhere in the UI: the app is ad-free by design.
+
+Launch: `npm start` opens the window with a demo season pre-loaded ("Demo data" badge, bottom bar) so every screen has real content with no game running.
+
+Sidebar screens, top to bottom (one screenshot each, docs/overwolf-review/screenshots/):
+- Overview (01) — KPI cards, priority-map scatter, session recap.
+- Review (02) — queue of recent games to grade.
+- Matches (03) — match log; click a row for match detail (04): scoreboard + per-hero stats.
+- Maps (05) — winrate by map/mode.
+- Heroes (06) — per-hero stats table.
+- Focus (07) — weakest maps/heroes/roles, ranked by cost.
+- Mental (08) — tilt/comms tracking vs winrate.
+- Trends (09) — winrate over time.
+- Readiness (10) — opt-in training-load coach, off by default.
+- Targets (11) — user-authored improvement targets.
+- Notion sync (12) — optional export; shown disconnected until the user pastes their own integration token.
+- Logs (13) — live debug log viewer.
+- Settings — General tab (14): accounts/app behavior. Master Data tab (15): editable heroes/maps/seasons.
+- About (16) — version/build info, privacy summary, support link.
+
+Also reachable from anywhere: Ctrl+K command palette (17, search/navigate/actions) and the "Log match" modal (18, manual match entry). First launch shows a one-time intro tour (00), replayable from "Help" in the status bar.
+```
+
+**Attach:** all 19 files in `docs/overwolf-review/screenshots/` (`00-onboarding-tour.jpg` …
+`18-log-match.jpg`), in that numeric order, matching the parenthesized numbers above. If the
+form caps the attachment count, the sidebar screens (01–16) are the required minimum — 00/17/18
+are the supplementary "how do I reach X" screens for the palette/log-match/first-run entry points.
+
+**Ad container:** none — confirmed empty in every screenshot; see the ad-free note in §3/§7.
