@@ -124,6 +124,53 @@ describe('editMatch — hero list', () => {
   });
 });
 
+describe('editMatch — review/flags sync', () => {
+  function editHarness(game: GameRecord) {
+    const patches: Array<Partial<GameRecord>> = [];
+    const deps = {
+      history: {
+        all: () => [game],
+        editManual: (_id: string, patch: Partial<GameRecord>) => { patches.push(patch); },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    return { provider: createDataProvider(deps), patches };
+  }
+  const flagsOnlyReviewedGame = (): GameRecord => ({
+    matchId: 'manual-1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+    result: 'Win', gameType: 'Competitive', source: 'manual', heroes: [],
+    mental: { tilt: true },
+    review: { at: 1, grades: {}, flags: { tilt: true } },
+  });
+
+  it('re-stamps review.flags alongside mental on an already-reviewed match, even with no grades in the edit', () => {
+    // Regression: a flags-only review (no grades) previously left review.flags
+    // stale on a flags-only edit, so the old flag resurrected on the merged read.
+    const { provider, patches } = editHarness(flagsOnlyReviewedGame());
+    provider.editMatch({ matchId: 'manual-1', mental: { tilt: false } });
+    expect(patches[0].mental).toEqual({ tilt: false });
+    expect(patches[0].review).toMatchObject({ grades: {}, flags: { tilt: false } });
+  });
+
+  it('preserves existing review grades when re-stamping flags with no new grades', () => {
+    const game = flagsOnlyReviewedGame();
+    game.review = { at: 1, grades: { 't-1': 'hit' }, flags: { tilt: true } };
+    const { provider, patches } = editHarness(game);
+    provider.editMatch({ matchId: 'manual-1', mental: { tilt: false } });
+    expect(patches[0].review).toMatchObject({ grades: { 't-1': 'hit' }, flags: { tilt: false } });
+  });
+
+  it('does not create a review on an unreviewed match edited with no grades', () => {
+    const unreviewedGame: GameRecord = {
+      matchId: 'manual-1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+      result: 'Win', gameType: 'Competitive', source: 'manual', heroes: ['Tracer'],
+    };
+    const { provider, patches } = editHarness(unreviewedGame);
+    provider.editMatch({ matchId: 'manual-1', mental: { tilt: true } });
+    expect(patches[0]).not.toHaveProperty('review');
+  });
+});
+
 describe('editMatch — Set current rank (back-compute)', () => {
   type Anchor = { account: string; role: Role; tier: string; division: number; progressPct: number; setAt: number };
   function rankHarness(game: GameRecord, seed: Anchor[] = []) {

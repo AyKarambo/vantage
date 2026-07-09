@@ -5,13 +5,13 @@
  * records add scoreboard, tabs, progress, player history, and screenshots.
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
-import { h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade } from '../../../src/shared/contract';
+import { applyStyle, h, render } from '../dom';
+import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
+import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
@@ -25,7 +25,7 @@ import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
-import { PALETTE } from '../theme';
+import { PALETTE, wrHsl } from '../theme';
 import type { ViewContext } from './view';
 
 const ROLE_OPTS: Array<{ value: Role; label: string }> = [
@@ -90,6 +90,7 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
     scoreboardSection(d),
     perHeroSection(d.perHero),
     competitiveSection(d.competitive, d.srDelta),
+    gradesSection(d, ctx),
     playerHistorySection(d),
     screenshotsSection(d.screenshots),
   ].filter((n): n is HTMLElement => n != null);
@@ -107,13 +108,11 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
     h('span', null, '·'),
     h('span', null, relTime(d.timestamp)),
   );
-  const flags = mentalFlags(d);
   return card({ class: 'detail-head' },
     h('div', { class: 'detail-head-main' },
       h('div', { class: `detail-result is-${state}` }, RESULT_TEXT[d.result] ?? d.result),
       h('h1', { class: 'detail-map' }, d.map),
       meta,
-      flags,
       h('div', { style: { marginTop: '10px' } },
         button('✎ Edit match', {
           variant: 'soft',
@@ -137,9 +136,15 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
   );
 }
 
+/**
+ * The feel/leaver pill row for a match, reading the merged manual layer —
+ * the quick-log self-report (`d.mental`) overlaid key-by-key with the saved
+ * Review flags (`d.review.flags`), the same seed the match editor builds —
+ * so flags graded only on the Review screen show up too. Null when nothing
+ * is flagged. Rendered read-only in the Grades card.
+ */
 function mentalFlags(d: MatchDetail): HTMLElement | null {
-  const m = d.mental;
-  if (!m) return null;
+  const m: MatchMental = { ...(d.mental ?? {}), ...(d.review?.flags ?? {}) };
   const lv = leaverFlags(m);
   const flags: Node[] = [];
   if (m.tilt) flags.push(pill('Tilt', 'loss'));
@@ -250,6 +255,56 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
             }, `${signed(Math.round(c.delta))}% over the range`)
           : null,
     ),
+  );
+}
+
+// --- grades (the manual layer, read-only — grading itself lives in the editor) --
+
+/**
+ * Read-only view of how the match was tracked: one row per graded active
+ * target, the 0-100 performance rating, and the merged feel/leaver pills.
+ * Null when none of the three exist, so an ungraded match skips the card
+ * entirely — same degrade-by-section pattern as the rest of the page.
+ */
+function gradesSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
+  const grades = d.review?.grades ?? {};
+  const rows = ctx.data.targets
+    .filter((t) => t.isActive && !t.archivedAt)
+    .flatMap((t) => {
+      const grade = grades[t.id];
+      return grade ? [gradeRow(t, grade)] : [];
+    });
+  const perf = d.performance != null
+    ? statBar({
+        label: 'Performance',
+        frac: d.performance / 100,
+        valueText: String(d.performance),
+        color: wrHsl(d.performance / 100),
+      })
+    : null;
+  const flags = mentalFlags(d);
+  if (!rows.length && !perf && !flags) return null;
+  return card(
+    { title: 'Grades', sub: 'your manual read on this match — edit it via ✎ Edit match' },
+    h('div', { class: 'stack', style: { gap: '12px' } },
+      rows.length ? h('div', { class: 'stack', style: { gap: '11px' } }, ...rows) : null,
+      perf,
+      flags,
+    ),
+  );
+}
+
+/** One graded target, read-only: name + rule left, its Hit/Partial/Missed pill right. */
+function gradeRow(t: TargetSummary, grade: TargetGrade): HTMLElement {
+  const spec = GRADES.find((o) => o.v === grade);
+  const gradePill = pill(spec?.label ?? grade);
+  if (spec) applyStyle(gradePill, { background: spec.bg, color: spec.fg });
+  return h('div', { class: 'review-target' },
+    h('div', { class: 'row-main', style: { minWidth: '0' } },
+      h('div', { style: { fontSize: '13px' } }, t.name),
+      h('div', { class: 'mono u-dim', style: { fontSize: '10.5px', marginTop: '2px' } }, t.rule),
+    ),
+    gradePill,
   );
 }
 
