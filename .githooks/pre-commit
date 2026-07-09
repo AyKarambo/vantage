@@ -1,0 +1,8 @@
+#!/bin/sh
+# Vantage pre-commit: block accidental secret commits (see scripts/check-secrets.mjs).
+# Enable once per clone:  git config core.hooksPath .githooks
+if ! command -v node >/dev/null 2>&1; then
+  echo "check-secrets: node not on PATH — skipping secret scan." >&2
+  exit 0
+fi
+exec node scripts/check-secrets.mjs

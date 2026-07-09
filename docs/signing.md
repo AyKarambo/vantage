@@ -1,8 +1,11 @@
 # Code signing — Vantage
 
-**Chosen path: SSL.com IV (Individual Validation) certificate + eSigner cloud signing,
-signed headlessly in CI.** This replaced the earlier Certum/SimplySign plan (see
-[History & alternatives](#history--alternatives) for why).
+**Chosen path: Certum "Open Source Developer" code-signing certificate, signed LOCALLY
+via SimplySign.** Releasing is a deliberate local command (`npm run publish:release`) run
+on a machine where SimplySign Desktop is unlocked — **no signing secrets exist in CI or
+git**. This replaced the earlier SSL.com IV + eSigner plan (see
+[History & alternatives](#history--alternatives)) once the Certum cert was actually
+obtained.
 
 ## Why signing is mandatory (not cosmetic)
 
@@ -16,157 +19,174 @@ Two independent reasons:
    runtime."* This landed around ow-electron ~39.8.x; we're pinned to 39.6.1, so it
    bites on the next ow-electron upgrade — and Vantage without GEP is not Vantage.
    (Local dev has a Dev Mode carve-out; the requirement is for *distributed* builds.)
-   The "Overwolf half" (gaming-package integrity, `OW_CLI_EMAIL`/`OW_CLI_API_KEY`/
-   `OW_BUILD_KEY`) needs a newer `@overwolf/ow-electron-builder` than our pinned
-   26.8.5 — wire those secrets when upgrading.
 2. **Overwolf gates store review on it.** The submission form asks "Is your app
    signed?" and requires a trusted-CA signature (self-signed is rejected).
 
 And the user-facing reason: unsigned installers show SmartScreen's harshest
 "unknown publisher" dialog, and unsigned files can never accrue reputation.
 
-## Why SSL.com IV
+**All three files must be signed** — the app exe (`Vantage.exe`), the uninstaller, and
+the installer — for GEP to load. Signing therefore happens *during* the build (the sign
+hook runs once per file), not as a post-hoc pass over the outer installer.
 
-- **Attainable as a solo individual in Germany** — no company, no D-U-N-S. Validation
-  is a government-ID check, not a community-adoption bar (unlike SignPath Foundation,
-  which rejected Vantage for insufficient stars/forks/press).
-- **Genuinely headless CI signing** via eSigner (cloud HSM + CodeSignTool with a TOTP
-  secret) — fits the auto-release-on-push pipeline. Certum's SimplySign cannot do
-  this (interactive OTP, ~2 h sessions).
-- **Your real name as publisher** (cert CN = verified legal name), not Certum's
-  generic "Open Source Developer".
-- **No usage restriction** — unlike Certum's open-source cert (revoked if the software
-  is ever distributed commercially), an IV cert doesn't care if Vantage monetizes later.
-- Keys live in SSL.com's cloud HSM (satisfies the post-2023 CA/B Forum hardware rule)
-  — nothing to ship, lose, or plug in.
+## Why signing runs locally (the hard constraint)
 
-## Costs (verified 2026-07 — re-check at purchase)
+The Certum cert's private key lives in **Certum's cloud HSM** and is only usable through
+the **SimplySign Desktop** app, which mounts it as a Windows *virtual smart card* after
+you log in with the **SimplySign mobile app's TOTP** (the QR you scanned at enrollment).
+That session lasts only **~2 hours**, and there is no machine credential to hand to a
+headless runner. So GitHub's cloud runners **cannot** sign — a fully-signed release can
+only be produced on your machine. CI is therefore limited to quality gates; releasing is
+local. (This is the one thing the abandoned eSigner path did better — it signed headlessly
+in CI. Everything else favoured Certum; see history.)
 
-| Item | Price |
-|---|---|
-| IV certificate | **$129/yr** (multi-year discounts: 2 yr $116.10/yr … 5 yr $96.75/yr) |
-| eSigner subscription | first **30 days free, unlimited signings**, then Tier 1 **$20/mo** (20 signings/mo, $1 overage) or **$180/yr** (240 signings pooled, 25% off) |
-| Signings per release | **3** (app exe + uninstaller + installer; `elevate.exe` skipped, sha256-only pinned) |
+## Why the Certum "Open Source Developer" cert
 
-Unused signings roll over **while the subscription is active** and are forfeited if it
-lapses. **Budget check:** auto-release publishes on *every push to main* — at 3
-signings/release, monthly Tier 1 covers ~6 releases/month; the annual plan's pooled
-240 ≈ 80 releases/yr. Prefer the **annual** plan, and batch merges when practical.
-(Prices move — SSL.com has changed eSigner pricing before; confirm at checkout and
-watch the first invoice after the 30-day trial.)
+- **Cheapest cert an EU individual can get** — no company, no D-U-N-S; validation is an
+  individual ID check.
+- Keys live in Certum's cloud HSM (satisfies the post-2023 CA/B Forum hardware rule) —
+  nothing to ship, lose, or plug in.
+- **Tradeoffs to accept:** the publisher shows the generic **"Open Source Developer
+  Timo Seikel"** (not a bare legal name), and the cert is **licensed for open-source /
+  non-commercial software** — see the [commercial-use caveat](#commercial-use-caveat).
 
-## Purchase & enrollment runbook
+## One-time prerequisites (on your machine)
 
-1. **Order** at <https://www.ssl.com/products/software-integrity/code-signing/iv/>.
-   At checkout choose **eSigner cloud signing** as the delivery/attestation option
-   (an "eSigner Tier" dropdown) — **not** YubiKey (+$379, key would live on the token,
-   useless for CI) and not "Own HSM". Standard 3–5-day validation is included; ignore
-   the +$599 expedite.
-2. **Identity validation** (German applicant): upload via the Orders tab —
-   - scan of ID **front** and **back** (Personalausweis address is on the back, so
-     both sides are genuinely required; passport works too),
-   - a **selfie holding the ID** next to your face, **≥ 5 megapixels**,
-   - then a **phone callback** to a verified number. No notary, no video call.
-3. **eSigner enrollment** (Orders → order details → *eSigner Cloud Signing
-   Enrollment*): choose **OTP APP** (not OTP SMS — SMS can't be automated), set the
-   4-digit PIN, click *create OTP and issue certificate*. When the QR code appears,
-   **copy the "secret code" text next to it** — that is `ES_TOTP_SECRET`. (Retrievable
-   later: order page → enter PIN → *Show QR Code*. Regenerating the QR **invalidates**
-   the old secret — rotate the GitHub secret at the same time.)
-4. **Credential ID**: shown on the order page under *SIGNING CREDENTIALS*, or via
-   `CodeSignTool get_credential_ids -username=… -password=…`.
-5. **Disable the malware blocker** for unattended CI (order page → *SIGNING
-   CREDENTIALS* → "malware blocker disabled"), or accept that a false positive can
-   hard-fail a release ("hash that needs to sign is a malware object hash"). Note
-   eSigner false-positives on NSIS helpers are real — our hook already skips
-   `elevate.exe` for exactly this reason.
-6. **Add the GitHub Actions secrets** (repo → Settings → Secrets and variables →
-   Actions): `ES_USERNAME`, `ES_PASSWORD`, `ES_CREDENTIAL_ID`, `ES_TOTP_SECRET`.
-   The next push to main produces a signed release; until then CI publishes unsigned
-   builds exactly as before.
+1. **Install SimplySign Desktop** (Certum) — this exposes the cloud key as a Windows
+   virtual smart card.
+2. **Enroll the SimplySign mobile app** — done at cert issuance (you scanned the QR). The
+   `otpauth://` seed is *only* for seeding the phone; it is **never** placed in env,
+   config, or the repo. Keep it in a password manager (see [Secret hygiene](#secret-hygiene)).
+3. **Log into SimplySign Desktop** (Certum account + mobile OTP). Windows then surfaces
+   the private-key-backed cert into `Cert:\CurrentUser\My`. (A bare imported `.cer`/`.pem`
+   is *not* signable — you must be logged in.)
+4. **Enable PIN caching:** SimplySign options → *"Enable PIN cache for CSP/KSP-based
+   applications"*. This stops a multi-file build from stalling on a modal PIN dialog
+   (electron-builder [#8854](https://github.com/electron-userland/electron-builder/issues/8854)).
+5. **Verify readiness:**
+   ```powershell
+   Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | fl Subject, Issuer, Thumbprint, NotAfter
+   ```
+   Expect `Thumbprint = 69310A558F482846DB5BF3A35531159E483BAEBF`, subject
+   `CN=Open Source Developer Timo Seikel`, issuer *Certum Code Signing 2021 CA*.
+6. **signtool.exe** — no install needed: the hook uses electron-builder's bundled
+   `…\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\windows-10\x64\signtool.exe`.
+   (Only if that build of signtool can't drive the SimplySign card: install the Windows
+   SDK *"Signing Tools for Desktop Apps"* component and set `SIGNTOOL_PATH` to its
+   `signtool.exe` — the hook honours that first.)
+
+## Releasing
+
+```powershell
+# 1. Unlock SimplySign Desktop (log in with the mobile OTP).
+# 2. From the repo root, with HEAD pushed to origin/main:
+npm run publish:release              # build, sign, verify, tag vX.Y.Z, publish the Release
+npm run publish:release -- -DryRun   # build + sign + verify only, no tag/Release
+```
+
+`publish-release.ps1` computes the next version from tags + Conventional Commits, builds
+with signing **required**, verifies the signature, then creates the tag at `HEAD` and
+publishes the GitHub Release with the signed installer + blockmap. It is fail-closed and
+idempotent — nothing is tagged or published unless the build verifies as signed, and it
+refuses to re-cut an existing tag/Release.
+
+`npm run release` alone still produces a local installer; it's **unsigned** unless
+SimplySign is unlocked (fine for personal use — Windows SmartScreen → *More info → Run
+anyway*).
 
 ## How the repo is wired
 
-- [scripts/esigner-sign.cjs](../scripts/esigner-sign.cjs) — electron-builder custom
-  Windows sign hook (`build.win.signtoolOptions.sign` in `package.json`). Runs once
-  per signable file (`Vantage.exe` → uninstaller → installer), shells out to
-  CodeSignTool as `java -jar` with an args array (no cmd.exe quoting pitfalls), signs
-  in place with `-override=true`, checks stdout for `Code signed successfully`
-  (CodeSignTool can exit 0 on failure), retries once, and **no-ops with a warning when
-  the ES_* env is absent** so dev builds and secretless CI keep working.
-- `signingHashAlgorithms: ["sha256"]` is pinned — the electron-builder default
-  (`sha1`+`sha256`) would invoke the hook twice per file and burn double credits for
-  an identical SHA-256 signature.
-- `publisherName: "Timo Seikel"` must match the certificate CN (electron-updater's
-  signature verification uses it, should we ever adopt it).
-- Both workflows ([auto-release.yml](../.github/workflows/auto-release.yml),
-  [release.yml](../.github/workflows/release.yml)) download CodeSignTool (~220 MB zip,
-  bundles its own JDK, **no top-level folder** in the archive), export
-  `CODE_SIGN_TOOL_PATH`, pass the ES_* secrets to the build, and then **verify** the
-  installer with `Get-AuthenticodeSignature` — a "signed" release that isn't fails CI.
+- [scripts/certum-sign.cjs](../scripts/certum-sign.cjs) — electron-builder custom Windows
+  sign hook (`build.win.signtoolOptions.sign`). Runs once per signable file
+  (`Vantage.exe`, `elevate.exe`, uninstaller, installer). With `certificateSha1` +
+  `rfc3161TimeStampServer` set, electron-builder resolves the cert from the store and
+  hands the hook a fully-formed signtool command (`configuration.computeSignToolArgs`);
+  the hook runs it against the bundled `signtool.exe`. **No-op when the cert is absent**
+  (SimplySign not logged in) so dev builds and CI still produce an installer — unless
+  `VANTAGE_REQUIRE_SIGNING=1` (set by `publish-release.ps1`), in which case it **throws**,
+  so a release can never publish silently unsigned.
+- `signtoolOptions` in `package.json`: `certificateSha1` = the cert thumbprint;
+  `rfc3161TimeStampServer` = `http://time.certum.pl`; `signingHashAlgorithms: ["sha256"]`
+  (avoids a wasteful sha1+sha256 dual pass); `publisherName: "Open Source Developer Timo
+  Seikel"` — **must match the cert CN** (electron-builder writes it into the NSIS
+  publisher metadata and electron-updater compares it during update verification).
+- [scripts/next-version.mjs](../scripts/next-version.mjs) — pure-Node version computation
+  (Conventional Commits) shared by the local release and the CI check.
+- [scripts/publish-release.ps1](../scripts/publish-release.ps1) — the local release
+  orchestrator described above.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) — quality gates only (typecheck
+  + tests) on push to `main` and PRs. `permissions: contents: read`, no secrets, no
+  signing, no publish path — it is structurally impossible for CI to publish a release.
 
-### Signing locally
+### Verifying a signed build
 
 ```powershell
-$env:ES_USERNAME = '…'; $env:ES_PASSWORD = '…'
-$env:ES_CREDENTIAL_ID = '…'; $env:ES_TOTP_SECRET = '…'
-$env:CODE_SIGN_TOOL_PATH = 'C:\tools\CodeSignTool'   # unzipped once from ssl.com
-npm run release    # hook signs exe + uninstaller + installer during the build
+$sig = Get-AuthenticodeSignature release\Vantage-Setup-*.exe
+$sig.Status                      # Valid
+$sig.SignerCertificate.Subject   # CN=Open Source Developer Timo Seikel, O=..., C=DE
+$sig.TimeStamperCertificate      # non-null → RFC-3161 timestamp applied
+signtool verify /pa /all /v release\Vantage-Setup-*.exe   # issuer = Certum, TSA present
 ```
+Also confirm the embedded `release\win-unpacked\Vantage.exe` is signed (the GEP
+requirement — the uninstaller's signing is reported in the build log by the hook).
 
-`npm run sign:local` ([scripts/sign-local.ps1](../scripts/sign-local.ps1)) post-hoc
-signs a *single* file — fine for a stray artifact, **not** a release path (the inner
-`Vantage.exe` and uninstaller would stay unsigned, failing the GEP requirement).
+## Annual renewal
 
-### Sandbox dry-run (optional, no credits)
+The cert is valid one year (2026-07-09 → 2027-07-09). On renewal the **thumbprint
+changes** — update `certificateSha1` in `package.json` to the new value (from step 5),
+and remove the expired cert from the store so lookups stay unambiguous. Re-enrollment of
+the mobile token happens at the same time.
 
-Before the cert arrives you can exercise the whole pipeline against eSigner's
-sandbox: overwrite `conf/code_sign_tool.properties` in the CodeSignTool dir with
+## Commercial-use caveat
 
-```properties
-CLIENT_ID=qOUeZCCzSqgA93acB3LYq6lBNjgZdiOxQc-KayC3UMw
-OAUTH2_ENDPOINT=https://oauth-sandbox.ssl.com/oauth2/token
-CSC_API_ENDPOINT=https://cs-try.ssl.com
-TSA_URL=http://ts.ssl.com
-```
+The Certum **Open Source Developer** cert is licensed for open-source / non-commercial
+software. Vantage is MIT-licensed and free today, so this is fine. **If Vantage is ever
+distributed commercially** (paid tiers, paid app), you must switch to a commercial cert
+(e.g. SSL.com IV — see history) *before* signing a commercial release; signing commercial
+software with this cert risks revocation.
 
-and use demo credentials (`esigner_demo` / `esignerDemo#1`). Sandbox signatures are
-**not trusted** — pipeline testing only. Restore the shipped properties afterwards.
+## Secret hygiene
+
+- The SimplySign **TOTP enrollment seed** (`otpauth://…`) belongs in a password manager,
+  never on disk in the repo or a synced folder. After enrollment its only use is
+  re-enrolling a new phone; the desktop signing session never needs the raw seed.
+- No signing credentials go in GitHub Actions secrets or git — the key stays in Certum's
+  cloud, the OTP stays on your phone.
+- Optional mechanical backstop: [scripts/check-secrets.mjs](../scripts/check-secrets.mjs)
+  + [.githooks/pre-commit](../.githooks/pre-commit) scan staged additions for secret-shaped
+  content (`otpauth://`, private-key blocks, `.pfx`/`.p12` files, Notion tokens). Enable
+  once per clone: `git config core.hooksPath .githooks`.
 
 ## SmartScreen expectations (be honest with yourself)
 
-No certificate removes SmartScreen warnings on day one anymore — Microsoft killed
-EV's instant-reputation bypass in 2024 (*"Paying a premium for EV solely to avoid
-SmartScreen warnings is no longer justified"* — their words). A fresh IV cert starts
-with zero reputation: early downloads still show "Windows protected your PC", now
-with your verified name instead of "unknown publisher". Reputation accrues to the
+No certificate removes SmartScreen warnings on day one anymore — Microsoft killed EV's
+instant-reputation bypass in 2024. This is an **OV** cert, so it starts with zero
+reputation: early downloads still show "Windows protected your PC", now with your verified
+"Open Source Developer" identity instead of "unknown publisher". Reputation accrues to the
 **publisher identity** over weeks / hundreds of clean installs and persists across
-releases — keep signing every release with the same cert and it compounds. The only
-true no-cold-start paths (Microsoft Store re-signing; native-Overwolf .opk) are
-architecturally wrong for Vantage.
+releases — keep signing every release with the same cert and it compounds.
 
 ## History & alternatives
 
-- **SignPath Foundation** — rejected Vantage (2026-07) for insufficient
-  community-adoption signals. Free OV signing with real CI support; worth
-  **re-applying** once stars/forks/press grow. Their bar is *"a certain verifiable
-  reputation"*, not paperwork.
-- **Certum Open Source (~€69 first yr / ~€29 renewal)** — the previous plan. Cheapest
-  cert an EU individual can get, but: no unattended CI path (SimplySign Desktop +
-  interactive OTP, ~2 h sessions; automation = fragile TOTP+SendKeys GUI hacks),
-  publisher shows generic "Open Source Developer", and the cert is **revoked if the
-  software is ever distributed commercially**. Solid fallback if SSL.com falls
-  through.
-- **Azure Artifact Signing** (ex-Trusted Signing, ~$10/mo, best CI story) —
-  **unavailable**: individual onboarding is USA/Canada-only; EU access requires a
-  registered organization. Re-check if Microsoft opens EU individuals.
+- **SSL.com IV + eSigner** — the previous plan (the repo was fully wired for it before the
+  Certum cert arrived). Its one advantage: genuinely **headless CI signing** (cloud HSM +
+  CodeSignTool with a TOTP secret as four `ES_*` GitHub secrets). Rejected in favour of the
+  cheaper Certum cert we could obtain — but it remains the **fallback** if Vantage ever
+  needs hands-off cloud CI or goes commercial (an IV cert has no open-source usage
+  restriction and shows your bare legal name).
+- **SignPath Foundation** — rejected Vantage (2026-07) for insufficient community-adoption
+  signals. Free OV signing with real CI support; worth **re-applying** as stars/forks/press
+  grow.
+- **Azure Trusted Signing** (~$10/mo, best CI story) — **unavailable**: individual
+  onboarding is USA/Canada-only; EU access requires a registered organization. Re-check if
+  Microsoft opens EU individuals.
 - **EV certificates** — pointless since 2024 (no SmartScreen bypass), pricier, and
   effectively require a business entity. Skip.
-- **Microsoft Store (MSIX)** — the only free zero-cold-start path, but incompatible
-  with the Overwolf runtime/overlay model and Store-only auto-update.
-- **Native Overwolf rewrite (.opk)** — needs no developer cert at all, but costs a
-  full CEF rewrite and Overwolf mandates its ads/subscriptions for store approval —
-  rejected on both counts.
+- **Microsoft Store (MSIX)** — the only free zero-cold-start path, but incompatible with
+  the Overwolf runtime/overlay model and Store-only auto-update.
+- **Native Overwolf rewrite (.opk)** — needs no developer cert at all, but costs a full CEF
+  rewrite and Overwolf mandates its ads/subscriptions for store approval — rejected on both
+  counts.
 - **Do not** use Sigstore/cosign or GitHub attestations for this — Windows
   SmartScreen/Authenticode never consult them (supply-chain provenance is a different
-  problem; they're still nice-to-have alongside a real signature).
+  problem; still nice-to-have alongside a real signature).

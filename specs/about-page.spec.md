@@ -68,8 +68,8 @@ for three concrete reasons:
 
 ## Out-of-Scope
 
-- **No "check for updates" / in-app updater.** Releases are handled by the auto-release pipeline;
-  the About screen neither checks nor installs versions.
+- **No "check for updates" / in-app updater.** Releases are handled by the release pipeline
+  (`npm run publish:release`); the About screen neither checks nor installs versions.
 - **No changelog / release-notes rendering.** (May link out later; not rendered here.)
 - **No network calls from About** — no telemetry, no version-check ping. The screen is fully offline.
 - **No redesign of onboarding or marketing copy.** About only *restates* existing promises.

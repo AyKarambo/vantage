@@ -1,0 +1,41 @@
+# Quality gates for every push to main and every PR.
+#
+# This workflow does NOT publish releases. Vantage is signed with a Certum cert via
+# SimplySign, whose cloud key can only be unlocked interactively (mobile OTP) on a local
+# machine — GitHub's cloud runners can't sign. So releasing is a deliberate LOCAL step
+# (`npm run publish:release`), and CI is limited to typecheck + tests. No secrets, no
+# signing, no publish path — it's structurally impossible for CI to ship an unsigned
+# release. Runbook: docs/signing.md.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags for next-version.mjs
+
+      - uses: actions/setup-node@v4
+        with:
+          # 24 = current active LTS: the history store runs on node:sqlite, a builtin
+          # Node 20 lacks, so `npm test` needs it too (the packaged app gets it from
+          # ow-electron 39's bundled Node 22.22; source is type-pinned via @types/node@22).
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      # Informational only — surfaces the version the next local release would cut.
+      - name: Next release version (informational)
+        run: node scripts/next-version.mjs --check

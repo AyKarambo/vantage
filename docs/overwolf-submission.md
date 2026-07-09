@@ -212,10 +212,11 @@ flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that'
 must carry a **trusted-CA** signature (self-signed is rejected) — and per Overwolf's
 [App Signing guide](https://dev.overwolf.com/ow-electron/guides/dev-tools/app-signing/) the exe
 signature is now **required for the gaming packages (GEP) to load at runtime** in distributed
-builds. Chosen route: **SSL.com IV certificate + eSigner cloud signing** — the sign hook
-([scripts/esigner-sign.cjs](../scripts/esigner-sign.cjs)) signs the app exe, uninstaller and
-installer **during** `npm run release`, locally and in CI, whenever the `ES_*` env vars /
-GitHub secrets are set. Full runbook: [docs/signing.md](signing.md).
+builds. Chosen route: **Certum "Open Source Developer" certificate, signed locally via SimplySign** —
+the sign hook ([scripts/certum-sign.cjs](../scripts/certum-sign.cjs)) signs the app exe, uninstaller
+and installer **during** the build, run via `npm run publish:release` on a machine where SimplySign
+Desktop is unlocked (publisher: "Open Source Developer Timo Seikel"). No GitHub secrets — the key
+stays in Certum's cloud, which can't sign on cloud CI runners. Full runbook: [docs/signing.md](signing.md).
 
 Without a trusted-CA signature the app **cannot be submitted for review**. (A self-signed build only
 suppresses local warnings via *More info → Run anyway* and does not satisfy Overwolf.)
@@ -257,8 +258,8 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
   launch and is replayable from **Help** in the status bar; the demo dataset stays clearly badged.
 - ✅ **Manual (◎) features persist** — Log Match writes a real game to local history (feeds every
   stat incl. the mental composite); authored targets are saved and shown in the library.
-- ⏳ **Code signing / installer** — see §6: obtain a cert and switch to the Overwolf Installer for
-  the CMP/ToS flow and Developer Console testing channels.
+- ⏳ **Code signing / installer** — cert obtained (Certum, signed locally — see §6); still to switch
+  to the Overwolf Installer for the CMP/ToS flow and Developer Console testing channels.
 
 ---
 
@@ -277,9 +278,9 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
 8. **Publish the legal docs** — push the repo to GitHub, enable Pages for `docs/`, and paste the
    public `docs/legal/privacy.html` + `docs/legal/terms.html` URLs into the console **and** the
    installer config. (Both must load without login — a hard Overwolf requirement.)
-9. **Buy the SSL.com IV certificate + enroll eSigner** and add the four `ES_*` GitHub secrets —
-   CI then signs every release automatically (see [docs/signing.md](signing.md) for the
-   purchase/enrollment runbook). Required before a public release *and* for GEP to load.
+9. **Sign each release locally** — with SimplySign Desktop unlocked (mobile OTP), run
+   `npm run publish:release` (see [docs/signing.md](signing.md)). No GitHub secrets; the Certum
+   cloud key can't sign on CI runners. Required before a public release *and* for GEP to load.
 10. **Confirm ad-free with DevRel** — the app carries no ads by design; get explicit sign-off.
 
 Assets already generated in `assets/store/` (git-ignored — reproducible via the two

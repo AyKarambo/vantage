@@ -119,7 +119,8 @@ packaged app.
 `build-renderer.mjs` (esbuild → single IIFE `renderer/dist/dashboard.js`, target
 chrome128) · `build-preview.mjs` + `preview-server.mjs` (the browser harness,
 port 5178) · `make-tray-icon.mjs`, `make-store-assets.mjs`, `capture-screenshots.cjs`
-(assets) · `pack-opk.mjs`, `sign-local.ps1` (packaging/signing).
+(assets) · `pack-opk.mjs` (packaging) · `certum-sign.cjs` (build sign hook),
+`publish-release.ps1` + `next-version.mjs` (local signed release — see docs/signing.md).
 
 ## `test/`
 

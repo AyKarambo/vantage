@@ -403,26 +403,32 @@ npm run import:obsidian -- -VaultPath "C:\path\to\vault" -OutFile "vantage-impor
 
 ## Build a release
 
-Every push to `main` auto-publishes a GitHub Release: the
-[`auto-release`](.github/workflows/auto-release.yml) workflow derives the next version from the latest
-`v*` tag plus the [Conventional Commits](https://www.conventionalcommits.org/) since it (`feat` →
-minor, `fix`/others → patch, `type!:`/`BREAKING CHANGE` → major), builds the installer on a Windows
-runner, and publishes a tagged Release with it attached. It's **tag-driven** — the version is baked
-into the built installer but not committed back, so nothing pushes to the protected `main` branch
-(`package.json`'s version field stays at its floor; the tag/Release/installer carry the real version).
-CI signs the installer automatically when the SSL.com eSigner secrets are configured
-(unsigned otherwise — see [docs/signing.md](docs/signing.md)).
+Releasing is a deliberate **local** step, because the Certum cert signs via SimplySign — its cloud
+key is only unlocked interactively (mobile OTP), so GitHub's cloud runners can't sign. Push to `main`
+runs **CI quality gates only** ([`ci`](.github/workflows/ci.yml): typecheck + tests, no publish).
 
-To build locally:
+To cut a signed release, from the repo root with SimplySign Desktop unlocked:
+
+```bash
+npm run publish:release            # build, sign (Certum), verify, tag vX.Y.Z, publish the Release
+npm run publish:release -- -DryRun # build + sign + verify only, no tag/Release
+```
+
+It derives the next version from the latest `v*` tag plus the
+[Conventional Commits](https://www.conventionalcommits.org/) since it (`feat` → minor, `fix`/others →
+patch, `type!:`/`BREAKING CHANGE` → major), builds + signs the app exe, uninstaller and installer
+(required for the Overwolf gaming packages (GEP) to load), verifies the signature, then tags and
+publishes the GitHub Release. It's **tag-driven** and fail-closed — the version is baked into the
+installer but not committed back, and nothing is published unless the build verifies as signed.
+
+To build locally without releasing:
 
 ```bash
 npm run release    # ow-electron-builder → release/Vantage-Setup-<ver>.exe
 ```
 
-Without the `ES_*` env vars this produces an unsigned installer (fine for personal use — Windows
-SmartScreen → *More info → Run anyway*). With them set, the same build signs the app exe, the
-uninstaller and the installer via SSL.com eSigner — required for the Overwolf gaming packages (GEP)
-to load in distributed builds. Setup and runbook: [docs/signing.md](docs/signing.md).
+This is **unsigned** unless SimplySign is unlocked (fine for personal use — Windows SmartScreen →
+*More info → Run anyway*). Setup, prerequisites and the full runbook: [docs/signing.md](docs/signing.md).
 
 ## Support
 
