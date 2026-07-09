@@ -23,7 +23,11 @@ export function mental(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view' },
     viewHead('Mental', 'The signals the game never reports — logged by you, ◎ manual'),
-    h('div', { class: 'grid-2' },
+    // Pair the two compact cards (State, Trends) in the top row and the two
+    // taller ones (costs, session) below, each at its natural height
+    // (align-items: start) — so no card is stretched to a row's height and left
+    // half-empty.
+    h('div', { class: 'grid-2', style: { alignItems: 'start' } },
       card({ title: 'State', actions: badge('◎ manual', 'manual') },
         h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
           statBar({ label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: String(m.calm) }),
@@ -31,10 +35,8 @@ export function mental(ctx: ViewContext): HTMLElement {
         ),
         breakReminderEditor(ctx),
       ),
-      costsCard(ctx),
-    ),
-    h('div', { class: 'grid-2' },
       trendsCard(ctx),
+      costsCard(ctx),
       sessionCard(ctx),
     ),
     card({ title: 'Flags this range', sub: 'how often each came up' },
