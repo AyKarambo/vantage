@@ -21,7 +21,8 @@ Coaching), so a late-night session spanning past midnight still reads as one, an
 never shows stale data as "current."
 
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
-  *winrate × volume* scatter with a top-priority callout, and a mental snapshot.
+  *winrate × volume* scatter with a top-priority callout, an activity heatmap
+  (games/day, click a day to open its matches), and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**
   (scoreboard, per-hero tabs, competitive progress, a read-only **Grades card** with
   the match's target grades, performance rating and feel/leaver flags, player history,
@@ -62,8 +63,8 @@ never shows stale data as "current."
   (on/off + loss threshold) that fires a tray notification after N consecutive losses.
 - **Trends** — winrate over time, splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
-  within a sitting, with a "you fade from game N" read when the sample supports it), an
-  activity heatmap, and **your self-rating over time** (the 0–100 performance slider with a
+  within a sitting, with a "you fade from game N" read when the sample supports it), and
+  **your self-rating over time** (the 0–100 performance slider with a
   rolling average plus the avg-rating-on-wins vs -losses split — does your self-read track
   results, or your play?). Per-hero and per-map average self-ratings also appear as **RTG**
   columns on the Heroes and Maps tables.

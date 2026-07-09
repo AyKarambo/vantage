@@ -1,10 +1,10 @@
-/** Trends — winrate over time, splits by role/mode/account, when you play, and activity. */
+/** Trends — winrate over time, splits by role/mode/account, and when you play. */
 import { h } from '../dom';
 import type { Group, PerformanceStats } from '../../../src/shared/contract';
 import { sessionFade } from '../../../src/core/analytics';
 import { roleLabel } from '../format';
 import { horizontalBars, lineChart, ratingChart, type WrPoint } from '../charts/plots';
-import { calendarHeatmap, card, emptyState, statBox } from '../components/primitives';
+import { card, emptyState, statBox } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { pct } from '../format';
 import { viewHead, type ViewContext } from './view';
@@ -34,8 +34,6 @@ export function trends(ctx: ViewContext): HTMLElement {
       sessionPositionCard(d.sessionPosition),
     ),
     performanceCard(d.performance),
-    card({ title: 'Activity', sub: 'games/day · colour = winrate · click a day to open its matches' },
-      calendarHeatmap(d.calendar, (date) => ctx.navigate('matches', { day: date }))),
   );
 }
 
