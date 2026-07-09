@@ -2,7 +2,10 @@
 
 ## Prerequisites
 
-- **Node.js 20+** and npm. That's it — everything else installs locally.
+- **Node.js 22.13+** (or the current LTS) and npm. `npm test` uses Node's built-in
+  `node:sqlite`, which needs an unflagged build (22.13+); the ow-electron/-builder Dev
+  Mode toolchain (below) separately wants Node ^20.19 or >=22.12 for its own tooling —
+  22.13+ covers both. Everything else installs locally.
 - Windows is required to run the real app (ow-electron targets Windows, and Overwatch
   only reports events there). The browser preview and the test suite run anywhere.
 
@@ -51,8 +54,38 @@ playing a match.
 
 ### 3. Desktop app with live/simulated data
 
-With Overwatch running, GEP events flow in automatically. Without the game, use the
-dev flags below.
+With Overwatch running, GEP events flow in automatically **once ow-electron Dev Mode
+authentication is set up** (one-time, below). Without the game, use the dev flags below
+instead.
+
+## Dev Mode — real GEP data before Overwolf approval
+
+Normally GEP only binds once Overwolf has approved/whitelisted the app (see
+[README.md](../../README.md) → *Status*). ow-electron's
+[Dev Mode](https://dev.overwolf.com/ow-electron/guides/dev-tools/dev-mode) bypasses that
+for local development: it loads the gaming packages (GEP, Overlay, Recorder) against an
+unsigned, unpackaged build, as long as the process can authenticate with an Overwolf
+Developer Console identity. This repo's `@overwolf/ow-electron` / `@overwolf/ow-electron-builder`
+devDependencies are pinned to the **beta** versions that support it (no stable release
+exists yet at time of writing).
+
+One-time setup:
+
+1. Sign in to the [Overwolf Developer Console](https://console.overwolf.com/) and confirm
+   (or create) an app registration matching this repo's `package.json` `name`
+   (`ow.vantage`) + `author` (`Timo Seikel`) exactly — see
+   [docs/overwolf-submission.md §1](../overwolf-submission.md). Grab an API key from there.
+2. `ow config` (the `@overwolf/ow-cli` devDependency ships the `ow` binary) — enter that
+   email + API key. This writes a `[default]` profile to `~/.ow/credentials`, which Dev
+   Mode reads automatically on every `npm start` / `npm run dev`, no flags or env vars
+   needed.
+
+Once that's done, launch normally (`npm start`) with Overwatch running. Watch the status
+bar's live-feed indicator (No game → Connected-waiting → Receiving data) and the Logs
+screen (Debug detail on) for `gep package ready` / `game-detected`. If GEP attaches but
+Overwatch isn't in the supported-games list, that's a Console-side registration gap, not
+a Dev Mode problem — `src/main/gep.ts`'s `logSupportedGames()` diagnostic calls this out
+explicitly in the log.
 
 ## Dev environment flags
 
