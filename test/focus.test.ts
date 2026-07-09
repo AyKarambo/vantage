@@ -251,6 +251,28 @@ describe('linkFocusTargets', () => {
     expect(linkFocusTargets(entries, [label], roleGames)[0].progress?.targetId).toBe(label.id);
   });
 
+  it('links a multi-word key even when the target drops the apostrophe', () => {
+    // A user who types "Kings Row" (no apostrophe) still links the "King's Row" key.
+    const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: "King's Row" }));
+    const t = target('Practice Kings Row: warm up unranked');
+    expect(linkFocusTargets(entriesFor(games), [t], games)[0].progress?.targetId).toBe(t.id);
+  });
+
+  it('does not link a short key that only matches across word boundaries', () => {
+    // "Plan a warmup routine" flattens to "…planawarmup…" which *contains* "ana",
+    // but token-run matching must not link the hero Ana to it.
+    const anaGames = [0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Ana'], map: `A${i}` }));
+    const anaEntries = focusEntries(anaGames).filter((e) => e.dimension === 'hero');
+    const decoyForAna = target('Plan a warmup routine before ranked');
+    expect(linkFocusTargets(anaEntries, [decoyForAna], anaGames)[0].progress).toBeUndefined();
+
+    // Same class: "Help me improve aim" flattens to a string containing "mei".
+    const meiGames = [0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Mei'], map: `B${i}` }));
+    const meiEntries = focusEntries(meiGames).filter((e) => e.dimension === 'hero');
+    const decoyForMei = target('Help me improve aim');
+    expect(linkFocusTargets(meiEntries, [decoyForMei], meiGames)[0].progress).toBeUndefined();
+  });
+
   it('links hero and role entries too', () => {
     const games = [
       ...[0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Ana'], map: `H${i}` })),

@@ -95,7 +95,7 @@ export function linkFocusTargets(
   );
   if (!candidates.length) return entries;
   return entries.map((e) => {
-    const target = linkedTarget(e.key, candidates);
+    const target = linkedTarget(e, candidates);
     if (!target) return e;
     const since = target.activatedAt ?? target.createdAt;
     const entryGames = focusGamesFor(allGames, e.dimension, e.key);
@@ -134,20 +134,51 @@ function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntr
 }
 
 /**
- * Most recently flagged candidate whose name mentions the key. Both sides are
- * normalized to lowercase alphanumerics before the substring test, so casing,
- * apostrophe styles ("King’s Row" vs "King's Row") and spacing never break the
- * link — and a role prefill written with the display label ("Open Q") still
- * links the `openQ` role key.
+ * Most recently flagged candidate whose name mentions the entry key as a whole
+ * token run. Both sides tokenize to lowercase alphanumeric words (apostrophes
+ * elided so "King’s"/"King's"/"Kings" match alike; every other separator splits
+ * a token), and the key's tokens must appear *contiguously* in the name — so
+ * casing, apostrophe style and spacing never break a real link, while a short
+ * key can no longer match across unrelated words (e.g. hero "Ana" against
+ * "Plan a warmup routine"). A role prefill written with the display label
+ * ("Open Q") still links the `openQ` role key via its camelCase-split variant.
  */
-function linkedTarget(key: string, candidates: AuthoredTarget[]): AuthoredTarget | undefined {
-  const needle = normalize(key);
-  if (!needle) return undefined;
+function linkedTarget(entry: FocusEntry, candidates: AuthoredTarget[]): AuthoredTarget | undefined {
+  const needles = keyNeedles(entry.key, entry.dimension);
+  if (!needles.length) return undefined;
   return candidates
-    .filter((t) => normalize(t.name).includes(needle))
+    .filter((t) => {
+      const name = tokenize(t.name);
+      return needles.some((needle) => includesTokenRun(name, needle));
+    })
     .sort((a, b) => (b.activatedAt ?? b.createdAt) - (a.activatedAt ?? a.createdAt))[0];
 }
 
-const normalize = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+/**
+ * The token runs that count as a link for an entry key. Maps/heroes match on
+ * their own tokens only; a role also matches its camelCase-split display form
+ * ("openQ" → ["open", "q"]), because a quick-created role target is named with
+ * the display label ("Practice Open Q …").
+ */
+function keyNeedles(key: string, dimension: FocusDimension): string[][] {
+  const base = tokenize(key);
+  if (!base.length) return [];
+  if (dimension !== 'role') return [base];
+  const split = tokenize(key.replace(/([a-z0-9])([A-Z])/g, '$1 $2'));
+  return split.join(' ') === base.join(' ') ? [base] : [base, split];
+}
+
+/** Lowercase alphanumeric tokens; apostrophes are elided rather than split on. */
+const tokenize = (s: string): string[] =>
+  s.toLowerCase().replace(/['’]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+
+/** Does `needle` appear as a contiguous run of tokens inside `haystack`? */
+function includesTokenRun(haystack: string[], needle: string[]): boolean {
+  if (!needle.length || needle.length > haystack.length) return false;
+  for (let i = 0; i + needle.length <= haystack.length; i += 1) {
+    if (needle.every((tok, j) => haystack[i + j] === tok)) return true;
+  }
+  return false;
+}
 
 const decided = (wl: WinLoss): number => wl.wins + wl.losses;
