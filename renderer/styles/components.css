@@ -645,7 +645,7 @@ table.data tbody tr:hover {
 /* Activity heatmap (GitHub-style) ------------------------------------------- */
 .heatmap-wrap {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 24px;
   flex-wrap: wrap;
 }
@@ -664,8 +664,9 @@ table.data tbody tr:hover {
 }
 .heatmap-legend {
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
 }
 
 /* Filter bar ----------------------------------------------------------------- */
