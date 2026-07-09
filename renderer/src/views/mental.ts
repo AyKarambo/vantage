@@ -186,9 +186,16 @@ function sessionCard(ctx: ViewContext): HTMLElement {
         label: `Game ${b.key}`,
         frac: b.rate,
         color: PALETTE.loss,
-        valueText: `${pct(b.rate)} · ${b.games}g`,
+        // Two fixed, right-aligned sub-columns (rate · games) so the numbers
+        // line up in vertical columns down the card instead of drifting with
+        // the width of "22g" vs "4g".
+        valueText: h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '5px' } },
+          h('span', { style: { minWidth: '30px', textAlign: 'right' } }, pct(b.rate)),
+          h('span', null, '·'),
+          h('span', { style: { minWidth: '24px', textAlign: 'right' } }, `${b.games}g`),
+        ),
         slim: true,
-        valueWidth: 62,
+        valueWidth: 72,
       })),
     ),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },

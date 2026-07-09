@@ -32,7 +32,9 @@ export function statBar(o: {
   label: string;
   frac: number;
   color?: string;
-  valueText: string;
+  /** Right-hand value — a plain string, or a node for a multi-column value that
+   *  needs its own internal alignment (see the Mental "Session" rows). */
+  valueText: string | Node;
   slim?: boolean;
   /** Widen the value column past the default 34px when the value is more than a
    *  short number (e.g. a "rate · count" pair) that would otherwise wrap. */
