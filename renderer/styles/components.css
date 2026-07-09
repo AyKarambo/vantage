@@ -305,6 +305,7 @@
   width: 34px;
   text-align: right;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* Performance slider ---------------------------------------------------------- */

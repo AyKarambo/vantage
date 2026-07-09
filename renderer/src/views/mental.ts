@@ -188,6 +188,7 @@ function sessionCard(ctx: ViewContext): HTMLElement {
         color: PALETTE.loss,
         valueText: `${pct(b.rate)} · ${b.games}g`,
         slim: true,
+        valueWidth: 62,
       })),
     ),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
