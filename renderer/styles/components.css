@@ -1009,6 +1009,8 @@ table.data tbody tr:hover {
   position: fixed;
   min-width: 260px;
   max-width: 340px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--card);
   border: 1px solid var(--border-2);
   border-radius: var(--r-lg);
@@ -1273,8 +1275,18 @@ table.data tbody tr:hover {
 }
 .match-col--srDelta,
 .match-col--duration,
-.match-col--finalScore {
+.match-col--finalScore,
+.match-col--performance {
   width: 52px;
+}
+/* Pill-run fields (#68): the grades cell shows one aggregate pill, the flags
+   cell can carry several — wrap them onto extra lines instead of ellipsis-
+   clipping the run (overrides the base .match-col nowrap/clip). */
+.match-col--measuredGrades,
+.match-col--flags {
+  width: 140px;
+  white-space: normal;
+  overflow: visible;
 }
 
 /* Shortcut cheatsheet ------------------------------------------------------------ */

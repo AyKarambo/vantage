@@ -122,7 +122,7 @@ export function computeDashboard(
     calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
-    matches: recentMatches(games, mapModeOf),
+    matches: recentMatches(games, mapModeOf, activeMeasured),
     mental: mentalSummary(games),
     performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
@@ -205,16 +205,20 @@ export function pendingReviewMatches(
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
 const ROW_CAP = 150;
 
-function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver): MatchRow[] {
+function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow[] {
   return [...games]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, ROW_CAP)
-    .map((g) => toMatchRow(g, mapModeOf));
+    .map((g) => toMatchRow(g, mapModeOf, activeMeasured));
 }
 
 function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow {
   const flags = rowFlags(g);
   const measuredGrades = measuredGradesFor(g, activeMeasured);
+  // The player's stored self-grades stay with the match (unlike the live-computed
+  // measuredGrades), so the Matches-list "Target grades" field renders these.
+  const storedGrades = g.review?.grades;
+  const targetGrades = storedGrades && Object.keys(storedGrades).length ? storedGrades : undefined;
   return {
     matchId: g.matchId,
     timestamp: g.timestamp,
@@ -231,6 +235,7 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
+    ...(targetGrades ? { targetGrades } : {}),
   };
 }
 

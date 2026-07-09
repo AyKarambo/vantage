@@ -28,14 +28,22 @@ export interface FilterPresetPref {
 export type MatchFieldMode = 'hidden' | 'inline' | 'column';
 
 /** The subset of `MatchRow` fields the "Customize view" control can toggle. */
-export type MatchColumnKey = 'role' | 'heroes' | 'account' | 'srDelta' | 'duration' | 'finalScore';
+export type MatchColumnKey =
+  | 'role' | 'heroes' | 'account' | 'srDelta' | 'duration' | 'finalScore'
+  | 'performance' | 'measuredGrades' | 'flags';
 
 export type MatchColumnsPref = Record<MatchColumnKey, MatchFieldMode>;
 
-/** Default Matches-list field layout — matches the pre-customization look. */
+/**
+ * Default Matches-list field layout — matches the pre-customization look. The
+ * grades-oriented fields (performance, target grades, flags — issue #68) default
+ * to `hidden`, so rows are unchanged until the user opts in; a stored pref from
+ * before they existed merges over this default and reads them as `hidden` too.
+ */
 export const MATCH_COLUMNS_DEFAULT: MatchColumnsPref = {
   heroes: 'inline', account: 'inline', srDelta: 'inline',
   role: 'hidden', duration: 'hidden', finalScore: 'hidden',
+  performance: 'hidden', measuredGrades: 'hidden', flags: 'hidden',
 };
 
 /** Every persisted UI preference; add fields here, not new storage keys. */
