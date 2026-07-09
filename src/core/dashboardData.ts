@@ -12,6 +12,7 @@ import {
 import { isCompetitive } from './matchFilter';
 import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
+import { mentalCosts, tiltBySessionPosition, tiltTrend } from './mentalAnalytics';
 import { progression } from './progression';
 import { buildTargets, evaluateMeasured, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget, type TargetSummary } from './targets';
 import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
@@ -130,6 +131,11 @@ export function computeDashboard(
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
     matches: recentMatches(games, mapModeOf, activeMeasured),
     mental: mentalSummary(games),
+    mentalCosts: mentalCosts(games),
+    tiltTrend: tiltTrend(games),
+    // Same convention as sessionPosition above: number over the whole history,
+    // aggregate only the filtered games.
+    tiltBySession: tiltBySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
     reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),

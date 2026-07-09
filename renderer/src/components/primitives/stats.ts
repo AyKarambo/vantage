@@ -32,15 +32,23 @@ export function statBar(o: {
   label: string;
   frac: number;
   color?: string;
-  valueText: string;
+  /** Right-hand value — a plain string, or a node for a multi-column value that
+   *  needs its own internal alignment (see the Mental "Session" rows). */
+  valueText: string | Node;
   slim?: boolean;
+  /** Widen the value column past the default 34px when the value is more than a
+   *  short number (e.g. a "rate · count" pair) that would otherwise wrap. */
+  valueWidth?: number;
 }): HTMLElement {
   const fill = h('div', { class: 'track-fill' });
   applyStyle(fill, { width: `${Math.round(Math.max(0, Math.min(1, o.frac)) * 100)}%`, background: o.color ?? PALETTE.accent });
+  const valueStyle: Record<string, string> = {};
+  if (o.color) valueStyle.color = o.color;
+  if (o.valueWidth) valueStyle.width = `${o.valueWidth}px`;
   return h('div', { class: 'statbar' },
     h('span', { class: 'statbar-label' }, o.label),
     h('div', { class: `track${o.slim ? ' track--slim' : ''}` }, fill),
-    h('span', { class: 'statbar-value', style: o.color ? { color: o.color } : undefined }, o.valueText),
+    h('span', { class: 'statbar-value', style: Object.keys(valueStyle).length ? valueStyle : undefined }, o.valueText),
   );
 }
 

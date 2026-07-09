@@ -47,12 +47,16 @@ export interface SessionPositionOpts {
 }
 
 /**
- * Winrate by game number within a session: '1'..'5' and '6+'. A session is a
- * run of games where consecutive end timestamps are at most `gapMinutes` apart
- * (a strictly larger gap starts a new sitting). Empty buckets are omitted;
- * order is always 1 → 6+.
+ * The games at each session position ('1'..'5', '6+'), in 1 → 6+ order with
+ * empty buckets omitted — the shared numbering every by-session-position
+ * analytic (winrate, tilt rate) aggregates over. A session is a run of games
+ * where consecutive end timestamps are at most `gapMinutes` apart (a strictly
+ * larger gap starts a new sitting); positions past 5 pool into '6+'.
  */
-export function bySessionPosition(games: GameRecord[], opts: SessionPositionOpts = {}): Group[] {
+export function sessionPositionGroups(
+  games: GameRecord[],
+  opts: SessionPositionOpts = {},
+): Array<{ key: string; games: GameRecord[] }> {
   const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
   const gapMs = (opts.gapMinutes ?? SESSION_GAP_MINUTES) * 60_000;
   const buckets = new Map<string, GameRecord[]>();
@@ -68,7 +72,16 @@ export function bySessionPosition(games: GameRecord[], opts: SessionPositionOpts
   const order = [...Array.from({ length: MAX_POSITION - 1 }, (_, i) => String(i + 1)), `${MAX_POSITION}+`];
   return order
     .filter((key) => buckets.has(key))
-    .map((key) => ({ key, ...winLoss(buckets.get(key)!) }));
+    .map((key) => ({ key, games: buckets.get(key)! }));
+}
+
+/**
+ * Winrate by game number within a session: '1'..'5' and '6+' (the
+ * {@link sessionPositionGroups} numbering). Empty buckets are omitted; order
+ * is always 1 → 6+.
+ */
+export function bySessionPosition(games: GameRecord[], opts: SessionPositionOpts = {}): Group[] {
+  return sessionPositionGroups(games, opts).map(({ key, games: gs }) => ({ key, ...winLoss(gs) }));
 }
 
 /** The session-fade read: where late-session winrate falls off vs the session start. */

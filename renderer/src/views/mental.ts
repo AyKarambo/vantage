@@ -1,8 +1,10 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
-import type { MatchFlagKey } from '../../../src/shared/contract';
+import type { MatchFlagKey, RatedSide, WinrateSide } from '../../../src/shared/contract';
+import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '../../../src/core/mentalAnalytics';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
+import { sparkline } from '../charts/plots';
 import { badge, card, statBar, statBox } from '../components/primitives';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { viewHead, type ViewContext } from './view';
@@ -16,24 +18,16 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
   abusive: 'abusive comms',
 };
 
-/** Decided tilted games needed before the tilt-tax number is worth believing. */
-const TILT_TAX_MIN_SAMPLE = 5;
-
 export function mental(ctx: ViewContext): HTMLElement {
   const m = ctx.data.mental;
-  const tiltTax = Math.round((m.winWhenCalm - m.winWhenTilted) * 100);
-  // Gate on decided samples on BOTH sides — `flags.tilt` includes draws (which
-  // don't feed winWhenTilted), and an empty calm side prices the tax off a 0/0
-  // sentinel winrate just as badly as a thin tilted side does.
-  const thinSide = m.tiltedDecided < TILT_TAX_MIN_SAMPLE
-    ? { label: 'tilted', n: m.tiltedDecided }
-    : m.calmDecided < TILT_TAX_MIN_SAMPLE
-      ? { label: 'calm', n: m.calmDecided }
-      : null;
 
   return h('div', { class: 'view' },
     viewHead('Mental', 'The signals the game never reports — logged by you, ◎ manual'),
-    h('div', { class: 'grid-2' },
+    // Pair the two compact cards (State, Trends) in the top row and the two
+    // taller ones (costs, session) below, each at its natural height
+    // (align-items: start) — so no card is stretched to a row's height and left
+    // half-empty.
+    h('div', { class: 'grid-2', style: { alignItems: 'start' } },
       card({ title: 'State', actions: badge('◎ manual', 'manual') },
         h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
           statBar({ label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: String(m.calm) }),
@@ -41,31 +35,182 @@ export function mental(ctx: ViewContext): HTMLElement {
         ),
         breakReminderEditor(ctx),
       ),
-      card({ title: 'Tilt tax', sub: 'winrate, calm vs tilted' },
-        h('div', { class: 'grid-2', style: { gap: '8px' } },
-          statBox(h('span', { class: 'is-win' }, pct(m.winWhenCalm)), 'When calm'),
-          statBox(h('span', { class: 'is-loss' }, pct(m.winWhenTilted)), 'When tilted'),
-        ),
-        h('div', { class: 'hint', style: { marginTop: '12px', lineHeight: '1.5' } },
-          // A tilt tax priced off one or two decided games (on either side of
-          // the split) would be noise dressed up as coaching — hold the claim
-          // until both samples can carry it.
-          thinSide
-            ? `Only ${thinSide.n} decided ${thinSide.label} game${thinSide.n === 1 ? '' : 's'} in this range — not enough to price the tilt tax yet. Keep flagging games.`
-            : tiltTax > 0
-              ? h('span', null, 'Tilt costs you about ', h('span', { class: 'is-loss' }, `${tiltTax} points`), ' of winrate. Take the break.')
-              : 'Tilt is not hurting your results right now — keep it up.'),
-      ),
+      trendsCard(ctx),
+      costsCard(ctx),
+      sessionCard(ctx),
     ),
     card({ title: 'Flags this range', sub: 'how often each came up' },
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' } },
         flagBox(ctx, m.flags.tilt, 'Tilt', 'tilt'),
         flagBox(ctx, m.flags.toxicMates, 'Toxic mates', 'toxicMates'),
-        flagBox(ctx, m.flags.leaver, 'Leavers', 'leaver'),
+        // The my-team/enemy split is aggregated separately on the payload; the
+        // drill-down stays combined ('leaver') until MatchFlagKey is widened
+        // (explicitly deferred — see spec #76).
+        flagBox(ctx, m.flags.leaverMyTeam, 'Leaver — my team', 'leaver', 'is-loss'),
+        flagBox(ctx, m.flags.leaverEnemyTeam, 'Leaver — enemy', 'leaver', 'is-win'),
         flagBox(ctx, m.flags.positiveComms, 'Positive comms', 'positiveComms', 'is-accent'),
         flagBox(ctx, m.flags.abusive, 'Abusive comms', 'abusive', 'is-loss'),
       ),
     ),
+  );
+}
+
+// ---- "What it costs you" ----------------------------------------------------
+
+/**
+ * The generalized tilt tax (spec #76): one row per mental axis, each priced in
+ * winrate points only when BOTH sides carry at least COST_MIN_SAMPLE decided
+ * (or rated) games — a delta off a thin or 0/0 sample would be noise dressed
+ * up as coaching.
+ */
+function costsCard(ctx: ViewContext): HTMLElement {
+  const c = ctx.data.mentalCosts;
+  return card({ title: 'What it costs you', sub: 'winrate by mental state, sample-gated' },
+    h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
+      taxRow('Tilt tax', c.tilt.calm, 'calm', c.tilt.tilted, 'tilted'),
+      taxRow('Comms tax', c.comms.positive, 'positive', c.comms.abusive, 'abusive'),
+      taxRow('Toxic mates', c.toxic.without, 'without', c.toxic.with, 'with'),
+      leaverRow(c.leaver),
+      perfRow(c.performance),
+    ),
+  );
+}
+
+/** Label + right-aligned verdict on one line, a dim detail line under it. */
+function costRow(label: string, verdict: Node | string, detail: string): HTMLElement {
+  return h('div', null,
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' } },
+      h('span', { style: { fontSize: '12.5px' } }, label),
+      h('span', { class: 'mono', style: { fontSize: '12px' } }, verdict),
+    ),
+    h('div', { class: 'hint', style: { marginTop: '2px' } }, detail),
+  );
+}
+
+/** The signed cost verdict: winning `cost` points less reads as a red −N pts. */
+function costVerdict(cost: number, unit = ' pts'): Node | string {
+  if (cost > 0) return h('span', { class: 'is-loss' }, `−${cost}${unit}`);
+  if (cost < 0) return h('span', { class: 'is-win' }, `+${-cost}${unit}`);
+  return 'even';
+}
+
+/** A two-sided winrate split row (good side vs bad side), gated on both samples. */
+function taxRow(label: string, good: WinrateSide, goodLabel: string, bad: WinrateSide, badLabel: string): HTMLElement {
+  if (good.decided < COST_MIN_SAMPLE || bad.decided < COST_MIN_SAMPLE) {
+    return costRow(label,
+      h('span', { class: 'u-dim' }, 'needs data'),
+      `${good.decided}/${COST_MIN_SAMPLE} ${goodLabel} · ${bad.decided}/${COST_MIN_SAMPLE} ${badLabel} decided games`);
+  }
+  const cost = Math.round((good.winrate - bad.winrate) * 100);
+  return costRow(label, costVerdict(cost),
+    `${pct(good.winrate)} ${goodLabel} · ${pct(bad.winrate)} ${badLabel}`);
+}
+
+/**
+ * The three-way leaver swing: the verdict prices a my-team leaver against
+ * leaver-free games; the enemy side is reported separately (its swing should
+ * be positive — a my-team cost must never hide behind it).
+ */
+function leaverRow(l: { none: WinrateSide; myTeam: WinrateSide; enemy: WinrateSide }): HTMLElement {
+  const side = (s: WinrateSide): string => (s.decided >= COST_MIN_SAMPLE ? pct(s.winrate) : `— (${s.decided}g)`);
+  const detail = `${side(l.myTeam)} my team · ${side(l.none)} none · ${side(l.enemy)} enemy`;
+  if (l.myTeam.decided < COST_MIN_SAMPLE || l.none.decided < COST_MIN_SAMPLE) {
+    return costRow('Leaver swing', h('span', { class: 'u-dim' }, 'needs data'), detail);
+  }
+  const cost = Math.round((l.none.winrate - l.myTeam.winrate) * 100);
+  return costRow('Leaver swing', costVerdict(cost), detail);
+}
+
+/** The performance drop when tilted (0–100 self-rating), gated on rated games. */
+function perfRow(p: { calm: RatedSide; tilted: RatedSide }): HTMLElement {
+  if (p.calm.rated < COST_MIN_SAMPLE || p.tilted.rated < COST_MIN_SAMPLE || p.calm.avg === null || p.tilted.avg === null) {
+    return costRow('Performance when tilted',
+      h('span', { class: 'u-dim' }, 'needs data'),
+      `${p.calm.rated}/${COST_MIN_SAMPLE} calm · ${p.tilted.rated}/${COST_MIN_SAMPLE} tilted rated games`);
+  }
+  const drop = Math.round(p.calm.avg - p.tilted.avg);
+  return costRow('Performance when tilted', costVerdict(drop, ''),
+    `self-rating ${p.calm.avg} calm · ${p.tilted.avg} tilted`);
+}
+
+// ---- Trends & session triggers ------------------------------------------------
+
+/** The coach copy for each tilt-trend read (lower tilt rate = improving). */
+const TREND_READ: Record<TiltTrendDirection, { cls: string; text: string }> = {
+  improving: { cls: 'is-win', text: '↓ Improving — you are tilting less lately. Keep doing what you changed.' },
+  worsening: { cls: 'is-loss', text: '↑ Worsening — the tilt rate is climbing. Shorter sessions, earlier breaks.' },
+  flat: { cls: 'u-dim', text: '→ Flat — no clear move either way yet.' },
+};
+
+/** Per-day tilt-rate sparkline + the improving/worsening read (issue #70 B). */
+function trendsCard(ctx: ViewContext): HTMLElement {
+  const points = ctx.data.tiltTrend;
+  if (points.length < 2) {
+    return card({ title: 'Trends', sub: 'share of games flagged tilted, per day' },
+      h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
+        'Not enough days with games in this range to draw a tilt-rate trend yet — keep flagging games.'));
+  }
+  const dir = tiltTrendDirection(points);
+  return card({ title: 'Trends', sub: 'share of games flagged tilted, per day' },
+    h('div', { style: { marginTop: '4px' } },
+      sparkline(points.map((p) => p.rate * 100), { width: 260, height: 46, color: PALETTE.loss }),
+      h('div', { class: 'hint mono', style: { marginTop: '4px', display: 'flex', justifyContent: 'space-between', maxWidth: '260px' } },
+        h('span', null, points[0].date),
+        h('span', null, points[points.length - 1].date),
+      ),
+    ),
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      dir
+        ? h('span', { class: TREND_READ[dir].cls }, TREND_READ[dir].text)
+        : h('span', { class: 'u-dim' }, `Not enough games in each half of the range to read a direction yet (${COST_MIN_SAMPLE} each needed).`)),
+  );
+}
+
+/** Tilt rate by game # within a sitting — the "stop after game N" card (issue #70 C). */
+function sessionCard(ctx: ViewContext): HTMLElement {
+  const buckets = ctx.data.tiltBySession;
+  if (!buckets.length) {
+    return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting' },
+      h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
+        'No games in this range yet — the per-position tilt read appears once you have sittings to compare.'));
+  }
+  // The stop-point claim needs a bucket that can carry it: enough games AND
+  // actual tilt at that position. Thin or tilt-free peaks stay unclaimed.
+  const sampled = buckets.some((b) => b.games >= COST_MIN_SAMPLE);
+  const peak = buckets
+    .filter((b) => b.games >= COST_MIN_SAMPLE && b.tilted > 0)
+    .sort((a, b) => b.rate - a.rate)[0];
+  return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting' },
+    h('div', { class: 'stack', style: { gap: '9px', marginTop: '4px' } },
+      ...buckets.map((b) => statBar({
+        label: `Game ${b.key}`,
+        frac: b.rate,
+        color: PALETTE.loss,
+        // Two fixed, right-aligned sub-columns (rate · games) so the numbers
+        // line up in vertical columns down the card instead of drifting with
+        // the width of "22g" vs "4g".
+        valueText: h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '5px' } },
+          h('span', { style: { minWidth: '30px', textAlign: 'right' } }, pct(b.rate)),
+          h('span', null, '·'),
+          h('span', { style: { minWidth: '24px', textAlign: 'right' } }, `${b.games}g`),
+        ),
+        slim: true,
+        valueWidth: 72,
+      })),
+    ),
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      peak
+        ? h('span', null, 'Tilt peaks at ', h('span', { class: 'is-loss' }, `game ${peak.key}`),
+            ` — ${pct(peak.rate)} of ${peak.games} games. `,
+            // "Break before game 1" is not advice — a first-game peak means the
+            // tilt walks in with you, so the nudge points at the queue-up instead.
+            peak.key === '1' ? 'You may be queuing already tilted — check in before you start.' : 'Plan the break before then.')
+        // Two distinct empty states: genuinely thin samples vs. plenty of
+        // games but no tilt flagged anywhere — don't blame sample size for
+        // the latter (AC7: no fake/false reasons in empty states).
+        : sampled
+          ? 'No tilt flagged at any position in this range — nothing to call a stop point from.'
+          : `Not enough games per position yet (${COST_MIN_SAMPLE} needed) to call a stop point.`),
   );
 }
 

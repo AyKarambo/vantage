@@ -54,9 +54,12 @@ never shows stale data as "current."
 - **Focus** — the "what to work on" hub: net-losing **maps, heroes and roles** in one
   deficit-ranked list, each with a trend arrow (improving/declining) and — once you
   track it as a target — the winrate movement since you flagged it.
-- **Mental** — calm/tilt state, the tilt tax on your winrate, flag counts, and a
-  **break-reminder setting** (on/off + loss threshold) that fires a tray notification
-  after N consecutive losses.
+- **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
+  winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
+  and the performance drop when tilted — each sample-gated), a **tilt-rate trend** sparkline
+  with an improving/worsening read, **tilt by game # in a sitting** (the "stop after game N"
+  read), flag counts with leavers split by team, and a **break-reminder setting**
+  (on/off + loss threshold) that fires a tray notification after N consecutive losses.
 - **Trends** — winrate over time, splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), an

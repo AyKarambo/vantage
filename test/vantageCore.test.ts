@@ -160,9 +160,29 @@ describe('computeDashboard', () => {
     expect(d.matches[0].mapType).toBeTypeOf('string');
     expect(d.byMapType.length).toBeGreaterThan(0);
     expect(d.mental.flags).toBeDefined();
+    expect(d.mentalCosts.tilt.calm.decided).toBeTypeOf('number');
+    expect(d.mentalCosts.leaver.enemy.decided).toBeTypeOf('number');
+    expect(Array.isArray(d.tiltTrend)).toBe(true);
+    expect(Array.isArray(d.tiltBySession)).toBe(true);
     expect(d.targets).toHaveLength(4);
     expect(d.progression.tier).toBeTypeOf('string');
     expect(d.greetingName).toBeTypeOf('string');
+  });
+
+  it('tiltBySession numbers positions over the whole history while the filter scopes aggregation', () => {
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const t0 = Date.now() - 3 * 60 * 60_000; // one sitting, 3 games 30 min apart
+    const sitting = (['support', 'support', 'damage'] as Role[]).map((role, i) =>
+      game({
+        result: 'Win', map: 'Ilios', role,
+        matchId: `sit-${i + 1}`,
+        timestamp: t0 + i * 30 * 60_000,
+        ...(i === 2 ? { mental: { tilt: true } } : {}),
+      }));
+    // Filtering to damage keeps only game #3 — it must still report at
+    // position '3', not be renumbered to a fresh sitting's game #1.
+    const d = computeDashboard(sitting, { days: 'all', role: 'damage' }, demo);
+    expect(d.tiltBySession).toEqual([{ key: '3', games: 1, tilted: 1, rate: 1 }]);
   });
 
   it('defaults breakReminder when ManualData omits it', () => {
