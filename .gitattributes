@@ -1,0 +1,2 @@
+# Git hooks are executed by sh (git bash on Windows) — a CRLF shebang breaks them.
+.githooks/pre-commit text eol=lf
