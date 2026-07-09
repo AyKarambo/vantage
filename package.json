@@ -20,6 +20,7 @@
     "make-icon": "node scripts/make-tray-icon.mjs",
     "assets:store": "node scripts/make-store-assets.mjs",
     "assets:screens": "npm run build:preview && ow-electron scripts/capture-screenshots.cjs",
+    "assets:app-screens": "npm run build && ow-electron scripts/capture-app-screenshots.cjs",
     "start": "npm run make-icon && npm run build && ow-electron .",
     "dev": "npm run make-icon && npm run build && ow-electron .",
     "test": "vitest run",
