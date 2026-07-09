@@ -41,11 +41,12 @@ function heroChip(hero: string, selected: Set<string>): HTMLElement {
  * Call again (repaint) when the role or hero list changes so the offered heroes
  * re-filter; individual chip toggles flip `is-on` without a repaint.
  *
- * Without `opts`, this is the original full role-filtered grid (unchanged —
- * `matchDetail.ts`'s editor relies on this default). With `opts.shortlist`, the
+ * Without `opts`, this is the original full role-filtered grid — kept as the
+ * fallback for callers without most-played data. With `opts.shortlist`, the
  * grid shows only that pool (unioned with `selected`, so existing picks stay
  * visible/removable); with `opts.search` a text filter reveals the rest of the
  * role-eligible pool on demand, toggled the same way as a shortlist chip.
+ * Both the quick-log card and the match editor now pass `{ shortlist, search: true }`.
  */
 export function paintHeroChips(
   host: HTMLElement, selected: Set<string>, role: Role, heroes: HeroEntry[], opts?: HeroPickerOpts,
