@@ -78,6 +78,13 @@ export interface MatchRow {
    * targets, on both review-inbox and match-list rows.
    */
   measuredGrades?: Record<string, { grade: TargetGrade; value: number } | 'no-stat'>;
+  /**
+   * The player's own stored per-target grades for this match (the self-graded
+   * review layer): target id → grade. Unlike {@link measuredGrades}, these are
+   * stored on the match, so they stay put regardless of later target changes —
+   * this is what the Matches-list "Target grades" field renders.
+   */
+  targetGrades?: Record<string, TargetGrade>;
 }
 
 /** Everything the dashboard needs for the current filter set. */

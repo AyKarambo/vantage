@@ -183,23 +183,22 @@ const GRADE_PILLS: Record<TargetGrade, { label: string; state: PillState }> = {
 };
 
 /**
- * One aggregate grade pill for a row — a match can hit several measured targets,
- * so we collapse them into a single grade via {@link aggregateGrade} (floor of
- * the average, rounding toward the worse grade) rather than a truncated run of
- * pills. `'no-stat'` entries are skipped; the tooltip lists each target's own
- * grade (names falling back to ids for since-deleted targets) so the summary
- * stays explainable.
+ * One aggregate grade pill for a row from the match's **stored self-grades**
+ * (`targetGrades`) — a match can be graded on several targets, so we collapse
+ * them into a single grade via {@link aggregateGrade} (floor of the average,
+ * rounding toward the worse grade) rather than a run of pills. These grades are
+ * stored on the match, so they stay put regardless of later target changes; the
+ * tooltip lists each target's own grade (name falling back to a placeholder for
+ * a since-deleted target) so the summary stays explainable.
  */
 function gradePills(m: MatchRow, ctx: ViewContext): HTMLElement | null {
-  const entries = Object.entries(m.measuredGrades ?? {}).filter(
-    (e): e is [string, { grade: TargetGrade; value: number }] => e[1] !== 'no-stat',
-  );
+  const entries = Object.entries(m.targetGrades ?? {});
   if (!entries.length) return null;
-  const summary = aggregateGrade(entries.map(([, res]) => res.grade));
+  const summary = aggregateGrade(entries.map(([, grade]) => grade));
   if (!summary) return null;
-  const nameOf = (id: string): string => ctx.data.targets.find((t) => t.id === id)?.name ?? id;
+  const nameOf = (id: string): string => ctx.data.targets.find((t) => t.id === id)?.name ?? 'target';
   const p = pill(GRADE_PILLS[summary].label, GRADE_PILLS[summary].state);
-  const lines = entries.map(([id, res]) => `${nameOf(id)}: ${GRADE_PILLS[res.grade].label} (${res.value.toLocaleString('en-US')})`);
+  const lines = entries.map(([id, grade]) => `${nameOf(id)}: ${GRADE_PILLS[grade].label}`);
   p.title = entries.length > 1
     ? `${lines.join('\n')}\n→ ${GRADE_PILLS[summary].label} (average)`
     : lines[0];

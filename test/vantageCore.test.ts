@@ -429,6 +429,23 @@ describe('computeDashboard', () => {
     expect(withoutTarget.matches.find((m) => m.matchId === measurable.matchId)).not.toHaveProperty('measuredGrades');
   });
 
+  it('carries the stored self-grades onto match-list rows as targetGrades, independent of active targets (#68 follow-up)', () => {
+    const now = Date.now();
+    const graded = game({
+      result: 'Win', map: 'Ilios', role: 'damage', timestamp: now,
+      review: { at: now, grades: { t1: 'hit', t2: 'missed' }, flags: {} },
+    });
+    const ungraded = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: now - 1000 });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+
+    // No targets passed at all — the stored grades still ride along, so they stay
+    // with the match regardless of whether the targets are still active.
+    const d = computeDashboard([graded, ungraded], { days: 'all' }, demo);
+    const gradedRow = d.matches.find((m) => m.matchId === graded.matchId)!;
+    expect(gradedRow.targetGrades).toEqual({ t1: 'hit', t2: 'missed' });
+    expect(d.matches.find((m) => m.matchId === ungraded.matchId)).not.toHaveProperty('targetGrades');
+  });
+
   it('carries performance onto ungraded review-inbox rows so the Review card can seed its slider', () => {
     // An imported / pre-rated game has a performance but no review — it belongs in
     // the inbox, and its rating must ride along so the card shows it (not "Not rated").

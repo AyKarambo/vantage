@@ -215,6 +215,10 @@ function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMe
 function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow {
   const flags = rowFlags(g);
   const measuredGrades = measuredGradesFor(g, activeMeasured);
+  // The player's stored self-grades stay with the match (unlike the live-computed
+  // measuredGrades), so the Matches-list "Target grades" field renders these.
+  const storedGrades = g.review?.grades;
+  const targetGrades = storedGrades && Object.keys(storedGrades).length ? storedGrades : undefined;
   return {
     matchId: g.matchId,
     timestamp: g.timestamp,
@@ -231,6 +235,7 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
+    ...(targetGrades ? { targetGrades } : {}),
   };
 }
 
