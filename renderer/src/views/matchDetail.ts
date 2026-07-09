@@ -552,22 +552,31 @@ function buildMatchEditor(
     // Field order and label convention are the log card's (its Account/Played
     // fields are log-only): Result, Map, Role, Heroes, Skill rating,
     // Performance, Comms, Flags, Targets.
-    const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw', outline: 'none' } },
+    const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', outline: 'none' } },
       h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
       h('div', { class: 'u-muted', style: { fontSize: '12px' } },
         `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}`),
-      factsBlock,
-      srBlock,
-      field(optionalLabel('Performance', '— how did you play?'),
-        performanceSlider(performance, (v) => (performance = v))),
-      field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
-      field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
-      field(optionalLabel('Targets', '— grade now or later on Review'),
-        h('div', { class: 'stack', style: { gap: '11px' } },
-          ...(rows.length
-            ? rows.map((r) => r.el)
-            : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
-        )),
+      // Two columns mirroring the log card: match facts + Skill rating on the
+      // left, the manual self-report (Performance / Comms / Flags / Targets) on
+      // the right. Collapses to one column on a narrow viewport (shared .log-grid).
+      h('div', { class: 'log-grid' },
+        h('div', { class: 'log-col' },
+          factsBlock,
+          srBlock,
+        ),
+        h('div', { class: 'log-col' },
+          field(optionalLabel('Performance', '— how did you play?'),
+            performanceSlider(performance, (v) => (performance = v))),
+          field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
+          field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
+          field(optionalLabel('Targets', '— grade now or later on Review'),
+            h('div', { class: 'stack', style: { gap: '11px' } },
+              ...(rows.length
+                ? rows.map((r) => r.el)
+                : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+            )),
+        ),
+      ),
       h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
         saveBtn,
         button('Cancel', { variant: 'ghost', onClick: close }),
@@ -582,7 +591,7 @@ function buildMatchEditor(
     if (editable) bindResultKeys(root, resultRow);
     requestAnimationFrame(() => root.focus());
     return root;
-  });
+  }, { panelClass: 'modal-card--wide' });
 }
 
 // --- player history -------------------------------------------------------------
