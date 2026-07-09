@@ -5,7 +5,7 @@ import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, rankLabel, signed, streakText } from '../format';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
-import { button, card, kpiCard, statBar, statBox } from '../components/primitives';
+import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
 import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
 
@@ -178,9 +178,9 @@ function scatterLegend(points: ScatterPoint[]): HTMLElement {
 }
 
 /**
- * Bottom row = Mental + Readiness. The old "Focus queue" card was removed
- * deliberately (issue #71): the scatter's "Top priority" callout above is the
- * Overview's single Focus tease — Focus itself is the hub.
+ * Bottom row = Mental + Readiness + Activity. The old "Focus queue" card was
+ * removed deliberately (issue #71): the scatter's "Top priority" callout above
+ * is the Overview's single Focus tease — Focus itself is the hub.
  */
 function bottomRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
@@ -197,7 +197,19 @@ function bottomRow(ctx: ViewContext): HTMLElement {
         : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Mental.')),
   );
 
-  return h('div', { class: 'overview-bottom' }, mental, readinessCard(ctx));
+  return h('div', { class: 'overview-bottom' }, activityCard(ctx), mental, readinessCard(ctx));
+}
+
+/** Games/day activity heatmap, moved here from Trends (issue #116) — an
+ *  at-a-glance read belongs on the landing screen, not the momentum screen. */
+function activityCard(ctx: ViewContext): HTMLElement {
+  const d = ctx.data;
+  return card(
+    { title: 'Activity', style: { flex: '1' } },
+    calendarHeatmap(d.calendar, (date) => ctx.navigate('matches', { day: date })),
+    h('div', { class: 'hint', style: { marginTop: '11px', lineHeight: '1.45' } },
+      'games/day · colour = winrate · click a day to open its matches'),
+  );
 }
 
 const READINESS_META: Record<string, { label: string; color: string }> = {
