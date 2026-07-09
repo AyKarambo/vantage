@@ -29,10 +29,13 @@ never shows stale data as "current."
   the game feed actually reported for that match). Every match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
-  The editor mirrors the Log match card: colour-coded **W/L/D**, the **mouse-wheel
-  nudge** on the SR field, the **three-state comms** switch (positive / banter /
-  abusive), and a **"Set current rank"** mode — enter the rank you ended at and Vantage
-  **back-calculates that match's SR %** (your live anchor is left as-is). Competitive
+  The editor mirrors the Log match card — the same shared controls, wording and field
+  order: colour-coded **W/L/D** (the `W`/`L`/`D` keys work here too), the **locked map
+  combobox** (type to search, recent maps first), the **most-played hero shortlist**
+  with search, the **mouse-wheel nudge** on the SR field, the **three-state comms**
+  switch (positive / banter / abusive), and a **"Set current rank"** mode — enter the
+  rank you ended at and Vantage **back-calculates that match's SR %** (your live anchor
+  is left as-is; switching role re-seeds the prefilled rank). Competitive
   progress shows the rank you held **after that specific match**: forward-calculated for
   matches at/after your anchor, and **reconstructed backward** (best-effort) for older
   ones, so a past game no longer just echoes today's rank.

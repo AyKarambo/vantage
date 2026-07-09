@@ -68,33 +68,49 @@ function gradeControl(onChange: (g: TargetGrade) => void): { el: HTMLElement; se
 type BoolFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'leaverMyTeam' | 'leaverEnemyTeam';
 
 const FLAGS: Array<{ label: string; key: BoolFlagKey }> = [
-  { label: 'Tilted', key: 'tilt' },
-  { label: 'Toxic mate', key: 'toxicMates' },
+  { label: 'Tilt', key: 'tilt' },
+  { label: 'Toxic mates', key: 'toxicMates' },
   { label: 'Leaver — my team', key: 'leaverMyTeam' },
   { label: 'Leaver — enemy', key: 'leaverEnemyTeam' },
 ];
 
 /**
- * The mental-flag chips + the three-state comms switch, seeded from (and
- * toggling) the caller's `flags`. Comms is the full Positive / Banter / Abusive
- * tone (the same {@link commsSwitch} the log card uses), reading through
- * `commsTone` so a legacy `positiveComms`/`comms:'positive'` record shows
- * selected and clearing the legacy boolean whenever it writes, so the tone stays
- * the single source of truth. Shared by the match-detail editor and Review.
+ * The mental-flag chip row alone, seeded from (and toggling) the caller's
+ * `flags`. The single source for the chip labels — the quick-log card, the
+ * match-detail editor, and Review all render these exact chips.
+ */
+export function mentalFlagChips(flags: MatchMental): HTMLElement {
+  return h('div', { class: 'review-flags' }, ...FLAGS.map((f) => flagChip(f.label, flags, f.key)));
+}
+
+/**
+ * The three-state comms switch bound to `flags`: the full Positive / Banter /
+ * Abusive tone, reading through `commsTone` so a legacy
+ * `positiveComms`/`comms:'positive'` record shows selected, and clearing the
+ * legacy boolean whenever it writes, so the tone stays the single source of
+ * truth. Shared by the quick-log card, the match-detail editor, and Review.
+ */
+export function commsToneSwitch(flags: MatchMental): HTMLElement {
+  return commsSwitch({
+    get: () => commsTone(flags) ?? null,
+    set: (t) => {
+      if (t) flags.comms = t;
+      else delete flags.comms;
+      delete flags.positiveComms; // the tone is authoritative from here on
+    },
+  });
+}
+
+/**
+ * Review's bundled "how it felt" block: the flag chips over the labelled comms
+ * switch — a composition of {@link mentalFlagChips} and {@link commsToneSwitch}.
  */
 export function mentalFlagsRow(flags: MatchMental): HTMLElement {
   return h('div', { class: 'stack', style: { gap: '10px' } },
-    h('div', { class: 'review-flags' }, ...FLAGS.map((f) => flagChip(f.label, flags, f.key))),
+    mentalFlagChips(flags),
     h('div', null,
       h('div', { class: 'field-label', style: { marginBottom: '6px' } }, 'Comms'),
-      commsSwitch({
-        get: () => commsTone(flags) ?? null,
-        set: (t) => {
-          if (t) flags.comms = t;
-          else delete flags.comms;
-          delete flags.positiveComms; // the tone is authoritative from here on
-        },
-      }),
+      commsToneSwitch(flags),
     ),
   );
 }
