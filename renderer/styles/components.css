@@ -1279,11 +1279,14 @@ table.data tbody tr:hover {
 .match-col--performance {
   width: 52px;
 }
-/* Pill-run fields (#68): wide enough for the common 1-2 pill case; longer runs
-   ellipsis-clip like every other column cell. */
+/* Pill-run fields (#68): the grades cell shows one aggregate pill, the flags
+   cell can carry several — wrap them onto extra lines instead of ellipsis-
+   clipping the run (overrides the base .match-col nowrap/clip). */
 .match-col--measuredGrades,
 .match-col--flags {
-  width: 110px;
+  width: 140px;
+  white-space: normal;
+  overflow: visible;
 }
 
 /* Shortcut cheatsheet ------------------------------------------------------------ */

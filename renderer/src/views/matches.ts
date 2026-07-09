@@ -1,7 +1,7 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
-import { dayKey, groupByDay } from '../../../src/core/analytics';
+import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
 import { relTime, roleLabel, signed } from '../format';
 import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
 import { wrHsl } from '../theme';
@@ -183,21 +183,27 @@ const GRADE_PILLS: Record<TargetGrade, { label: string; state: PillState }> = {
 };
 
 /**
- * Compact auto-graded target pills for a row — one per graded measured target,
- * `'no-stat'` entries skipped; the pill's tooltip names the target (falling back
- * to its id for a since-deleted one) and the measured value.
+ * One aggregate grade pill for a row — a match can hit several measured targets,
+ * so we collapse them into a single grade via {@link aggregateGrade} (floor of
+ * the average, rounding toward the worse grade) rather than a truncated run of
+ * pills. `'no-stat'` entries are skipped; the tooltip lists each target's own
+ * grade (names falling back to ids for since-deleted targets) so the summary
+ * stays explainable.
  */
 function gradePills(m: MatchRow, ctx: ViewContext): HTMLElement | null {
   const entries = Object.entries(m.measuredGrades ?? {}).filter(
     (e): e is [string, { grade: TargetGrade; value: number }] => e[1] !== 'no-stat',
   );
   if (!entries.length) return null;
+  const summary = aggregateGrade(entries.map(([, res]) => res.grade));
+  if (!summary) return null;
   const nameOf = (id: string): string => ctx.data.targets.find((t) => t.id === id)?.name ?? id;
-  return pillRow(entries.map(([id, res]) => {
-    const p = pill(GRADE_PILLS[res.grade].label, GRADE_PILLS[res.grade].state);
-    p.title = `${nameOf(id)} — ${res.value.toLocaleString('en-US')}`;
-    return p;
-  }));
+  const p = pill(GRADE_PILLS[summary].label, GRADE_PILLS[summary].state);
+  const lines = entries.map(([id, res]) => `${nameOf(id)}: ${GRADE_PILLS[res.grade].label} (${res.value.toLocaleString('en-US')})`);
+  p.title = entries.length > 1
+    ? `${lines.join('\n')}\n→ ${GRADE_PILLS[summary].label} (average)`
+    : lines[0];
+  return pillRow([p]);
 }
 
 /** Per-row flag pill vocabulary — compact labels, tones matching the match-detail header pills. */
@@ -221,9 +227,10 @@ function flagPills(m: MatchRow): HTMLElement | null {
     : null;
 }
 
-/** A tight inline run of pills — shared by the grades and flags fields. */
+/** A run of pills — shared by the grades and flags fields. Wraps (right-aligned)
+ *  rather than ellipsis-clipping when a row carries more than the column fits. */
 function pillRow(pills: HTMLElement[]): HTMLElement {
-  return h('span', { style: { display: 'inline-flex', gap: '4px', alignItems: 'center', verticalAlign: 'middle' } }, ...pills);
+  return h('span', { style: { display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', gap: '4px', alignItems: 'center', justifyContent: 'flex-end', verticalAlign: 'middle' } }, ...pills);
 }
 
 /** Hero cross-links, comma-joined; stopPropagation keeps the row click intact. */

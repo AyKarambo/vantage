@@ -28,3 +28,6 @@ export type { DayGroup, SessionRecap } from './session';
 // Temporal splits (time of day, session position, fade detection)
 export { byTimeOfDay, bySessionPosition, sessionFade } from './temporal';
 export type { SessionFade } from './temporal';
+
+// Collapse a match's several target grades into one (floor-of-average)
+export { aggregateGrade } from './targetGrade';
