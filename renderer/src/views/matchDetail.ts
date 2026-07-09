@@ -111,13 +111,11 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
     h('span', null, '·'),
     h('span', null, relTime(d.timestamp)),
   );
-  const flags = mentalFlags(d);
   return card({ class: 'detail-head' },
     h('div', { class: 'detail-head-main' },
       h('div', { class: `detail-result is-${state}` }, RESULT_TEXT[d.result] ?? d.result),
       h('h1', { class: 'detail-map' }, d.map),
       meta,
-      flags,
       h('div', { style: { marginTop: '10px' } },
         button('✎ Edit match', {
           variant: 'soft',
@@ -146,7 +144,7 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
  * the quick-log self-report (`d.mental`) overlaid key-by-key with the saved
  * Review flags (`d.review.flags`), the same seed the match editor builds —
  * so flags graded only on the Review screen show up too. Null when nothing
- * is flagged. Shared by the header and the Grades card.
+ * is flagged. Rendered read-only in the Grades card.
  */
 function mentalFlags(d: MatchDetail): HTMLElement | null {
   const m: MatchMental = { ...(d.mental ?? {}), ...(d.review?.flags ?? {}) };
