@@ -82,7 +82,10 @@ Write-Host "Releasing $tag ($($info.level), from $(if ($info.lastTag) { $info.la
 # 5. idempotency --------------------------------------------------------------
 if (git tag -l $tag) { throw "tag $tag already exists locally." }
 if (git ls-remote --tags $Remote "refs/tags/$tag") { throw "tag $tag already exists on $Remote." }
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & $gh release view $tag *> $null
+$ErrorActionPreference = $prevEAP
 if ($LASTEXITCODE -eq 0) { throw "a GitHub Release $tag already exists." }
 
 # 6-8. build, sign, verify, publish (restore package.json no matter what) ------
