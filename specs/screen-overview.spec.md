@@ -1,6 +1,6 @@
 # Screen spec: Overview (`overview`)
 
-**Source:** `renderer/src/views/overview.ts`, `src/core/analytics/session.ts` (`sessionRecap`) · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8) · updated 2026-07-08 per issue #71 (SDD spec #75): Focus queue card + "▶ queue" removed
+**Source:** `renderer/src/views/overview.ts`, `src/core/analytics/session.ts` (`sessionRecap`) · reverse-engineered 2026-07-04 · updated 2026-07-04 after gap implementation · updated 2026-07-04 after the ui-qol batch (PR #8) · updated 2026-07-08 per issue #71 (SDD spec #75): Focus queue card + "▶ queue" removed · updated 2026-07-09 per issue #116 (SDD spec `move-activity-heatmap-to-overview`): Activity heatmap moved here from `screen-trends.spec.md`
 **Provenance tags:** [explicit] stated in code/comments · [inferred] reconstructed from behavior · [confirmed] user decision (2026-07-04 spec review; 2026-07-08 issue #71 scope call) · [implemented 2026-07-04] shipped in the gap-closing pass · [qol 2026-07-04] shipped in the ui-qol batch (intent: `ui-qol.spec.md`)
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext` (`renderer/src/views/view.ts`); the global filter bar (Account · Role · Mode · Season) re-scopes it; demo dataset shows a "Demo data" badge. [qol 2026-07-04] Ctrl+K now opens the **command palette** (see `screen-shell.spec.md`), not the quick-log modal directly — the quick-log opens via this screen's **Log match** CTA or the palette's Log match action (the palette's empty-query default, so Ctrl+K → Enter still logs a match).
@@ -16,7 +16,8 @@
 - KPI row: **Winrate** (+ recent-form delta chip), **Games** (W·L split), **Rank**, **Streak** (accented, with "ride it" / "reset it" nudge). [fix 2026-07-05] The **Rank** KPI (and the sidebar rank line) show the player's **real anchored rank** — the calculated rank of the greeting account's most-played anchored role — with its within-division progress %. Only when that account has *no* rank anchor does it fall back to the winrate-derived heuristic (`progression`); previously it always showed the heuristic, so a just-set rank appeared wrong (e.g. "Platinum 1").
 - Scatter card: winrate × volume for every map in range; dot colour is a stable categorical per map; legend uses shortened map names with the full name on hover.
 - **Top priority** callouts [confirmed 2026-07-08]: top 3 net-losing maps (net = losses − wins > 0, from `focusMaps`) with games, signed net, winrate; hint copy uses practice/review framing ("Practice them before ranked and review one replay each."); the CTA "Open Focus →" is the Overview's **single** entry to the Focus screen — Overview teases, Focus is the hub (hierarchy owned by `screen-focus.spec.md`).
-- Bottom row: **Mental** snapshot (Calm/Tilted bars + break-reminder line — [implemented 2026-07-04] truthful, reflecting the real per-user setting owned by `screen-mental.spec.md`) and the **Readiness** teaser (when enabled). [confirmed 2026-07-08] The former "Focus queue" card (top 4 net-losing maps with per-row "▶ queue" buttons) was removed per issue #71 — it triplicated the focus list, and "queue" read like an action while being pure navigation.
+- Bottom row: **Activity** (calendar heatmap, leftmost), **Mental** snapshot (Calm/Tilted bars + break-reminder line — [implemented 2026-07-04] truthful, reflecting the real per-user setting owned by `screen-mental.spec.md`), and the **Readiness** teaser (when enabled) — three cards in one row, Activity always present regardless of the Readiness toggle. [confirmed 2026-07-08] The former "Focus queue" card (top 4 net-losing maps with per-row "▶ queue" buttons) was removed per issue #71 — it triplicated the focus list, and "queue" read like an action while being pure navigation.
+- [moved 2026-07-09, issue #116] **Activity** calendar heatmap: games per day (fixed 35-day window), cell colour = winrate, opacity = game count; legend (Losing/Even/Winning) stacked vertically beside the grid. Clicking a day cell with games navigates to Matches filtered to that day. Subtitle ("games/day · colour = winrate · click a day to open its matches") renders as a hint line at the bottom of the card rather than in the header. Moved from Trends (`screen-trends.spec.md`) — an at-a-glance read belongs on the landing screen, not the momentum screen.
 
 ## Out-of-Scope
 
@@ -41,6 +42,8 @@
 - Given a click on "Log match", then the quick-log modal opens.
 - Given games were played yesterday and no recap has been dismissed today, when Overview renders, then the "Yesterday's session" card shows W–L + net, winrate, best map, and targets-hit; clicking ✕ dismisses it for the rest of the day (and it stays gone across relaunches that day).
 - Given yesterday had no games, then no recap card renders.
+- Given the bottom row renders, then it shows Activity, Mental, and Readiness (if enabled) as cards in one row, Activity leftmost and always present regardless of the Readiness toggle.
+- Given a click on an Activity heatmap day cell with games, then the app navigates to Matches filtered to that day.
 
 ## Known gaps (intent ≠ code)
 
