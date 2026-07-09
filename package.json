@@ -25,7 +25,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "release": "npm run make-icon && npm run build && ow-electron-builder --win --x64 --publish=never",
-    "sign:local": "powershell -ExecutionPolicy Bypass -File scripts/sign-local.ps1",
+    "publish:release": "powershell -ExecutionPolicy Bypass -File scripts/publish-release.ps1",
+    "release:check": "node scripts/next-version.mjs --check",
     "import:obsidian": "powershell -ExecutionPolicy Bypass -File scripts/import-obsidian.ps1",
     "pack:opk": "node scripts/pack-opk.mjs"
   },
@@ -62,11 +63,13 @@
       "icon": "assets/appicon.png",
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "signtoolOptions": {
-        "sign": "./scripts/esigner-sign.cjs",
+        "sign": "./scripts/certum-sign.cjs",
+        "certificateSha1": "69310A558F482846DB5BF3A35531159E483BAEBF",
+        "rfc3161TimeStampServer": "http://time.certum.pl",
         "signingHashAlgorithms": [
           "sha256"
         ],
-        "publisherName": "Timo Seikel"
+        "publisherName": "Open Source Developer Timo Seikel"
       }
     },
     "nsis": {
