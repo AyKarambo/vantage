@@ -4,7 +4,7 @@
  * renderer bundle can all share it.
  */
 import type { Role, Result } from '../../core/model';
-import type { WinLoss, Group, FocusItem, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
@@ -135,7 +135,14 @@ export interface DashboardData {
   /** Winrate by game number within a session ('1'..'5', '6+'). */
   sessionPosition: Group[];
   calendar: CalendarDay[];
+  /** Map-only ranking that annotates the Overview scatter ("Top priority" callout). */
   focusMaps: FocusItem[];
+  /**
+   * The Focus screen's cross-dimension "work on these" list: net-losing maps,
+   * heroes and roles merged, ranked and capped, with trend + linked-target
+   * progress attached. Already net>0-filtered.
+   */
+  focusItems: FocusEntry[];
   heroStats: HeroSummary[];
   matches: MatchRow[];
   mental: MentalSummary;
