@@ -192,7 +192,9 @@ first, current season always listed), and `All time`; there's no account or game
 bar — the account switcher in the top-left already covers "which account", and mode no longer
 applies. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run actions,
 find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet, `←/→`
-between match details, `H/P/M/S` grading on Review, `W/L/D`+`Enter` in the log dialog), toasts with
+between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/PageDown` to page
+through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
+Review, `W/L/D`+`Enter` in the log dialog), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
 everywhere** (click a heatmap day or a Mental flag count to open exactly those matches; hero-drawer
 map rows and Overview scatter dots jump to the Maps screen), remembered role + account in the
