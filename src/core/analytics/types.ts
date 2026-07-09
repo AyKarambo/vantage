@@ -138,6 +138,42 @@ export interface FocusItem extends WinLoss {
   net: number;
 }
 
+/** Which gameplay dimension a focus entry ranks: a map, a hero, or a role queue. */
+export type FocusDimension = 'map' | 'hero' | 'role';
+
+/** Recent-half vs earlier-half winrate verdict for a focus entry's games. */
+export type FocusTrend = 'improving' | 'flat' | 'declining';
+
+/**
+ * Feedback for a focus entry the player is already working on via a linked
+ * improvement target — "is focusing this actually helping?".
+ */
+export interface FocusProgress {
+  targetId: string;
+  targetName: string;
+  /** When the linked target was flagged (its `activatedAt ?? createdAt`). */
+  since: number;
+  /** Games matching this entry since {@link since}, over unfiltered history. */
+  gamesSince: number;
+  /**
+   * Winrate change in points since the target was flagged (winrate since −
+   * winrate before, ×100); only present when both windows hold ≥3 decided games.
+   */
+  deltaPts?: number;
+}
+
+/**
+ * One row of the cross-dimension "work on these" list on the Focus screen: a
+ * net-losing map, hero or role, with the closing-the-loop signals attached.
+ */
+export interface FocusEntry extends FocusItem {
+  dimension: FocusDimension;
+  /** Absent when the entry has too few games in range to split into halves. */
+  trend?: FocusTrend;
+  /** Present when an active improvement target is linked to this entry. */
+  progress?: FocusProgress;
+}
+
 /** Per-hero rollup: winrate plus exact stat totals and per-10-minute averages. */
 export interface HeroSummary extends WinLoss {
   hero: string;

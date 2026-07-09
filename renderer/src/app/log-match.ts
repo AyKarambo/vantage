@@ -11,28 +11,22 @@
 import { h, render } from '../dom';
 import { time, roleLabel } from '../format';
 import { registerShortcut } from '../shortcuts';
-import { badge, button, select, segmented } from '../components/primitives';
+import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { typeahead } from '../components/typeahead';
-import { targetGradeRow } from '../components/reviewControls';
-import { resultChooser } from '../components/resultChooser';
-import { commsSwitch } from '../components/commsSwitch';
+import { mapPicker, resolveMapName } from '../components/mapPicker';
+import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
+import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
-import { attachWheelNudge } from './wheelStepper';
+import { field, optionalLabel } from '../components/formField';
+import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
-import { TIERS } from '../../../src/core/rank';
-import type { AccountSummary, CommsTone, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
+import type { AccountSummary, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
-const FLAGS = ['Tilt', 'Toxic mates', 'Leaver — my team', 'Leaver — enemy'];
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
-const DIVISIONS = [5, 4, 3, 2, 1];
-
-/** The SR-entry mode: nudge the change (±%) or set the current rank outright. */
-type SrMode = 'change' | 'set-current';
 
 /** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
 function presetFor(result: Result): string {
@@ -53,9 +47,8 @@ interface LogState {
   /** Heroes played this match — the card allows several. */
   heroes: Set<string>;
   account: string;
-  flags: Set<string>;
-  /** Comms tone, or null when the player left the switch unset. */
-  comms: CommsTone | null;
+  /** The mental self-report (flags + comms tone), toggled in place by the shared chips/switch. */
+  mental: MatchMental;
   /** How SR is entered: nudge the change, or set the current rank directly. */
   srMode: SrMode;
   srDelta: string;
@@ -78,20 +71,25 @@ export interface LogCarry {
 // Cheatsheet entries only — the dialog binds these keys itself (the global
 // dispatcher never fires over an open overlay), so `when` keeps them inert.
 const never = (): boolean => false;
-registerShortcut({ combo: 'w', description: 'Result: Win (in the log dialog)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'l', description: 'Result: Loss (in the log dialog)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'd', description: 'Result: Draw (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'w', description: 'Result: Win (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'l', description: 'Result: Loss (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'd', description: 'Result: Draw (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'enter', description: 'Save the match (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (in the log dialog)', group: 'Log match', when: never, run: () => {} });
 
-/** Turn the chip selection + comms switch into the optional per-match mental self-report. */
-function mentalFrom(flags: Set<string>, comms: CommsTone | null): MatchMental | undefined {
+/**
+ * Serialize the chip/switch-driven mental state into the optional per-match
+ * self-report: only truthy flags and a set comms tone go out (a toggled-off
+ * chip leaves a `false` behind in the working object), and an untouched report
+ * stays `undefined` so nothing is logged for it.
+ */
+function mentalFrom(mental: MatchMental): MatchMental | undefined {
   const m: MatchMental = {};
-  if (flags.has('Tilt')) m.tilt = true;
-  if (flags.has('Toxic mates')) m.toxicMates = true;
-  if (flags.has('Leaver — my team')) m.leaverMyTeam = true;
-  if (flags.has('Leaver — enemy')) m.leaverEnemyTeam = true;
-  if (comms) m.comms = comms;
+  if (mental.tilt) m.tilt = true;
+  if (mental.toxicMates) m.toxicMates = true;
+  if (mental.leaverMyTeam) m.leaverMyTeam = true;
+  if (mental.leaverEnemyTeam) m.leaverEnemyTeam = true;
+  if (mental.comms) m.comms = mental.comms;
   return Object.keys(m).length ? m : undefined;
 }
 
@@ -140,8 +138,7 @@ function buildForm(
     map: '',
     heroes: new Set<string>(carry?.heroes ?? []),
     account: defaultAccount,
-    flags: new Set<string>(),
-    comms: null,
+    mental: {},
     // No anchor yet for this account+role → open in "Set current rank" so the
     // starting rank gets established there (replacing the old one-time-setup
     // block); otherwise default to nudging the change.
@@ -158,17 +155,9 @@ function buildForm(
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
 
-  /**
-   * Resolve free-typed map text onto the known map list (case-insensitive).
-   * Resolution is NOT gated by `isActive`: a user backfilling a game on a map
-   * that has since rotated out of the pool must still be able to type it and log
-   * it (spec AC 22) — only the browse suggestions hide inactive maps.
-   */
-  const resolveMap = (): string | null => {
-    const q = state.map.trim().toLowerCase();
-    if (!q) return null;
-    return ctx.data.masterData.maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
-  };
+  // Free-typed map text resolves case-insensitively onto the known map list
+  // (spec AC 22 — inactive maps stay loggable); see resolveMapName.
+  const resolveMap = (): string | null => resolveMapName(state.map, ctx.data.masterData.maps);
 
   // The map combobox is strict (see mapField below): its committed value can
   // only ever be an exact known map name or empty. Save stays disabled the
@@ -210,7 +199,7 @@ function buildForm(
         map,
         heroes: [...state.heroes],
         gameType: 'Competitive',
-        mental: mentalFrom(state.flags, state.comms),
+        mental: mentalFrom(state.mental),
         account: state.account,
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
         ...(state.performance != null ? { performance: state.performance } : {}),
@@ -280,17 +269,11 @@ function buildForm(
   );
 
   const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
-  const mutedMapNames = new Set(ctx.data.masterData.maps.filter((m) => !m.isActive).map((m) => m.name));
   const mapField = field('Map',
-    typeahead({
+    mapPicker({
       value: state.map,
-      placeholder: 'start typing — recent maps listed first',
-      suggestions: mapSuggestions(ctx),
-      searchSuggestions: allMapNames(ctx),
-      mutedItems: mutedMapNames,
-      strict: true,
-      showOnFocus: true,
-      inputClass: 'vt-input',
+      maps: ctx.data.masterData.maps,
+      recentMaps: ctx.data.matches.map((m) => m.map),
       onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
     }),
   );
@@ -332,25 +315,6 @@ function buildForm(
   paintHeroes();
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
-  // SR-delta input with the mouse-wheel nudge (±1) and edit tracking.
-  const srDeltaInput = (): HTMLInputElement => {
-    const el = numInput(state.srDelta, 'e.g. +22 or -19', (v) => { state.srDelta = v; state.srEdited = true; });
-    attachWheelNudge(el, () => state.srDelta, (v) => { state.srDelta = v; state.srEdited = true; });
-    return el;
-  };
-
-  // Tier / division / % picker — the "Set current rank" mode's input.
-  const rankPicker = (): HTMLElement => {
-    const pctInput = numInput(state.anchorPct, 'e.g. 40, or -19 if protected', (v) => (state.anchorPct = v));
-    attachWheelNudge(pctInput, () => state.anchorPct, (v) => (state.anchorPct = v));
-    return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-      select(TIERS.map((t) => ({ value: t, label: t })), state.anchorTier, (v) => (state.anchorTier = v)),
-      select(DIVISIONS.map((d) => ({ value: String(d), label: `Div ${d}` })), String(state.anchorDivision),
-        (v) => (state.anchorDivision = Number(v))),
-      pctInput,
-    );
-  };
-
   /**
    * Seed tier/division/% from the account+role's existing recorded rank when
    * entering Set-current mode (mirrors Settings' openSetRank prefill) — there's
@@ -372,27 +336,30 @@ function buildForm(
   const paintRank = (): void => {
     const toggleRow = field(
       optionalLabel('Skill rating', '— nudge the change or set your rank'),
-      segmented<SrMode>({
-        options: [{ value: 'change', label: 'Change (±%)' }, { value: 'set-current', label: 'Set current rank' }],
-        value: state.srMode,
-        onChange: (v) => {
-          state.srMode = v;
-          if (v === 'set-current') seedAnchorFromRanks();
-          paintRank();
-        },
-        fill: true,
+      srModeToggle(state.srMode, (v) => {
+        state.srMode = v;
+        if (v === 'set-current') seedAnchorFromRanks();
+        paintRank();
       }),
     );
 
     if (state.srMode === 'set-current') {
       render(rankHost, toggleRow,
-        field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker()),
+        field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker({
+          tier: state.anchorTier,
+          division: state.anchorDivision,
+          pct: state.anchorPct,
+          onTier: (v) => (state.anchorTier = v),
+          onDivision: (v) => (state.anchorDivision = v),
+          onPct: (v) => (state.anchorPct = v),
+        })),
         h('div', { class: 'hint', style: { marginTop: '4px' } },
           `Sets ${roleLabel(state.role)} on ${state.account} to this rank — we track from here.`));
       return;
     }
 
-    const srField = field(optionalLabel('Skill rating change (%)'), srDeltaInput());
+    const srField = field(optionalLabel('Skill rating change (%)'),
+      srDeltaInput(state.srDelta, (v) => { state.srDelta = v; state.srEdited = true; }));
     const hint = hasAnchor(state.account, state.role)
       ? `Rank tracked for ${roleLabel(state.role)} on ${state.account} — the % above moves it.`
       : `No rank tracked for ${roleLabel(state.role)} on ${state.account} yet — switch to “Set current rank” to set your starting rank.`;
@@ -401,25 +368,14 @@ function buildForm(
   };
   paintRank();
 
+  // Flags + comms: the shared chip row and three-state comms switch (also used
+  // by the editor and Review), toggling the mental self-report in place.
   const flagsBlock = field(
     optionalLabel('Flags', "— manual, the game doesn't report these"),
-    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-      ...FLAGS.map((f) => {
-        const el = h('button', { class: `chip${state.flags.has(f) ? ' is-on' : ''}` }, f);
-        el.addEventListener('click', () => {
-          state.flags.has(f) ? state.flags.delete(f) : state.flags.add(f);
-          el.classList.toggle('is-on');
-        });
-        return el;
-      }),
-    ),
+    mentalFlagChips(state.mental),
   );
-
-  // Comms tone: a single-select colour switch (green/yellow/red). Clicking the
-  // active option again clears it — comms stays optional. Shared with the editor
-  // and Review via the commsSwitch component.
   const commsBlock = field(optionalLabel('Comms', '— how team comms felt'),
-    commsSwitch({ get: () => state.comms, set: (t) => { state.comms = t; } }));
+    commsToneSwitch(state.mental));
 
   const targetsBlock = activeTargets.length
     ? field(
@@ -468,23 +424,12 @@ function buildForm(
     ),
   );
 
-  // Keyboard flow: W/L/D pick the result when not typing; Enter saves from
-  // anywhere but a button (a focused button keeps its native click) and the
-  // typeahead swallows Enter itself while its list is open.
+  // Keyboard flow: W/L/D pick the result when not typing (shared binding);
+  // Enter saves from anywhere but a button (a focused button keeps its native
+  // click) and the typeahead swallows Enter itself while its list is open.
+  bindResultKeys(form, resultRow);
   form.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
-    const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
-    if (!typing) {
-      const byKey: Record<string, string> = { w: 'Win', l: 'Loss', d: 'Draw' };
-      const pick = byKey[e.key.toLowerCase()];
-      if (pick && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        resultRow.querySelectorAll('button').forEach((b) => {
-          if (b.dataset.value === pick) b.click();
-        });
-        return;
-      }
-    }
     // e.repeat: ignore key-repeat from a held Enter — only a fresh keydown saves.
     if (e.key === 'Enter' && !e.repeat && !(t instanceof HTMLButtonElement)) {
       e.preventDefault();
@@ -503,53 +448,6 @@ function buildForm(
 }
 
 // --- little local builders --------------------------------------------------
-
-/**
- * Browse order for the map typeahead: recently-played first, then the rest —
- * built from the ACTIVE competitive pool only, so a map rotated out of the pool
- * is hidden from suggestions (spec AC 21). It stays type-resolvable via
- * {@link resolveMap} (AC 22), so history on it is never blocked.
- */
-function mapSuggestions(ctx: ViewContext): string[] {
-  const active = ctx.data.masterData.maps
-    .filter((m) => m.isActive)
-    .map((m) => m.name)
-    .sort((a, b) => a.localeCompare(b));
-  const activeSet = new Set(active);
-  const recent: string[] = [];
-  for (const m of ctx.data.matches) if (activeSet.has(m.map) && !recent.includes(m.map)) recent.push(m.map);
-  const rest = active.filter((m) => !recent.includes(m));
-  return [...recent, ...rest];
-}
-
-/**
- * Every known map (active + inactive), sorted — the locked combobox's search
- * pool, so a rotated-out map is still reachable by typing its name (spec AC
- * 21/22), just deprioritized/muted rather than hidden.
- */
-function allMapNames(ctx: ViewContext): string[] {
-  return ctx.data.masterData.maps.map((m) => m.name).sort((a, b) => a.localeCompare(b));
-}
-
-function field(label: Node | string, control: Node): HTMLElement {
-  return h('div', null, typeof label === 'string' ? h('div', { class: 'field-label' }, label) : label, control);
-}
-
-/** A field label with a dimmed "— optional / …" suffix. */
-function optionalLabel(label: string, suffix = '— optional'): HTMLElement {
-  return h('span', null,
-    h('span', { class: 'field-label', style: { display: 'inline', margin: '0' } }, label),
-    h('span', { class: 'u-dim', style: { fontSize: '11px', marginLeft: '6px' } }, suffix),
-  );
-}
-
-/** A text/number input styled like the rest of the form. */
-function numInput(value: string, placeholder: string, onChange: (v: string) => void): HTMLInputElement {
-  return h('input', {
-    class: 'vt-input mono', type: 'number', step: '1', value, placeholder,
-    on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
-  }) as HTMLInputElement;
-}
 
 /** Compact segmented choice (Role, Mode). */
 function choiceSegment(options: string[], initial: string, onPick: (value: string) => void): HTMLElement {

@@ -3,13 +3,17 @@
 // Vocabulary types
 export type {
   HeroStat, MatchMental, CommsTone, TargetGrade, MatchReview, GameRecord,
-  WinLoss, Group, FocusItem, HeroSummary, Streak,
+  WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry,
+  HeroSummary, Streak,
 } from './types';
 
 // Grouping + win/loss aggregation
 export {
   winLoss, groupBy, byMap, byRole, byAccount, byHero, byMode, focusBy, trend, dayKey,
 } from './grouping';
+
+// Cross-dimension focus ranking (the Focus screen's "work on these" hub)
+export { focusEntries, focusTrend, focusGamesFor, linkFocusTargets } from './focus';
 
 // Per-hero stat rollups
 export { heroStats } from './heroStats';
@@ -28,3 +32,6 @@ export type { DayGroup, SessionRecap } from './session';
 // Temporal splits (time of day, session position, fade detection)
 export { byTimeOfDay, bySessionPosition, sessionPositionGroups, sessionFade } from './temporal';
 export type { SessionFade, SessionPositionOpts } from './temporal';
+
+// Collapse a match's several target grades into one (floor-of-average)
+export { aggregateGrade } from './targetGrade';

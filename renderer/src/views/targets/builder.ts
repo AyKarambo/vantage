@@ -7,7 +7,7 @@ import type { TargetMode, TargetSummary } from '../../../../src/shared/contract'
 import { TARGET_TEMPLATES, stepFor, parseMeasuredRule } from '../../../../src/core/targets';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
-import { attachStepper } from '../../app/wheelStepper';
+import { attachStepper } from '../../components/wheelStepper';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 

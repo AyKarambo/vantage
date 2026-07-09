@@ -4,7 +4,7 @@
  * renderer bundle can all share it.
  */
 import type { Role, Result } from '../../core/model';
-import type { WinLoss, Group, FocusItem, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
@@ -75,11 +75,19 @@ export interface MatchRow {
   flags?: Partial<Record<MatchFlagKey, true>>;
   /**
    * Auto-graded measured (⚡) targets for this match, shown read-only on the
-   * Review screen: target id → the derived grade + underlying per-10/ratio value,
-   * or `'no-stat'` when the match can't measure it. Only populated for the
-   * currently-active measured targets on the review inbox rows.
+   * Review screen and as an optional Matches-list field: target id → the
+   * derived grade + underlying per-10/ratio value, or `'no-stat'` when the
+   * match can't measure it. Only populated for the currently-active measured
+   * targets, on both review-inbox and match-list rows.
    */
   measuredGrades?: Record<string, { grade: TargetGrade; value: number } | 'no-stat'>;
+  /**
+   * The player's own stored per-target grades for this match (the self-graded
+   * review layer): target id → grade. Unlike {@link measuredGrades}, these are
+   * stored on the match, so they stay put regardless of later target changes —
+   * this is what the Matches-list "Target grades" field renders.
+   */
+  targetGrades?: Record<string, TargetGrade>;
 }
 
 /** Everything the dashboard needs for the current filter set. */
@@ -130,7 +138,14 @@ export interface DashboardData {
   /** Winrate by game number within a session ('1'..'5', '6+'). */
   sessionPosition: Group[];
   calendar: CalendarDay[];
+  /** Map-only ranking that annotates the Overview scatter ("Top priority" callout). */
   focusMaps: FocusItem[];
+  /**
+   * The Focus screen's cross-dimension "work on these" list: net-losing maps,
+   * heroes and roles merged, ranked and capped, with trend + linked-target
+   * progress attached. Already net>0-filtered.
+   */
+  focusItems: FocusEntry[];
   heroStats: HeroSummary[];
   matches: MatchRow[];
   mental: MentalSummary;

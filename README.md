@@ -21,29 +21,39 @@ Coaching), so a late-night session spanning past midnight still reads as one, an
 never shows stale data as "current."
 
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
-  *winrate × volume* scatter with a focus band, a focus queue and a mental snapshot.
+  *winrate × volume* scatter with a top-priority callout, and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**
-  (scoreboard, per-hero tabs, competitive progress, player history, and an
-  end-of-match screenshots gallery — each section degrades gracefully to whatever the
-  game feed actually reported for that match). Every match is **editable** from here:
+  (scoreboard, per-hero tabs, competitive progress, a read-only **Grades card** with
+  the match's target grades, performance rating and feel/leaver flags, player history,
+  and an end-of-match screenshots gallery — each section degrades gracefully to whatever
+  the game feed actually reported for that match). Every match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
-  The editor mirrors the Log match card: colour-coded **W/L/D**, the **mouse-wheel
-  nudge** on the SR field, the **three-state comms** switch (positive / banter /
-  abusive), and a **"Set current rank"** mode — enter the rank you ended at and Vantage
-  **back-calculates that match's SR %** (your live anchor is left as-is). Competitive
+  The editor mirrors the Log match card — the same shared controls, wording and field
+  order: colour-coded **W/L/D** (the `W`/`L`/`D` keys work here too), the **locked map
+  combobox** (type to search, recent maps first), the **most-played hero shortlist**
+  with search, the **mouse-wheel nudge** on the SR field, the **three-state comms**
+  switch (positive / banter / abusive), and a **"Set current rank"** mode — enter the
+  rank you ended at and Vantage **back-calculates that match's SR %** (your live anchor
+  is left as-is; switching role re-seeds the prefilled rank). Competitive
   progress shows the rank you held **after that specific match**: forward-calculated for
   matches at/after your anchor, and **reconstructed backward** (best-effort) for older
   ones, so a past game no longer just echoes today's rank.
-  A **Customize view** popover lets you set role, heroes, account, SR delta, duration
-  and final score each to hidden, inline (folded into the row's meta line), or its own
-  aligned column — the choice persists across sessions. The meta line only ever joins
-  the fields you've set to inline that actually have a value for that row (no `—`
-  placeholders or dangling `·`), and disappears entirely when nothing applies.
+  A **Customize view** popover lets you set role, heroes, account, SR delta, duration,
+  final score, performance rating, target grades and leaver/mental flags each to hidden,
+  inline (folded into the row's meta line), or its own aligned column — the choice
+  persists across sessions. The grades-oriented fields start hidden and render compactly
+  when enabled: the 0-100 self-rating as a small tinted stat, auto-graded measured
+  targets as Hit / Partial / Missed pills, and flags as Tilt / Toxic / Leaver / +Comms /
+  Abusive pills. The meta line only ever joins the fields you've set to inline that
+  actually have a value for that row (no `—` placeholders or dangling `·`), and
+  disappears entirely when nothing applies.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
   drill-down drawer (per-map winrate, recent games, aggregates).
-- **Focus** — net-losing maps ranked by deficit — the "what to work on" signal.
+- **Focus** — the "what to work on" hub: net-losing **maps, heroes and roles** in one
+  deficit-ranked list, each with a trend arrow (improving/declining) and — once you
+  track it as a target — the winrate movement since you flagged it.
 - **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
   winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
   and the performance drop when tilted — each sample-gated), a **tilt-rate trend** sparkline

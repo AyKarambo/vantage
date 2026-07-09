@@ -4,8 +4,9 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar,
-  currentSession, focusBy, heroStats, performanceStats, sessionRecap, streak, trend, winLoss, groupBy,
+  byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
+  focusBy, focusEntries, heroStats, linkFocusTargets, performanceStats, sessionRecap, streak,
+  trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
@@ -122,8 +123,13 @@ export function computeDashboard(
     sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
+    // The Focus screen's cross-dimension hub: ranked/trended over the FILTERED
+    // range (the list describes what you see), while the since-flagged progress
+    // of a linked target runs over the unfiltered history (like staleness —
+    // it is about the target's lifetime, not the current filter).
+    focusItems: linkFocusTargets(focusEntries(games), authoredTargets, all),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
-    matches: recentMatches(games, mapModeOf),
+    matches: recentMatches(games, mapModeOf, activeMeasured),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),
     tiltTrend: tiltTrend(games),
@@ -211,16 +217,20 @@ export function pendingReviewMatches(
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
 const ROW_CAP = 150;
 
-function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver): MatchRow[] {
+function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow[] {
   return [...games]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, ROW_CAP)
-    .map((g) => toMatchRow(g, mapModeOf));
+    .map((g) => toMatchRow(g, mapModeOf, activeMeasured));
 }
 
 function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow {
   const flags = rowFlags(g);
   const measuredGrades = measuredGradesFor(g, activeMeasured);
+  // The player's stored self-grades stay with the match (unlike the live-computed
+  // measuredGrades), so the Matches-list "Target grades" field renders these.
+  const storedGrades = g.review?.grades;
+  const targetGrades = storedGrades && Object.keys(storedGrades).length ? storedGrades : undefined;
   return {
     matchId: g.matchId,
     timestamp: g.timestamp,
@@ -237,6 +247,7 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
+    ...(targetGrades ? { targetGrades } : {}),
   };
 }
 
