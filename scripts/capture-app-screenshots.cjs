@@ -21,6 +21,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+const crypto = require('node:crypto');
 const { app, BrowserWindow, nativeImage } = require('electron');
 
 const ROOT = path.join(__dirname, '..');
@@ -37,6 +38,10 @@ const { RankAnchorStore } = require(path.join(ROOT, 'dist', 'store', 'rankAnchor
 const { MasterDataStore } = require(path.join(ROOT, 'dist', 'store', 'masterData'));
 const { generateSampleGames } = require(path.join(ROOT, 'dist', 'core', 'sampleData'));
 const { DEFAULT_MASTER_DATA, mergeMasterData } = require(path.join(ROOT, 'dist', 'core', 'masterData'));
+const { DEFAULT_BREAK_REMINDER } = require(path.join(ROOT, 'dist', 'core', 'breakReminder'));
+const { DEFAULT_STALENESS } = require(path.join(ROOT, 'dist', 'core', 'staleness'));
+const { DEFAULT_READINESS } = require(path.join(ROOT, 'dist', 'core', 'readiness'));
+const { DEFAULT_SESSION_SETTINGS } = require(path.join(ROOT, 'dist', 'core', 'sessionSettings'));
 const { createDataProvider } = require(path.join(ROOT, 'dist', 'main', 'dataProvider'));
 const { registerDashboardIpc, registerWindowControls } = require(path.join(ROOT, 'dist', 'main', 'dashboard', 'ipcHandlers'));
 const { hardenWebContents } = require(path.join(ROOT, 'dist', 'main', 'dashboard', 'webContentsSecurity'));
@@ -78,14 +83,17 @@ async function main() {
   const rankAnchors = new RankAnchorStore(dataDir);
   const masterDataStore = new MasterDataStore(dataDir);
 
+  // Mirrors appConfig.ts's DEFAULTS exactly (not ad hoc `{}` stand-ins) so every
+  // screen — notably Readiness, which defaults to *enabled* — matches what a
+  // fresh real install actually shows, not an arbitrarily-off feature.
   const config = {
     accounts: { Main: 'Main', Smurf: 'Smurf', Alt: 'Alt', Climb: 'Climb' },
     ui: { closeToTray: true, demoPreference: 'on' },
     runAtLogin: false,
-    breakReminder: {},
-    staleness: {},
-    readiness: { enabled: false },
-    sessionSettings: {},
+    breakReminder: { ...DEFAULT_BREAK_REMINDER },
+    staleness: { ...DEFAULT_STALENESS },
+    readiness: { ...DEFAULT_READINESS },
+    sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
   };
 
   const log = createLogger({ dir: path.join(TMP, 'logs'), getSecrets: () => [], mirrorToConsole: false });
@@ -189,9 +197,30 @@ async function main() {
 
   const results = [];
   let n = 0;
+  let lastDigest = null;
+  const grab = async () => {
+    // Force a fresh compositor frame — a visible-but-occluded window (e.g.
+    // covered by another window on the desktop during an unattended run) can
+    // otherwise hand capturePage() a stale cached frame from before the last
+    // DOM change, silently duplicating the previous screenshot.
+    win.webContents.invalidate();
+    await wait(80);
+    return win.webContents.capturePage();
+  };
   const capture = async (name) => {
     await wait(550);
-    const image = await win.webContents.capturePage();
+    let image = await grab();
+    let digest = crypto.createHash('sha1').update(image.toBitmap()).digest('hex');
+    // Defense-in-depth: a frame identical to the immediately-previous capture
+    // means the compositor didn't actually repaint (occlusion/throttling) —
+    // retry a couple of times with a longer settle before accepting it.
+    for (let attempt = 0; digest === lastDigest && attempt < 3; attempt++) {
+      await wait(400);
+      image = await grab();
+      digest = crypto.createHash('sha1').update(image.toBitmap()).digest('hex');
+    }
+    if (digest === lastDigest) console.warn(`  ⚠ ${name}: frame identical to the previous capture after retries`);
+    lastDigest = digest;
     let quality = 92;
     let jpg = image.toJPEG(quality);
     while (jpg.length > 350 * 1024 && quality > 50) {
