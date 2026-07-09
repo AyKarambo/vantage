@@ -1,9 +1,10 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
-import type { MatchFlagKey, MatchRow } from '../../../src/shared/contract';
-import { dayKey, groupByDay } from '../../../src/core/analytics';
+import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
+import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
 import { relTime, roleLabel, signed } from '../format';
-import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented } from '../components/primitives';
+import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
+import { wrHsl } from '../theme';
 import { openPopover } from '../components/popover';
 import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
@@ -20,7 +21,10 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
 };
 
 /** Canonical field order — both the "Customize view" popover and rendering follow this (spec F1). */
-const FIELD_ORDER: MatchColumnKey[] = ['role', 'heroes', 'account', 'srDelta', 'duration', 'finalScore'];
+const FIELD_ORDER: MatchColumnKey[] = [
+  'role', 'heroes', 'account', 'srDelta', 'duration', 'finalScore',
+  'performance', 'measuredGrades', 'flags',
+];
 
 const FIELD_LABELS: Record<MatchColumnKey, string> = {
   role: 'Role',
@@ -29,6 +33,9 @@ const FIELD_LABELS: Record<MatchColumnKey, string> = {
   srDelta: 'SR delta',
   duration: 'Duration',
   finalScore: 'Final score',
+  performance: 'Performance',
+  measuredGrades: 'Target grades',
+  flags: 'Flags',
 };
 
 export function matches(ctx: ViewContext): HTMLElement {
@@ -153,9 +160,76 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext): Node | n
       return m.durationMinutes != null ? document.createTextNode(`${m.durationMinutes}m`) : null;
     case 'finalScore':
       return m.finalScore ? document.createTextNode(m.finalScore) : null;
+    case 'performance':
+      // The 0-100 self-rating as a small stat, tinted with the same continuous
+      // ramp the performance slider uses, so the colour language matches.
+      return m.performance != null
+        ? h('span', { class: 'mono', title: 'Self-rated performance', style: { color: wrHsl(m.performance / 100) } }, String(m.performance))
+        : null;
+    case 'measuredGrades':
+      return gradePills(m, ctx);
+    case 'flags':
+      return flagPills(m);
     default:
       return null;
   }
+}
+
+/** Hit/Partial/Missed pill vocabulary — the Review card's grade tones (spec F1 extension, #68). */
+const GRADE_PILLS: Record<TargetGrade, { label: string; state: PillState }> = {
+  hit: { label: 'Hit', state: 'win' },
+  partial: { label: 'Partial', state: 'draw' },
+  missed: { label: 'Missed', state: 'loss' },
+};
+
+/**
+ * One aggregate grade pill for a row from the match's **stored self-grades**
+ * (`targetGrades`) — a match can be graded on several targets, so we collapse
+ * them into a single grade via {@link aggregateGrade} (floor of the average,
+ * rounding toward the worse grade) rather than a run of pills. These grades are
+ * stored on the match, so they stay put regardless of later target changes; the
+ * tooltip lists each target's own grade (name falling back to a placeholder for
+ * a since-deleted target) so the summary stays explainable.
+ */
+function gradePills(m: MatchRow, ctx: ViewContext): HTMLElement | null {
+  const entries = Object.entries(m.targetGrades ?? {});
+  if (!entries.length) return null;
+  const summary = aggregateGrade(entries.map(([, grade]) => grade));
+  if (!summary) return null;
+  const nameOf = (id: string): string => ctx.data.targets.find((t) => t.id === id)?.name ?? 'target';
+  const p = pill(GRADE_PILLS[summary].label, GRADE_PILLS[summary].state);
+  const lines = entries.map(([id, grade]) => `${nameOf(id)}: ${GRADE_PILLS[grade].label}`);
+  p.title = entries.length > 1
+    ? `${lines.join('\n')}\n→ ${GRADE_PILLS[summary].label} (average)`
+    : lines[0];
+  return pillRow([p]);
+}
+
+/** Per-row flag pill vocabulary — compact labels, tones matching the match-detail header pills. */
+const FLAG_PILLS: Array<{ key: MatchFlagKey; label: string; state: PillState }> = [
+  { key: 'tilt', label: 'Tilt', state: 'loss' },
+  { key: 'toxicMates', label: 'Toxic', state: 'loss' },
+  { key: 'leaver', label: 'Leaver', state: 'draw' },
+  { key: 'positiveComms', label: '+Comms', state: 'win' },
+  { key: 'abusive', label: 'Abusive', state: 'loss' },
+];
+
+/** Compact leaver/mental flag pills for a row, or `null` when unflagged (spec F3). */
+function flagPills(m: MatchRow): HTMLElement | null {
+  const set = FLAG_PILLS.filter((f) => m.flags?.[f.key]);
+  return set.length
+    ? pillRow(set.map((f) => {
+        const p = pill(f.label, f.state);
+        p.title = FLAG_LABELS[f.key];
+        return p;
+      }))
+    : null;
+}
+
+/** A run of pills — shared by the grades and flags fields. Wraps (right-aligned)
+ *  rather than ellipsis-clipping when a row carries more than the column fits. */
+function pillRow(pills: HTMLElement[]): HTMLElement {
+  return h('span', { style: { display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', gap: '4px', alignItems: 'center', justifyContent: 'flex-end', verticalAlign: 'middle' } }, ...pills);
 }
 
 /** Hero cross-links, comma-joined; stopPropagation keeps the row click intact. */

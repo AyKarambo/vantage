@@ -18,6 +18,27 @@ export interface ResultChooserOpts {
   keys?: boolean;
 }
 
+/**
+ * Bind W/L/D keys on `scope` to drive a {@link resultChooser} row — skips
+ * typing contexts (input/textarea/select) and modifier combos, and clicks the
+ * matching `data-value` button so the chooser's own handler stays the single
+ * source of state. Shared by the quick-log card and the match-detail editor
+ * (`scope` must be focusable so the keydown actually reaches it).
+ */
+export function bindResultKeys(scope: HTMLElement, row: HTMLElement): void {
+  scope.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+    const byKey: Record<string, string> = { w: 'Win', l: 'Loss', d: 'Draw' };
+    const pick = byKey[e.key.toLowerCase()];
+    if (!pick || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    row.querySelectorAll('button').forEach((b) => {
+      if (b.dataset.value === pick) b.click();
+    });
+  });
+}
+
 export function resultChooser(opts: ResultChooserOpts): HTMLElement {
   const options: Result[] = ['Win', 'Loss', 'Draw'];
   const row = h('div', { style: { display: 'flex', gap: '8px' } });
