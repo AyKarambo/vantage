@@ -29,7 +29,8 @@
     "publish:release": "powershell -ExecutionPolicy Bypass -File scripts/publish-release.ps1",
     "release:check": "node scripts/next-version.mjs --check",
     "import:obsidian": "powershell -ExecutionPolicy Bypass -File scripts/import-obsidian.ps1",
-    "pack:opk": "node scripts/pack-opk.mjs"
+    "pack:opk": "node scripts/pack-opk.mjs",
+    "make:winget": "node scripts/make-winget-manifest.mjs"
   },
   "build": {
     "appId": "com.timoseikel.vantage",
