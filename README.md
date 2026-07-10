@@ -308,6 +308,12 @@ renderer stays a contained surface. External links open only through the main pr
 
 ## Run it
 
+**Just want to use Vantage?** Grab the signed installer from
+[Releases](https://github.com/AyKarambo/vantage/releases/latest) — or, once it's published to
+winget-pkgs, install with `winget install AyKarambo.Vantage` (see [docs/winget.md](docs/winget.md)).
+
+To run from source:
+
 ```bash
 npm install
 npm start
@@ -452,6 +458,13 @@ npm run release    # ow-electron-builder → release/Vantage-Setup-<ver>.exe
 
 This is **unsigned** unless SimplySign is unlocked (fine for personal use — Windows SmartScreen →
 *More info → Run anyway*). Setup, prerequisites and the full runbook: [docs/signing.md](docs/signing.md).
+
+### Publish to winget
+
+Releases are also distributed via [winget](https://learn.microsoft.com/windows/package-manager/)
+(`winget install AyKarambo.Vantage`). Generate the manifest with `npm run make:winget` and submit
+it to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) — full runbook, including
+the pre-submission gates (Overwolf ToS + clean-VM silent install), in [docs/winget.md](docs/winget.md).
 
 ## Support
 
