@@ -45,12 +45,13 @@ auto-detect it) to tighten `winget upgrade`/`winget list` matching.
 ## Generating the manifest
 
 ```bash
-npm run make:winget -- --version 0.30.0    # resolves the release asset via `gh`
+npm run make:winget                        # defaults to the latest v* release tag
+npm run make:winget -- --version 0.30.0    # or a specific version
 ```
 
-This reads `package.json`, resolves the installer URL + SHA-256 from the published
-`v<version>` GitHub Release (via `gh release view`; it falls back to downloading and hashing
-if the asset digest is missing), and writes the three files under
+This reads `package.json` for metadata, resolves the installer URL + SHA-256 from the published
+`v<version>` GitHub Release (via `gh release view`; it falls back to downloading and hashing if
+the asset digest is missing), and writes the three files under
 `packaging/winget/manifests/a/AyKarambo/Vantage/<version>/`:
 
 - `AyKarambo.Vantage.yaml` — version
@@ -99,6 +100,8 @@ Numbered, fail-closed — each step gates the next.
    wingetcreate submit --token <classic-PAT> "packaging\winget\manifests\a\AyKarambo\Vantage\0.30.0"
    ```
    Equivalent from-scratch form: `wingetcreate new <installer-url> --submit --token <PAT>`.
+   > Keep the PAT out of shell history: set `$env:WINGET_CREATE_GITHUB_TOKEN` (wingetcreate) or
+   > `$env:GITHUB_TOKEN` (komac) instead of passing `--token` on the command line.
 5. **Wait for `winget-pkgs` CI + moderator review**, then merge. Community review latency
    varies (hours to days) and is outside our control.
 6. **Verify live** on a clean machine after merge:
