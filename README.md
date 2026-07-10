@@ -458,9 +458,19 @@ device.
 
 ## Testing the live pipeline
 
-`OW_SYNC_RECORD=1` captures a real GEP session to `userData/recordings/*.jsonl`; replay it with
-`OW_SYNC_REPLAY=<file>` to exercise match start/stop and the history update without the game. These
-are dev-only flags — the recorder is off in normal use.
+Two complementary ways to exercise the real GEP pipeline without waiting for Overwolf's
+store approval:
+
+- **ow-electron Dev Mode** — authenticate a local Overwolf Developer Console identity
+  (`ow config`, one-time) and GEP attaches live during `npm start`/`npm run dev`, exactly
+  as it would for an approved app. See
+  [docs/onboarding/01-getting-started.md](docs/onboarding/01-getting-started.md) for setup.
+  Requires the beta `@overwolf/ow-electron`/`@overwolf/ow-electron-builder` versions this
+  repo is pinned to (Dev Mode has no stable release yet).
+- **Record/replay** — `OW_SYNC_RECORD=1` captures a real GEP session to
+  `userData/recordings/*.jsonl`; replay it with `OW_SYNC_REPLAY=<file>` to exercise match
+  start/stop and the history update without the game running at all. These are dev-only
+  flags — the recorder is off in normal use.
 
 ## Roadmap
 

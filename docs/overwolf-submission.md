@@ -37,6 +37,13 @@ This must be identical to the app you were whitelisted as, or GEP/console won't 
 match the two values above. If the console shows anything different, change
 `package.json` `name`/`author` to match it exactly and rebuild — the UID must line up.
 
+**Verifying this pre-approval:** you don't need to wait for full store approval to check
+GEP actually binds — [ow-electron Dev Mode](https://dev.overwolf.com/ow-electron/guides/dev-tools/dev-mode)
+authenticates a local Developer Console identity (`ow config`, one-time; see
+[docs/onboarding/01-getting-started.md](onboarding/01-getting-started.md)) and loads GEP
+against the unsigned local build. It still needs the Console-side app registration above
+— just not public approval or a signed installer.
+
 ---
 
 ## 2. Roadmap phase mapping (Phase 1)
