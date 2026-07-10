@@ -77,19 +77,27 @@ winget validate --manifest "packaging\winget\manifests\a\AyKarambo\Vantage\0.30.
 
 Numbered, fail-closed — each step gates the next.
 
-1. **Confirm Overwolf permits third-party redistribution** *(gate — do this first)*. Verify
-   the current Overwolf developer/distribution terms allow redistributing an ow-electron app
-   installer via a third-party channel (winget) rather than exclusively through Overwolf's own
-   store. If unclear, confirm with your Overwolf DevRel contact. **If it's not permitted, stop
-   — the rest is moot.** Record the outcome (issue comment on #123 or a note here).
-2. **Verify the silent install on a clean VM** *(gate)*. `winget-pkgs` CI installs the package
-   unattended in Windows Sandbox and fails the PR (`Validation-Unattended-Failed`) if it
-   prompts. On a clean Windows 10/11 VM:
+> **The true gate is GEP approval, not winget.** Overwolf requires the app idea to be
+> whitelisted via the App-proposal process before public GEP use; ow-electron Dev Mode is for
+> local pre-approval testing only. This obligation already applies to the GitHub Releases build
+> — winget just widens reach. Confirm the app is approved for **public** GEP distribution before
+> broadening it.
+
+1. **Overwolf ToS — third-party distribution: confirmed permitted** ✅ (researched 2026-07-10,
+   high confidence — see [Overwolf ToS findings](#overwolf-tos-findings)). Overwolf's Developer
+   Terms Exhibit B allows distribution "through the Overwolf Platform **and through a third-party
+   distributor**"; ow-electron is a standalone/self-hosted model; and Overwolf itself ships
+   `Overwolf.CurseForge` on winget. A one-line DevRel nod is *advisable insurance* for the lone
+   ambiguous clause (Sec 3.5(b)) — **not blocking**.
+2. **Verify the silent install** *(gate)*. `winget-pkgs` CI installs the package unattended in
+   Windows Sandbox and fails the PR (`Validation-Unattended-Failed`) if it prompts.
    ```powershell
    .\Vantage-Setup-0.30.0.exe /S      # must complete with ZERO dialogs, then the app launches
    ```
-   electron-builder NSIS honours `/S`, but confirm it on the actual signed asset before
-   submitting.
+   electron-builder NSIS honours `/S` (winget applies it automatically for `nullsoft`). The
+   v0.30.0 asset's SHA-256 was verified against the manifest (bytes match); the definitive
+   no-dialogs check runs in `winget-pkgs` CI's own Windows Sandbox on submission, or via a
+   manual VM/Sandbox run.
 3. **Generate + validate** the manifest for the released version (commands above). Commit the
    staged copy under `packaging/winget/`.
 4. **Submit the PR** with a first-party tool and a **classic** GitHub PAT (`public_repo` scope
@@ -131,10 +139,14 @@ as a follow-up (`winget-auto-update`).
 
 The repo can generate and validate the manifest; these require infra or are outward-facing:
 
-- ⏳ **Confirm Overwolf ToS** permits third-party redistribution (step 1) — a human/DevRel call.
-- ⏳ **Run `/S` on a clean VM** (step 2) — needs a throwaway Windows environment.
-- ⏳ **Open the `winget-pkgs` PR** (step 4) — public action; needs the ToS gate passed + a
-  classic PAT you hold. Never auto-submitted from CI.
+- ✅ **Overwolf ToS** — third-party distribution confirmed permitted (research; see below). An
+  optional one-line DevRel nod closes the lone interpretive gap.
+- ⚠ **GEP App-proposal / whitelisting** — confirm the app is approved for **public** GEP use
+  before broadening distribution (applies to GitHub Releases too, not just winget).
+- ◑ **Silent install** — installer SHA-256 verified against the manifest; the no-dialogs `/S`
+  check is confirmed definitively by `winget-pkgs` CI (or a manual VM/Sandbox run).
+- ⏳ **Open the `winget-pkgs` PR** (step 4) — public action; needs a classic PAT you hold.
+  Never auto-submitted from CI.
 - ⏳ **Verify the live install** after the community merge (step 6).
 
 ## Notes & decisions
@@ -147,3 +159,32 @@ The repo can generate and validate the manifest; these require infra or are outw
   [signing.md → History](signing.md#history--alternatives)).
 - Source research: [#14](https://github.com/AyKarambo/vantage/issues/14); spec + plan:
   [#123](https://github.com/AyKarambo/vantage/issues/123).
+
+### Overwolf ToS findings
+
+Researched 2026-07-10 (multi-source sweep + adversarial review). **Verdict: permitted, high
+confidence** — distributing the publisher's own signed ow-electron installer via winget is
+within Overwolf's terms:
+
+- **Developer Terms, Exhibit B** (ow-electron additional terms — the controlling *lex
+  specialis*): the Application "may be available for End-Users to download and access through the
+  Overwolf Platform **and through a third-party distributor**"; "OW-Electron allows you to
+  distribute your Application using several different hosting/distribution services."
+  <https://legal.overwolf.com/docs/overwolf/developers/developer-terms/>
+- **ow-electron FAQ**: "you are able to share your app with anyone you like as well as host the
+  app in any location you prefer."
+  <https://dev.overwolf.com/ow-electron/getting-started/onboarding-resources/ow-electron-faq/>
+- **winget policy 1.1.4** requires the InstallerUrl be "the ISV's release location" (rehosts are
+  banned) — so a winget manifest is *first-party* distribution, not third-party rehosting.
+  <https://learn.microsoft.com/windows/package-manager/package/windows-package-manager-policies>
+- **Precedent:** Overwolf itself publishes `Overwolf.CurseForge` on winget (nullsoft; installer
+  on `curseforge.overwolf.com`).
+- The ow-electron runtime + GEP type defs are MIT-licensed (no channel restriction).
+
+**Residual (why "advisable", not "certain"):** Developer Terms Sec 3.5(b) ("distribute … the
+Application … except through the functionality expressly provided by the Platform") reads, in
+isolation, as a channel-lock; it's overridden by the more-specific Exhibit B and would otherwise
+forbid the GitHub-Releases distribution the FAQ blesses. A brief written DevRel confirmation
+closes it. **Separately — and more important — the real gate for public GEP distribution is
+App-proposal / whitelisting approval** (Dev Mode is pre-approval only); that's an app-level
+obligation independent of winget.
