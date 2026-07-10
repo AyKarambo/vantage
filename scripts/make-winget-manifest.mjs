@@ -6,7 +6,7 @@
 // package.json + the published GitHub Release asset, so cutting a new winget version is one
 // command instead of hand-editing YAML.
 //
-//   node scripts/make-winget-manifest.mjs                     # current pkg.version; resolves
+//   node scripts/make-winget-manifest.mjs                     # latest v* release tag; resolves
 //                                                             # the release asset via `gh`
 //   node scripts/make-winget-manifest.mjs --version 0.30.0    # a specific version
 //   node scripts/make-winget-manifest.mjs --url <url> --sha256 <HEX>   # offline / explicit
@@ -48,10 +48,32 @@ function parseArgs(argv) {
   return out;
 }
 const args = parseArgs(process.argv.slice(2));
-/** A flag's string value, or `fallback` when it was omitted / given as a bare boolean flag. */
-const str = (v, fallback) => (typeof v === 'string' ? v : fallback);
+// A flag written without a value (e.g. `--version` with nothing after it) parses to `true`.
+// That's a mistake for flags that take a value, so fail loudly instead of silently falling back.
+const VALUE_FLAGS = ['version', 'repo', 'tag', 'out', 'url', 'sha256', 'release-date'];
+for (const f of VALUE_FLAGS) {
+  if (args[f] === true) {
+    console.error(`make-winget-manifest: --${f} needs a value`);
+    process.exit(1);
+  }
+}
+/** A flag's string value, or `fallback` when the flag was omitted. */
+const str = (v, fallback) => (v === undefined ? fallback : v);
 
-const version = str(args.version, pkg.version);
+function git(gitArgs) {
+  return execFileSync('git', gitArgs, { cwd: root, encoding: 'utf8' }).trim();
+}
+// Releases are tag-driven; package.json stays at its floor version (publish-release.ps1 bumps it
+// only transiently), so the default version is the latest v* release tag, not pkg.version.
+function latestReleaseVersion() {
+  try {
+    return git(['describe', '--tags', '--match', 'v*', '--abbrev=0']).replace(/^v/, '');
+  } catch {
+    return pkg.version; // no v* tag yet
+  }
+}
+
+const version = str(args.version, latestReleaseVersion());
 const repo = str(args.repo, DEFAULT_REPO); // owner/name
 const tag = str(args.tag, `v${version}`);
 const productName = pkg.build?.productName ?? pkg.name; // "Vantage" → asset "Vantage-Setup-<v>.exe"

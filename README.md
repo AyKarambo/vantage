@@ -438,10 +438,10 @@ This is **unsigned** unless SimplySign is unlocked (fine for personal use — Wi
 
 ### Publish to winget
 
-Releases are also distributed via [winget](https://learn.microsoft.com/windows/package-manager/)
-(`winget install AyKarambo.Vantage`). Generate the manifest with `npm run make:winget` and submit
-it to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) — full runbook, including
-the pre-submission gates (Overwolf ToS + clean-VM silent install), in [docs/winget.md](docs/winget.md).
+Once the manifest is merged into [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs),
+Vantage installs with `winget install AyKarambo.Vantage`. Generate the manifest with
+`npm run make:winget` and submit it per the runbook — including the pre-submission gates
+(Overwolf ToS + clean-VM silent install) — in [docs/winget.md](docs/winget.md).
 
 ## Support
 
