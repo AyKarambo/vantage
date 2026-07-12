@@ -3,8 +3,6 @@ import type { GameRecord } from './analytics';
 import { resolveAccount } from './resolvers/account';
 import { resolveRole } from './resolvers/role';
 import { resolveResult } from './resolvers/result';
-import { isCompetitive } from './matchFilter';
-import { presetSrDelta } from './rank';
 
 /**
  * Convert a raw capture record into an analyzable, resolved game — the one
@@ -28,11 +26,6 @@ export function matchToGame(
           damage: record.damage ?? 0, healing: record.healing ?? 0, mitigation: record.mitigation ?? 0,
         }]
       : undefined;
-  // GEP reports no rank/SR, so a live-captured competitive game would move the
-  // calculated rank by 0. Estimate the SR change from the result (same preset as
-  // the manual quick-log) so auto-logged games advance the ladder too; a real
-  // GEP delta, if one ever arrives, still wins. Stays editable in the UI.
-  const srDelta = record.srDelta ?? (isCompetitive(record.gameType) ? presetSrDelta(result) : undefined);
   return {
     matchId: record.matchId,
     timestamp: record.endedAt ?? now(),
@@ -46,6 +39,9 @@ export function matchToGame(
     perHero,
     finalScore: record.finalScore,
     roster: record.roster,
-    srDelta,
+    // GEP reports no rank/SR, so a live-captured game carries no delta (stays
+    // undefined) unless one was actually reported; the player sets it by hand on
+    // Review or in the match editor. Never fabricated from the result.
+    srDelta: record.srDelta,
   };
 }
