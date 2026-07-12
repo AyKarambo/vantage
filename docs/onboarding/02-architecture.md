@@ -51,10 +51,9 @@ matchToGame(record, accounts)   src/core/gameRecord.ts
    │  (account, role, result, map) → GameRecord
    ▼
 pipeline.recordGame(game)       src/main/matchPipeline.ts
-   │  dedupes by matchId, evaluates the break reminder,
-   │  kicks off async screenshot capture
+   │  dedupes by matchId, evaluates the break reminder
    ▼
-HistoryStore.add(game)          src/store/history.ts → userData/data/history.json
+HistoryStore.add(game)          src/store/history.ts → <data folder>/history.db (SQLite)
    ▼
 DataProvider.getDashboard()     src/main/dashboard/provider.ts
    │  computeDashboard(games, filters) — src/core/dashboardData.ts
@@ -85,11 +84,13 @@ builds a `GameRecord` directly and feeds it into the same `recordGame` path.
 ## The composition root
 
 [`src/main/index.ts`](../../src/main/index.ts) is the only place where things get wired
-together, in order: config → stores → aggregator → screenshots → Notion runtime →
-pipeline + data provider (via `createMatchPipeline()` / `createDataProvider()` factory
-functions) → tray → dashboard window. Everything is constructor-injected — no globals,
-no service locators. Factories receive `getConfig: () => AppConfig` *thunks* rather than
-config values, so a config reload takes effect without a restart.
+together, in order: config → data-folder resolution (default, chosen, or adopted — see
+[01 — Getting started](01-getting-started.md#where-the-app-keeps-its-data)) → stores →
+aggregator → Notion runtime → pipeline + data provider (via `createMatchPipeline()` /
+`createDataProvider()` factory functions) → tray → dashboard window. Everything is
+constructor-injected — no globals, no service locators. Factories receive
+`getConfig: () => AppConfig` *thunks* rather than config values, so a config reload
+takes effect without a restart.
 
 This DI style is also the testing story: tests construct the unit with `vi.fn()` fakes
 instead of module-mocking.

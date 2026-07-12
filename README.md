@@ -24,10 +24,11 @@ never shows stale data as "current."
   *winrate × volume* scatter with a top-priority callout, an activity heatmap
   (games/day, click a day to open its matches), and a mental snapshot.
 - **Matches** — the recent game log; click any row for a full **match detail page**
-  (scoreboard, per-hero tabs, competitive progress, a read-only **Grades card** with
-  the match's target grades, performance rating and feel/leaver flags, player history,
-  and an end-of-match screenshots gallery — each section degrades gracefully to whatever
-  the game feed actually reported for that match). Every match is **editable** from here:
+  (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
+  support ×2, per-hero tabs, competitive progress, a read-only **Grades card** with
+  the match's target grades, performance rating and feel/leaver flags, and player
+  history — each section degrades gracefully to whatever the game feed actually
+  reported for that match). Every match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
   The editor mirrors the Log match card — the same shared controls, wording and field
@@ -52,7 +53,7 @@ never shows stale data as "current."
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
   drill-down drawer (per-map winrate, recent games, aggregates).
-- **Focus** — the "what to work on" hub: net-losing **maps, heroes and roles** in one
+- **Focus** — the "what to work on" hub: your net-losing **maps** in one
   deficit-ranked list, each with a trend arrow (improving/declining) and — once you
   track it as a target — the winrate movement since you flagged it.
 - **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
@@ -107,12 +108,15 @@ never shows stale data as "current."
 - **Improvement Target** — build a target (self-rated ◎, or measured ⚡ which **auto-grades
   from your per-10-minute stats** — no manual read), or start from a **curated, coaching-grounded
   template** (positioning, ult economy, cooldown value, target selection, plus per-role stat
-  floors). Measured thresholds take **scroll-to-adjust** (per-stat steps, hold Shift for bigger
-  jumps). Rotate your focus with the **Active focus** panel (quick add/remove + "start a fresh
-  focus"); active targets that go stale (past a configurable days/matches threshold) get a
-  rotate nudge. Edit or archive/delete targets, and track a library that shows whether hitting
-  a target actually moves your winrate. The **Focus** screen can create a map-practice target
-  for a losing map in one click (**＋ target**).
+  floors). Measured (⚡) targets can be **scoped to a specific role and/or hero** so a target
+  only grades the games it actually applies to, and each target carries a small **goal-flag**
+  icon for at-a-glance identification in lists. Measured thresholds take **scroll-to-adjust**
+  (per-stat steps, hold Shift for bigger jumps). Rotate your focus with the **Active focus**
+  panel (quick add/remove + "start a fresh focus"); active targets that go stale (past a
+  configurable days/matches threshold) get a rotate nudge. Edit or archive/delete targets, and
+  track a library that shows whether hitting a target actually moves your winrate. The
+  **Focus** screen can create a map-practice target for a losing map in one click
+  (**＋ target**).
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still
@@ -176,13 +180,18 @@ never shows stale data as "current."
   Opening the Notion screen also shows a **per-column status** for the five optional
   subjective columns (Comms, Improvement Target, Leaver, Tilt, Toxic Mates): available,
   or skipped with a reason (missing, wrong type, or a near-miss name like `comms ` you
-  probably meant). Only the manual **Sync**, **Import** and **Clean up** buttons ever
+  probably meant). Unset select-type fields (no comms flag logged, no leaver, no grade
+  yet) write the literal **`none`** value rather than leaving the Notion cell blank, so a
+  filtered Notion view can tell "explicitly none" apart from "not yet synced." The screen
+  also shows a live **count of matches not yet synced**, so you always know whether a
+  push is needed. Only the manual **Sync**, **Import** and **Clean up** buttons ever
   send data outbound — no automatic traffic.
 - **About** — the app's identity and version, the build/runtime facts (Electron, Chromium,
   Node, V8, platform/OS) with a one-click **Copy diagnostics** for bug reports, the
-  account-safety ("zero ban risk — GEP only") and local-first promises restated in-app, and
-  support/legal (support email, MIT © Timo Seikel). External links open via the sanctioned
-  `shell.openExternal` path — the renderer window itself never navigates.
+  account-safety ("GEP-only data source") and local-first promises restated in-app, a note
+  that the app is **free to use**, and support/legal (support email, MIT © Timo Seikel).
+  External links open via the sanctioned `shell.openExternal` path — the renderer window
+  itself never navigates.
 
 Vantage tracks **competitive matches only** — quick play and arcade games are never recorded,
 live or manually logged, so every stat, count, and export is competitive by construction (existing
@@ -191,8 +200,10 @@ range — with a one-click **Reset** chip and savable presets. The time filter o
 `Last 30 days`, one entry per **named competitive season** with data (e.g. `2026 Season 3`, newest
 first, current season always listed), and `All time`; there's no account or game-mode filter in the
 bar — the account switcher in the top-left already covers "which account", and mode no longer
-applies. Quality-of-life throughout: **Ctrl+K command palette** (jump to any screen, run actions,
-find a map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet, `←/→`
+applies. **Role icons appear app-wide** (filter bar, scoreboard, hero picker) so
+tank/damage/support is always visually distinguishable at a glance. Quality-of-life
+throughout: **Ctrl+K command palette** (jump to any screen, run actions, find a
+map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet, `←/→`
 between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/PageDown` to page
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
 Review, `W/L/D`+`Enter` in the log dialog), toasts with
@@ -202,11 +213,13 @@ map rows and Overview scatter dots jump to the Maps screen), remembered role + a
 quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
 window-position memory, and a **Settings** screen with an
-**accounts manager** (create/edit/delete accounts, per-role rank anchors), a **Master data**
+**accounts manager** (detects and lists every account seen in your match history —
+create/edit/delete, per-role rank anchors — and **auto-switches** the active account
+filter when GEP reports a different logged-in account), a **Master data**
 editor (see below), a **Quick Log** card (how many most-played heroes the log-match hero picker
 suggests) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
-*all* your data — match history, targets, outbox, rank anchors, and screenshots — to any folder,
+*all* your data — match history, targets, outbox, and rank anchors — to any folder,
 moved together with a copy-verify-then-delete guarantee. Point it at a OneDrive/Dropbox-synced
 folder for off-machine backup (use it from one machine at a time — editing the same synced files
 from two machines at once can corrupt them). The app restores your last view on launch and
@@ -248,8 +261,9 @@ the rest of your data and travel with it when you relocate the data folder.
 
 The live data source is **Overwolf's Game Events Provider (GEP)** — the sanctioned
 feed Overwolf apps use. Nothing here reads game memory, injects, or exposes hidden
-info, so there is **no Blizzard ban risk**. (Going live with GEP requires publishing
-the app through Overwolf's approval flow — see *Status*.)
+info — every stat comes from events Overwolf already sanctions apps to read. (Going
+live with GEP requires publishing the app through Overwolf's approval flow — see
+*Status*.)
 
 The desktop shell is hardened to match: the renderer runs with **context isolation**
 and **sandbox** on, `nodeIntegration` off, behind a strict **CSP** (`default-src 'none'`),
@@ -268,7 +282,10 @@ renderer stays a contained surface. External links open only through the main pr
 - Competitive **rank** follows the current Overwatch model: eight tiers Bronze→**Champion**,
   five divisions each (5 = lowest, 1 = highest), with within-division progress shown as a
   **percentage (0–100%)**. It is a winrate-derived heuristic (GEP does not report rank), not a
-  value read from the game.
+  value read from the game. **Rank protection** (a loss that would drop below 0% holds the
+  division and carries the true negative, matching the game's own display) and the resulting
+  **SR movement** are shown **consistently everywhere rank appears** — Overview, match rows,
+  match detail, Log match, and Settings → Accounts.
 - The manual (◎) surfaces now **persist**: Log match writes a real game to the local history
   (feeding every stat, including the mental composite), authored improvement targets are
   saved to a local store and shown in your Targets library, and grading a game on the
@@ -334,7 +351,7 @@ Electron/Overwolf/Notion plumbing kept at the edges:
 - `core/mental.ts` · `core/progression.ts` · `core/targets/` · `core/maps.ts` — the
   additional Vantage models (mental composite, rank heuristic, target library, map modes).
 - `core/matchDetail.ts` · `core/playerIndex.ts` — the match detail page's payload
-  (scoreboard, per-hero tabs, competitive estimate, screenshots) and the local
+  (scoreboard, per-hero tabs, competitive estimate) and the local
   player-encounter index it draws Player History from.
 - `core/breakReminder.ts` — the pure break-reminder state machine (consecutive-loss
   threshold, re-fire cadence, re-arm on a win), driven by the main process after every
@@ -356,8 +373,6 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   and the renderer-facing DataProvider, both unit-testable without Electron.
 - `main/notionRuntime.ts` — the Notion client/exporter/admin lifecycle in one place:
   token state, database selection, cached shape validation, export short-circuiting.
-- `main/screenshots.ts` — best-effort end-of-match screenshot capture, served to the
-  renderer via the read-only `vantage-media://` protocol.
 - `notion/notionAdmin.ts` — the Notion database picker/auto-create admin operations
   (list databases/pages, create a shaped Gametracker + Maps pair, validate a shape).
 
