@@ -11,9 +11,11 @@
 import { h, render } from '../dom';
 import type { MatchMental, MatchRow, PendingMatch, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { parseMeasuredRule } from '../../../src/core/targets';
+import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { srDeltaInput } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { store } from '../store';
@@ -161,6 +163,10 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   // Seed from any already-stored rating (mirrors the match-detail editor) so an
   // imported / previously-rated game shows its value here instead of "Not rated".
   let performance: number | undefined = m.performance;
+  // Manual SR % — only offered for competitive games (GEP can't report it).
+  // Seeded from the row's current delta so an already-set value shows here.
+  const isComp = classifyGameType(m.gameType) === 'competitive';
+  let srText = m.srDelta != null ? String(m.srDelta) : '';
 
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
@@ -175,7 +181,20 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   markFocus();
 
   const doSave = (): void => {
-    void bridge.saveReview({ matchId: m.matchId, grades, flags, ...(performance != null ? { performance } : {}) }).then(() => {
+    // Send the SR % only for competitive matches and only when the field parses
+    // to a finite number. Blank leaves it unchanged — clearing an SR stays a
+    // match-editor action, never a side effect of grading a review.
+    const t = srText.trim();
+    let srDelta: number | undefined;
+    if (isComp && t !== '') {
+      const n = Number(t);
+      if (Number.isFinite(n)) srDelta = n;
+    }
+    void bridge.saveReview({
+      matchId: m.matchId, grades, flags,
+      ...(performance != null ? { performance } : {}),
+      ...(srDelta !== undefined ? { srDelta } : {}),
+    }).then(() => {
       gradedThisSession.add(m.matchId);
       kbHook = null;
       onSaved();
@@ -207,6 +226,14 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
     )),
     section('◎ How it felt', mentalFlagsRow(flags)),
     section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
+    // Competitive only — GEP can't report SR, so the player enters what the game
+    // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
+    isComp
+      ? section('◎ SR change (%)', h('div', { class: 'stack', style: { gap: '6px' } },
+          srDeltaInput(srText, (v) => { srText = v; }),
+          h('div', { class: 'hint' }, "the % the game showed (e.g. +22 or −19) — GEP can't report this"),
+        ))
+      : null,
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),

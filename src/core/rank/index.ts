@@ -8,4 +8,3 @@ export { TIERS, applyMatch, computeRank, stateFromAnchor, ladderPoints } from '.
 export { competitiveComps, currentRank } from './timeline';
 export { rankToPoints, pointsToRank } from './scalar';
 export { rankAfterMatch, srDeltaForSetRank } from './reconstruct';
-export { presetSrDelta, PRESET_SR_STEP } from './preset';

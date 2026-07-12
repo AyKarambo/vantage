@@ -91,6 +91,12 @@ export interface ReviewInput {
   flags: MatchMental;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
+  /**
+   * Signed SR % the player set for this competitive match on Review — `null`
+   * clears, `undefined` leaves unchanged; GEP can't report this. Mirrors
+   * {@link MatchEditInput.srDelta}.
+   */
+  srDelta?: number | null;
 }
 
 /**

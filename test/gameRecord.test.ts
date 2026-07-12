@@ -85,12 +85,13 @@ describe('matchToGame', () => {
     expect(game?.timestamp).toBe(42);
   });
 
-  it('estimates an SR delta for competitive games so auto-logs advance the rank', () => {
-    // GEP reports no rank; a live-captured competitive game must still move the
-    // ladder, so the result seeds a preset delta (±25, 0 for a draw).
-    expect(matchToGame(base({ outcome: 'Victory' }), ACCOUNTS)?.srDelta).toBe(25);
-    expect(matchToGame(base({ outcome: 'Defeat' }), ACCOUNTS)?.srDelta).toBe(-25);
-    expect(matchToGame(base({ outcome: 'Draw' }), ACCOUNTS)?.srDelta).toBe(0);
+  it('does not fabricate an SR delta for a competitive game (GEP reports none)', () => {
+    // GEP reports no rank/SR, so a live-captured competitive game carries no
+    // delta — the player sets it by hand on Review or in the match editor. The
+    // old preset (±25) polluted the calculated rank and is gone.
+    expect(matchToGame(base({ outcome: 'Victory' }), ACCOUNTS)?.srDelta).toBeUndefined();
+    expect(matchToGame(base({ outcome: 'Defeat' }), ACCOUNTS)?.srDelta).toBeUndefined();
+    expect(matchToGame(base({ outcome: 'Draw' }), ACCOUNTS)?.srDelta).toBeUndefined();
   });
 
   it('does not invent an SR delta for a non-competitive record', () => {
@@ -98,7 +99,7 @@ describe('matchToGame', () => {
     expect(game?.srDelta).toBeUndefined();
   });
 
-  it('keeps a real GEP-reported SR delta over the estimate', () => {
+  it('passes a real reported SR delta through unchanged', () => {
     const game = matchToGame(base({ srDelta: -12 }), ACCOUNTS);
     expect(game?.srDelta).toBe(-12);
   });
