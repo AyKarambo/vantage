@@ -4,7 +4,7 @@ import {
   hasPlayedAtColumn, PLAYED_AT_PROPERTY, hasSrDeltaColumn, SR_DELTA_PROPERTY,
   presentSubjectiveColumns, mapRelationSourceId, diagnoseSubjectiveColumns,
   OPTIONAL_SUBJECTIVE_PROPERTIES, PROVISIONABLE_PROPERTIES, expectedTypeOf,
-  planColumnProvision,
+  planColumnProvision, subjectiveSelectOptions, noneLikeOption,
 } from '../src/notion/gametrackerSchema';
 
 describe('buildGametrackerProperties', () => {
@@ -282,6 +282,51 @@ describe('mapRelationSourceId', () => {
   it('is undefined when Map is absent or not a relation', () => {
     expect(mapRelationSourceId({})).toBeUndefined();
     expect(mapRelationSourceId({ Map: { type: 'rich_text' } })).toBeUndefined();
+  });
+});
+
+describe('subjectiveSelectOptions', () => {
+  it('extracts option names verbatim for subjective SELECT columns, keyed by canonical name', () => {
+    const props = {
+      Comms: { type: 'select', select: { options: [{ name: 'positive' }, { name: 'None' }] } },
+      'Improvement Target': { type: 'select', select: { options: [{ name: 'hit' }, { name: 'N/A' }] } },
+    };
+    expect(subjectiveSelectOptions(props)).toEqual({
+      Comms: ['positive', 'None'],
+      'Improvement Target': ['hit', 'N/A'],
+    });
+  });
+
+  it('ignores a subjective column that is present but not a select (guards on type)', () => {
+    const props = {
+      Comms: { type: 'rich_text' }, // wrong type — no options to read
+      Tilt: { type: 'checkbox' }, // not a select-typed subjective column
+    };
+    expect(subjectiveSelectOptions(props)).toEqual({});
+  });
+
+  it('emits an empty option list for a select with no options', () => {
+    expect(subjectiveSelectOptions({ Comms: { type: 'select' } })).toEqual({ Comms: [] });
+    expect(subjectiveSelectOptions({ Comms: { type: 'select', select: { options: [] } } })).toEqual({ Comms: [] });
+  });
+});
+
+describe('noneLikeOption', () => {
+  it('finds an option named "none" case-insensitively and returns it verbatim', () => {
+    expect(noneLikeOption(['positive', 'None'])).toBe('None');
+    expect(noneLikeOption(['NONE'])).toBe('NONE');
+    expect(noneLikeOption([' none '])).toBe(' none '); // trimmed for the match, returned verbatim
+  });
+
+  it('returns the first none-like option when several are present', () => {
+    expect(noneLikeOption(['None', 'none'])).toBe('None');
+  });
+
+  it('is undefined when no option is a plain "none" (never matches n/a, no, etc.)', () => {
+    expect(noneLikeOption(['positive', 'abusive'])).toBeUndefined();
+    expect(noneLikeOption(['N/A', 'no'])).toBeUndefined();
+    expect(noneLikeOption([])).toBeUndefined();
+    expect(noneLikeOption(undefined)).toBeUndefined();
   });
 });
 

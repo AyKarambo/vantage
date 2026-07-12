@@ -19,6 +19,7 @@ import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/core/dashboardData';
+import { isCompetitive } from '../../src/core/matchFilter';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
 import {
@@ -269,12 +270,16 @@ let previewFolderPickCount = 0;
 
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
+  // The preview has no real export ledger, so treat every competitive game as
+  // still needing a sync — enough to exercise the "Sync N games" copy.
+  const competitiveGames = dataset().filter((g) => isCompetitive(g.gameType)).length;
   return {
     tokenSet: notionTokenSet,
     databaseConfigured: Boolean(db),
     connected: notionTokenSet && Boolean(db),
     gametrackerUrl: db?.url,
-    trackedGames: dataset().length,
+    unsyncedGames: competitiveGames,
+    competitiveGames,
     databaseSource: db ? 'selected' : 'none',
     databaseId: db?.id,
     databaseTitle: db?.title,

@@ -111,7 +111,7 @@ async function main() {
     import: async () => ({ imported: 0, skipped: 0, failed: 0, unavailable: true }),
     status: () => ({
       tokenSet: false, databaseConfigured: false, connected: false,
-      trackedGames: history.count(), databaseSource: 'none', importedMatches: 0,
+      unsyncedGames: 0, competitiveGames: history.count(), databaseSource: 'none', importedMatches: 0,
     }),
     setToken: () => notionStub.status(),
     clearToken: () => notionStub.status(),

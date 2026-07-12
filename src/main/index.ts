@@ -238,7 +238,9 @@ function main(): void {
     outbox,
     config: () => config,
     reloadConfig: () => (config = loadConfig()),
-    trackedGames: () => history.count(),
+    // Unfiltered history — NotionRuntime.status() counts the competitive games
+    // that still need syncing (never-exported / changed-since-export) itself.
+    historyGames: () => history.all(),
     importedMatches: () => history.importedCount('notion'),
     onTokenState: (tokenSet) => tray.setState({ tokenSet }),
     onError: (title, body) => {

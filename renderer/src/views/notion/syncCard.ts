@@ -13,10 +13,13 @@ import { button, card } from '../../components/primitives';
 
 export function syncCard(s: NotionStatus | null): HTMLElement {
   const out = h('div', { style: { marginTop: '12px', minHeight: '18px' } });
-  const count = s?.trackedGames ?? 0;
+  // Competitive games that still need a push (never-exported / changed-since-export),
+  // not the whole history — see NotionStatus.unsyncedGames (spec E3).
+  const count = s?.unsyncedGames ?? 0;
+  const competitive = s?.competitiveGames ?? 0;
   const canSync = Boolean(s?.connected) && count > 0;
 
-  const btn = button(canSync ? `Sync ${count} games to Notion` : 'Sync to Notion', {
+  const btn = button(canSync ? `Sync ${count} game${count === 1 ? '' : 's'} to Notion` : 'Sync to Notion', {
     variant: 'primary',
     disabled: !canSync,
     onClick: async () => {
@@ -48,9 +51,11 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
     ? 'Checking…'
     : !s.connected
       ? 'Connect above to enable syncing.'
-      : count === 0
-        ? 'No tracked games yet — play a game and they’ll appear here to sync.'
-        : 'Pushes every tracked game to your database; matches already synced are skipped.';
+      : count > 0
+        ? 'Pushes every tracked game to your database; matches already synced are skipped.'
+        : competitive > 0
+          ? 'All competitive games are synced — you’re up to date.'
+          : 'No competitive games yet — play a game and they’ll appear here to sync.';
 
   // Import (pull) — the inverse of sync: read the Gametracker rows back into
   // local history (dedup by Match ID). Enabled once connected.
