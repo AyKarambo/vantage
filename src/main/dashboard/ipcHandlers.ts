@@ -203,6 +203,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.setAppSettings, (_e, patch: Partial<AppUiSettings>) =>
     provider.setAppSettings(patch),
   );
+  handle(ch.setDevKey, (_e, key: string) => provider.setDevKey(key));
   handle(ch.getAppInfo, () => provider.getAppInfo());
   handle(ch.openExternal, (_e, url: string) => provider.openExternal(url));
 

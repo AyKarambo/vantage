@@ -120,6 +120,8 @@ export interface DataProvider {
   getAppSettings(): AppUiSettings;
   /** Apply + persist app-behavior settings; returns the applied values. */
   setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
+  /** Persist the Overwolf dev key to ~/.ow-cli/dev-key; returns whether one is now present. */
+  setDevKey(key: string): { hasKey: boolean };
   /** Version + build/runtime facts + support contact (the About screen). */
   getAppInfo(): AppInfo;
   /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
