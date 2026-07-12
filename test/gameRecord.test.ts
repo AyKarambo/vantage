@@ -84,4 +84,22 @@ describe('matchToGame', () => {
     const game = matchToGame(base({ endedAt: undefined }), ACCOUNTS, () => 42);
     expect(game?.timestamp).toBe(42);
   });
+
+  it('estimates an SR delta for competitive games so auto-logs advance the rank', () => {
+    // GEP reports no rank; a live-captured competitive game must still move the
+    // ladder, so the result seeds a preset delta (±25, 0 for a draw).
+    expect(matchToGame(base({ outcome: 'Victory' }), ACCOUNTS)?.srDelta).toBe(25);
+    expect(matchToGame(base({ outcome: 'Defeat' }), ACCOUNTS)?.srDelta).toBe(-25);
+    expect(matchToGame(base({ outcome: 'Draw' }), ACCOUNTS)?.srDelta).toBe(0);
+  });
+
+  it('does not invent an SR delta for a non-competitive record', () => {
+    const game = matchToGame(base({ gameType: 'Quick Play', outcome: 'Victory' }), ACCOUNTS);
+    expect(game?.srDelta).toBeUndefined();
+  });
+
+  it('keeps a real GEP-reported SR delta over the estimate', () => {
+    const game = matchToGame(base({ srDelta: -12 }), ACCOUNTS);
+    expect(game?.srDelta).toBe(-12);
+  });
 });
