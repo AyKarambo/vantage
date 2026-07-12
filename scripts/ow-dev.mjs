@@ -40,6 +40,23 @@ const DEV_KEY_FILES = [
   path.join(homedir(), '.ow', 'dev-key'),
 ];
 
+/**
+ * The app's persisted Dev Mode toggle (config.local.json → ui.devMode), set from
+ * the in-app Settings screen. Absent/unreadable ⇒ enabled (preserves prior
+ * behavior); an explicit `false` is the off switch. config.local.json lives in
+ * Electron's userData for `ow.vantage` (= %APPDATA%\ow.vantage on Windows).
+ */
+function devModeEnabled() {
+  const roaming = process.env.APPDATA || path.join(homedir(), 'AppData', 'Roaming');
+  const configFile = path.join(roaming, 'ow.vantage', 'config.local.json');
+  try {
+    const config = JSON.parse(readFileSync(configFile, 'utf8'));
+    return config?.ui?.devMode !== false;
+  } catch {
+    return true;
+  }
+}
+
 /** Parse the ow-cli INI-ish credentials file into { profile: { key: value } }. */
 function parseCredentials(text) {
   const profiles = {};
@@ -118,21 +135,35 @@ function ensureDevCredentials() {
   return null;
 }
 
-const source = ensureDevCredentials();
-if (source) {
-  console.log(`[ow-dev] Dev Mode credentials from ${source}`);
+const enabled = devModeEnabled();
+let source = null;
+if (!enabled) {
+  // Turned off in Settings (ui.devMode:false): launch WITHOUT dev credentials so
+  // owepm skips the gaming packages. Strip any inherited creds too, so an env var
+  // set in this shell can't override the app's off switch.
+  delete process.env.OW_DEV_KEY;
+  delete process.env.OW_CLI_EMAIL;
+  delete process.env.OW_CLI_API_KEY;
+  console.log('[ow-dev] Dev Mode is OFF (ui.devMode:false in Settings) — launching without dev credentials; GEP will not attach.');
 } else {
-  console.warn('[ow-dev] No Dev Mode credentials found.');
-  console.warn('[ow-dev]   Dev key:  set OW_DEV_KEY, or put the token in ~/.ow-cli/dev-key');
-  console.warn('[ow-dev]   API key:  run `ow config`, or set OW_CLI_EMAIL + OW_CLI_API_KEY');
-  console.warn('[ow-dev]   Without one, ow-electron skips the gaming packages and GEP will not attach.');
+  source = ensureDevCredentials();
+  if (source) {
+    console.log(`[ow-dev] Dev Mode credentials from ${source}`);
+  } else {
+    console.warn('[ow-dev] No Dev Mode credentials found.');
+    console.warn('[ow-dev]   Dev key:  set OW_DEV_KEY, or put the token in ~/.ow-cli/dev-key');
+    console.warn('[ow-dev]   API key:  run `ow config`, or set OW_CLI_EMAIL + OW_CLI_API_KEY');
+    console.warn('[ow-dev]   Without one, ow-electron skips the gaming packages and GEP will not attach.');
+  }
 }
 
 const args = process.argv.slice(2);
 
-// `--check`: report status and exit without launching the app.
+// `--check`: report status and exit without launching. Exit 1 only when Dev Mode
+// is enabled but no credentials resolved (a real misconfiguration); an
+// intentional OFF state exits 0.
 if (args.includes('--check')) {
-  process.exit(source ? 0 : 1);
+  process.exit(enabled && !source ? 1 : 0);
 }
 
 // Resolve the ow-electron bin explicitly so this works both via npm (which puts
