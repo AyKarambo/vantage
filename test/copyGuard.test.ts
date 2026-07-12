@@ -34,7 +34,10 @@ function collectTextFiles(target: string): string[] {
   }
   const out: string[] = [];
   for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue;
+    // Skip dependencies and build output — this guard checks authored copy, not
+    // compiled bundles (renderer/dist, the renderer/preview harness), which are
+    // gitignored and can carry a stale copy of pre-cleanup source.
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'preview') continue;
     out.push(...collectTextFiles(path.join(target, entry.name)));
   }
   return out;
