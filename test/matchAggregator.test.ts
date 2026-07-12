@@ -196,6 +196,48 @@ describe('MatchAggregator local player from roster is_local', () => {
   });
 });
 
+describe('MatchAggregator roster teardown (slots cleared to {} before match_end)', () => {
+  it('retains the last rich snapshot per slot when GEP blanks the roster at match end', () => {
+    // Mirrors a real capture: full roster rows stream in, then every slot is
+    // reset to `{}` as the scoreboard tears down — and only AFTER that does
+    // match_end fire. The empty snapshots must not blank the scoreboard.
+    const agg = new MatchAggregator(() => 1000);
+    const seq: GepMessage[] = [
+      event('match_start'),
+      info('match_info', 'pseudo_match_id', 'td-1'),
+      info('match_info', 'map', 1207),
+      info('roster', 'roster_9', { player_name: 'KARAMBO', battlenet_tag: 'Karambo#21442', is_local: true, hero_name: 'Shion', hero_role: 'DAMAGE', kills: 16, deaths: 4, assists: 2, damage: 8433, team: 1 }),
+      info('roster', 'roster_1', { player_name: 'ADMONI', battlenet_tag: 'Admoni#1955', is_local: false, hero_name: 'Cassidy', hero_role: 'DAMAGE', kills: 16, deaths: 3, damage: 11334, team: 1 }),
+      info('roster', 'roster_4', { player_name: 'ENEMY', battlenet_tag: 'Kittens#2693', is_local: false, hero_name: 'Roadhog', hero_role: 'TANK', kills: 11, deaths: 6, damage: 7895, team: 0 }),
+      info('match_info', 'match_outcome', 'victory'),
+      // Match teardown: every slot blanked BEFORE match_end (the bug trigger).
+      info('roster', 'roster_1', {}),
+      info('roster', 'roster_4', {}),
+      info('roster', 'roster_9', {}),
+    ];
+    let rec = null;
+    for (const m of seq) rec = agg.handle(m) ?? rec;
+    rec = agg.handle(event('match_end'));
+    expect(rec).not.toBeNull();
+
+    // The full scoreboard survived the blanking — one rich row per slot.
+    expect(rec!.roster).toHaveLength(3);
+    const bySlot = Object.fromEntries((rec!.roster ?? []).map((p) => [p.battleTag, p]));
+    expect(bySlot['Karambo#21442']).toMatchObject({ heroName: 'Shion', kills: 16, isLocal: true });
+    expect(bySlot['Admoni#1955']).toMatchObject({ heroName: 'Cassidy', kills: 16, team: 1 });
+    expect(bySlot['Kittens#2693']).toMatchObject({ heroName: 'Roadhog', team: 0 });
+    expect(bySlot['Kittens#2693'].isLocal).toBeFalsy();
+
+    // The local player's own line is intact too (the blank {} for the local
+    // slot must not zero out the aggregated stats).
+    expect(rec!.battleTag).toBe('Karambo#21442');
+    expect(rec!.mapName).toBe('Nepal');
+    expect(rec!.heroes).toEqual(['Shion']);
+    expect(rec!.eliminations).toBe(16);
+    expect(rec!.deaths).toBe(4);
+  });
+});
+
 describe('parseRoster', () => {
   it('parses the real GEP field names (battle_tag / battlenet_tag / player_name / is_local)', () => {
     const p = parseRoster({ player_name: 'KARAMBO', battle_tag: 'Karambo#21234', is_local: 1, hero_name: 'Tracer', hero_role: 'DAMAGE' });
