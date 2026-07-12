@@ -631,6 +631,7 @@ const mock: OwStatsApi = {
     return () => syncListeners.delete(cb);
   },
   onGameLogged: (_cb: (p: { matchId: string }) => void) => () => {},
+  onPendingChanged: (_cb: () => void) => () => {},
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {
     appSettings = { ...appSettings, ...patch };
@@ -691,6 +692,9 @@ const mock: OwStatsApi = {
     delete previewReviews[matchId];
     save(REVIEWS_KEY, previewReviews);
   },
+  // No pending (no-outcome) matches exist in the browser harness — the pending
+  // store is a real-app SQLite table. The stub keeps the UI buildable/typed.
+  resolvePendingMatch: async () => {},
   previewPendingReviewIgnore: async (input) => ({ count: eligibleForIgnore(input).length }),
   ignorePendingReviews: async (input) => {
     const eligible = eligibleForIgnore(input);

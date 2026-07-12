@@ -9,7 +9,7 @@
  * re-render locally (no refetch); `gradedThisSession` keeps the list honest.
  */
 import { h, render } from '../dom';
-import type { MatchMental, MatchRow, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { MatchMental, MatchRow, PendingMatch, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { parseMeasuredRule } from '../../../src/core/targets';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
@@ -40,18 +40,18 @@ export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
   const pending = d.reviewInbox.filter((m) => !gradedThisSession.has(m.matchId));
+  // No-outcome matches held for manual completion — filtered by the session set
+  // so a just-resolved row disappears immediately, before the refetch lands.
+  const needsResult = (d.pendingMatches ?? []).filter((m) => !resolvedThisSession.has(m.matchId));
 
-  const head = viewHead(
-    'Review',
-    pending.length
-      ? `${pending.length} tracked game${pending.length === 1 ? '' : 's'} need your read — grade your targets and flag how it felt`
-      : 'Grade your targets and flag how it felt on the games you play',
-  );
+  const head = viewHead('Review', subtitle(pending.length, needsResult.length));
+  const needsResultSection = needsResult.length ? needsResultCard(needsResult) : null;
 
   if (!pending.length) {
     return h('div', { class: 'view', style: { maxWidth: '760px' } },
       head,
       activeStrip(active),
+      needsResultSection,
       card({ variant: 'raised' }, emptyState('All caught up — every tracked game has your read. 🎯', true)),
     );
   }
@@ -59,7 +59,63 @@ export function review(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view', style: { maxWidth: '760px' } },
     head,
     activeStrip(active),
+    needsResultSection,
     h('div', { class: 'stack', style: { gap: '10px' } }, ...pending.map((m, i) => item(m, active, i === 0))),
+  );
+}
+
+/** The Review head subtitle, reflecting both the needs-result and grading backlogs. */
+function subtitle(gradeCount: number, needsResultCount: number): string {
+  const parts: string[] = [];
+  if (needsResultCount) parts.push(`${needsResultCount} match${needsResultCount === 1 ? '' : 'es'} need a result set`);
+  if (gradeCount) parts.push(`${gradeCount} tracked game${gradeCount === 1 ? '' : 's'} need your read`);
+  return parts.length
+    ? `${parts.join(' · ')} — grade your targets and flag how it felt`
+    : 'Grade your targets and flag how it felt on the games you play';
+}
+
+/**
+ * Matches resolved in this session, so their row hides on the local re-render
+ * before the pending-store refetch arrives (mirrors {@link gradedThisSession}).
+ */
+const resolvedThisSession = new Set<string>();
+
+/**
+ * "Needs result" — competitive matches GEP delivered without a win/loss. Sits
+ * ABOVE the grading inbox (rendered even when the inbox is empty). Setting a
+ * result runs the held match back through the normal history pipeline.
+ */
+function needsResultCard(items: PendingMatch[]): HTMLElement {
+  return card({ variant: 'raised', class: 'review-needs-result' },
+    h('div', { class: 'review-section-label' },
+      `Needs result — ${items.length} ranked ${items.length === 1 ? 'match' : 'matches'} ended without a win/loss`),
+    h('div', { class: 'stack', style: { gap: '10px', marginTop: '10px' } }, ...items.map(needsResultRow)),
+  );
+}
+
+/** One "Needs result" row: the auto badge, the match facts, and W/L/D actions. */
+function needsResultRow(m: PendingMatch): HTMLElement {
+  const options: Result[] = ['Win', 'Loss', 'Draw'];
+  const buttons = options.map((result) =>
+    button(result, {
+      onClick: () => {
+        for (const b of buttons) b.disabled = true;
+        void bridge.resolvePendingMatch(m.matchId, result).then(() => {
+          resolvedThisSession.add(m.matchId);
+          toast(`Result set — ${m.map} · ${result}`);
+          store.rerender();
+          void store.refresh();
+        });
+      },
+    }));
+  return h('div', { class: 'review-row' },
+    h('span', { class: 'review-auto', title: 'auto-detected — no result reported' }, '⚡'),
+    h('div', { class: 'row-main', style: { minWidth: '0' } },
+      h('div', { style: { fontSize: '13px' } }, m.map),
+      h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
+        `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
+    ),
+    h('div', { style: { display: 'flex', gap: '6px' } }, ...buttons),
   );
 }
 
