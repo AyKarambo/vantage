@@ -31,6 +31,8 @@ export interface MatchPipelineDeps {
   notify(title: string, body: string): void;
   /** Diagnostic logging sink (console in production). */
   log(...args: unknown[]): void;
+  /** Fired once per genuinely-new competitive game persisted — drives the live dashboard refresh. */
+  onGameLogged?(game: GameRecord): void;
 }
 
 /**
@@ -65,6 +67,7 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
     if (fire) {
       deps.notify('Time for a break?', `That's ${s.count} losses in a row — step away for a few minutes.`);
     }
+    deps.onGameLogged?.(game);
     return true;
   }
 

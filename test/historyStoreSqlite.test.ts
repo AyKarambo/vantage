@@ -5,6 +5,7 @@ import * as path from 'path';
 import { HistoryStore, DB_FILE } from '../src/store/history';
 import type { GameRecord } from '../src/core/analytics';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
+import { resolveMapId } from '../src/core/resolvers/mapId';
 
 // SQLite keeps the file open (and locked, on Windows), so every store instance
 // and temp dir created here is tracked and torn down after each test.
@@ -30,6 +31,27 @@ afterEach(() => {
 const g = (p: Partial<GameRecord>): GameRecord => ({
   matchId: 'm', timestamp: 0, account: 'Main', role: 'damage', map: 'Ilios',
   result: 'Win', gameType: 'Competitive', heroes: [], ...p,
+});
+
+describe('HistoryStore (SQLite) — reresolve backfill', () => {
+  it('re-resolves a stored numeric map id to a name, idempotently, only rewriting changed rows', () => {
+    const dir = tmp();
+    const h = open(dir);
+    h.addMany([
+      g({ matchId: 'a', map: '1207' }), // raw GEP id → Nepal
+      g({ matchId: 'b', map: "King's Row" }), // already a name → untouched
+    ]);
+    const remap = () => h.reresolve((game) => ({ map: resolveMapId(game.map) }));
+    expect(remap()).toBe(1); // only 'a' changed
+    expect(remap()).toBe(0); // idempotent — a re-run rewrites nothing
+    h.close();
+
+    // Reopen the same dir → the resolved map persisted in the `data` JSON, not just the column.
+    const re = open(dir);
+    const byId = Object.fromEntries(re.all().map((x) => [x.matchId, x]));
+    expect(byId.a.map).toBe('Nepal');
+    expect(byId.b.map).toBe("King's Row");
+  });
 });
 
 describe('HistoryStore (SQLite) — core interface', () => {

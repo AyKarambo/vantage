@@ -168,6 +168,29 @@ export class HistoryStore {
     return games.length;
   }
 
+  /**
+   * One-time re-resolution of stored rows: apply `fn` to each game and rewrite
+   * only those whose `map`/`account` actually changed — idempotent, so a second
+   * run rewrites nothing. Config-free: the caller injects the resolver (which
+   * knows the map catalog / accounts). Returns the count rewritten.
+   */
+  reresolve(fn: (g: GameRecord) => { map?: string; account?: string }): number {
+    const games = this.allStmt.all().map((row) => JSON.parse(String(row.data)) as GameRecord);
+    const changed: GameRecord[] = [];
+    for (const g of games) {
+      const patch = fn(g);
+      let dirty = false;
+      if (patch.map !== undefined && patch.map !== g.map) { g.map = patch.map; dirty = true; }
+      if (patch.account !== undefined && patch.account !== g.account) { g.account = patch.account; dirty = true; }
+      if (dirty) changed.push(g);
+    }
+    if (!changed.length) return 0;
+    this.tx(() => {
+      for (const g of changed) this.updateStmt.run(...updateValues(g));
+    });
+    return changed.length;
+  }
+
   /** Total number of stored games. */
   count(): number {
     return Number(this.countStmt.get()?.c ?? 0);

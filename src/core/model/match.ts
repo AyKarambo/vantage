@@ -23,7 +23,10 @@ export interface RosterPlayer {
   damage?: number;
   healing?: number;
   mitigation?: number;
-  /** Set by the aggregator on the tracked player's entry (BattleTag match). */
+  /**
+   * True for the tracked (local) player — parsed from the GEP `is_local` flag,
+   * and confirmed by the aggregator on the local entry (BattleTag match fallback).
+   */
   isLocal?: boolean;
 }
 

@@ -630,6 +630,7 @@ const mock: OwStatsApi = {
     syncListeners.add(cb);
     return () => syncListeners.delete(cb);
   },
+  onGameLogged: (_cb: (p: { matchId: string }) => void) => () => {},
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {
     appSettings = { ...appSettings, ...patch };

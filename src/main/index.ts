@@ -23,6 +23,7 @@ import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
 import { computeDevMode } from '../core/devMode';
+import { resolveMapId } from '../core/resolvers/mapId';
 import { safeReadiness } from '../core/readiness';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -119,6 +120,11 @@ function main(): void {
   // One-time import of a pre-SQLite history.json — kept frozen as a backup. The
   // legacy file always lived in the default data dir, wherever the DB is now.
   migrateJsonHistory(history, path.join(dataDir, 'history.json'));
+  // One-time, idempotent: re-resolve numeric GEP map ids stored on older rows to
+  // names now that the id→name table exists (e.g. "1207" → "Nepal"). A re-run
+  // rewrites nothing. Account can't be recovered for legacy "Unknown" rows.
+  const remapped = history.reresolve((g) => ({ map: resolveMapId(g.map) }));
+  if (remapped) log.info('store', 'backfilled map names on existing rows', { rows: remapped });
 
   // First-run detection is config-driven, not file-existence: HistoryStore's
   // constructor above already created history.db in dataDir, so a "does
@@ -266,6 +272,9 @@ function main(): void {
     mapNames: allMapNames,
   });
 
+  // Fires the live "a match was logged" push to an open dashboard (placeholder
+  // until the window exists, like publishStatus below).
+  let pushGameLogged: (game: { matchId: string }) => void = () => {};
   const pipeline = createMatchPipeline({
     history,
     aggregator,
@@ -273,6 +282,7 @@ function main(): void {
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
+    onGameLogged: (game) => pushGameLogged(game),
   });
 
   // Truthful connection indicator: folds GEP signals into the four-state
@@ -438,6 +448,7 @@ function main(): void {
     tray.setHealth(p.state);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
+  pushGameLogged = (game) => dashboard.push(EVENT_CHANNELS.onGameLogged, { matchId: game.matchId });
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock

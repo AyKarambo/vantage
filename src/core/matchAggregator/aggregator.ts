@@ -11,6 +11,7 @@
 import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from '../model';
 import { K } from './keys';
 import { asNumber, asString, parseRoster } from './gepValues';
+import { resolveMapId } from '../resolvers/mapId';
 
 /** The stateful accumulator: feed messages to `handle`, receive a finished record on match end. */
 export class MatchAggregator {
@@ -68,7 +69,7 @@ export class MatchAggregator {
     }
 
     if (feature === K.matchInfo || feature === K.roster) {
-      if (key === K.map) rec.mapName = asString(msg.value) ?? rec.mapName;
+      if (key === K.map) rec.mapName = resolveMapId(asString(msg.value)) ?? rec.mapName;
       else if (key === K.pseudoMatchId || key === K.matchId)
         rec.matchId = asString(msg.value) ?? rec.matchId;
       else if (key === K.outcome) rec.outcome = asString(msg.value) ?? rec.outcome;
@@ -90,9 +91,18 @@ export class MatchAggregator {
     // the full scoreboard GEP chose to report (local team only on some patches).
     this.current.rosterAll.set(key, player);
 
-    if (!isLocal(player.battleTag, this.current.record.battleTag)) return;
-
     const rec = this.current.record;
+    // Local-player identity: GEP's roster `is_local` flag is the documented signal.
+    // Seed `rec.battleTag` from the local entry so the account resolves even when the
+    // `game_info.battle_tag` event never arrives; BattleTag matching stays the fallback.
+    if (player.isLocal && player.battleTag && !rec.battleTag) rec.battleTag = player.battleTag;
+    // Accumulate stats ONLY for the identified local player: once a battleTag is
+    // known, match against it — so a second or mis-flagged `is_local` entry can't
+    // interleave a stranger's cumulative stats into the per-hero deltas. Before a
+    // battleTag is known, trust the `is_local` flag to bootstrap identity.
+    const isLocalPlayer = rec.battleTag ? isLocal(player.battleTag, rec.battleTag) : Boolean(player.isLocal);
+    if (!isLocalPlayer) return;
+
     if (player.heroName && !rec.heroes.includes(player.heroName)) rec.heroes.push(player.heroName);
     if (player.heroRole) rec.heroRole = player.heroRole;
 
@@ -174,7 +184,7 @@ export class MatchAggregator {
       rec.roster = [...this.current.rosterAll.entries()]
         .sort(([a], [b]) => slotOf(a) - slotOf(b))
         .map(([, player]) =>
-          isLocal(player.battleTag, rec.battleTag) ? { ...player, isLocal: true } : player,
+          player.isLocal || isLocal(player.battleTag, rec.battleTag) ? { ...player, isLocal: true } : player,
         );
     }
 

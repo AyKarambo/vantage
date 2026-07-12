@@ -73,6 +73,7 @@ function harness(config: AppConfig = appConfig()) {
   const history = fakeHistory();
   const notifications: Array<{ title: string; body: string }> = [];
   const captures: Array<{ matchId: string; onSaved: (relPaths: string[]) => void }> = [];
+  const logged: string[] = [];
   const deps: MatchPipelineDeps = {
     history,
     aggregator: { handle: () => null },
@@ -86,8 +87,11 @@ function harness(config: AppConfig = appConfig()) {
       notifications.push({ title, body });
     },
     log: () => {},
+    onGameLogged: (g) => {
+      logged.push(g.matchId);
+    },
   };
-  return { pipeline: createMatchPipeline(deps), history, notifications, captures };
+  return { pipeline: createMatchPipeline(deps), history, notifications, captures, logged };
 }
 
 describe('createMatchPipeline — recordGame dedupe', () => {
@@ -175,6 +179,27 @@ describe('createMatchPipeline — competitive capture gate', () => {
     pipeline.addMatch({ ...capturedMatch('gep-qp'), gameType: 'quickplay' });
     expect(history.games).toHaveLength(0);
     expect(captures).toHaveLength(0); // no screenshot capture scheduled for a dropped game
+  });
+});
+
+describe('createMatchPipeline — onGameLogged live signal', () => {
+  it('fires once per newly-logged competitive game, not for dupes or non-competitive', () => {
+    const { pipeline, logged } = harness();
+
+    expect(pipeline.recordGame(game({ matchId: 'c-1', result: 'Win' }))).toBe(true);
+    expect(logged).toEqual(['c-1']);
+
+    // Duplicate matchId → no second signal.
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Loss' }));
+    expect(logged).toEqual(['c-1']);
+
+    // Non-competitive → dropped before the signal.
+    pipeline.recordGame(game({ matchId: 'qp-1', result: 'Win', gameType: 'Unranked' }));
+    expect(logged).toEqual(['c-1']);
+
+    // A new competitive game through the feed/addMatch path → fires again.
+    pipeline.addMatch(capturedMatch('gep-2'));
+    expect(logged).toEqual(['c-1', 'gep-2']);
   });
 });
 
