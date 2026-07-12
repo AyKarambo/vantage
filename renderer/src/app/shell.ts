@@ -174,6 +174,9 @@ export class App {
     // Live logging: a just-tracked match refetches the open dashboard (composes
     // with the focus-refresh below for pushes dropped while the window was closed).
     bridge.onGameLogged(() => void store.refresh());
+    // A no-outcome match held (or resolved) refetches so the Review "Needs
+    // result" section stays in step with the pending store.
+    bridge.onPendingChanged(() => void store.refresh());
     // Keep "updated Xm" honest while the app idles.
     setInterval(() => {
       const s = store.get();

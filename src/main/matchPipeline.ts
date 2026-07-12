@@ -2,7 +2,7 @@ import type { HistoryStore } from '../store/history';
 import type { MatchAggregator } from '../core/matchAggregator';
 import type { ScreenshotService } from './screenshots';
 import type { AppConfig } from './config';
-import type { GepMessage, MatchRecord } from '../core/model';
+import type { GepMessage, MatchRecord, Result } from '../core/model';
 import { matchToGame } from '../core/gameRecord';
 import { streak, type GameRecord } from '../core/analytics';
 import { isCompetitive } from '../core/matchFilter';
@@ -19,8 +19,9 @@ import {
 
 /** Everything the pipeline needs, as narrow structural slices so tests can inject plain objects. */
 export interface MatchPipelineDeps {
-  /** Durable game history: dedupe-add, full read for streak evaluation, screenshot attach. */
-  history: Pick<HistoryStore, 'add' | 'all' | 'addScreenshots'>;
+  /** Durable game history: dedupe-add, full read for streak evaluation, screenshot attach,
+   *  plus the no-outcome holding store (hold on drop / take on resolve). */
+  history: Pick<HistoryStore, 'add' | 'all' | 'addScreenshots' | 'addPending' | 'takePending'>;
   /** Folds the GEP message stream into one finished MatchRecord per match. */
   aggregator: Pick<MatchAggregator, 'handle'>;
   /** Best-effort end-of-match capture — never throws, never blocks the pipeline. */
@@ -33,6 +34,25 @@ export interface MatchPipelineDeps {
   log(...args: unknown[]): void;
   /** Fired once per genuinely-new competitive game persisted — drives the live dashboard refresh. */
   onGameLogged?(game: GameRecord): void;
+  /** Fired when the pending ("needs result") holding store changes — drives the Review refresh. */
+  onPendingChanged?(): void;
+}
+
+/**
+ * The raw GEP-style outcome string a resolved {@link Result} maps back onto, so a
+ * hand-completed pending match re-enters the pipeline exactly as a live capture
+ * would (through {@link matchToGame}'s `resolveResult`).
+ */
+const OUTCOME_FOR_RESULT: Record<Result, string> = { Win: 'victory', Loss: 'defeat', Draw: 'draw' };
+
+/**
+ * Whether a captured record represents a match that was actually played — the
+ * gate that separates a genuine no-outcome ranked game (hold it for Review) from
+ * an empty/aborted capture (drop it). True if any local hero, any roster entry,
+ * or an elimination count is present.
+ */
+function matchPlayed(record: MatchRecord): boolean {
+  return record.heroes.length > 0 || (record.roster?.length ?? 0) > 0 || record.eliminations != null;
 }
 
 /**
@@ -43,6 +63,7 @@ export interface MatchPipelineDeps {
 export function createMatchPipeline(deps: MatchPipelineDeps): {
   recordGame(game: GameRecord): boolean;
   addMatch(record: MatchRecord): void;
+  resolvePending(matchId: string, result: Result): boolean;
   feed(msg: GepMessage): void;
 } {
   // Lives in this closure — same lifetime as the pipeline (see recordGame JSDoc).
@@ -74,7 +95,18 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   /** Persist a finished match into the analyzable history. */
   function addMatch(record: MatchRecord): void {
     const game = matchToGame(record, deps.getConfig().accounts);
-    if (!game || !recordGame(game)) return;
+    if (!game) {
+      // `matchToGame` returns null ONLY for a missing/unresolvable outcome. A
+      // played ranked match shouldn't vanish just because GEP never sent the
+      // win/loss — hold it in the separate pending store so it can be completed
+      // by hand in Review (it NEVER enters history/analytics until resolved).
+      if (isCompetitive(record.gameType) && matchPlayed(record) && deps.history.addPending(record)) {
+        deps.notify('Match needs a result', 'A ranked match ended without a result — set win/loss in Review.');
+        deps.onPendingChanged?.();
+      }
+      return;
+    }
+    if (!recordGame(game)) return;
     // Best-effort end-of-match capture (~2s later, while the summary screen is
     // up). Every failure inside is a logged no-op; a manual log never gets here.
     deps.screenshots.capture(game.matchId, (paths) => {
@@ -84,6 +116,20 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
     });
   }
 
+  /**
+   * Complete a held pending match with a user-chosen result: take it out of the
+   * holding store, stamp the raw outcome, and run it back through {@link addMatch}
+   * so it lands in history via the identical `matchToGame` → `recordGame` →
+   * screenshot path a live capture would. Returns false for an unknown id.
+   */
+  function resolvePending(matchId: string, result: Result): boolean {
+    const rec = deps.history.takePending(matchId);
+    if (!rec) return false;
+    rec.outcome = OUTCOME_FOR_RESULT[result];
+    addMatch(rec);
+    return true;
+  }
+
   // One entry point for a normalized GEP message — shared by the live feed and
   // dev simulation so both exercise the same pipeline.
   const feed = (msg: GepMessage): void => {
@@ -91,5 +137,5 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
     if (record) addMatch(record);
   };
 
-  return { recordGame, addMatch, feed };
+  return { recordGame, addMatch, resolvePending, feed };
 }

@@ -90,6 +90,24 @@ export interface MatchRow {
   targetGrades?: Record<string, TargetGrade>;
 }
 
+/**
+ * A competitive match that played but arrived without a GEP outcome (win/loss),
+ * held for manual completion on the Review screen. Deliberately a lean summary
+ * of the raw capture — never a {@link MatchRow}/`GameRecord` — because a pending
+ * match is NOT in history or analytics until the user sets its result.
+ */
+export interface PendingMatch {
+  matchId: string;
+  map: string;
+  heroes: string[];
+  role: Role;
+  account: string;
+  /** When the match ended (from the capture's `endedAt`), for relative-time display + ordering. */
+  timestamp: number;
+  /** How many roster players the capture carried — a "we did record this game" signal. */
+  rosterCount: number;
+}
+
 /** Everything the dashboard needs for the current filter set. */
 export interface DashboardData {
   /** Effective demo display: the sample season is shown (demo opted-in AND no real history). */
@@ -162,6 +180,13 @@ export interface DashboardData {
   reviewInbox: MatchRow[];
   /** Total ungraded count (the badge) — unfiltered and uncapped. */
   pendingReviews: number;
+  /**
+   * Played competitive matches GEP delivered without a win/loss, waiting for the
+   * user to set a result in Review (the "Needs result" section). Held in a
+   * separate store, so these never touch history/analytics/rank/Notion until
+   * resolved. Always unfiltered; empty when none are pending.
+   */
+  pendingMatches: PendingMatch[];
   /**
    * The effective editable master data (heroes/maps/seasons) — bundled defaults
    * ⊕ the user's overrides. Rides on the dashboard payload so renderer views

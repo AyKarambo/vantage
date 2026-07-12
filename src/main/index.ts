@@ -275,6 +275,9 @@ function main(): void {
   // Fires the live "a match was logged" push to an open dashboard (placeholder
   // until the window exists, like publishStatus below).
   let pushGameLogged: (game: { matchId: string }) => void = () => {};
+  // Fires when the pending ("needs result") set changes, so an open Review
+  // screen re-fetches (same placeholder-until-window pattern as pushGameLogged).
+  let pushPendingChanged: () => void = () => {};
   const pipeline = createMatchPipeline({
     history,
     aggregator,
@@ -283,6 +286,7 @@ function main(): void {
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
     onGameLogged: (game) => pushGameLogged(game),
+    onPendingChanged: () => pushPendingChanged(),
   });
 
   // Truthful connection indicator: folds GEP signals into the four-state
@@ -312,6 +316,7 @@ function main(): void {
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
     persistSessionSettings: (sessionSettings) => saveLocalConfig({ sessionSettings }),
     recordGame: (game) => pipeline.recordGame(game),
+    resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),
     notify: (title, body) => tray.notify(title, body),
     // Demo season draws only from the active competitive pool (spec AC 24).
     sampleGames: () => generateSampleGames(180, 42, activeMapNames()),
@@ -449,6 +454,7 @@ function main(): void {
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (game) => dashboard.push(EVENT_CHANNELS.onGameLogged, { matchId: game.matchId });
+  pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
