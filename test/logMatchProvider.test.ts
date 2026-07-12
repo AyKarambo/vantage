@@ -282,6 +282,50 @@ describe('saveReview — performance', () => {
   });
 });
 
+describe('saveReview — SR %', () => {
+  // Stores a mutable game and applies editManual patches with the store's real
+  // semantics (null deletes the key, undefined is ignored) so we can assert the
+  // stored game's srDelta after the review save.
+  function reviewHarness(game: GameRecord) {
+    const deps = {
+      history: {
+        setReview: () => {},
+        editManual: (_id: string, patch: Partial<GameRecord>) => {
+          const target = game as unknown as Record<string, unknown>;
+          for (const [k, v] of Object.entries(patch)) {
+            if (v === null) delete target[k];
+            else if (v !== undefined) target[k] = v;
+          }
+        },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    return { provider: createDataProvider(deps), game };
+  }
+  const compGame = (extra: Partial<GameRecord> = {}): GameRecord => ({
+    matchId: 'm1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+    result: 'Win', gameType: 'Competitive', heroes: ['Tracer'], ...extra,
+  });
+
+  it('persists a set SR % onto the match', () => {
+    const { provider, game } = reviewHarness(compGame());
+    provider.saveReview({ matchId: 'm1', grades: {}, flags: {}, srDelta: 22 });
+    expect(game.srDelta).toBe(22);
+  });
+
+  it('clears an existing SR % when null is sent', () => {
+    const { provider, game } = reviewHarness(compGame({ srDelta: 30 }));
+    provider.saveReview({ matchId: 'm1', grades: {}, flags: {}, srDelta: null });
+    expect(game.srDelta).toBeUndefined();
+  });
+
+  it('leaves an existing SR % unchanged when srDelta is omitted', () => {
+    const { provider, game } = reviewHarness(compGame({ srDelta: 30 }));
+    provider.saveReview({ matchId: 'm1', grades: {}, flags: {} });
+    expect(game.srDelta).toBe(30);
+  });
+});
+
 describe('mostPlayedHeroes', () => {
   it('ranks per account/role over the full history', () => {
     const games: GameRecord[] = [

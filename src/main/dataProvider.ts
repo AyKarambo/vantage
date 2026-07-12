@@ -141,6 +141,9 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     saveReview: (input) => {
       deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
+      // GEP can't report SR, so the player may set it here (competitive only);
+      // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
+      if (input.srDelta !== undefined) deps.history.editManual(input.matchId, { srDelta: input.srDelta });
     },
     importReviews: (inputs) =>
       deps.history.setReviews(inputs.map((i) => ({
