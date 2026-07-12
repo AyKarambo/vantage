@@ -75,6 +75,16 @@ describe('matchToGame', () => {
     expect(game?.roster).toBeUndefined();
   });
 
+  it('resolves a raw GEP numeric map id to its canonical name (Neon Junktion → "4140")', () => {
+    const game = matchToGame(base({ mapName: '4140' }), ACCOUNTS);
+    expect(game?.map).toBe('Neon Junktion');
+  });
+
+  it('leaves an unknown map value untouched and still falls back to Unknown when absent', () => {
+    expect(matchToGame(base({ mapName: 'Ilios' }), ACCOUNTS)?.map).toBe('Ilios');
+    expect(matchToGame(base({ mapName: undefined }), ACCOUNTS)?.map).toBe('Unknown');
+  });
+
   it('falls back to the battleTag when no account mapping matches', () => {
     const game = matchToGame(base(), {});
     expect(game?.account).toBe('Karambo#21234');

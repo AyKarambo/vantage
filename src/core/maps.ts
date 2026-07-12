@@ -38,3 +38,28 @@ export function isStadiumOnlyMap(name: string): boolean {
 export function mapMode(name: string): MapMode {
   return MAP_MODES[name] ?? 'Unknown';
 }
+
+/**
+ * A few Overwatch maps are reported by GEP as a numeric internal map id rather
+ * than a display name — Neon Junktion, for instance, arrives as `"4140"`, which
+ * then leaks straight through capture into history and the UI. Map those known
+ * ids back to Vantage's canonical map name so live capture, storage, analytics
+ * and Notion export all agree.
+ *
+ * Extend this table as new numeric-id maps surface in real captures (every raw
+ * GEP message is logged by the app, so the id is easy to read off).
+ */
+export const GEP_MAP_ID_NAMES: Record<string, string> = {
+  '4140': 'Neon Junktion',
+};
+
+/**
+ * Normalize a raw GEP-reported map value to a canonical map name. A known numeric
+ * GEP map id is translated to its name; any other value (already a real name) is
+ * returned unchanged. `undefined`/empty passes through so callers keep their own
+ * fallback (e.g. `?? 'Unknown'`).
+ */
+export function resolveGepMapName(raw: string | undefined): string | undefined {
+  if (!raw) return raw;
+  return GEP_MAP_ID_NAMES[raw.trim()] ?? raw;
+}

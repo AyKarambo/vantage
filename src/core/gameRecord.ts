@@ -3,6 +3,7 @@ import type { GameRecord } from './analytics';
 import { resolveAccount } from './resolvers/account';
 import { resolveRole } from './resolvers/role';
 import { resolveResult } from './resolvers/result';
+import { resolveGepMapName } from './maps';
 
 /**
  * Convert a raw capture record into an analyzable, resolved game — the one
@@ -31,7 +32,7 @@ export function matchToGame(
     timestamp: record.endedAt ?? now(),
     account: resolveAccount(record.battleTag, accounts) ?? record.battleTag ?? 'Unknown',
     role,
-    map: record.mapName ?? 'Unknown',
+    map: resolveGepMapName(record.mapName) ?? 'Unknown',
     result,
     gameType: record.gameType ?? 'Unknown',
     durationMinutes: record.durationMinutes,
