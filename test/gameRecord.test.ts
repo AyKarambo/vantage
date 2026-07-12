@@ -76,9 +76,9 @@ describe('matchToGame', () => {
     expect(game?.roster).toBeUndefined();
   });
 
-  it('resolves a raw GEP numeric map id to its canonical name (Neon Junktion → "4140")', () => {
+  it('resolves a raw GEP numeric map id to its canonical name ("4140" → Neon Junction)', () => {
     const game = matchToGame(base({ mapName: '4140' }), ACCOUNTS);
-    expect(game?.map).toBe('Neon Junktion');
+    expect(game?.map).toBe('Neon Junction');
   });
 
   it('leaves an unknown map value untouched and still falls back to Unknown when absent', () => {

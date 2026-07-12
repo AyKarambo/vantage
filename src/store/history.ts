@@ -8,8 +8,9 @@ import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 
 /**
  * Reconstruct a {@link GameRecord} from its stored `data` blob, normalizing a
- * legacy raw GEP map id (e.g. Neon Junktion persisted as `"4140"`) to the
- * canonical map name so old rows display and group correctly on load.
+ * legacy raw GEP map value (Neon Junction persisted as the numeric id `"4140"`
+ * or the old "Neon Junktion" spelling) to the canonical map name so old rows
+ * display and group correctly on load.
  */
 function parseGame(data: unknown): GameRecord {
   const game = JSON.parse(String(data)) as GameRecord;

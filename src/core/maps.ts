@@ -9,7 +9,7 @@ export type MapMode = 'Push' | 'Hybrid' | 'Escort' | 'Control' | 'Flashpoint' | 
 
 export const MAP_MODES: Record<string, MapMode> = {
   'New Queen Street': 'Push', Colosseo: 'Push', 'Esperança': 'Push', Runasapi: 'Push', 'Redwood Dam': 'Push',
-  "King's Row": 'Hybrid', Midtown: 'Hybrid', Eichenwalde: 'Hybrid', Hollywood: 'Hybrid', Numbani: 'Hybrid', 'Blizzard World': 'Hybrid', Paraíso: 'Hybrid', 'Neon Junktion': 'Hybrid',
+  "King's Row": 'Hybrid', Midtown: 'Hybrid', Eichenwalde: 'Hybrid', Hollywood: 'Hybrid', Numbani: 'Hybrid', 'Blizzard World': 'Hybrid', Paraíso: 'Hybrid', 'Neon Junction': 'Hybrid',
   'Circuit Royal': 'Escort', Dorado: 'Escort', Havana: 'Escort', Junkertown: 'Escort', Rialto: 'Escort', 'Route 66': 'Escort', 'Shambali Monastery': 'Escort', 'Watchpoint: Gibraltar': 'Escort',
   'Antarctic Peninsula': 'Control', Busan: 'Control', Ilios: 'Control', 'Lijiang Tower': 'Control', Nepal: 'Control', Oasis: 'Control', Samoa: 'Control',
   'New Junk City': 'Flashpoint', Suravasa: 'Flashpoint', Aatlis: 'Flashpoint',
@@ -40,26 +40,26 @@ export function mapMode(name: string): MapMode {
 }
 
 /**
- * A few Overwatch maps are reported by GEP as a numeric internal map id rather
- * than a display name — Neon Junktion, for instance, arrives as `"4140"`, which
- * then leaks straight through capture into history and the UI. Map those known
- * ids back to Vantage's canonical map name so live capture, storage, analytics
- * and Notion export all agree.
- *
- * Extend this table as new numeric-id maps surface in real captures (every raw
- * GEP message is logged by the app, so the id is easy to read off).
+ * Raw GEP/legacy map values that need folding to Vantage's canonical map name:
+ *   - Some maps arrive from GEP as a numeric internal id (Neon Junction is
+ *     reported as `"4140"`), which otherwise leaks straight into history and UI.
+ *   - Older builds spelled Neon Junction with a 'k' ("Neon Junktion"); existing
+ *     stored rows carry that spelling and must fold to the current one.
+ * Extend as new numeric-id maps surface in real captures (every raw GEP message
+ * is logged by the app, so the id is easy to read off).
  */
-export const GEP_MAP_ID_NAMES: Record<string, string> = {
-  '4140': 'Neon Junktion',
+export const GEP_MAP_ALIASES: Record<string, string> = {
+  '4140': 'Neon Junction',
+  'Neon Junktion': 'Neon Junction',
 };
 
 /**
- * Normalize a raw GEP-reported map value to a canonical map name. A known numeric
- * GEP map id is translated to its name; any other value (already a real name) is
- * returned unchanged. `undefined`/empty passes through so callers keep their own
- * fallback (e.g. `?? 'Unknown'`).
+ * Normalize a raw GEP-reported (or legacy-stored) map value to a canonical map
+ * name. A known numeric GEP id or legacy spelling is translated; any other value
+ * (already a real name) is returned unchanged. `undefined`/empty passes through so
+ * callers keep their own fallback (e.g. `?? 'Unknown'`).
  */
 export function resolveGepMapName(raw: string | undefined): string | undefined {
   if (!raw) return raw;
-  return GEP_MAP_ID_NAMES[raw.trim()] ?? raw;
+  return GEP_MAP_ALIASES[raw.trim()] ?? raw;
 }

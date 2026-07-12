@@ -58,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File import-obsidian.ps1 -VaultPath "C:\path
 - Maps each match's `date`+`time` to a timestamp (your machine's **local** time zone).
 - Maps `performance` stars `1/2/3/4/5` → `0/25/50/75/100`.
 - Canonicalizes map names to Vantage's spelling (e.g. `Watchpoint Gibraltar` → `Watchpoint: Gibraltar`,
-  `Neon Junction` → `Neon Junktion`); unknown maps are kept verbatim and listed in the summary.
+  `Neon Junktion` → `Neon Junction`); unknown maps are kept verbatim and listed in the summary.
 - Gives each match a **deterministic id** derived from its filename, so re-running the script and
   re-importing only adds matches that are new — nothing duplicates.
 - Skips files with no frontmatter or no `result`, and reports how many were skipped.

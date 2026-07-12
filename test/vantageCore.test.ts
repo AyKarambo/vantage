@@ -32,7 +32,7 @@ describe('mapMode', () => {
   });
 
   it('resolves the newer maps so imports do not bucket them as Unknown', () => {
-    expect(mapMode('Neon Junktion')).toBe('Hybrid');
+    expect(mapMode('Neon Junction')).toBe('Hybrid');
     expect(mapMode('Redwood Dam')).toBe('Push');
   });
 
