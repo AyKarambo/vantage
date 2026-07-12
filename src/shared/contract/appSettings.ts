@@ -32,7 +32,7 @@ export interface AppInfo {
   packaged: boolean;
 }
 
-/** Where Vantage's data folder (DB + manual data + screenshots) currently lives (Settings screen). */
+/** Where Vantage's data folder (DB + manual data) currently lives (Settings screen). */
 export interface DataLocation {
   /** Absolute folder the data files live in. */
   folder: string;

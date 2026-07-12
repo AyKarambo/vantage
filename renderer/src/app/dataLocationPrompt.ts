@@ -37,7 +37,7 @@ export function openDataLocationPrompt(onDone: () => void): void {
         h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '17px', fontWeight: '600', marginBottom: '8px' } },
           'Where should Vantage keep your data?'),
         h('div', { style: { fontSize: '13.5px', lineHeight: '1.55', color: 'var(--text-2)' } },
-          'Vantage stores your match history, targets, and screenshots in a single folder. By default ' +
+          'Vantage stores your match history and targets in a single folder. By default ' +
           'that’s its app-data folder, shown below — or point it at a folder you manage, a good place ' +
           'for a cloud-synced backup. You can change this later in Settings.'),
         loc

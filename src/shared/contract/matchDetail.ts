@@ -92,6 +92,4 @@ export interface MatchDetail {
   };
   /** Players seen in prior matches; [] when no roster data exists. */
   playerHistory: PlayerEncounter[];
-  /** vantage-media:// URLs of end-of-match captures; [] when none. */
-  screenshots: string[];
 }

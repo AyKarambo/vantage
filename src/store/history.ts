@@ -248,16 +248,6 @@ export class HistoryStore {
     return removed;
   }
 
-  /** Append end-of-match capture paths to a stored game; false if the id is unknown. */
-  addScreenshots(matchId: string, screenshots: string[]): boolean {
-    if (!screenshots.length) return false;
-    const game = this.getOne(matchId);
-    if (!game) return false;
-    game.screenshots = [...(game.screenshots ?? []), ...screenshots];
-    this.updateStmt.run(...updateValues(game));
-    return true;
-  }
-
   /** Attach (or replace) the manual review on a stored game; false if the id is unknown. */
   setReview(matchId: string, review: MatchReview): boolean {
     const game = this.getOne(matchId);

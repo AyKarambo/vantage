@@ -126,7 +126,7 @@ export interface DataProvider {
   getAppInfo(): AppInfo;
   /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
   openExternal(url: string): Promise<void>;
-  /** Where Vantage's data folder currently lives (DB + manual data + screenshots). */
+  /** Where Vantage's data folder currently lives (DB + manual data). */
   getDataLocation(): DataLocation;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder; async (shows a dialog). */
   chooseDataFolder(): Promise<DataLocationResult>;

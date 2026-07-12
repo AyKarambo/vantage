@@ -63,15 +63,6 @@ describe('HistoryStore (SQLite) — core interface', () => {
     expect(h.all()[0].performance).toBeUndefined();
   });
 
-  it('addScreenshots appends, and is false for unknown id or empty list', () => {
-    const h = open(tmp());
-    h.add(g({ matchId: 'a', screenshots: ['one.png'] }));
-    expect(h.addScreenshots('a', ['two.png'])).toBe(true);
-    expect(h.all()[0].screenshots).toEqual(['one.png', 'two.png']);
-    expect(h.addScreenshots('a', [])).toBe(false);
-    expect(h.addScreenshots('nope', ['x.png'])).toBe(false);
-  });
-
   it('clearReview removes a review and is false when there is none', () => {
     const h = open(tmp());
     h.add(g({ matchId: 'a', review: { at: 1, grades: { t1: 'hit' }, flags: {} } }));
@@ -87,7 +78,7 @@ describe('HistoryStore (SQLite) — core interface', () => {
       durationMinutes: 12.5, heroes: ['Ana', 'Kiriko'],
       perHero: [{ hero: 'Ana', role: 'support', eliminations: 10, deaths: 3, assists: 20, damage: 5000, healing: 9000, mitigation: 0 }],
       roster: [{ battleTag: 'Me#1', heroName: 'Ana', isLocal: true }],
-      finalScore: '2-1', screenshots: ['a.png'],
+      finalScore: '2-1',
       mental: { tilt: true, positiveComms: true },
       review: { at: 1_700_000_001_000, grades: { t1: 'hit' }, flags: { toxicMates: true } },
       importedAt: 1_700_000_002_000,

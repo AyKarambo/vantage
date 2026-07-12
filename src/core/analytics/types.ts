@@ -92,8 +92,6 @@ export interface GameRecord {
   /** Latest roster snapshot per slot — whatever teams GEP reported (may be
    *  local team only). Absent on older records and manual logs. */
   roster?: RosterPlayer[];
-  /** End-of-match capture files, relative to the screenshots root. */
-  screenshots?: string[];
   /** Manual self-report captured in the Log Match card, if the player added one. */
   mental?: MatchMental;
   /** The saved Review-screen read (target grades + feel flags), if graded. */

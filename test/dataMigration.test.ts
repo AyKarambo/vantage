@@ -9,7 +9,6 @@ import {
   MANUAL_LOG_FILE,
   OUTBOX_FILE,
   RANK_ANCHORS_FILE,
-  SCREENSHOTS_DIR,
   LEGACY_HISTORY_JSON_FILE,
   type DataArtifactPresence,
 } from '../src/core/dataMigration';
@@ -28,7 +27,6 @@ function presence(overrides: Partial<DataArtifactPresence> = {}): DataArtifactPr
     manualLog: false,
     outbox: false,
     rankAnchors: false,
-    screenshots: false,
     legacyHistoryJson: false,
     ...overrides,
   };
@@ -58,7 +56,6 @@ describe('planDataMigration', () => {
         manualLog: true,
         outbox: true,
         rankAnchors: true,
-        screenshots: true,
         legacyHistoryJson: true,
       }),
       fromDir,
@@ -70,18 +67,17 @@ describe('planDataMigration', () => {
       OUTBOX_FILE,
       RANK_ANCHORS_FILE,
       LEGACY_HISTORY_JSON_FILE,
-      SCREENSHOTS_DIR,
     ]);
   });
 
-  it('orders history.db first and the screenshots directory last', () => {
+  it('orders history.db first and the legacy backup last', () => {
     const plan = planDataMigration(
-      presence({ historyDb: true, screenshots: true, outbox: true }),
+      presence({ historyDb: true, legacyHistoryJson: true, outbox: true }),
       fromDir,
       toDir
     );
     expect(plan.ops[0].name).toBe(HISTORY_DB_FILE);
-    expect(plan.ops[plan.ops.length - 1].name).toBe(SCREENSHOTS_DIR);
+    expect(plan.ops[plan.ops.length - 1].name).toBe(LEGACY_HISTORY_JSON_FILE);
   });
 
   it('marks history.db as non-optional and every other artifact as optional', () => {
@@ -91,7 +87,6 @@ describe('planDataMigration', () => {
         manualLog: true,
         outbox: true,
         rankAnchors: true,
-        screenshots: true,
         legacyHistoryJson: true,
       }),
       fromDir,
@@ -103,23 +98,22 @@ describe('planDataMigration', () => {
     expect(byName[OUTBOX_FILE].optional).toBe(true);
     expect(byName[RANK_ANCHORS_FILE].optional).toBe(true);
     expect(byName[LEGACY_HISTORY_JSON_FILE].optional).toBe(true);
-    expect(byName[SCREENSHOTS_DIR].optional).toBe(true);
   });
 
-  it('marks the screenshots directory as kind "dir" and files as kind "file"', () => {
-    const plan = planDataMigration(presence({ historyDb: true, screenshots: true }), fromDir, toDir);
+  it('marks every artifact as kind "file"', () => {
+    const plan = planDataMigration(presence({ historyDb: true, manualLog: true }), fromDir, toDir);
     const byName = Object.fromEntries(plan.ops.map((op) => [op.name, op]));
     expect(byName[HISTORY_DB_FILE].kind).toBe('file');
-    expect(byName[SCREENSHOTS_DIR].kind).toBe('dir');
+    expect(byName[MANUAL_LOG_FILE].kind).toBe('file');
   });
 
   it('joins fromDir/toDir onto each artifact name for from/to paths', () => {
-    const plan = planDataMigration(presence({ historyDb: true, screenshots: true }), fromDir, toDir);
+    const plan = planDataMigration(presence({ historyDb: true, manualLog: true }), fromDir, toDir);
     const byName = Object.fromEntries(plan.ops.map((op) => [op.name, op]));
     expect(byName[HISTORY_DB_FILE].from).toBe(path.join(fromDir, HISTORY_DB_FILE));
     expect(byName[HISTORY_DB_FILE].to).toBe(path.join(toDir, HISTORY_DB_FILE));
-    expect(byName[SCREENSHOTS_DIR].from).toBe(path.join(fromDir, SCREENSHOTS_DIR));
-    expect(byName[SCREENSHOTS_DIR].to).toBe(path.join(toDir, SCREENSHOTS_DIR));
+    expect(byName[MANUAL_LOG_FILE].from).toBe(path.join(fromDir, MANUAL_LOG_FILE));
+    expect(byName[MANUAL_LOG_FILE].to).toBe(path.join(toDir, MANUAL_LOG_FILE));
   });
 });
 
@@ -138,7 +132,6 @@ describe('isVantageDataDir', () => {
       manualLog: true,
       outbox: true,
       rankAnchors: true,
-      screenshots: true,
       legacyHistoryJson: true,
     });
     expect(isVantageDataDir(files)).toBe(false);
@@ -171,8 +164,8 @@ const g = (p: Partial<GameRecord>): GameRecord => ({
   result: 'Win', gameType: 'Competitive', heroes: [], ...p,
 });
 
-/** A trivial Relocatable fake standing in for the JSON side-stores/screenshots
- *  service until they gain a real `relocate` (Wave 1's `W1-C2`). Records the
+/** A trivial Relocatable fake standing in for the JSON side-stores until they
+ *  gain a real `relocate` (Wave 1's `W1-C2`). Records the
  *  directory it was last pointed at and, when constructed with a source dir
  *  holding a file, actually moves that file — enough to exercise the
  *  executor's copy/commit/delete + rollback paths without depending on
@@ -197,8 +190,6 @@ describe('migrateDataFolder — copy-verify-commit', () => {
     const history = historyAt(a);
     history.addMany([g({ matchId: 'x' }), g({ matchId: 'y' })]);
     fs.writeFileSync(path.join(a, 'manual.json'), '{"targets":[]}');
-    fs.mkdirSync(path.join(a, 'screenshots', 'x'), { recursive: true });
-    fs.writeFileSync(path.join(a, 'screenshots', 'x', 'end-of-match.png'), 'fake-png');
 
     let persisted: string | undefined;
     const manual = fakeStore('manual.json', a);
@@ -213,8 +204,7 @@ describe('migrateDataFolder — copy-verify-commit', () => {
     expect(persisted).toBe(b);
     expect(fs.existsSync(path.join(b, DB_FILE))).toBe(true);
     expect(fs.existsSync(path.join(a, DB_FILE))).toBe(false);
-    expect(fs.existsSync(path.join(b, 'screenshots', 'x', 'end-of-match.png'))).toBe(true);
-    expect(fs.existsSync(path.join(a, 'screenshots'))).toBe(false);
+    expect(fs.existsSync(path.join(b, 'manual.json'))).toBe(true);
     expect(manual.calls).toEqual([b]);
     expect(history.all().map((r) => r.matchId)).toEqual(['x', 'y']);
   });

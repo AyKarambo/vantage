@@ -48,10 +48,8 @@ function capturedMatch(matchId: string): MatchRecord {
 /** In-memory stand-in for the HistoryStore slice the pipeline needs. */
 function fakeHistory() {
   const games: GameRecord[] = [];
-  const attached: Array<{ matchId: string; screenshots: string[] }> = [];
   return {
     games,
-    attached,
     add(g: GameRecord): boolean {
       if (games.some((x) => x.matchId === g.matchId)) return false;
       games.push(g);
@@ -60,11 +58,6 @@ function fakeHistory() {
     all(): GameRecord[] {
       return [...games];
     },
-    addScreenshots(matchId: string, screenshots: string[]): boolean {
-      if (!games.some((x) => x.matchId === matchId) || !screenshots.length) return false;
-      attached.push({ matchId, screenshots });
-      return true;
-    },
   };
 }
 
@@ -72,16 +65,10 @@ function fakeHistory() {
 function harness(config: AppConfig = appConfig()) {
   const history = fakeHistory();
   const notifications: Array<{ title: string; body: string }> = [];
-  const captures: Array<{ matchId: string; onSaved: (relPaths: string[]) => void }> = [];
   const logged: Array<{ matchId: string; account: string; configured: boolean }> = [];
   const deps: MatchPipelineDeps = {
     history,
     aggregator: { handle: () => null },
-    screenshots: {
-      capture: (matchId, onSaved) => {
-        captures.push({ matchId, onSaved });
-      },
-    },
     getConfig: () => config,
     notify: (title, body) => {
       notifications.push({ title, body });
@@ -91,7 +78,7 @@ function harness(config: AppConfig = appConfig()) {
       logged.push(payload);
     },
   };
-  return { pipeline: createMatchPipeline(deps), history, notifications, captures, logged };
+  return { pipeline: createMatchPipeline(deps), history, notifications, logged };
 }
 
 describe('createMatchPipeline — recordGame dedupe', () => {
@@ -175,10 +162,9 @@ describe('createMatchPipeline — competitive capture gate', () => {
   });
 
   it('drops a non-competitive match delivered through addMatch (feed path)', () => {
-    const { pipeline, history, captures } = harness();
+    const { pipeline, history } = harness();
     pipeline.addMatch({ ...capturedMatch('gep-qp'), gameType: 'quickplay' });
     expect(history.games).toHaveLength(0);
-    expect(captures).toHaveLength(0); // no screenshot capture scheduled for a dropped game
   });
 });
 
@@ -210,27 +196,15 @@ describe('createMatchPipeline — onGameLogged (F4)', () => {
   });
 });
 
-describe('createMatchPipeline — addMatch screenshots', () => {
-  it('resolves the record into history and attaches captured screenshots via the callback', () => {
-    const { pipeline, history, captures } = harness();
+describe('createMatchPipeline — addMatch', () => {
+  it('resolves the record into history exactly once, ignoring a duplicate', () => {
+    const { pipeline, history } = harness();
 
     pipeline.addMatch(capturedMatch('gep-1'));
     expect(history.games).toHaveLength(1);
     expect(history.games[0]).toMatchObject({ matchId: 'gep-1', result: 'Win', account: 'Main' });
-    expect(captures).toHaveLength(1);
-    expect(captures[0].matchId).toBe('gep-1');
 
-    // The capture completes later; its saved paths land on the stored game.
-    captures[0].onSaved(['gep-1/end-of-match.png']);
-    expect(history.attached).toEqual([
-      { matchId: 'gep-1', screenshots: ['gep-1/end-of-match.png'] },
-    ]);
-  });
-
-  it('never schedules a capture for a duplicate match', () => {
-    const { pipeline, captures } = harness();
     pipeline.addMatch(capturedMatch('gep-1'));
-    pipeline.addMatch(capturedMatch('gep-1'));
-    expect(captures).toHaveLength(1);
+    expect(history.games).toHaveLength(1);
   });
 });

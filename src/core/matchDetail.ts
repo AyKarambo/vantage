@@ -53,7 +53,6 @@ export function matchDetail(
     scoreboard: scoreboardOf(game),
     competitive: competitiveOf(game, competitiveContext, all, anchors),
     playerHistory: playerHistory(all, game),
-    screenshots: (game.screenshots ?? []).map(toMediaUrl),
   };
 }
 
@@ -165,10 +164,4 @@ function competitiveOf(
   );
   const p = progression(scoped.length ? scoped : [game]);
   return { note: 'estimate', tier: p.tier, division: p.division, progressPct: p.progressPct, delta: p.delta };
-}
-
-/** Renderer-facing URL served by the read-only vantage-media:// protocol. */
-function toMediaUrl(relPath: string): string {
-  const clean = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
-  return `vantage-media://screenshots/${clean.split('/').map(encodeURIComponent).join('/')}`;
 }

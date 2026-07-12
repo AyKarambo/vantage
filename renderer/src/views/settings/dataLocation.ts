@@ -7,8 +7,8 @@ import { store } from '../../store';
 
 /**
  * Data storage — where *all* Vantage data files live (`history.db`,
- * `manual.json`, `outbox.json`, `rankAnchors.json`, `screenshots/`, plus a
- * legacy `history.json` backup when present). Point it at a cloud-synced
+ * `manual.json`, `outbox.json`, `rankAnchors.json`, plus a legacy
+ * `history.json` backup when present). Point it at a cloud-synced
  * folder for off-machine backup. "Change…" migrates everything with a
  * copy-verify-then-delete guarantee: originals are removed only after the
  * switch is committed, and a target that already holds Vantage data is
@@ -25,7 +25,7 @@ export function dataLocationCard(): HTMLElement {
       message ? h('div', { class: 'hint' }, message) : null,
       h('div', { style: { marginTop: '2px' } }, button('Change…', { variant: 'soft', onClick: choose })),
       h('div', { class: 'hint', style: { marginTop: '6px' } },
-        'All match history, targets, and screenshots move together. Point this at a cloud-synced folder ' +
+        'All match history and targets move together. Point this at a cloud-synced folder ' +
         '(OneDrive, Dropbox) for off-machine backup — use from one machine only, since editing the synced ' +
         'files from two machines at once can corrupt them. Notion export stays a separate, portable backup.'),
     );
@@ -75,7 +75,7 @@ export function dataLocationCard(): HTMLElement {
     ));
   }
 
-  return card({ title: 'Data storage', sub: 'where your match history, targets, and screenshots are stored' }, body);
+  return card({ title: 'Data storage', sub: 'where your match history and targets are stored' }, body);
 }
 
 /** The migration succeeded but some originals in the old folder couldn't be

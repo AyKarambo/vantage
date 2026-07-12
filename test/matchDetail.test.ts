@@ -37,7 +37,6 @@ const full = (): GameRecord => ({
     { battleTag: 'Nova#11214', heroName: 'Ana', heroRole: 'support', team: 0, kills: 4, deaths: 5, assists: 20, damage: 3000, healing: 9000, mitigation: 0 },
     { battleTag: 'Enemy#9', heroName: 'Reinhardt', heroRole: 'tank', team: 1, kills: 14, deaths: 6, assists: 4, damage: 8000, healing: 0, mitigation: 12000 },
   ],
-  screenshots: ['full-1/end-of-match.png'],
   mental: { tilt: true },
 });
 
@@ -67,7 +66,6 @@ describe('matchDetail degradation contract', () => {
     expect(d!.perHero).toEqual([]);
     expect(d!.scoreboard).toBeUndefined();
     expect(d!.playerHistory).toEqual([]);
-    expect(d!.screenshots).toEqual([]);
     expect(d!.performance).toBeUndefined();
   });
 
@@ -153,9 +151,6 @@ describe('matchDetail degradation contract', () => {
     // Player history spans the whole history.
     expect(d!.playerHistory).toHaveLength(1);
     expect(d!.playerHistory[0]).toMatchObject({ name: 'Nova#11214', encounters: 1 });
-
-    // Screenshots become read-only vantage-media:// URLs.
-    expect(d!.screenshots).toEqual(['vantage-media://screenshots/full-1/end-of-match.png']);
   });
 
   it('orders each team 5v5 (tank, dps, dps, support, support) and derives role from hero when GEP omits it', () => {
@@ -210,12 +205,6 @@ describe('matchDetail degradation contract', () => {
       name: 'Main', hero: 'Ana', isLocal: true, healing: 11000,
     });
     expect(d!.scoreboard![0].team).toBeUndefined();
-  });
-
-  it('normalizes screenshot paths (backslashes, leading slashes) into URLs', () => {
-    const g = minimal({ matchId: 's-1', screenshots: ['s-1\\end-of-match.png'] });
-    const d = matchDetail([g], 's-1');
-    expect(d!.screenshots).toEqual(['vantage-media://screenshots/s-1/end-of-match.png']);
   });
 });
 

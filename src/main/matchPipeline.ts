@@ -1,6 +1,5 @@
 import type { HistoryStore } from '../store/history';
 import type { MatchAggregator } from '../core/matchAggregator';
-import type { ScreenshotService } from './screenshots';
 import type { AppConfig } from './config';
 import type { GepMessage, MatchRecord } from '../core/model';
 import { matchToGame } from '../core/gameRecord';
@@ -14,19 +13,17 @@ import {
 
 /**
  * The match pipeline: GEP message → aggregated MatchRecord → resolved GameRecord
- * persisted to history, plus break-reminder evaluation and best-effort screenshots.
- * No Electron imports (deps are type-only slices), so unit tests drive it with
- * plain objects — the composition root in ./index supplies the real services.
+ * persisted to history, plus break-reminder evaluation. No Electron imports
+ * (deps are type-only slices), so unit tests drive it with plain objects — the
+ * composition root in ./index supplies the real services.
  */
 
 /** Everything the pipeline needs, as narrow structural slices so tests can inject plain objects. */
 export interface MatchPipelineDeps {
-  /** Durable game history: dedupe-add, full read for streak evaluation, screenshot attach. */
-  history: Pick<HistoryStore, 'add' | 'all' | 'addScreenshots'>;
+  /** Durable game history: dedupe-add, full read for streak evaluation. */
+  history: Pick<HistoryStore, 'add' | 'all'>;
   /** Folds the GEP message stream into one finished MatchRecord per match. */
   aggregator: Pick<MatchAggregator, 'handle'>;
-  /** Best-effort end-of-match capture — never throws, never blocks the pipeline. */
-  screenshots: Pick<ScreenshotService, 'capture'>;
   /** Live app config — re-read on every use (breakReminder, accounts), never cached. */
   getConfig(): AppConfig;
   /** Surface a user-facing notification (the tray balloon in production). */
@@ -87,14 +84,8 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   /** Persist a finished match into the analyzable history. */
   function addMatch(record: MatchRecord): void {
     const game = matchToGame(record, deps.getConfig().accounts);
-    if (!game || !recordGame(game)) return;
-    // Best-effort end-of-match capture (~2s later, while the summary screen is
-    // up). Every failure inside is a logged no-op; a manual log never gets here.
-    deps.screenshots.capture(game.matchId, (paths) => {
-      if (deps.history.addScreenshots(game.matchId, paths)) {
-        deps.log('[shots]', paths.length, 'screenshot(s) attached to', game.matchId);
-      }
-    });
+    if (!game) return;
+    recordGame(game);
   }
 
   // One entry point for a normalized GEP message — shared by the live feed and

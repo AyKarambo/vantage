@@ -2,8 +2,8 @@ import * as path from 'path';
 
 /**
  * Resolve the effective Vantage data directory (history database plus every
- * other store — manual targets, the Notion outbox ledger, rank anchors,
- * screenshots). A configured folder (trimmed, resolved to an absolute path)
+ * other store — manual targets, the Notion outbox ledger, rank anchors).
+ * A configured folder (trimmed, resolved to an absolute path)
  * wins; a blank/whitespace value falls back to the default `<userData>/data`.
  * Pure and Electron-free so the composition root's location logic is
  * unit-testable.

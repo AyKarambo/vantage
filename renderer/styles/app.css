@@ -578,17 +578,6 @@
   font-size: 15px;
   font-weight: 600;
 }
-.shot-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-}
-.shot {
-  width: 100%;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-2);
-  display: block;
-}
 
 /* Focus / Targets ----------------------------------------------------------- */
 .target-row {

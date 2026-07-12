@@ -10,9 +10,8 @@ import {
 
 /**
  * Anything that can be told to reopen itself at a new directory (`HistoryStore`
- * today; the JSON side-stores and `ScreenshotService` share the same shape).
- * Kept structural so this module doesn't need to import every concrete store
- * class.
+ * today; the JSON side-stores share the same shape). Kept structural so this
+ * module doesn't need to import every concrete store class.
  *
  * `deferDelete` is optional (most stores' `relocate` never deletes anything —
  * the JSON side-stores' original file is removed by the executor itself, well
@@ -52,16 +51,15 @@ function adoptOrRelocate(store: Relocatable, dir: string): void {
 }
 
 /** The live store handles the executor repoints after a successful copy phase.
- *  Only `history` is required today — the JSON side-stores/screenshots are
- *  optional so this compiles and works before they gain `relocate` (Wave 1
- *  sequencing: this task lands before `W1-C2`). */
+ *  Only `history` is required today — the JSON side-stores are optional so this
+ *  compiles and works before they gain `relocate` (Wave 1 sequencing: this task
+ *  lands before `W1-C2`). */
 export interface DataMigrationStores {
   history: Relocatable;
   manualLog?: Relocatable;
   outbox?: Relocatable;
   rankAnchors?: Relocatable;
   masterData?: Relocatable;
-  screenshots?: Relocatable;
 }
 
 /** What the executor needs from the caller to plan + run a migration. */
@@ -222,7 +220,6 @@ function relocateAll(stores: DataMigrationStores, toDir: string, opts: { adopt: 
     if (stores.outbox) adoptOrRelocate(stores.outbox, toDir);
     if (stores.rankAnchors) adoptOrRelocate(stores.rankAnchors, toDir);
     if (stores.masterData) adoptOrRelocate(stores.masterData, toDir);
-    if (stores.screenshots) adoptOrRelocate(stores.screenshots, toDir);
     return undefined;
   }
   const deleteHistoryOriginal = stores.history.relocate(toDir, { deferDelete: true }) ?? undefined;
@@ -230,7 +227,6 @@ function relocateAll(stores: DataMigrationStores, toDir: string, opts: { adopt: 
   if (stores.outbox) stores.outbox.relocate(toDir);
   if (stores.rankAnchors) stores.rankAnchors.relocate(toDir);
   if (stores.masterData) stores.masterData.relocate(toDir);
-  if (stores.screenshots) stores.screenshots.relocate(toDir);
   return deleteHistoryOriginal;
 }
 
@@ -250,7 +246,6 @@ function statPresence(dir: string): DataArtifactPresence {
     outbox: has('outbox.json'),
     rankAnchors: has('rankAnchors.json'),
     masterData: has('masterData.json'),
-    screenshots: has('screenshots'),
     legacyHistoryJson: has('history.json'),
   };
 }

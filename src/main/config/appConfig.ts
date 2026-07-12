@@ -70,7 +70,7 @@ export interface AppConfig {
   masterData: MasterDataConfig;
   /**
    * Folder holding all Vantage data files (SQLite match history, manual log,
-   * outbox ledger, rank anchors, screenshots). Absent ⇒ the default
+   * outbox ledger, rank anchors). Absent ⇒ the default
    * `<userData>/data`. Point it at a cloud-synced folder (OneDrive/Dropbox) for
    * off-machine backup. Single-machine use only — simultaneous multi-machine
    * access to the synced files can corrupt SQLite.

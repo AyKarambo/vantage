@@ -2,7 +2,7 @@
  * Match detail — the parameterized drill-down behind a Matches row click.
  * Every section renders only when its data exists, so the page degrades
  * tier-by-tier: a minimal legacy record still gets a full header, richer
- * records add scoreboard, tabs, progress, player history, and screenshots.
+ * records add scoreboard, tabs, progress, and player history.
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { applyStyle, h, render } from '../dom';
@@ -94,7 +94,6 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
     competitiveSection(d.competitive, d.srDelta),
     gradesSection(d, ctx),
     playerHistorySection(d),
-    screenshotsSection(d.screenshots),
   ].filter((n): n is HTMLElement => n != null);
 }
 
@@ -633,20 +632,5 @@ function encounterRow(p: PlayerEncounter): HTMLElement {
       `${p.encounters} prior ${p.encounters === 1 ? 'match' : 'matches'}${wl}`),
     h('span', { class: 'u-dim mono', style: { fontSize: '11px', minWidth: '46px', textAlign: 'right' } },
       relTime(p.lastSeen)),
-  );
-}
-
-// --- screenshots gallery ---------------------------------------------------------
-
-function screenshotsSection(shots: string[]): HTMLElement {
-  if (!shots.length) {
-    // Collapsed: the section is reserved, not populated (capture is best-effort).
-    return card({ title: 'Screenshots', sub: 'end-of-match captures' },
-      h('div', { class: 'hint' }, 'No screenshots were captured for this match.'));
-  }
-  return card({ title: 'Screenshots', sub: 'end-of-match captures' },
-    h('div', { class: 'shot-grid' },
-      ...shots.map((src) => h('img', { class: 'shot', src, alt: 'End-of-match screenshot', loading: 'lazy' })),
-    ),
   );
 }

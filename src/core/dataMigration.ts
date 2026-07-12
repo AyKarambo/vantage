@@ -1,15 +1,14 @@
 /**
  * The filenames a Vantage data folder can hold, exactly as they land on disk.
- * `history.db` is the SQLite store; the rest are JSON side-stores plus the
- * screenshots directory and a frozen legacy backup. Centralized here so the
- * planner and its executor (`src/store/dataMigration.ts`) agree on names.
+ * `history.db` is the SQLite store; the rest are JSON side-stores plus a frozen
+ * legacy backup. Centralized here so the planner and its executor
+ * (`src/store/dataMigration.ts`) agree on names.
  */
 export const HISTORY_DB_FILE = 'history.db';
 export const MANUAL_LOG_FILE = 'manual.json';
 export const OUTBOX_FILE = 'outbox.json';
 export const RANK_ANCHORS_FILE = 'rankAnchors.json';
 export const MASTER_DATA_FILE = 'masterData.json';
-export const SCREENSHOTS_DIR = 'screenshots';
 export const LEGACY_HISTORY_JSON_FILE = 'history.json';
 
 /** A single data artifact this migration knows how to move. */
@@ -31,8 +30,6 @@ export interface DataArtifactPresence {
   rankAnchors: boolean;
   /** `masterData.json` — editable heroes/maps/seasons override deltas. */
   masterData: boolean;
-  /** `screenshots/` directory. */
-  screenshots: boolean;
   /** Frozen legacy `history.json` backup, present only on installs migrated from pre-SQLite. */
   legacyHistoryJson: boolean;
 }
@@ -61,10 +58,8 @@ export interface DataMigrationPlan {
  * Only artifacts present in `files` are listed — missing optional files are
  * silently skipped, not treated as errors (spec C2). `history.db` is always
  * first (the executor needs the DB handle closed/reopened before touching the
- * JSON side-stores or the screenshots directory), followed by the JSON
- * side-stores, then the legacy backup, then the screenshots directory last
- * (directories are the slowest/most failure-prone copy, so surfacing a JSON
- * or DB copy failure first gives the clearest error).
+ * JSON side-stores), followed by the JSON side-stores, then the legacy backup
+ * last.
  *
  * Pure and Electron-free: it never touches the filesystem. The executor
  * (`src/store/dataMigration.ts`) stats `fromDir`, builds `files`, calls this,
@@ -81,10 +76,6 @@ export function planDataMigration(
     if (!present) return;
     ops.push({ name, from: joinPath(fromDir, name), to: joinPath(toDir, name), kind: 'file', optional });
   };
-  const addDir = (name: string, present: boolean, optional: boolean) => {
-    if (!present) return;
-    ops.push({ name, from: joinPath(fromDir, name), to: joinPath(toDir, name), kind: 'dir', optional });
-  };
 
   addFile(HISTORY_DB_FILE, files.historyDb, false);
   addFile(MANUAL_LOG_FILE, files.manualLog, true);
@@ -92,7 +83,6 @@ export function planDataMigration(
   addFile(RANK_ANCHORS_FILE, files.rankAnchors, true);
   addFile(MASTER_DATA_FILE, files.masterData, true);
   addFile(LEGACY_HISTORY_JSON_FILE, files.legacyHistoryJson, true);
-  addDir(SCREENSHOTS_DIR, files.screenshots, true);
 
   return { ops };
 }

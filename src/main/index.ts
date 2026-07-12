@@ -17,7 +17,6 @@ import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
-import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
@@ -87,7 +86,7 @@ function main(): void {
 
   // Backfill for installs that used the legacy `historyDbFolder` ("move
   // history DB" feature): that setting only ever relocated history.db, so its
-  // manual.json/outbox.json/rankAnchors.json/screenshots/history.json still
+  // manual.json/outbox.json/rankAnchors.json/history.json still
   // sit in the default userData/data dir. Once `dataFolder`/`historyDbFolder`
   // resolves every store (including the side-stores) to that legacy folder,
   // those files would silently look empty/missing there. One-time, idempotent,
@@ -153,20 +152,15 @@ function main(): void {
   const activeMapNames = (): string[] =>
     mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps.filter((m) => m.isActive).map((m) => m.name);
   const aggregator = new MatchAggregator();
-  const screenshots = new ScreenshotService(path.join(dataDir, 'screenshots'), log.adapter('shots'));
-  screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
-  // The migration executor repoints every store at once; `ScreenshotService`
-  // is constructed against `<dataDir>/screenshots` (not the bare data dir), so
-  // its `Relocatable` wraps the join the same way the constructor above did.
+  // The migration executor repoints every store at once.
   const migrationStores = (): DataMigrationStores => ({
     history,
     manualLog: manual,
     outbox,
     rankAnchors,
     masterData: masterDataStore,
-    screenshots: { relocate: (newDir) => screenshots.relocate(path.join(newDir, 'screenshots')) },
   });
 
   /** True iff `dir` already holds a Vantage history database. */
@@ -278,7 +272,6 @@ function main(): void {
   const pipeline = createMatchPipeline({
     history,
     aggregator,
-    screenshots,
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
@@ -521,8 +514,8 @@ function main(): void {
 /**
  * Legacy-`historyDbFolder` backfill (finding: side-stores silently orphaned).
  * That old setting only ever relocated `history.db`; every other data file
- * (`manual.json`, `outbox.json`, `rankAnchors.json`, `screenshots/`, and the
- * frozen `history.json` backup) still lives in `defaultDir`. Now that
+ * (`manual.json`, `outbox.json`, `rankAnchors.json`, and the frozen
+ * `history.json` backup) still lives in `defaultDir`. Now that
  * `dataFolder`/`historyDbFolder` resolves every store to `targetDir`, those
  * files must move over too — but only per-file, only when the file is
  * genuinely missing at `targetDir` (never overwrite something already there),
@@ -549,16 +542,6 @@ function backfillLegacySideStores(defaultDir: string, targetDir: string, log: Pi
     } catch (err) {
       log.error('store', 'legacy side-store backfill failed', { file: name, from, to, error: String(err) });
     }
-  }
-  const shotsFrom = path.join(defaultDir, 'screenshots');
-  const shotsTo = path.join(targetDir, 'screenshots');
-  try {
-    if (!fs.existsSync(shotsTo) && fs.existsSync(shotsFrom)) {
-      fs.renameSync(shotsFrom, shotsTo);
-      log.info('store', 'legacy side-store backfilled', { file: 'screenshots', from: shotsFrom, to: shotsTo });
-    }
-  } catch (err) {
-    log.error('store', 'legacy side-store backfill failed', { file: 'screenshots', from: shotsFrom, to: shotsTo, error: String(err) });
   }
 }
 
