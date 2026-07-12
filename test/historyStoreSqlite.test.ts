@@ -161,6 +161,33 @@ describe('HistoryStore (SQLite) — pending (no-outcome) holding store', () => {
     expect(h.takePending('never')).toBeUndefined();
   });
 
+  it('removePending deletes a held match and returns a boolean; a removed id disappears from allPending/hasPending', () => {
+    const h = open(tmp());
+    h.addPending(pm({ matchId: 'a', endedAt: 10 }));
+    h.addPending(pm({ matchId: 'b', endedAt: 20 }));
+    // Removes the row without returning it (the dismiss path).
+    expect(h.removePending('a')).toBe(true);
+    expect(h.hasPending('a')).toBe(false);
+    expect(h.allPending().map((r) => r.matchId)).toEqual(['b']);
+    expect(h.pendingCount()).toBe(1);
+    // A second remove (or an unknown id) is a no-op → false.
+    expect(h.removePending('a')).toBe(false);
+    expect(h.removePending('never')).toBe(false);
+    // A dismissed match never leaks into the analyzable history.
+    expect(h.count()).toBe(0);
+  });
+
+  it('a removePending survives close + reopen — the removed row does not come back', () => {
+    const dir = tmp();
+    const first = open(dir);
+    first.addPending(pm({ matchId: 'gone', endedAt: 1 }));
+    first.addPending(pm({ matchId: 'stays', endedAt: 2 }));
+    expect(first.removePending('gone')).toBe(true);
+    first.close();
+    const reopened = open(dir);
+    expect(reopened.allPending().map((r) => r.matchId)).toEqual(['stays']);
+  });
+
   it('losslessly round-trips a rich MatchRecord and survives close + reopen for un-taken rows', () => {
     const dir = tmp();
     const first = open(dir);
