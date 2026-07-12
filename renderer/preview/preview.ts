@@ -552,6 +552,10 @@ const mock: OwStatsApi = {
     t.name = input.name;
     t.mode = input.mode;
     t.rule = input.rule;
+    if (input.roleScope != null) t.roleScope = input.roleScope;
+    else delete t.roleScope;
+    if (input.heroScope != null) t.heroScope = input.heroScope;
+    else delete t.heroScope;
     save(TARGETS_KEY, targets);
   },
   setTargetActive: async (id: string, active: boolean) => {

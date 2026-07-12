@@ -141,7 +141,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         review: { at: Date.now(), grades: i.grades, flags: i.flags },
       }))),
     updateTarget: (input) => {
-      deps.manual.updateTarget(input.id, { name: input.name, mode: input.mode, rule: input.rule });
+      deps.manual.updateTarget(input.id, {
+        name: input.name, mode: input.mode, rule: input.rule,
+        roleScope: input.roleScope, heroScope: input.heroScope,
+      });
     },
     setTargetActive: (id, active) => deps.manual.setActive(id, active),
     deactivateAllTargets: () => deps.manual.deactivateAll(),

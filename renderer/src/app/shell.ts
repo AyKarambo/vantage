@@ -53,7 +53,34 @@ const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about']);
 interface NavItem {
   id: ViewId;
   label: string;
-  icon: string;
+  /** A text glyph (rendered as-is) or a prebuilt inline-SVG node (appended). */
+  icon: string | Node;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * The Targets nav glyph: a pennant flying from a pole (a goal flag), drawn inline
+ * in `currentColor` so it tracks the nav item's colour and active state — the same
+ * technique as {@link ../components/roleIcon}. Deliberately distinct from Review's
+ * wavy `⚑` text glyph so the two never read as the same icon.
+ */
+function goalFlagIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '15');
+  svg.setAttribute('height', '15');
+  svg.setAttribute('aria-hidden', 'true');
+  const pole = document.createElementNS(SVG_NS, 'line');
+  for (const [k, v] of Object.entries({ x1: 6, y1: 3, x2: 6, y2: 21, stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' })) {
+    pole.setAttribute(k, String(v));
+  }
+  const pennant = document.createElementNS(SVG_NS, 'path');
+  pennant.setAttribute('d', 'M6 4l11 3.2L6 11z');
+  pennant.setAttribute('fill', 'currentColor');
+  svg.appendChild(pole);
+  svg.appendChild(pennant);
+  return svg;
 }
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
@@ -73,7 +100,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'mental', label: 'Mental', icon: '◐' },
       { id: 'trends', label: 'Trends', icon: '◔' },
       { id: 'readiness', label: 'Readiness', icon: '◆' },
-      { id: 'targets', label: 'Targets', icon: '✦' },
+      { id: 'targets', label: 'Targets', icon: goalFlagIcon() },
     ],
   },
   {
@@ -393,6 +420,8 @@ export class App {
           class: 'nav-item',
           on: { click: () => store.setView(item.id) },
         },
+          // icon is a text glyph or a prebuilt SVG node; h() appends a Node as-is
+          // and stringifies a glyph, so both render correctly.
           h('span', { class: 'nav-icon' }, item.icon),
           item.label,
         );

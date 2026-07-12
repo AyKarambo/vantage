@@ -21,7 +21,7 @@ export type { TargetTemplate } from './templates';
 export { TARGET_TEMPLATES } from './templates';
 
 // Automatic grading of measured (⚡) targets from match stats
-export type { MeasuredOp, ParsedRule } from './measured';
+export type { MeasuredOp, ParsedRule, MeasuredScope } from './measured';
 export {
   parseMeasuredRule, formatMeasuredRule, matchStatValue, evaluateMeasured, foldMeasuredGradesForExport,
   effectiveImprovementGrade,

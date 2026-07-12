@@ -3,11 +3,13 @@
  * the edit surface (a library row's Edit re-opens it pre-filled via `BuilderHandle.edit`).
  */
 import { h, render } from '../../dom';
-import type { TargetMode, TargetSummary } from '../../../../src/shared/contract';
+import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
 import { TARGET_TEMPLATES, stepFor, parseMeasuredRule } from '../../../../src/core/targets';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
 import { attachStepper } from '../../components/wheelStepper';
+import { paintHeroChips } from '../../components/heroPicker';
+import { roleIcon } from '../../components/roleIcon';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
@@ -23,6 +25,9 @@ export interface BuilderState {
   stat: string;
   op: string;
   value: string;
+  /** Measured-target scope (D). Undefined = "Any" (evaluate over the whole match). */
+  roleScope?: Role;
+  heroScope?: string;
 }
 
 export interface BuilderHandle {
@@ -47,6 +52,8 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     stat: 'Deaths',
     op: '≤',
     value: '4',
+    roleScope: undefined,
+    heroScope: undefined,
   };
   const host = h('div');
 
@@ -59,9 +66,14 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
   const save = (): void => {
     const name = state.name.trim() || 'Untitled target';
     const rule = state.mode === 'self' ? 'You grade it' : `${state.stat} ${state.op} ${state.value}`;
+    // Scope only applies to measured targets; a self-rated save sends no scope,
+    // which the store treats as "clear any previously-saved scope".
+    const scope = state.mode === 'measured'
+      ? { roleScope: state.roleScope, heroScope: state.heroScope }
+      : {};
     const persist = state.editingId
-      ? bridge.updateTarget({ id: state.editingId, name, mode: state.mode, rule })
-      : bridge.saveTarget({ name, mode: state.mode, rule });
+      ? bridge.updateTarget({ id: state.editingId, name, mode: state.mode, rule, ...scope })
+      : bridge.saveTarget({ name, mode: state.mode, rule, ...scope });
     void persist.then(() => {
       state.saved = true;
       draw();
@@ -75,7 +87,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     const dirty = (): void => { state.saved = false; drawFooter(); };
 
     const drawGrade = (): void => {
-      render(gradeBlock, state.mode === 'self' ? selfBlock() : measuredBlock(state, dirty));
+      render(gradeBlock, state.mode === 'self' ? selfBlock() : measuredBlock(state, ctx.data.masterData.heroes, dirty));
     };
     const drawFooter = (): void => {
       render(footer,
@@ -108,7 +120,13 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
         fill: true,
         value: state.mode,
         options: [{ value: 'self', label: '◎ Self-rated' }, { value: 'measured', label: '⚡ Measured' }],
-        onChange: (v) => { state.mode = v; dirty(); drawGrade(); },
+        onChange: (v) => {
+          state.mode = v;
+          // Switching to self-rated hides + clears the measured-only scope.
+          if (v === 'self') { state.roleScope = undefined; state.heroScope = undefined; }
+          dirty();
+          drawGrade();
+        },
       }),
       h('div', { style: { marginTop: '12px' } }, gradeBlock),
       h('div', { style: { marginTop: '16px' } }, footer),
@@ -119,10 +137,13 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
   // parses the `${stat} ${op} ${value}` string back into the stat/op/value
   // controls via the shared core parser (`parseMeasuredRule`), the inverse of
   // save()'s template — one round-trip, one source of truth.
-  const loadRule = (t: { name: string; mode: TargetMode; rule: string }): void => {
+  const loadRule = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string }): void => {
     state.name = t.name;
     state.mode = t.mode;
     state.saved = false;
+    // Round-trip the measured scope on edit; templates carry none, so they clear it.
+    state.roleScope = t.mode === 'measured' ? t.roleScope : undefined;
+    state.heroScope = t.mode === 'measured' ? t.heroScope : undefined;
     const rule = parseMeasuredRule(t.rule);
     if (t.mode === 'measured' && rule) {
       state.stat = rule.stat;
@@ -195,7 +216,15 @@ function formatThreshold(value: string): string {
   return value !== '' && Number.isFinite(n) ? n.toLocaleString('en-US') : value;
 }
 
-export function measuredBlock(state: BuilderState, onChange: () => void): HTMLElement {
+/** The role-scope options: "Any" (undefined) plus the three queue roles. */
+const ROLE_SCOPE_OPTIONS: Array<{ value: Role | undefined; label: string }> = [
+  { value: undefined, label: 'Any role' },
+  { value: 'tank', label: 'Tank' },
+  { value: 'damage', label: 'Damage' },
+  { value: 'support', label: 'Support' },
+];
+
+export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
   const preview = badge(previewText(state), 'auto');
   const update = (): void => { preview.textContent = previewText(state); onChange(); };
 
@@ -213,6 +242,54 @@ export function measuredBlock(state: BuilderState, onChange: () => void): HTMLEl
     update();
   });
 
+  // --- Scope (D): restrict auto-grading to a role and/or a single hero. ---
+  const heroHost = h('div');
+  const heroSelected = new Set<string>(state.heroScope ? [state.heroScope] : []);
+  const paintHeroes = (): void => {
+    // "Any role" (undefined) → the full hero list (openQ shows everyone); a
+    // specific role filters the grid to that role's heroes.
+    paintHeroChips(heroHost, heroSelected, state.roleScope ?? 'openQ', heroes, { search: true });
+  };
+  // The picker is a multi-select, but a target's scope is a single hero. The
+  // chip toggles `heroSelected` in place on the target phase; here (bubble phase)
+  // we enforce single-select — prune the set to the just-toggled hero and clear
+  // the `is-on` class off any other chip WITHOUT a repaint, so typed search text
+  // survives selecting a hero.
+  heroHost.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('button.chip') as HTMLElement | null;
+    if (!btn || !heroHost.contains(btn)) return;
+    const name = btn.textContent ?? '';
+    if (heroSelected.has(name)) {
+      for (const other of [...heroSelected]) if (other !== name) heroSelected.delete(other);
+      heroHost.querySelectorAll('button.chip.is-on').forEach((c) => { if (c !== btn) c.classList.remove('is-on'); });
+      state.heroScope = name;
+    } else {
+      state.heroScope = undefined;
+    }
+    onChange();
+  });
+
+  const roleHost = h('div', { class: 'segmented segmented--fill' });
+  const paintRoles = (): void => {
+    render(roleHost, ...ROLE_SCOPE_OPTIONS.map((opt) => {
+      const active = state.roleScope === opt.value;
+      const btn = h('button', { class: `segmented-opt${active ? ' is-active' : ''}`, title: opt.label },
+        opt.value ? roleIcon(opt.value, { size: 14 }) : null,
+        h('span', { style: { marginLeft: opt.value ? '5px' : '0' } }, opt.label),
+      );
+      btn.addEventListener('click', () => {
+        if (state.roleScope === opt.value) return;
+        state.roleScope = opt.value;
+        paintRoles();
+        paintHeroes(); // the hero grid re-filters to the newly chosen role
+        onChange();
+      });
+      return btn;
+    }));
+  };
+  paintRoles();
+  paintHeroes();
+
   return h('div', { class: 'card' },
     h('div', { style: { fontSize: '12.5px', color: 'var(--text-2)', marginBottom: '10px' } }, 'Bind it to a stat and auto-grade:'),
     h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
@@ -224,6 +301,11 @@ export function measuredBlock(state: BuilderState, onChange: () => void): HTMLEl
     ),
     h('div', { class: 'hint', style: { lineHeight: '1.5', marginTop: '10px' } },
       'Auto-graded from your end-of-match stats — Damage, Healing and Mitigation are read per 10 minutes. Scroll the number to adjust (hold Shift for bigger steps); matches the game does not report the stat for are skipped.'),
+    h('div', { class: 'field-label', style: { marginTop: '14px' } }, 'Scope (optional)'),
+    h('div', { class: 'hint', style: { marginBottom: '8px' } },
+      'Limit auto-grading to a role and/or a single hero — leave as “Any role” with no hero to grade over the whole match. Matches with no in-scope hero are skipped.'),
+    roleHost,
+    h('div', { style: { marginTop: '8px' } }, heroHost),
   );
 }
 
