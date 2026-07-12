@@ -8,6 +8,9 @@ import type { ViewContext } from '../view';
 /** localStorage flag: once the Dev Mode easter egg is unlocked, it stays unlocked. */
 const DEV_UNLOCK_KEY = 'vantage.devUnlocked';
 const TAPS_TO_UNLOCK = 5;
+// Module scope so the count survives a Settings re-render (which rebuilds this
+// whole card and would otherwise reset a per-instance counter mid-sequence).
+let unlockTaps = 0;
 
 function readUnlocked(): boolean {
   try {
@@ -119,16 +122,18 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
   }
 
   const cardEl = card({ title: 'App behavior' }, body);
-  // Easter egg: clicking the card title TAPS_TO_UNLOCK times reveals Dev Mode.
-  // Not advertised anywhere; the title uses a default cursor so it reads as inert.
-  const title = cardEl.querySelector('.card-title') as HTMLElement | null;
-  if (title) {
-    let taps = 0;
-    title.addEventListener('click', () => {
+  // Easter egg: clicking the card header TAPS_TO_UNLOCK times reveals Dev Mode.
+  // The whole header is the hit target (not just the title text) so it's easy to
+  // find, and `unlockTaps` lives at module scope so a Settings re-render — which
+  // rebuilds this card — doesn't reset progress mid-sequence. Not advertised.
+  const head = cardEl.querySelector('.card-head') as HTMLElement | null;
+  if (head) {
+    head.addEventListener('click', () => {
       if (unlocked) return;
-      taps += 1;
-      if (taps < TAPS_TO_UNLOCK) return;
+      unlockTaps += 1;
+      if (unlockTaps < TAPS_TO_UNLOCK) return;
       unlocked = true;
+      unlockTaps = 0;
       try {
         localStorage.setItem(DEV_UNLOCK_KEY, '1');
       } catch {
