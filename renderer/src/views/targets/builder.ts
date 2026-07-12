@@ -5,6 +5,7 @@
 import { h, render } from '../../dom';
 import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
 import { TARGET_TEMPLATES, stepFor, parseMeasuredRule } from '../../../../src/core/targets';
+import { roleOfHero } from '../../../../src/core/heroes';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
 import { attachStepper } from '../../components/wheelStepper';
@@ -280,6 +281,13 @@ export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange
       btn.addEventListener('click', () => {
         if (state.roleScope === opt.value) return;
         state.roleScope = opt.value;
+        // A specific role the scoped hero doesn't belong to would make an
+        // unsatisfiable role AND hero filter (the target could never grade any
+        // match) — drop the now-off-role hero so the scope stays gradable.
+        if (state.roleScope && state.heroScope && roleOfHero(state.heroScope) !== state.roleScope) {
+          state.heroScope = undefined;
+          heroSelected.clear();
+        }
         paintRoles();
         paintHeroes(); // the hero grid re-filters to the newly chosen role
         onChange();
