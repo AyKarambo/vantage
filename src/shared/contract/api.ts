@@ -173,6 +173,8 @@ export interface OwStatsApi {
   onGepStatus(cb: (s: GepStatusPayload) => void): () => void;
   /** Subscribe to live sync progress (fires per exported game); returns an unsubscribe function. */
   onSyncProgress(cb: (p: SyncProgress) => void): () => void;
+  /** Subscribe to "a new match was just logged" (drives the live dashboard refresh); returns an unsubscribe function. */
+  onGameLogged(cb: (p: { matchId: string }) => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -190,6 +192,7 @@ export const EVENT_CHANNELS = {
   onLogEntry: 'push:log-entry',
   onGepStatus: 'push:gep-status',
   onSyncProgress: 'push:sync-progress',
+  onGameLogged: 'push:game-logged',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**

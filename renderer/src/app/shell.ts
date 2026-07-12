@@ -171,6 +171,9 @@ export class App {
     // The "Dev Mode" badge reflects a build-constant (unpackaged + dev creds in
     // the env at start), so fetch it once rather than subscribing to live status.
     void bridge.getAppInfo().then((info) => this.devBadge.classList.toggle('hidden', !info.devMode));
+    // Live logging: a just-tracked match refetches the open dashboard (composes
+    // with the focus-refresh below for pushes dropped while the window was closed).
+    bridge.onGameLogged(() => void store.refresh());
     // Keep "updated Xm" honest while the app idles.
     setInterval(() => {
       const s = store.get();

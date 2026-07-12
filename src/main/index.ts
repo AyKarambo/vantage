@@ -266,6 +266,9 @@ function main(): void {
     mapNames: allMapNames,
   });
 
+  // Fires the live "a match was logged" push to an open dashboard (placeholder
+  // until the window exists, like publishStatus below).
+  let pushGameLogged: (game: { matchId: string }) => void = () => {};
   const pipeline = createMatchPipeline({
     history,
     aggregator,
@@ -273,6 +276,7 @@ function main(): void {
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
+    onGameLogged: (game) => pushGameLogged(game),
   });
 
   // Truthful connection indicator: folds GEP signals into the four-state
@@ -438,6 +442,7 @@ function main(): void {
     tray.setHealth(p.state);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
+  pushGameLogged = (game) => dashboard.push(EVENT_CHANNELS.onGameLogged, { matchId: game.matchId });
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
