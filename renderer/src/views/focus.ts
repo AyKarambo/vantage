@@ -1,14 +1,14 @@
 /**
- * Focus — the cross-dimension "work on these" hub: net-losing maps, heroes and
- * roles merged into one priority list, each with a trend verdict and, when an
- * improvement target is linked, the since-flagged progress. Overview teases →
- * Focus prioritizes → Maps stays the reference table → Targets is the commitment.
+ * Focus — the "work on these" hub: net-losing maps in one priority list, each
+ * with a trend verdict and, when an improvement target is linked, the
+ * since-flagged progress. Overview teases → Focus prioritizes → Maps stays
+ * the reference table → Targets is the commitment.
  */
 import { h, applyStyle } from '../dom';
 import type { FocusEntry, FocusProgress, FocusTrend } from '../../../src/shared/contract';
-import { pct, roleLabel, signed } from '../format';
+import { pct, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
-import { button, card, pill } from '../components/primitives';
+import { button, card } from '../components/primitives';
 import { viewHead, type ViewContext } from './view';
 
 const TREND_META: Record<FocusTrend, { arrow: string; color: string; label: string }> = {
@@ -17,20 +17,16 @@ const TREND_META: Record<FocusTrend, { arrow: string; color: string; label: stri
   declining: { arrow: '▾', color: PALETTE.loss, label: 'getting worse' },
 };
 
-const DIMENSION_LABEL: Record<FocusEntry['dimension'], string> = {
-  map: 'Map', hero: 'Hero', role: 'Role',
-};
-
 export function focus(ctx: ViewContext): HTMLElement {
   const items = ctx.data.focusItems;
   const maxNet = items[0]?.net ?? 1;
 
   return h('div', { class: 'view' },
-    viewHead('Focus', 'The maps, heroes and roles that cost you the most points — work on these'),
-    card({ title: 'Work on these', sub: 'net = losses − wins · across maps, heroes & roles' },
+    viewHead('Focus', 'The maps that cost you the most points — work on these'),
+    card({ title: 'Work on these', sub: 'net = losses − wins · across your maps' },
       items.length
         ? h('div', { class: 'stack', style: { gap: '14px' } }, ...items.map((e) => focusRow(ctx, e, maxNet)))
-        : h('div', { class: 'empty empty--good' }, 'Nothing is net-losing right now — nice. 🎯'),
+        : h('div', { class: 'empty empty--good' }, 'No maps are net-losing right now — nice. 🎯'),
     ),
     card({ variant: 'glow', title: 'Build a focus routine' },
       h('p', { class: 'hint', style: { lineHeight: '1.6', margin: '0 0 12px' } },
@@ -43,12 +39,11 @@ export function focus(ctx: ViewContext): HTMLElement {
 function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement {
   const fill = h('span', { style: { display: 'block', height: '100%', background: PALETTE.loss, borderRadius: 'inherit' } });
   applyStyle(fill, { width: `${Math.round((e.net / maxNet) * 100)}%` });
-  const name = e.dimension === 'role' ? roleLabel(e.key) : e.key;
+  const name = e.key;
 
   return h('div', null,
     h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' } },
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', minWidth: '0' } },
-        pill(DIMENSION_LABEL[e.dimension]),
         h('div', { class: 'row-name', style: { fontSize: '13.5px' } }, name),
         trendArrow(e.trend),
       ),
