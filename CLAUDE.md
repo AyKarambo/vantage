@@ -14,6 +14,29 @@ Notion export. Built on **ow-electron** (Overwolf's Electron) — a frameless de
   CSP-friendly script by **esbuild**. `h()` (`renderer/src/dom.ts`) is the composition primitive.
 - **Tests:** vitest. **Export:** `@notionhq/client` (optional). **Package manager:** npm.
 
+## Overwolf development & docs lookup (ow-electron)
+This is an **ow-electron** (Overwolf Electron) project — follow these rules before writing or
+debugging any Overwolf / Electron / GEP code (adapted from Overwolf's
+[AI coding-assistant config guide](https://dev.overwolf.com/ow-electron/guides/dev-tools/ai-coding-assistants-config)).
+- **Packages — never swap for the vanilla equivalents.** The runtime is `@overwolf/ow-electron`
+  and the builder is `@overwolf/ow-electron-builder`; `npm start`/`dev` launch through
+  `ow-electron`, `npm run release` through `ow-electron-builder` — never vanilla `electron` /
+  `electron-builder`. Keep the `"overwolf": { "packages": ["gep"] }` block in `package.json`
+  (the gaming packages this app loads). All Overwolf packages live under the `@overwolf` scope.
+- **API lookup order — verify, don't guess API shapes.**
+  1. Search the local type definitions first — glob `node_modules/@overwolf/**/*.d.ts` (e.g.
+     `@overwolf/ow-electron-packages-types` for GEP). Cite the `file:line` for any type used.
+  2. Only if the symbol isn't there, or you need a conceptual/how-to answer, query the docs MCP.
+- **Overwolf docs MCP.** Tool `mcp__ow-docs-mcp__algolia_search_index_overwolf`; always filter
+  with `facet_docusaurus_tag: ["docs-ow-electron-current"]` (this is ow-electron, **not**
+  ow-native). If the MCP server isn't connected, say so and ask the user to reload — don't guess.
+- **Dev Mode auth (real GEP before store approval).** Gaming packages only load once ow-electron
+  authenticates, and its dev-mode check reads credentials **only** from the environment —
+  `OW_CLI_EMAIL` + `OW_CLI_API_KEY` (or an `OW_DEV_KEY` bearer token). It does **not** read the
+  `ow config` credentials file (`~/.ow-cli/credentials`) at runtime; `npm start` / `npm run dev`
+  bridge that file into those env vars via `scripts/ow-dev.mjs`. Credentials never enter git
+  (guardrail 2).
+
 ## Build & Test
 - `npm test` — run the vitest suite once (`test:watch` for watch mode).
 - `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`), no emit.

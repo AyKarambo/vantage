@@ -74,11 +74,31 @@ One-time setup:
 1. Sign in to the [Overwolf Developer Console](https://console.overwolf.com/) and confirm
    (or create) an app registration matching this repo's `package.json` `name`
    (`ow.vantage`) + `author` (`Timo Seikel`) exactly — see
-   [docs/overwolf-submission.md §1](../overwolf-submission.md). Grab an API key from there.
-2. `ow config` (the `@overwolf/ow-cli` devDependency ships the `ow` binary) — enter that
-   email + API key. This writes a `[default]` profile to `~/.ow/credentials`, which Dev
-   Mode reads automatically on every `npm start` / `npm run dev`, no flags or env vars
-   needed.
+   [docs/overwolf-submission.md §1](../overwolf-submission.md).
+2. Generate an API key: Console → **Profile → API Keys → "Revoke and get new API key"**.
+   Copy it now — the console only shows it once.
+3. `ow config` (the `@overwolf/ow-cli` devDependency ships the `ow` binary) — enter your
+   Console login email + that API key. This writes a `[default]` profile to
+   `~/.ow-cli/credentials`. (Heads-up: the Dev Mode docs call this file `~/.ow/credentials`,
+   but the pinned `@overwolf/ow-cli` 0.1.x actually writes `~/.ow-cli/credentials` — the
+   launcher below checks both, so either is fine.)
+
+**Have a *dev key* instead of an API key?** Temporary/approved developers without Console
+API-key access get a **dev key** from Overwolf. It authenticates differently (Bearer, via
+`OW_DEV_KEY`) and is **not** an API key — typing it into `ow config`'s API-key prompt makes
+ow-electron send it as `OW_CLI_API_KEY` and Overwolf rejects it (401 `invalid verification`).
+Instead, set `OW_DEV_KEY=<token>`, or drop the token (by itself) into `~/.ow-cli/dev-key`.
+The launcher prefers a dev key when one is present.
+
+**How the credentials reach the app.** ow-electron's Dev Mode authenticates using *only* the
+environment variables `OW_CLI_EMAIL` + `OW_CLI_API_KEY` (or a bearer `OW_DEV_KEY`) — it does
+**not** read the `~/.ow-cli/credentials` file that `ow config` writes. `npm start` / `npm run dev`
+launch through [`scripts/ow-dev.mjs`](../../scripts/ow-dev.mjs), which loads that file and
+exports those env vars into the ow-electron process for you, so `ow config` alone is enough.
+Prefer to manage it yourself? Set `OW_CLI_EMAIL` + `OW_CLI_API_KEY` (or `OW_DEV_KEY`) in your
+shell and they take precedence. Run `npm run dev:check` to confirm credentials resolve before
+launching. (If you only ran `ow config` and GEP still won't attach, that env-vs-file gap was
+almost certainly the cause.)
 
 Once that's done, launch normally (`npm start`) with Overwatch running. Watch the status
 bar's live-feed indicator (No game → Connected-waiting → Receiving data) and the Logs
@@ -86,6 +106,24 @@ screen (Debug detail on) for `gep package ready` / `game-detected`. If GEP attac
 Overwatch isn't in the supported-games list, that's a Console-side registration gap, not
 a Dev Mode problem — `src/main/gep.ts`'s `logSupportedGames()` diagnostic calls this out
 explicitly in the log.
+
+**Troubleshooting — GEP never loads (`invalid verification` / no `gep package ready`).**
+ow-electron's own package-manager log is the source of truth:
+`%APPDATA%/ow-electron/<app-uid>/logs/owpm.log` (also echoed to the `npm start` terminal).
+`[SECURITY] Dev credentials rejected (401)` → `closing package manager: 'invalid
+verification'` means the credentials *reached* Overwolf and were **rejected** — the local
+`ow config` / env-var wiring is fine, the credentials themselves aren't accepted. Common causes:
+1. **A dev key sent as an API key** (this repo's original bug). A dev key must go out as
+   `OW_DEV_KEY` (Bearer); if it's sitting in the `apiKey` slot of `~/.ow-cli/credentials` it's
+   sent as `OW_CLI_API_KEY` (Key) and rejected. Move it to `~/.ow-cli/dev-key` (or set
+   `OW_DEV_KEY`). `npm run dev:check` should then report `(dev key, bearer)`.
+2. **Stale/incorrect API key** — regenerate it (Console → Profile → API Keys → "Revoke and
+   get new API key") and re-run `ow config`; regenerating a key invalidates the previous one,
+   so an old value left in `~/.ow-cli/credentials` will 401.
+3. **Account/app not yet approved for dev-mode gaming packages** — if credentials are the right
+   type and still 401, dev tooling access hasn't been granted. Overwolf grants gaming-package
+   (GEP) access once the app idea is approved and the account is whitelisted (see
+   [Status](../../README.md)); contact your Overwolf DevRel.
 
 ## Dev environment flags
 
