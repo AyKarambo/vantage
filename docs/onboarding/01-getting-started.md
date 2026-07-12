@@ -90,14 +90,6 @@ ow-electron send it as `OW_CLI_API_KEY` and Overwolf rejects it (401 `invalid ve
 Instead, set `OW_DEV_KEY=<token>`, or drop the token (by itself) into `~/.ow-cli/dev-key`.
 The launcher prefers a dev key when one is present.
 
-**Or set it in the app.** Vantage's **Settings → App behavior** has a **Dev Mode** toggle and a
-**dev-key** field: paste your dev key there and it's saved to `~/.ow-cli/dev-key` for you (never
-into app config or git), and the toggle persists `ui.devMode`, which
-[`scripts/ow-dev.mjs`](../../scripts/ow-dev.mjs) reads to enable/disable credential injection.
-Both take effect on the **next launch**. When Dev Mode is actually active (unpackaged **and**
-credentials present), a **"Dev mode"** badge appears in the status bar. These controls are inert
-in the packaged/installed build — Dev Mode can't activate there.
-
 **How the credentials reach the app.** ow-electron's Dev Mode authenticates using *only* the
 environment variables `OW_CLI_EMAIL` + `OW_CLI_API_KEY` (or a bearer `OW_DEV_KEY`) — it does
 **not** read the `~/.ow-cli/credentials` file that `ow config` writes. `npm start` / `npm run dev`
