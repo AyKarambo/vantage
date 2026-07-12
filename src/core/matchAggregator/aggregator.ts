@@ -86,6 +86,12 @@ export class MatchAggregator {
   private applyRoster(key: string, value: unknown): void {
     const player = parseRoster(value);
     if (!player) return;
+    // As the scoreboard tears down at match end, GEP resets each roster slot to
+    // an empty object (`roster_N = {}`) — observed in a real capture, arriving
+    // BEFORE match_end fires. Such a snapshot carries no identity, hero, or stat;
+    // ignore it so it can't overwrite the last rich snapshot we retained (which
+    // would blank the whole scoreboard).
+    if (!hasRosterContent(player)) return;
 
     // Keep the latest snapshot per roster slot so the finished record carries
     // the full scoreboard GEP chose to report (local team only on some patches).
@@ -256,6 +262,18 @@ function zeroSnap(): Snap {
 
 function newMutable(): MutableMatch {
   return { record: emptyMatch(''), rosterLocal: {}, rosterAll: new Map(), roundWins: 0, roundLosses: 0, perHero: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+}
+
+/**
+ * True when a roster snapshot carries anything worth retaining — identity, a
+ * hero, or any stat. A slot cleared to `{}` at match teardown has none of these,
+ * so it is skipped rather than overwriting the previous rich snapshot. `team`
+ * alone doesn't count: it never arrives without the rest of a real row.
+ */
+function hasRosterContent(p: RosterPlayer): boolean {
+  return Boolean(p.battleTag || p.heroName || p.heroRole) ||
+    p.kills != null || p.deaths != null || p.assists != null ||
+    p.damage != null || p.healing != null || p.mitigation != null;
 }
 
 /** Numeric slot of a `roster_N` key, for stable scoreboard ordering. */
