@@ -91,6 +91,8 @@ export interface DataProviderDeps {
     get(): AppUiSettings;
     apply(patch: Partial<AppUiSettings>): AppUiSettings;
   };
+  /** Persist the Overwolf dev key to ~/.ow-cli/dev-key; returns whether one is now present. */
+  setDevKey(key: string): { hasKey: boolean };
   /** Version + build/runtime facts + support contact for the About screen. */
   appInfo(): AppInfo;
   /** Open an external URL — the composition root's `shell.openExternal`. */
@@ -428,6 +430,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     getGepStatus: () => deps.gepStatus(),
     getAppSettings: () => deps.appSettings.get(),
     setAppSettings: (patch) => deps.appSettings.apply(patch),
+    setDevKey: (key) => deps.setDevKey(key),
     getAppInfo: () => deps.appInfo(),
     // Scheme-guarded before it ever reaches the shell: a disallowed URL is a no-op.
     openExternal: async (url) => { await openIfAllowed(url, deps.openExternal); },

@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-  loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath,
+  setDevKey as saveDevKey, hasDevKey, type AppConfig,
 } from './config';
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
@@ -21,6 +22,7 @@ import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
+import { computeDevMode } from '../core/devMode';
 import { safeReadiness } from '../core/readiness';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -314,6 +316,7 @@ function main(): void {
         // toggle look "dead" (it re-painted with the stale old value).
         runAtLogin: config.runAtLogin,
         demoPreference: config.ui.demoPreference,
+        devMode: config.ui.devMode,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -330,10 +333,17 @@ function main(): void {
           saveLocalUiConfig({ demoPreference: patch.demoPreference });
           config = loadConfig();
         }
+        // Dev Mode is a next-launch preference the launcher (scripts/ow-dev.mjs)
+        // reads; persisting it here is enough — no live process change.
+        if (patch.devMode !== undefined) {
+          saveLocalUiConfig({ devMode: patch.devMode });
+          config = loadConfig();
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
           demoPreference: config.ui.demoPreference,
+          devMode: config.ui.devMode,
         };
       },
     },
@@ -347,7 +357,16 @@ function main(): void {
       platform: process.platform,
       osRelease: os.release(),
       packaged: app.isPackaged,
+      // Truthful dev-mode read: unpackaged AND dev credentials in the env at
+      // start (injected by scripts/ow-dev.mjs) — see core/devMode.
+      devMode: computeDevMode({ packaged: app.isPackaged, env: process.env }),
     }),
+    // Store the Overwolf dev key where the launcher reads it (~/.ow-cli/dev-key),
+    // never in app config. Takes effect next launch (Dev Mode auth is start-time).
+    setDevKey: (key: string) => {
+      saveDevKey(key);
+      return { hasKey: hasDevKey() };
+    },
     openExternal: (url) => shell.openExternal(url),
     dataLocation: {
       get: () => ({ ...currentDataLocation(), ...(firstRunNeedsDataChoice ? { needsFirstRunChoice: true } : {}) }),

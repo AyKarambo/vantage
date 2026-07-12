@@ -137,6 +137,10 @@ export class App {
     on: { click: () => void store.refresh() },
   }, '⚠ stale — retry');
   private readonly demoBadge = h('span', { class: 'badge badge--demo hidden' }, 'Demo data');
+  private readonly devBadge = h('span', {
+    class: 'badge badge--dev hidden',
+    title: 'Running in ow-electron Dev Mode — live GEP data via your Overwolf dev key',
+  }, 'Dev mode');
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
@@ -164,6 +168,9 @@ export class App {
     initGepStatus();
     subscribeGepStatus(() => this.renderGepIndicator());
     this.renderGepIndicator();
+    // The "Dev Mode" badge reflects a build-constant (unpackaged + dev creds in
+    // the env at start), so fetch it once rather than subscribing to live status.
+    void bridge.getAppInfo().then((info) => this.devBadge.classList.toggle('hidden', !info.devMode));
     // Keep "updated Xm" honest while the app idles.
     setInterval(() => {
       const s = store.get();
@@ -187,7 +194,7 @@ export class App {
           title: 'Connection status — click for details',
           on: { click: (e) => this.openGepPopover(e.currentTarget as HTMLElement) },
         }, this.gepDot, this.gepLabel),
-        this.statusLabel, this.busySpin, this.staleLink, this.demoBadge,
+        this.statusLabel, this.busySpin, this.staleLink, this.demoBadge, this.devBadge,
         h('button', {
           class: 'statusbar-link',
           style: { marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer', font: 'inherit', fontSize: '11.5px' },
