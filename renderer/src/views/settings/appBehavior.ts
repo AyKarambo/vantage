@@ -5,11 +5,27 @@ import { card, chip } from '../../components/primitives';
 import { store } from '../../store';
 import type { ViewContext } from '../view';
 
-/** Close-to-tray + run-at-login + demo data + Dev Mode — persisted in the main process. */
+/** localStorage flag: once the Dev Mode easter egg is unlocked, it stays unlocked. */
+const DEV_UNLOCK_KEY = 'vantage.devUnlocked';
+const TAPS_TO_UNLOCK = 5;
+
+function readUnlocked(): boolean {
+  try {
+    return localStorage.getItem(DEV_UNLOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Close-to-tray + run-at-login + demo data — plus a hidden Dev Mode section. */
 export function appBehaviorCard(ctx: ViewContext): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '10px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
   // AppInfo is a build-constant (packaged / devMode); fetched alongside settings.
   let info: AppInfo | null = null;
+  let last: AppUiSettings | null = null;
+  // Dev Mode is a hidden feature: revealed only once the easter egg is unlocked,
+  // or when the app is already running in Dev Mode (so it can be turned off).
+  let unlocked = readUnlocked();
 
   // The dev-key input is created ONCE so a repaint (from an unrelated toggle)
   // re-inserts the same node, preserving its value. It saves on `change`
@@ -52,8 +68,31 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
     });
   }
 
-  function paint(s: AppUiSettings): void {
+  function devModeSection(s: AppUiSettings): HTMLElement {
     const packaged = info?.packaged ?? false;
+    const show = unlocked || (info?.devMode ?? false);
+    return h('div', { class: show ? 'stack' : 'hidden', style: { gap: '10px', marginTop: '4px' } },
+      h('div', { style: { fontSize: '11.5px', fontWeight: '600', color: 'var(--text-1)' } }, 'Dev Mode'),
+      h('div', null,
+        // Packaged builds can never run Dev Mode → show it as unavailable and inert,
+        // not a fake "on" (AC5: never a silent no-op).
+        chip(
+          packaged ? 'Dev Mode: unavailable' : (s.devMode ? 'Dev Mode: on' : 'Dev Mode: off'),
+          packaged ? false : s.devMode,
+          packaged ? undefined : () => apply({ devMode: !s.devMode }),
+        ),
+        h('div', { class: 'hint', style: { marginTop: '6px' } },
+          packaged
+            ? 'Unavailable in the installed build — Dev Mode only runs in the unpackaged dev build.'
+            : 'When on, the launcher loads real Overwatch (GEP) data using your dev key. Applies on the next launch.'),
+      ),
+      // The dev-key field is meaningless in a packaged build; hide it there.
+      h('div', { class: packaged ? 'hidden' : '' }, devKeyInput, devKeyHint),
+    );
+  }
+
+  function paint(s: AppUiSettings): void {
+    last = s;
     render(body,
       h('div', null,
         chip(s.closeToTray ? '✕ keeps Vantage in the tray' : '✕ quits Vantage', s.closeToTray,
@@ -75,20 +114,28 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
             ? 'You have tracked games, so this has no visible effect — real data always wins. It applies again only if your history is empty.'
             : 'Preload a realistic sample season to explore the app. Turn it off to start from a clean slate.'),
       ),
-      // Dev Mode — real GEP data before store approval (unpackaged dev runs only).
-      h('div', { style: { marginTop: '10px', fontSize: '11.5px', fontWeight: '600', color: 'var(--text-1)' } }, 'Dev Mode'),
-      h('div', null,
-        // No click handler when packaged → a disabled-looking, inert chip (AC5).
-        chip(s.devMode ? 'Dev Mode: on' : 'Dev Mode: off', s.devMode,
-          packaged ? undefined : () => apply({ devMode: !s.devMode })),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          packaged
-            ? 'Unavailable in the installed build — Dev Mode only runs in the unpackaged dev build.'
-            : 'When on, the launcher loads real Overwatch (GEP) data using your dev key. Applies on the next launch.'),
-      ),
-      // The dev-key field is meaningless in a packaged build; hide it there.
-      h('div', { class: packaged ? 'hidden' : '' }, devKeyInput, devKeyHint),
+      devModeSection(s),
     );
   }
-  return card({ title: 'App behavior' }, body);
+
+  const cardEl = card({ title: 'App behavior' }, body);
+  // Easter egg: clicking the card title TAPS_TO_UNLOCK times reveals Dev Mode.
+  // Not advertised anywhere; the title uses a default cursor so it reads as inert.
+  const title = cardEl.querySelector('.card-title') as HTMLElement | null;
+  if (title) {
+    let taps = 0;
+    title.addEventListener('click', () => {
+      if (unlocked) return;
+      taps += 1;
+      if (taps < TAPS_TO_UNLOCK) return;
+      unlocked = true;
+      try {
+        localStorage.setItem(DEV_UNLOCK_KEY, '1');
+      } catch {
+        /* storage unavailable — session-only unlock still works */
+      }
+      if (last) paint(last);
+    });
+  }
+  return cardEl;
 }
