@@ -317,6 +317,7 @@ function main(): void {
     persistSessionSettings: (sessionSettings) => saveLocalConfig({ sessionSettings }),
     recordGame: (game) => pipeline.recordGame(game),
     resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),
+    dismissPending: (matchId) => pipeline.dismissPending(matchId),
     notify: (title, body) => tray.notify(title, body),
     // Demo season draws only from the active competitive pool (spec AC 24).
     sampleGames: () => generateSampleGames(180, 42, activeMapNames()),

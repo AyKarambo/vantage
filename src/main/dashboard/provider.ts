@@ -140,6 +140,8 @@ export interface DataProvider {
   pendingMatches(): PendingMatch[];
   /** Complete a held pending match with a win/loss/draw — moves it into history via the normal pipeline. */
   resolvePendingMatch(matchId: string, result: Result): void;
+  /** Dismiss a held pending match without logging it (the user's "not a real match" verdict). */
+  dismissPendingMatch(matchId: string): void;
   /** The effective master data (defaults ⊕ overrides) — feeds the dashboard read + the editor. */
   effectiveMasterData(): MasterData;
   /** Add/edit a hero; persists the delta and returns the new effective master data. */

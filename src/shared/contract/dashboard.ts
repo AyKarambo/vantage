@@ -106,6 +106,13 @@ export interface PendingMatch {
   timestamp: number;
   /** How many roster players the capture carried — a "we did record this game" signal. */
   rosterCount: number;
+  /**
+   * The win/loss/draw GEP actually reported for this match, when it had one — a
+   * held match can still carry a result (it's held because the game_type was
+   * unknown, not because the outcome was). Lets Review hint the reported result
+   * and make confirming it one click. Absent when GEP reported no outcome.
+   */
+  reportedResult?: Result;
 }
 
 /** Everything the dashboard needs for the current filter set. */

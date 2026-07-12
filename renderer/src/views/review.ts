@@ -69,7 +69,7 @@ export function review(ctx: ViewContext): HTMLElement {
 /** The Review head subtitle, reflecting both the needs-result and grading backlogs. */
 function subtitle(gradeCount: number, needsResultCount: number): string {
   const parts: string[] = [];
-  if (needsResultCount) parts.push(`${needsResultCount} match${needsResultCount === 1 ? '' : 'es'} need a result set`);
+  if (needsResultCount) parts.push(`${needsResultCount} match${needsResultCount === 1 ? '' : 'es'} to confirm or dismiss`);
   if (gradeCount) parts.push(`${gradeCount} tracked game${gradeCount === 1 ? '' : 's'} need your read`);
   return parts.length
     ? `${parts.join(' · ')} — grade your targets and flag how it felt`
@@ -83,25 +83,42 @@ function subtitle(gradeCount: number, needsResultCount: number): string {
 const resolvedThisSession = new Set<string>();
 
 /**
- * "Needs result" — competitive matches GEP delivered without a win/loss. Sits
- * ABOVE the grading inbox (rendered even when the inbox is empty). Setting a
- * result runs the held match back through the normal history pipeline.
+ * "Needs review" — played matches GEP didn't confirm as clean trackable games:
+ * no win/loss, an unknown/missing game_type (e.g. after an account swap), or
+ * both. Rather than silently drop a possibly-real match, Vantage holds it here
+ * for the user to curate. Sits ABOVE the grading inbox (rendered even when the
+ * inbox is empty). Setting a result runs the held match back through the normal
+ * history pipeline; dismissing drops it without ever logging it.
  */
 function needsResultCard(items: PendingMatch[]): HTMLElement {
   return card({ variant: 'raised', class: 'review-needs-result' },
     h('div', { class: 'review-section-label' },
-      `Needs result — ${items.length} ranked ${items.length === 1 ? 'match' : 'matches'} ended without a win/loss`),
+      `Needs review — ${items.length} ${items.length === 1 ? 'match' : 'matches'} GEP didn’t confirm`),
+    h('div', { class: 'hint', style: { marginTop: '-6px', marginBottom: '4px' } },
+      'Set a result to track it, or dismiss if it wasn’t a real match.'),
     h('div', { class: 'stack', style: { gap: '10px', marginTop: '10px' } }, ...items.map(needsResultRow)),
   );
 }
 
-/** One "Needs result" row: the auto badge, the match facts, and W/L/D actions. */
+/** GEP's own outcome vocabulary, for the "GEP: …" reported-result hint chip. */
+const GEP_RESULT_LABEL: Record<Result, string> = { Win: 'Victory', Loss: 'Defeat', Draw: 'Draw' };
+
+/**
+ * One "Needs review" row: the auto badge, the match facts, an optional
+ * GEP-reported-result hint, the W/L/D confirm buttons (the reported result
+ * pre-highlighted for a one-click confirm), and a subtle Dismiss action.
+ */
 function needsResultRow(m: PendingMatch): HTMLElement {
   const options: Result[] = ['Win', 'Loss', 'Draw'];
+  const actions: HTMLButtonElement[] = [];
+  const disableAll = (): void => { for (const b of actions) b.disabled = true; };
   const buttons = options.map((result) =>
     button(result, {
+      // Pre-highlight the result GEP actually reported (when it did) so a match
+      // that HAS a result is one click to confirm.
+      variant: m.reportedResult === result ? 'soft' : 'default',
       onClick: () => {
-        for (const b of buttons) b.disabled = true;
+        disableAll();
         void bridge.resolvePendingMatch(m.matchId, result).then(() => {
           resolvedThisSession.add(m.matchId);
           toast(`Result set — ${m.map} · ${result}`);
@@ -110,14 +127,35 @@ function needsResultRow(m: PendingMatch): HTMLElement {
         });
       },
     }));
+  const dismiss = button('Not a real match', {
+    variant: 'ghost',
+    class: 'review-dismiss',
+    title: 'Discard this match — it won’t be tracked',
+    onClick: () => {
+      disableAll();
+      void bridge.dismissPendingMatch(m.matchId).then(() => {
+        // Reuse the resolved-this-session set so the row hides immediately,
+        // before the pending-store refetch lands.
+        resolvedThisSession.add(m.matchId);
+        toast(`Dismissed — ${m.map}`);
+        store.rerender();
+        void store.refresh();
+      });
+    },
+  });
+  actions.push(...buttons, dismiss);
   return h('div', { class: 'review-row' },
-    h('span', { class: 'review-auto', title: 'auto-detected — no result reported' }, '⚡'),
+    h('span', { class: 'review-auto', title: 'auto-detected — GEP didn’t confirm a result' }, '⚡'),
     h('div', { class: 'row-main', style: { minWidth: '0' } },
       h('div', { style: { fontSize: '13px' } }, m.map),
       h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
         `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
     ),
-    h('div', { style: { display: 'flex', gap: '6px' } }, ...buttons),
+    m.reportedResult
+      ? h('span', { class: 'pill is-accent', title: 'the result GEP reported', style: { whiteSpace: 'nowrap' } },
+          `GEP: ${GEP_RESULT_LABEL[m.reportedResult]}`)
+      : null,
+    h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, ...buttons, dismiss),
   );
 }
 

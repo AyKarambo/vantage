@@ -693,8 +693,9 @@ const mock: OwStatsApi = {
     save(REVIEWS_KEY, previewReviews);
   },
   // No pending (no-outcome) matches exist in the browser harness — the pending
-  // store is a real-app SQLite table. The stub keeps the UI buildable/typed.
+  // store is a real-app SQLite table. The stubs keep the UI buildable/typed.
   resolvePendingMatch: async () => {},
+  dismissPendingMatch: async () => {},
   previewPendingReviewIgnore: async (input) => ({ count: eligibleForIgnore(input).length }),
   ignorePendingReviews: async (input) => {
     const eligible = eligibleForIgnore(input);

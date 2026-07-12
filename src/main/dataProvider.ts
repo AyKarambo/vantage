@@ -19,6 +19,7 @@ import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
 import { resolveRole } from '../core/resolvers/role';
 import { resolveAccount } from '../core/resolvers/account';
 import { resolveMapId } from '../core/resolvers/mapId';
+import { resolveResult } from '../core/resolvers/result';
 import type { Role, Result, MatchRecord } from '../core/model';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
@@ -83,6 +84,8 @@ export interface DataProviderDeps {
   recordGame(g: GameRecord): boolean;
   /** Match-pipeline entry to complete a held pending match (takes it out of the pending store into history). */
   resolvePending(matchId: string, result: Result): boolean;
+  /** Match-pipeline entry to dismiss a held pending match (removes it from the pending store; never logged). */
+  dismissPending(matchId: string): boolean;
   /** Surface a user-facing notification (the tray balloon in production). */
   notify(title: string, body: string): void;
   /** Demo dataset shown until the first real game is tracked. */
@@ -456,6 +459,9 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     resolvePendingMatch: (matchId, result) => {
       deps.resolvePending(matchId, result);
     },
+    dismissPendingMatch: (matchId) => {
+      deps.dismissPending(matchId);
+    },
     effectiveMasterData,
     masterDataUpsertHero: (entry) => {
       deps.masterDataStore.replace(upsertHeroOverride(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, entry));
@@ -531,6 +537,10 @@ function toPendingMatch(rec: MatchRecord, accounts: Record<string, string>): Pen
     account: resolveAccount(rec.battleTag, accounts) ?? rec.battleTag ?? 'Unknown',
     timestamp: rec.endedAt ?? 0,
     rosterCount: rec.roster?.length ?? 0,
+    // A held match can still carry a GEP-reported outcome (it was held for an
+    // unknown game_type, not necessarily a missing result) — surface it so
+    // Review can hint it and make confirming it one click.
+    ...(resolveResult(rec.outcome) ? { reportedResult: resolveResult(rec.outcome) } : {}),
   };
 }
 

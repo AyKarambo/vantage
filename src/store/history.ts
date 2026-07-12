@@ -117,6 +117,7 @@ export class HistoryStore {
   private hasPendingStmt!: StatementSync;
   private getPendingStmt!: StatementSync;
   private deletePendingStmt!: StatementSync;
+  private removePendingStmt!: StatementSync;
   private pendingCountStmt!: StatementSync;
 
   constructor(dir: string) {
@@ -255,6 +256,15 @@ export class HistoryStore {
       this.deletePendingStmt.run(matchId);
     });
     return rec;
+  }
+
+  /**
+   * Remove a held pending match without returning it — the dismiss path, when
+   * the user decides it wasn't a real/trackable game. It never enters history.
+   * Returns true only if a row was actually deleted (false for an unknown id).
+   */
+  removePending(matchId: string): boolean {
+    return Number(this.removePendingStmt.run(matchId).changes) > 0;
   }
 
   /** How many matches are waiting for a result (the "Needs result" badge). */
@@ -485,6 +495,7 @@ export class HistoryStore {
     this.hasPendingStmt = this.db.prepare('SELECT 1 FROM pending_matches WHERE matchId = ?');
     this.getPendingStmt = this.db.prepare('SELECT data FROM pending_matches WHERE matchId = ?');
     this.deletePendingStmt = this.db.prepare('DELETE FROM pending_matches WHERE matchId = ?');
+    this.removePendingStmt = this.db.prepare('DELETE FROM pending_matches WHERE matchId = ?');
     this.pendingCountStmt = this.db.prepare('SELECT COUNT(*) AS c FROM pending_matches');
   }
 

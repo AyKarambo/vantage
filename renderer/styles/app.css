@@ -392,6 +392,18 @@
   font-size: 13px;
   color: var(--accent-mono);
 }
+/* Dismiss ("not a real match") — a subtle danger action, set apart from the
+   W/L/D confirm buttons so it never reads as another result. */
+.review-dismiss {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.review-dismiss:hover {
+  color: var(--loss-text);
+  border-color: var(--loss-soft);
+  background: var(--loss-soft);
+}
 .review-card {
   border-color: var(--accent-border);
 }

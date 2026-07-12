@@ -85,6 +85,12 @@ function fakeHistory() {
       const idx = pending.findIndex((x) => x.matchId === matchId);
       return idx < 0 ? undefined : pending.splice(idx, 1)[0];
     },
+    removePending(matchId: string): boolean {
+      const idx = pending.findIndex((x) => x.matchId === matchId);
+      if (idx < 0) return false;
+      pending.splice(idx, 1);
+      return true;
+    },
   };
 }
 
@@ -259,7 +265,7 @@ describe('createMatchPipeline — addMatch screenshots', () => {
   });
 });
 
-describe('createMatchPipeline — no-outcome matches held for Review', () => {
+describe('createMatchPipeline — uncertain matches held for Review', () => {
   it('holds a played competitive match with no GEP outcome (never in history), and notifies', () => {
     const { pipeline, history, notifications, captures } = harness();
 
@@ -268,12 +274,46 @@ describe('createMatchPipeline — no-outcome matches held for Review', () => {
     // matchToGame yields null (no win/loss) → the match is held, not dropped.
     expect(history.games).toHaveLength(0);
     expect(history.pending.map((r) => r.matchId)).toEqual(['gep-no-result']);
-    // The user is told a result is needed, with the Review-pointing copy.
+    // The user is told the match needs review, with the confirm-or-dismiss copy.
     expect(notifications).toEqual([
-      { title: 'Match needs a result', body: 'A ranked match ended without a result — set win/loss in Review.' },
+      {
+        title: 'Match needs review',
+        body: 'A match ended without a confirmed result — set it in Review, or dismiss it if it wasn’t a real match.',
+      },
     ]);
     // No screenshot capture for a match that never reached history.
     expect(captures).toHaveLength(0);
+  });
+
+  it('holds a competitive (RANKED) match with no result — the regression: not auto-logged, not dropped', () => {
+    const { pipeline, history, notifications } = harness();
+    pipeline.addMatch(noOutcomeMatch('ranked-no-result', { gameType: 'RANKED' }));
+    expect(history.games).toHaveLength(0);
+    expect(history.pending.map((r) => r.matchId)).toEqual(['ranked-no-result']);
+    expect(notifications).toHaveLength(1);
+  });
+
+  it('holds a played match with an UNKNOWN/missing game_type and no result (the account-swap drop)', () => {
+    // The real bug: after an account swap GEP delivered the match with a null
+    // game_type AND no outcome. It classifies as neither competitive nor a known
+    // non-competitive mode, so it must be HELD for the user — never silently
+    // dropped. This is the key new assertion.
+    const { pipeline, history, notifications, captures } = harness();
+    pipeline.addMatch(noOutcomeMatch('swap-drop', { gameType: undefined }));
+    expect(history.games).toHaveLength(0);
+    expect(history.pending.map((r) => r.matchId)).toEqual(['swap-drop']);
+    expect(notifications).toHaveLength(1);
+    expect(captures).toHaveLength(0);
+  });
+
+  it('holds an unknown-game_type match that DOES carry a result — not auto-logged, not dropped', () => {
+    // A result is present, but the game_type is unknown, so we can't confirm
+    // it's a trackable competitive game. Hold it for the user rather than
+    // fabricating a game_type or auto-logging it into analytics.
+    const { pipeline, history } = harness();
+    pipeline.addMatch({ ...capturedMatch('unknown-with-result'), gameType: undefined });
+    expect(history.games).toHaveLength(0);
+    expect(history.pending.map((r) => r.matchId)).toEqual(['unknown-with-result']);
   });
 
   it('fires onPendingChanged once when a match is held, and dedupes a re-held id', () => {
@@ -286,9 +326,10 @@ describe('createMatchPipeline — no-outcome matches held for Review', () => {
     expect(pendingSignals()).toBe(1);
   });
 
-  it('drops a NON-competitive no-outcome match — not held, no notify', () => {
+  it('drops an EXPLICITLY non-competitive no-outcome match (quickplay/arcade) — not held, no notify', () => {
     const { pipeline, history, notifications, pendingSignals } = harness();
     pipeline.addMatch(noOutcomeMatch('qp-no-result', { gameType: 'quickplay' }));
+    pipeline.addMatch(noOutcomeMatch('ar-no-result', { gameType: 'arcade' }));
     expect(history.games).toHaveLength(0);
     expect(history.pending).toHaveLength(0);
     expect(notifications).toHaveLength(0);
@@ -331,5 +372,46 @@ describe('createMatchPipeline — no-outcome matches held for Review', () => {
     // Unknown id → nothing taken, nothing added.
     expect(draw.pipeline.resolvePending('ghost', 'Win')).toBe(false);
     expect(draw.history.games).toHaveLength(1);
+  });
+
+  it('resolvePending lands an UNKNOWN-game_type held match in history (the confirm-to-track path)', () => {
+    // The account-swap case: held with a missing game_type. Confirming a result
+    // must actually track it — not bounce it back into pending. The user's
+    // confirm stamps it competitive so it passes the competitive-only gate.
+    const { pipeline, history, logged } = harness();
+    pipeline.addMatch(noOutcomeMatch('swap-confirm', { gameType: undefined }));
+    expect(history.pending).toHaveLength(1);
+
+    expect(pipeline.resolvePending('swap-confirm', 'Loss')).toBe(true);
+    expect(history.pending).toHaveLength(0);
+    expect(history.games).toHaveLength(1);
+    expect(history.games[0]).toMatchObject({ matchId: 'swap-confirm', result: 'Loss', gameType: 'Competitive' });
+    expect(logged).toEqual(['swap-confirm']);
+  });
+
+  it('dismissPending removes a held match (never logged), returns true, and fires onPendingChanged', () => {
+    const { pipeline, history, logged, pendingSignals } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-dismiss'));
+    expect(history.pending).toHaveLength(1);
+    expect(pendingSignals()).toBe(1); // one signal from the hold
+
+    expect(pipeline.dismissPending('gep-dismiss')).toBe(true);
+    // Gone from pending, and it NEVER entered history.
+    expect(history.pending).toHaveLength(0);
+    expect(history.games).toHaveLength(0);
+    expect(logged).toEqual([]);
+    // A second signal fired for the dismissal.
+    expect(pendingSignals()).toBe(2);
+  });
+
+  it('dismissPending returns false for an unknown id and fires no signal', () => {
+    const { pipeline, history, pendingSignals } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-keep'));
+    expect(pendingSignals()).toBe(1);
+
+    expect(pipeline.dismissPending('ghost')).toBe(false);
+    // The real held match is untouched, and no extra signal fired.
+    expect(history.pending.map((r) => r.matchId)).toEqual(['gep-keep']);
+    expect(pendingSignals()).toBe(1);
   });
 });
