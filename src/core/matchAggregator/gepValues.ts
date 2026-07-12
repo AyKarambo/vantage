@@ -18,7 +18,10 @@ export function parseRoster(value: unknown): RosterPlayer | undefined {
     return undefined;
   };
   const player: RosterPlayer = {
-    battleTag: asString(pick('battleTag', 'battletag', 'name', 'player', 'playerName')),
+    battleTag: asString(pick('battleTag', 'battletag', 'battle_tag', 'battlenet_tag', 'name', 'player', 'playerName', 'player_name')),
+    // Documented Overwatch GEP flag marking the tracked (local) player — the
+    // identity signal the pipeline used to throw away.
+    isLocal: asBool(pick('is_local', 'isLocal', 'local')),
     heroName: asString(pick('heroName', 'hero_name', 'hero', 'character')),
     heroRole: asString(pick('heroRole', 'hero_role', 'role')),
     team: asNumber(pick('team', 'team_id', 'teamId')),
@@ -70,6 +73,18 @@ export function asNumber(value: unknown): number | undefined {
   if (typeof value === 'string') {
     const n = Number(value.replace(/[, ]/g, ''));
     if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/** Coerce a GEP flag (`0|1`, `true|false`, or `"true"/"false"`) into a boolean; undefined otherwise. */
+export function asBool(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase();
+    if (s === 'true' || s === '1') return true;
+    if (s === 'false' || s === '0' || s === '') return false;
   }
   return undefined;
 }
