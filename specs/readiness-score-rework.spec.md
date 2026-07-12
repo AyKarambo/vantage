@@ -1,7 +1,7 @@
 # Feature spec: Readiness score rework — objective performance signals (`readiness-score-rework`)
 
 **Source:** Spec interview 2026-07-07 + web-research synthesis (commercial readiness scores, load-monitoring math, decline detection, esports fatigue — `specs/readiness-score-rework.research.md`) + GitHub issue [#44](https://github.com/AyKarambo/vantage/issues/44). Hardened against a 5-lens adversarial critique (intent-fidelity, research-honesty, codebase-fit, AC-quality, edge-cases) before review. **Approved 2026-07-07.**
-**Related specs:** `supercompensation-detection.spec.md` (the current model — this spec **supersedes its score/band-relationship sections**; band vocabulary, screen surfaces, honesty framing, settings, and launch-toast behavior carry over), `log-match-improvements-2.spec.md` (the 0–100 performance slider this consumes), `screen-targets.spec.md` / `screen-review.spec.md` (active targets + per-match grades), `screen-trends.spec.md`, `screen-heroes.spec.md`, `screen-maps.spec.md` (analytics surfaces).
+**Related specs:** `supercompensation-detection.spec.md` (the current model — this spec **supersedes its score/band-relationship sections**; band vocabulary, screen surfaces, honesty framing, settings, and launch-toast behavior carry over), the 0–100 performance slider it consumes (captured on Log Match and Review), `screen-targets.spec.md` / `screen-review.spec.md` (active targets + per-match grades), `screen-trends.spec.md`, `screen-heroes.spec.md`, `screen-maps.spec.md` (analytics surfaces).
 **Implements:** issue #44 (both parts: performance-rating analytics + readiness integration).
 
 ## Intent (WHAT & WHY)

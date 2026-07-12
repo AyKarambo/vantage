@@ -30,9 +30,10 @@ editable after the fact.
    - Anchor and every logged % are **always editable**; edits recompute the rank forward.
 5. **Rank-protection mode** — when you're at 0% of a division and a further loss would
    demote: only a **Loss** demotes; a **Win or Draw keeps** you. Vantage shows a "Rank
-   protected" state and holds the division. On the demoting loss it lowers the division by
-   one and does **not** fabricate the new intra-division % — it flags a re-anchor and the
-   next logged match (or a manual edit) sets it.
+   protected" state — a 🛡 shield plus the buffer, rendered through the shared rank renderer
+   (`src/core/rankDisplay.ts`) — and holds the division. A demoting loss lowers the division
+   by one and **carries the overshoot as a negative buffer** into the new division, which the
+   shield/buffer display shows directly; nothing is fabricated and no re-anchor is required.
 6. **Edit any match from the Matches screen** — clicking a match opens an editor for the
    **manual layer** (result/role/map/hero for hand-logged; mental flags, leaver team,
    SR %, target grades for all). On **Overwolf-tracked** matches, GEP-derived facts
@@ -40,8 +41,8 @@ editable after the fact.
    editable.
 
 ## Out-of-Scope
-- Notion import/export changes (→ `notion-import.spec.md`).
-- Settings toasts, run-at-login, chart sizing (→ `ui-fixes-toasts-autolaunch-charts.spec.md`).
+- Notion import/export changes (see the Notion specs).
+- Settings toasts, run-at-login, chart sizing.
 - Any non-GEP live data source; automatic rank detection from the game (account-safety
   guardrail — SR % stays user-entered).
 - Cross-account rank aggregation / "combined MMR".
@@ -94,8 +95,9 @@ editable after the fact.
   app shows "Rank protected" and holds the division.
 - Given I'm protected, When I log a Win or Draw, Then protection clears and the rank moves
   normally.
-- Given I'm protected, When I log another Loss, Then the division drops by one and the new
-  intra-division % is flagged for re-anchor rather than guessed.
+- Given I'm protected, When I log another Loss, Then the division drops by one and the
+  overshoot carries into the new division as a negative buffer (shown as the rank-protection
+  shield) rather than being guessed or re-anchored.
 
 **Edit any match**
 - Given any match on the Matches screen, When I click it, Then I can edit its manual layer
@@ -113,12 +115,12 @@ editable after the fact.
   `leaver` → my team.
 - **SR %** → type the exact number the game shows; calculated rank replaces the winrate
   estimate once an anchor exists.
-- **Rank protection** → only Loss demotes; Win/Draw keeps; on demotion the app flags a
-  re-anchor instead of fabricating the landing %.
+- **Rank protection** → only Loss demotes; Win/Draw keeps; on demotion the overshoot carries
+  as a negative buffer into the new division instead of fabricating the landing %.
 - **Edit scope** → manual layer only on auto-tracked matches; GEP facts locked.
 - **Targets-in-log** → inline 3-way grading, optional, mirrors Review.
 
 ## Open Questions
-- Whether to also surface calculated per-role rank on the Overview KPI (today it shows the
-  winrate estimate). v1 shows calculated rank on match detail + a Settings ranks panel;
-  Overview may follow.
+None — the calculated per-role rank is surfaced everywhere through the shared rank renderer
+(`src/core/rankDisplay.ts`): the Overview Rank KPI (with the anchor→now movement arrow), the
+sidebar account chip and switcher popover, match detail, and the Settings accounts panel.

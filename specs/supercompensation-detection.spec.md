@@ -9,11 +9,9 @@
 **Source:** Spec interview + `/deep-research` synthesis (supercompensation, overtraining/overreaching, esports fatigue), 2026-07-05. **Approved 2026-07-05.**
 **Related specs:** `screen-mental.spec.md` (mental self-report + break reminder this builds on), `screen-overview.spec.md` (secondary surface), `screen-settings.spec.md` (enable/disable), `screen-shell.spec.md` (per-view filter-bar suppression, added 2026-07-06).
 **Extends, does not replace:** the short-horizon loss-streak break reminder in `src/core/breakReminder.ts`.
-**Updated 2026-07-06** after the `feedback-batch-2026-07` Area E fix (schematic moved from the
-main view into a "How is this calculated?" modal, the view is now exempt from the global filter
-bar) and the Area D competitive-only change (the readiness input is now the competitive-only
-history) — see `feedback-batch-2026-07.spec.md` Areas E and D for the originating
-problems/requirements and their own acceptance criteria.
+**Note:** the Readiness screen renders with no global filter bar and is unaffected by the
+account switcher; the supercompensation schematic lives in a "How is this calculated?" modal
+rather than the main view; and the readiness input is the competitive-only history.
 
 ## Intent (WHAT & WHY)
 
@@ -95,8 +93,8 @@ Load-bearing for the whole feature: the detection is built to respect this, and 
   - **(updated 2026-07-06, Area D cross-reference)** The history the verdict is computed over is
     now the **competitive-only** history (`isCompetitive`-filtered upstream in
     `computeDashboard`, `src/core/dashboardData.ts`) rather than the truly-unfiltered set — an
-    accepted consequence of "everything is competitive" (`dashboard-filter-fixes.spec.md` Area
-    D). This does not weaken "unaffected by filters/accounts": the verdict still ignores the
+    accepted consequence of "everything is competitive" (the app is competitive-only
+    everywhere). This does not weaken "unaffected by filters/accounts": the verdict still ignores the
     filter bar and the account switcher entirely; it is simply no longer fed non-competitive
     rows at all. A user with pre-existing non-competitive history may see their verdict shift
     once, on the release that ships this change — intended, not a regression.
