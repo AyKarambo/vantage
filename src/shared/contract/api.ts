@@ -20,7 +20,7 @@ import type {
 } from './inputs';
 import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
 import type { ImportFileResult } from './importFile';
-import type { Role } from '../../core/model';
+import type { Role, Result } from '../../core/model';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
@@ -143,6 +143,11 @@ export interface OwStatsApi {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
+  /**
+   * Complete a held "needs result" match by setting its win/loss/draw: it moves
+   * out of the pending store and into history through the normal pipeline.
+   */
+  resolvePendingMatch(matchId: string, result: Result): Promise<void>;
   /** Read-only: how many pending matches "Ignore all" would affect right now (beyond the capped inbox rows). */
   previewPendingReviewIgnore(input: IgnorePendingReviewsInput): Promise<{ count: number }>;
   /** Bulk-saves an empty review for every matching pending match; returns their ids for Undo. */
@@ -175,6 +180,8 @@ export interface OwStatsApi {
   onSyncProgress(cb: (p: SyncProgress) => void): () => void;
   /** Subscribe to "a new match was just logged" (drives the live dashboard refresh); returns an unsubscribe function. */
   onGameLogged(cb: (p: { matchId: string }) => void): () => void;
+  /** Subscribe to "the pending (needs-result) set changed" (a match was held or resolved); returns an unsubscribe function. */
+  onPendingChanged(cb: () => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -193,6 +200,7 @@ export const EVENT_CHANNELS = {
   onGepStatus: 'push:gep-status',
   onSyncProgress: 'push:sync-progress',
   onGameLogged: 'push:game-logged',
+  onPendingChanged: 'push:pending-changed',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**
@@ -258,6 +266,7 @@ export const IPC_CHANNELS = {
   setDataFolder: 'settings:set-data-folder',
   chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
   clearReview: 'manual:clear-review',
+  resolvePendingMatch: 'manual:resolve-pending-match',
   previewPendingReviewIgnore: 'manual:preview-ignore-pending-reviews',
   ignorePendingReviews: 'manual:ignore-pending-reviews',
   clearReviews: 'manual:clear-reviews',

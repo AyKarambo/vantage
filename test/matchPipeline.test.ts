@@ -45,12 +45,23 @@ function capturedMatch(matchId: string): MatchRecord {
   };
 }
 
-/** In-memory stand-in for the HistoryStore slice the pipeline needs. */
+/**
+ * A played competitive match GEP delivered WITHOUT an outcome — matchToGame
+ * returns null for it (no win/loss), so the pipeline must hold it as pending.
+ */
+function noOutcomeMatch(matchId: string, over: Partial<MatchRecord> = {}): MatchRecord {
+  const { outcome: _drop, ...rest } = capturedMatch(matchId);
+  return { ...rest, ...over };
+}
+
+/** In-memory stand-in for the HistoryStore slice the pipeline needs (incl. the pending store). */
 function fakeHistory() {
   const games: GameRecord[] = [];
+  const pending: MatchRecord[] = [];
   const attached: Array<{ matchId: string; screenshots: string[] }> = [];
   return {
     games,
+    pending,
     attached,
     add(g: GameRecord): boolean {
       if (games.some((x) => x.matchId === g.matchId)) return false;
@@ -65,6 +76,15 @@ function fakeHistory() {
       attached.push({ matchId, screenshots });
       return true;
     },
+    addPending(rec: MatchRecord): boolean {
+      if (pending.some((x) => x.matchId === rec.matchId)) return false;
+      pending.push(rec);
+      return true;
+    },
+    takePending(matchId: string): MatchRecord | undefined {
+      const idx = pending.findIndex((x) => x.matchId === matchId);
+      return idx < 0 ? undefined : pending.splice(idx, 1)[0];
+    },
   };
 }
 
@@ -74,6 +94,7 @@ function harness(config: AppConfig = appConfig()) {
   const notifications: Array<{ title: string; body: string }> = [];
   const captures: Array<{ matchId: string; onSaved: (relPaths: string[]) => void }> = [];
   const logged: string[] = [];
+  let pendingSignals = 0;
   const deps: MatchPipelineDeps = {
     history,
     aggregator: { handle: () => null },
@@ -90,8 +111,18 @@ function harness(config: AppConfig = appConfig()) {
     onGameLogged: (g) => {
       logged.push(g.matchId);
     },
+    onPendingChanged: () => {
+      pendingSignals++;
+    },
   };
-  return { pipeline: createMatchPipeline(deps), history, notifications, captures, logged };
+  return {
+    pipeline: createMatchPipeline(deps),
+    history,
+    notifications,
+    captures,
+    logged,
+    pendingSignals: () => pendingSignals,
+  };
 }
 
 describe('createMatchPipeline — recordGame dedupe', () => {
@@ -225,5 +256,80 @@ describe('createMatchPipeline — addMatch screenshots', () => {
     pipeline.addMatch(capturedMatch('gep-1'));
     pipeline.addMatch(capturedMatch('gep-1'));
     expect(captures).toHaveLength(1);
+  });
+});
+
+describe('createMatchPipeline — no-outcome matches held for Review', () => {
+  it('holds a played competitive match with no GEP outcome (never in history), and notifies', () => {
+    const { pipeline, history, notifications, captures } = harness();
+
+    pipeline.addMatch(noOutcomeMatch('gep-no-result'));
+
+    // matchToGame yields null (no win/loss) → the match is held, not dropped.
+    expect(history.games).toHaveLength(0);
+    expect(history.pending.map((r) => r.matchId)).toEqual(['gep-no-result']);
+    // The user is told a result is needed, with the Review-pointing copy.
+    expect(notifications).toEqual([
+      { title: 'Match needs a result', body: 'A ranked match ended without a result — set win/loss in Review.' },
+    ]);
+    // No screenshot capture for a match that never reached history.
+    expect(captures).toHaveLength(0);
+  });
+
+  it('fires onPendingChanged once when a match is held, and dedupes a re-held id', () => {
+    const { pipeline, history, pendingSignals } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-no-result'));
+    expect(pendingSignals()).toBe(1);
+    // A second delivery of the same id is a pending no-op: not re-added, no signal.
+    pipeline.addMatch(noOutcomeMatch('gep-no-result'));
+    expect(history.pending).toHaveLength(1);
+    expect(pendingSignals()).toBe(1);
+  });
+
+  it('drops a NON-competitive no-outcome match — not held, no notify', () => {
+    const { pipeline, history, notifications, pendingSignals } = harness();
+    pipeline.addMatch(noOutcomeMatch('qp-no-result', { gameType: 'quickplay' }));
+    expect(history.games).toHaveLength(0);
+    expect(history.pending).toHaveLength(0);
+    expect(notifications).toHaveLength(0);
+    expect(pendingSignals()).toBe(0);
+  });
+
+  it('does not hold an empty/aborted competitive capture (nothing was played)', () => {
+    const { pipeline, history, notifications } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-empty', { heroes: [], roster: [], eliminations: undefined }));
+    expect(history.pending).toHaveLength(0);
+    expect(history.games).toHaveLength(0);
+    expect(notifications).toHaveLength(0);
+  });
+
+  it('resolvePending moves the held match into history with the chosen result, and clears pending', () => {
+    const { pipeline, history, logged } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-no-result'));
+    expect(history.pending).toHaveLength(1);
+
+    expect(pipeline.resolvePending('gep-no-result', 'Win')).toBe(true);
+    // It left the pending store and landed in history as a real, resolved game.
+    expect(history.pending).toHaveLength(0);
+    expect(history.games).toHaveLength(1);
+    expect(history.games[0]).toMatchObject({ matchId: 'gep-no-result', result: 'Win', account: 'Main' });
+    // Resolving runs the same path as a live game, so the live signal fires.
+    expect(logged).toEqual(['gep-no-result']);
+  });
+
+  it('resolvePending maps Loss/Draw onto the raw outcome and returns false for an unknown id', () => {
+    const loss = harness();
+    loss.pipeline.addMatch(noOutcomeMatch('m-loss'));
+    expect(loss.pipeline.resolvePending('m-loss', 'Loss')).toBe(true);
+    expect(loss.history.games[0].result).toBe('Loss');
+
+    const draw = harness();
+    draw.pipeline.addMatch(noOutcomeMatch('m-draw'));
+    expect(draw.pipeline.resolvePending('m-draw', 'Draw')).toBe(true);
+    expect(draw.history.games[0].result).toBe('Draw');
+
+    // Unknown id → nothing taken, nothing added.
+    expect(draw.pipeline.resolvePending('ghost', 'Win')).toBe(false);
+    expect(draw.history.games).toHaveLength(1);
   });
 });

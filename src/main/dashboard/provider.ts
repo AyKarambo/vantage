@@ -10,8 +10,8 @@ import type { RankAnchorMap } from '../../core/rank';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogLevel,
-  ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
-  RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
+  ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
+  RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
 } from '../../shared/contract';
 
@@ -136,6 +136,10 @@ export interface DataProvider {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
+  /** Played competitive matches held without a GEP outcome, awaiting a manual result (the "Needs result" section). */
+  pendingMatches(): PendingMatch[];
+  /** Complete a held pending match with a win/loss/draw — moves it into history via the normal pipeline. */
+  resolvePendingMatch(matchId: string, result: Result): void;
   /** The effective master data (defaults ⊕ overrides) — feeds the dashboard read + the editor. */
   effectiveMasterData(): MasterData;
   /** Add/edit a hero; persists the delta and returns the new effective master data. */
