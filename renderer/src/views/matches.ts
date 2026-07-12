@@ -2,7 +2,8 @@
 import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
 import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
-import { relTime, roleLabel, signed } from '../format';
+import { relTime, signed } from '../format';
+import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
 import { wrHsl } from '../theme';
 import { openPopover } from '../components/popover';
@@ -147,7 +148,7 @@ function prettyDay(label: string): string {
 function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext): Node | null {
   switch (key) {
     case 'role':
-      return m.role ? document.createTextNode(roleLabel(m.role)) : null;
+      return m.role ? h('span', { class: 'tag tag--role' }, roleIcon(m.role)) : null;
     case 'heroes':
       return m.heroes.length ? heroLinks(m, ctx) : null;
     case 'account':

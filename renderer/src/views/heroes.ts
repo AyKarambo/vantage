@@ -2,11 +2,12 @@
 import { h, render } from '../dom';
 import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, pct, roleLabel } from '../format';
+import { fmt, pct } from '../format';
 import { wrColor } from '../theme';
 import { prefs } from '../prefs';
 import { store } from '../store';
 import { card, chip, resultPill, statBox } from '../components/primitives';
+import { roleIcon } from '../components/roleIcon';
 import { dataTable, type Column } from '../components/table';
 import { openDrawer } from '../components/overlay';
 import { viewHead, type ViewContext } from './view';
@@ -20,7 +21,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
   // Column order is the display order; `get` drives sort, `render` is optional display formatting.
   const columns: Array<Column<HeroSummary>> = [
     { key: 'hero', label: 'Hero', get: (r) => r.hero },
-    { key: 'role', label: 'Role', get: (r) => r.role ?? '', render: (r) => h('span', { class: 'tag' }, roleLabel(r.role ?? '–')) },
+    { key: 'role', label: 'Role', get: (r) => r.role ?? '', render: (r) => h('span', { class: 'tag tag--role' }, roleIcon(r.role)) },
     { key: 'games', label: 'G', get: (r) => r.games },
     { key: 'winrate', label: 'WR', get: (r) => r.winrate, render: (r) => h('span', { style: { color: wrColor(r.winrate) } }, pct(r.winrate)) },
     { key: 'kda', label: 'KDA', get: (r) => r.kda, render: (r) => r.kda.toFixed(1) },

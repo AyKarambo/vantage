@@ -7,7 +7,8 @@
  */
 import { h } from '../dom';
 import type { ScoreboardEntry } from '../../../src/shared/contract';
-import { fmt, roleLabel } from '../format';
+import { fmt } from '../format';
+import { roleIcon } from './roleIcon';
 
 type StatKey = 'eliminations' | 'assists' | 'deaths' | 'damage' | 'healing' | 'mitigation';
 
@@ -25,8 +26,6 @@ const STATS: StatColumn[] = [
   { key: 'healing', label: 'HEAL', compact: true },
   { key: 'mitigation', label: 'MIT', compact: true },
 ];
-
-const ROLE_GLYPH: Record<string, string> = { tank: 'T', damage: 'D', support: 'S', openQ: 'O' };
 
 export function scoreboard(entries: ScoreboardEntry[]): HTMLElement {
   // Perks are not in the feed today — the column only exists if data ever shows up.
@@ -89,7 +88,7 @@ function row(e: ScoreboardEntry, columns: string, hasPerks: boolean, best: Map<S
     class: `sb-row${e.isLocal ? ' is-you' : ''}`,
     style: { gridTemplateColumns: columns },
   },
-    h('span', { class: 'sb-role tag', title: e.role ? roleLabel(e.role) : undefined }, e.role ? ROLE_GLYPH[e.role] ?? '?' : '–'),
+    h('span', { class: 'sb-role' }, roleIcon(e.role)),
     h('span', { class: 'sb-hero' }, e.hero ?? '—'),
     h('span', { class: 'sb-name' }, e.name, e.isLocal ? h('span', { class: 'sb-you' }, 'you') : null),
     hasPerks ? h('span', { class: 'sb-perks' }, e.perks?.join(', ') || '—') : null,

@@ -158,6 +158,30 @@ describe('matchDetail degradation contract', () => {
     expect(d!.screenshots).toEqual(['vantage-media://screenshots/full-1/end-of-match.png']);
   });
 
+  it('orders each team 5v5 (tank, dps, dps, support, support) and derives role from hero when GEP omits it', () => {
+    const g = minimal({
+      matchId: '5v5-1',
+      role: 'support', // the local player's queue role
+      roster: [
+        { battleTag: 'Mercy#1', heroName: 'Mercy', heroRole: 'support', team: 0 },
+        { battleTag: 'Me#1', heroName: 'Ana', team: 0, isLocal: true },
+        { battleTag: 'Rein#1', heroName: 'Reinhardt', heroRole: 'tank', team: 0 },
+        { battleTag: 'Genji#1', heroName: 'Genji', team: 0 }, // heroRole MISSING → derived from hero
+        { battleTag: 'Ashe#1', heroName: 'Ashe', heroRole: 'damage', team: 0 },
+        { battleTag: 'Sig#1', heroName: 'Sigma', heroRole: 'tank', team: 1 },
+      ],
+    });
+    const d = matchDetail([g], '5v5-1')!;
+    const team0 = d.scoreboard!.filter((e) => e.team === 0).map((e) => e.role);
+    expect(team0).toEqual(['tank', 'damage', 'damage', 'support', 'support']);
+    // Genji's role was derived from the hero (GEP gave no heroRole).
+    expect(d.scoreboard!.find((e) => e.hero === 'Genji')!.role).toBe('damage');
+    // Within the support bucket the local player sorts first.
+    expect(d.scoreboard!.filter((e) => e.team === 0 && e.role === 'support')[0].isLocal).toBe(true);
+    // The tracked player's team renders before the enemy team.
+    expect(d.scoreboard!.map((e) => e.team)).toEqual([0, 0, 0, 0, 0, 1]);
+  });
+
   it('merges duplicate same-hero perHero segments at read time (panel + local scoreboard)', () => {
     const dup = minimal({
       matchId: 'dup-1', durationMinutes: 10, heroes: ['Tracer', 'Genji'],
