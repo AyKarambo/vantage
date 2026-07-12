@@ -22,7 +22,7 @@ each one takes about ten minutes.
   composition bundled by esbuild.
 - **The one rule that shapes everything:** live game data comes *only* from Overwolf's
   Game Events Provider (GEP). No memory reading, no injection — that's the product's
-  zero-ban-risk promise.
+  account-safety design.
 - **Fastest feedback loop:** `npm run preview` serves the full UI in a plain browser at
   <http://localhost:5178> with sample data and a mocked bridge — no Overwolf runtime, no
   Electron, no game.

@@ -23,8 +23,8 @@ enable / limit navigation" and "disable or limit creation of new windows") are u
 **Why it matters:** if any content ever managed to run in the renderer (an injected string, a
 future dependency, a mistaken `target=_blank` link), it could navigate the window to an attacker
 origin or spawn an uncontrolled child window — turning a contained renderer into a phishing or
-data-exfil surface. Closing this is pure defense-in-depth that reinforces the zero-ban-risk,
-local-first guarantee. It is **low-risk** because the renderer today performs **no** in-window
+data-exfil surface. Closing this is pure defense-in-depth that reinforces the account-safe,
+local-first design. It is **low-risk** because the renderer today performs **no** in-window
 navigation and opens **no** windows: every external link already routes through
 `shell.openExternal` in the main process (`src/main/index.ts`).
 

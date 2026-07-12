@@ -43,7 +43,7 @@ Notion export. Built on **ow-electron** (Overwolf's Electron) — a frameless de
 ## Guardrails (never violate)
 1. **Account safety — GEP only.** Live match data comes solely from Overwolf's Game Events
    Provider. Never read game memory, inject, or expose hidden info. This is the product's
-   core promise and the zero-ban-risk guarantee.
+   core promise and its GEP-only account-safety design.
 2. **No secrets in git.** Code-signing material, Notion tokens, and keys are never committed.
    The signing key lives in Certum's cloud HSM, accessed interactively via SimplySign Desktop
    (mobile OTP) at release time — there are **no signing secrets in GitHub Actions or git**. The

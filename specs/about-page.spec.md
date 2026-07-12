@@ -29,9 +29,9 @@ for three concrete reasons:
    into a paste.
 2. **Trust — the product's whole promise, restated in-app.** Vantage's differentiator is that it is
    **account-safe** (reads only Overwolf's sanctioned GEP feed — never game memory, no injection,
-   zero ban risk) and **local-first** (data stays on the device; the only outbound path is the
-   user's own Notion export). Those promises live in the constitution and onboarding, but nowhere
-   permanent and user-facing. The About screen is their natural home.
+   no hidden information) and **local-first** (data stays on the device; the only outbound path is
+   the user's own Notion export). Those promises live in the constitution and onboarding, but
+   nowhere permanent and user-facing. The About screen is their natural home.
 3. **Polish.** A store-quality desktop app has an About screen; its absence is a visible rough edge.
 
 ## In-Scope
@@ -44,7 +44,7 @@ for three concrete reasons:
 - **Identity block:** the Vantage brand mark, the "Vantage" wordmark, the product tagline
   ("Account-safe Overwatch stats coach"), and the **version number shown prominently** (e.g.
   `Version 0.1.0`).
-- **Account-safety & privacy promises**, restated plainly: GEP-only / zero-ban-risk, and
+- **Account-safety & privacy promises**, restated plainly: GEP-only sanctioned data source, and
   local-first / opt-in Notion export.
 - **Build & runtime block** (for support), as labelled rows: app version, ow-electron/Electron
   version, Chromium, Node, V8, platform + OS release, and a dev-vs-packaged indicator.
@@ -130,8 +130,9 @@ for three concrete reasons:
 
 6. **Account-safety & privacy promises are present.**
    Given I am on the About screen, When it renders, Then it states, in plain language, both that
-   Vantage reads only Overwolf's GEP feed (account-safe / zero ban risk) and that data is
-   local-first with Notion export as the only opt-in outbound path.
+   Vantage reads only Overwolf's sanctioned GEP feed (account-safe — no game memory reads, no
+   injection, no hidden information) and that data is local-first with Notion export as the only
+   opt-in outbound path. It also notes, in plain language, that the app is free to use.
 
 7. **Support link opens safely.**
    Given I click the support-email link, When the click is handled, Then it opens the OS mail client

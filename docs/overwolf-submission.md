@@ -12,9 +12,14 @@ list of steps only you (the account owner) can do.
 > [ow-electron sample repo](https://github.com/overwolf/ow-electron-packages-sample) (no
 > `manifest.json`), and the actual **OPK** we packed with `ow-cli` (77 entries, no
 > `manifest.json`). Identity + Overwolf config live in `package.json` (`name`+`author` → UID,
-> `overwolf.packages`, `build`). The store artifact is the **OPK** — a ZIP of the built app
-> (with `package.json` inside `app.asar`), built by `npm run pack:opk`, **not** the NSIS `.exe`.
-> The `manifest.json` reference/validation pages you may find are the **ow-native** framework's.
+> `overwolf.packages`, `build`). The `manifest.json` reference/validation pages you may find
+> are the **ow-native** framework's.
+>
+> **Store artifact — corrected:** the **OPK is for ow-native apps only.** For **ow-electron**
+> apps (what Vantage is), the submission artifact is the **signed `.exe`** (the NSIS installer
+> built by `npm run release` / `npm run publish:release`), uploaded to the Developer Console
+> directly — not an OPK. `npm run pack:opk` / `ow-cli opk *` below is dead weight for this app;
+> left in place until confirmed with DevRel, but do not block submission on it.
 
 ---
 
@@ -68,7 +73,7 @@ Use these when filling the "Submit your app idea" form.
 - **Data source / how it works:** Overwolf **Game Events Provider (GEP)** only. It
   reads sanctioned events (your own account, map, role, match outcome, your own
   scoreboard). It never reads game memory, never injects, and exposes nothing the
-  player can't already see — so there is no competitive advantage and no ban risk.
+  player can't already see — so there is no competitive advantage from using it.
 - **Monetization:** **None — the app is free and ad-free by choice.** There is no ad
   container in the UI. Overwolf usually expects ads or a subscription, so flag this in
   the proposal and confirm an ad-free app is acceptable for this scope; a subscription
@@ -115,7 +120,7 @@ Vantage turns your Overwatch match history into a coaching dashboard that tells 
 ### Account-safe by design
 Vantage uses Overwolf's official Game Events Provider — the same sanctioned feed other
 Overwatch apps use. It never reads game memory or injects anything, and only ever shows
-information you can already see in your own game. **No ban risk.**
+information you can already see in your own game. **Free to use.**
 
 ### Bonus
 One-click export of your tracked games to a Notion database.
@@ -166,9 +171,10 @@ provided so you can swap (full set: 01-overview, 02-review, 03-matches, 04-maps,
 ## 6. Release runbook (Phase 3)
 
 Overwolf's [Release Your App](https://dev.overwolf.com/ow-native/getting-started/release-your-app)
-flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that's ow-native)
-— but the store artifact is an **OPK** that carries Overwolf metadata generated from
-`package.json`, produced by Overwolf's packaging tooling (not a plain NSIS installer).
+flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that's ow-native) —
+and for ow-electron apps the submission artifact is the **signed `.exe`** itself (the NSIS
+installer), uploaded directly to the Developer Console. (The OPK path in this section is
+ow-native's; keeping it documented below only in case DevRel says otherwise for this app.)
 
 1. **Self-test.** `npm test` (55 unit tests), `npm run typecheck`, then `npm start` and
    click through every screen. For live GEP, run elevated with Overwatch open (whitelisted).
@@ -177,34 +183,20 @@ flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that'
      required icon) + taskbar/installer icon.
    - `assets/tray.png` (32×32) → the tray icon.
 3. **Bump the version** in `package.json` (`version`) — required for every new upload.
-4. **Build the app files:**
+4. **Build + sign the app files:**
    ```bash
-   npm run release   # ow-electron-builder → release/win-unpacked/ + Vantage-Setup-<ver>.exe
+   npm run publish:release   # build, sign (Certum/SimplySign), verify, tag, gh release create
    ```
    `build.files` ships `dist/`, `renderer/` (minus the dev preview + sourcemaps),
-   `assets/` (minus `assets/store/`), `appsettings.json` and `package.json`. The NSIS
-   `.exe` is the **"traditional installer"** distribution option.
-5. **Pack the OPK** (the store artifact — **not** the NSIS `.exe`):
-   ```bash
-   npm run pack:opk   # @overwolf/ow-cli opk pack release/win-unpacked → release/Vantage-<ver>.opk
-   ```
-   This is verified working: it produces `release/Vantage-0.1.0.opk` (~134 MB) — a ZIP of the
-   runnable app (`Vantage.exe` + Electron runtime + `resources/app.asar`). There is **no
-   `manifest.json`** (ow-electron keeps config in `package.json`, bundled in the asar); confirmed
-   by inspecting the OPK. The **[Overwolf CLI](https://www.npmjs.com/package/@overwolf/ow-cli)**
-   also handles upload/rollout:
-   ```bash
-   npx @overwolf/ow-cli opk sign   <file.opk>   # if code-signing is required
-   npx @overwolf/ow-cli opk upload <file.opk>   # → prints a version id
-   npx @overwolf/ow-cli opk release <versionId> # roll out to a % of users
-   ```
-   **➡ One DevRel confirm:** Overwolf's docs defer ow-electron packaging specifics to DevRel
-   ([their words](https://dev.overwolf.com/ow-electron/guides/dev-tools/overwolf-installer/):
-   *"contact your DevRel for specific details"*). Confirm they accept this OPK structure /
-   upload path — but the command + artifact are ready.
-6. **Upload + submit** — either `ow-cli opk upload` (needs `ow-cli config` with your console
-   token) or upload `release/Vantage-0.1.0.opk` in the [Developer Console](https://console.overwolf.com);
-   complete the store listing (§4–§5); submit to **DevRel QA**.
+   `assets/` (minus `assets/store/`), `appsettings.json` and `package.json`. The signed
+   NSIS `.exe` (`release/Vantage-Setup-<ver>.exe`) is the **submission artifact for
+   ow-electron apps** — upload it directly, no packing step needed.
+5. ~~Pack the OPK~~ — **OPK packaging (`npm run pack:opk` / `ow-cli opk *`) is for
+   ow-native apps, not ow-electron.** Left in the repo only in case DevRel says
+   otherwise for this app; do not treat it as a required step.
+6. **Upload + submit** — upload the signed `release/Vantage-Setup-<ver>.exe` in the
+   [Developer Console](https://console.overwolf.com); complete the store listing (§4–§5);
+   submit to **DevRel QA**.
 7. **QA cycle** — address feedback and re-upload (bump version each time) until it passes.
 8. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
 
@@ -266,13 +258,12 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
 ## 8. What only you can do
 
 1. **Confirm identity** (§1) in the Developer Console; align `package.json` if needed.
-2. **Confirm the OPK flow with DevRel** (§6 step 5) — the exact `ow-cli opk pack` command
-   and whether the console takes the OPK or the installer. **This is the packaging detail
-   we couldn't finalize without your account.**
+2. **(Optional) confirm with DevRel** that the signed `.exe` is still the right upload
+   format — ow-electron apps submit the `.exe`, not an OPK (OPK is ow-native-only); this
+   repo already builds that artifact via `npm run publish:release`.
 3. **Fill the blanks** in the store copy (§4): About the creator, Support link, socials.
 4. **(Optional) convert the tile** to JPG/WebP (§5) if the console rejects PNG.
-5. **Build + pack**: `npm run release` (app files), then `ow-cli opk pack/upload` per DevRel,
-   bumping `version`.
+5. **Build + sign**: `npm run publish:release`, bumping `version` per upload.
 6. **Submit the app idea** (§3) if not already done as part of whitelisting.
 7. **Complete the store listing** (§4, §5) and **submit for review** to DevRel QA; address feedback.
 8. **Publish the legal docs** — push the repo to GitHub, enable Pages for `docs/`, and paste the
