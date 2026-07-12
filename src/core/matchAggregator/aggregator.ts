@@ -96,7 +96,12 @@ export class MatchAggregator {
     // Seed `rec.battleTag` from the local entry so the account resolves even when the
     // `game_info.battle_tag` event never arrives; BattleTag matching stays the fallback.
     if (player.isLocal && player.battleTag && !rec.battleTag) rec.battleTag = player.battleTag;
-    if (!player.isLocal && !isLocal(player.battleTag, rec.battleTag)) return;
+    // Accumulate stats ONLY for the identified local player: once a battleTag is
+    // known, match against it — so a second or mis-flagged `is_local` entry can't
+    // interleave a stranger's cumulative stats into the per-hero deltas. Before a
+    // battleTag is known, trust the `is_local` flag to bootstrap identity.
+    const isLocalPlayer = rec.battleTag ? isLocal(player.battleTag, rec.battleTag) : Boolean(player.isLocal);
+    if (!isLocalPlayer) return;
 
     if (player.heroName && !rec.heroes.includes(player.heroName)) rec.heroes.push(player.heroName);
     if (player.heroRole) rec.heroRole = player.heroRole;
