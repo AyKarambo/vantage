@@ -100,10 +100,14 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
 
 function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
   const state = RESULT_STATE[d.result];
+  // Vantage is competitive-only, so the mode reads "RANKED" on every match —
+  // pure noise. Only surface it for the rare non-competitive record (e.g. a
+  // legacy import), never for the competitive norm.
+  const showMode = classifyGameType(d.gameType) !== 'competitive';
   const meta = h('div', { class: 'detail-meta' },
     pill(d.mapType, 'accent'),
-    h('span', null, d.gameType),
-    h('span', null, '·'),
+    showMode ? h('span', null, d.gameType) : null,
+    showMode ? h('span', null, '·') : null,
     h('span', null, `${roleLabel(d.role)} · ${d.account}`),
     h('span', null, '·'),
     h('span', null, relTime(d.timestamp)),
