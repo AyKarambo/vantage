@@ -227,6 +227,11 @@ export function registerDashboardIpc(provider: DataProvider): void {
     provider.resolvePendingMatch(matchId, result);
   });
 
+  // "Needs result" dismiss: drop a held match the user says wasn't a real game.
+  handle(ch.dismissPendingMatch, (_e, matchId: string) => {
+    provider.dismissPendingMatch(matchId);
+  });
+
   // Editable master data (heroes/maps/seasons) + the Update fetch.
   handle(ch.masterDataGet, () => provider.effectiveMasterData());
   handle(ch.masterDataUpsertHero, (_e, entry: HeroEntry) => provider.masterDataUpsertHero(entry));

@@ -148,6 +148,12 @@ export interface OwStatsApi {
    * out of the pending store and into history through the normal pipeline.
    */
   resolvePendingMatch(matchId: string, result: Result): Promise<void>;
+  /**
+   * Dismiss a held "needs result" match without logging it — the user's verdict
+   * that it wasn't a real/trackable game. Removes it from the pending store;
+   * it never enters history.
+   */
+  dismissPendingMatch(matchId: string): Promise<void>;
   /** Read-only: how many pending matches "Ignore all" would affect right now (beyond the capped inbox rows). */
   previewPendingReviewIgnore(input: IgnorePendingReviewsInput): Promise<{ count: number }>;
   /** Bulk-saves an empty review for every matching pending match; returns their ids for Undo. */
@@ -267,6 +273,7 @@ export const IPC_CHANNELS = {
   chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
   clearReview: 'manual:clear-review',
   resolvePendingMatch: 'manual:resolve-pending-match',
+  dismissPendingMatch: 'manual:dismiss-pending-match',
   previewPendingReviewIgnore: 'manual:preview-ignore-pending-reviews',
   ignorePendingReviews: 'manual:ignore-pending-reviews',
   clearReviews: 'manual:clear-reviews',
