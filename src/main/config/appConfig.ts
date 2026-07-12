@@ -45,6 +45,13 @@ export interface UiConfig {
   closeToTray: boolean;
   /** First-run demo-data choice. 'unset' until the user is asked on first run. */
   demoPreference: DemoPreference;
+  /**
+   * Dev Mode enabled for the next launch. `scripts/ow-dev.mjs` injects Overwolf
+   * dev credentials unless this is explicitly `false`, so the default `true`
+   * keeps existing dev setups working; toggling it off is the in-app kill switch.
+   * Inert for a packaged build (Dev Mode can't activate there).
+   */
+  devMode: boolean;
   windowBounds?: WindowBounds;
 }
 
@@ -97,7 +104,7 @@ const DEFAULTS: AppConfig = {
   readiness: { ...DEFAULT_READINESS },
   sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
-  ui: { closeToTray: true, demoPreference: 'unset' },
+  ui: { closeToTray: true, demoPreference: 'unset', devMode: true },
 };
 
 /** Per-user, machine-local files (survive app updates, never committed). */
@@ -149,6 +156,7 @@ export function loadConfig(): AppConfig {
   }
   // Env overrides (handy for one-off testing without editing files).
   if (process.env.OW_SYNC_SENSOR) merged.sensor = process.env.OW_SYNC_SENSOR as Sensor;
+  if (process.env.OW_DEV_MODE) merged.ui.devMode = process.env.OW_DEV_MODE === '1';
   return merged;
 }
 
