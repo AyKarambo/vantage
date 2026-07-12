@@ -131,6 +131,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.listAccounts, () => provider.listAccounts());
   handle(ch.saveAccount, (_e, input: AccountInput) => provider.saveAccount(input));
   handle(ch.deleteAccount, (_e, battleTag: string) => provider.deleteAccount(battleTag));
+  handle(ch.deleteDetectedAccount, (_e, account: string) => provider.deleteDetectedAccount(account));
   handle(ch.getRanks, () => provider.getRanks());
   handle(ch.setRankAnchor, (_e, input: RankAnchorInput) => provider.setRankAnchor(input));
   handle(ch.mostPlayedHeroes, () => provider.mostPlayedHeroes());

@@ -16,6 +16,7 @@ import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
+import { mergeAccountList } from '../core/accountsManage';
 import type { Role } from '../core/model';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
@@ -40,11 +41,11 @@ import type { GameRecord } from '../core/analytics';
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'removeImported' | 'importedCount'>;
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'removeImported' | 'importedCount'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
-  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel'>;
+  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel' | 'removeAccount'>;
   /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
   masterDataStore: Pick<MasterDataStore, 'all' | 'replace'>;
   /** The online-catalog fetch edge (main-process `net.fetch` of OverFast); injected so this stays Electron-free. */
@@ -110,6 +111,12 @@ export interface DataProviderDeps {
 export function createDataProvider(deps: DataProviderDeps): DataProvider {
   const demoPref = () => deps.getConfig().ui.demoPreference;
   const effectiveMasterData = (): MasterData => mergeMasterData(DEFAULT_MASTER_DATA, deps.masterDataStore.all());
+  // The manageable account list: configured accounts unioned with the accounts
+  // only detected in history (Unknown bucket + unlabelled raw BattleTags),
+  // de-duped by resolveAccount matching. Read live from config + history so it
+  // reflects every account mutation immediately.
+  const accountList = (): AccountSummary[] =>
+    mergeAccountList(deps.getConfig().accounts, deps.history.all().map((g) => g.account));
   return {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
@@ -242,7 +249,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       }
       deps.history.editManual(input.matchId, patch);
     },
-    listAccounts: () => accountList(deps.getConfig().accounts),
+    listAccounts: () => accountList(),
     saveAccount: (input) => {
       const accounts = { ...deps.getConfig().accounts };
       const newLabel = input.label || input.battleTag;
@@ -255,16 +262,34 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (oldLabel && oldLabel !== newLabel) {
         deps.history.relabelAccount(oldLabel, newLabel);
         deps.rankAnchors.relabel(oldLabel, newLabel);
+      } else if (!oldLabel && input.battleTag !== newLabel) {
+        // Labelling a detected raw-tag account: its history rows + anchors are
+        // keyed by the raw BattleTag, so adopt the new label — the raw-tag entry
+        // then de-dupes into this configured one instead of lingering. (A no-op
+        // for a brand-new account with no matching history.)
+        deps.history.relabelAccount(input.battleTag, newLabel);
+        deps.rankAnchors.relabel(input.battleTag, newLabel);
       }
       accounts[input.battleTag] = newLabel;
       deps.persistAccounts(accounts);
-      return accountList(accounts);
+      return accountList();
     },
     deleteAccount: (battleTag) => {
+      // Non-destructive: drops the configured label only. History rows keep their
+      // account value (they'll resurface as a detected-unlabelled entry if any
+      // exist) — deleting match data is the separate deleteDetectedAccount path.
       const accounts = { ...deps.getConfig().accounts };
       delete accounts[battleTag];
       deps.persistAccounts(accounts);
-      return accountList(accounts);
+      return accountList();
+    },
+    deleteDetectedAccount: (account) => {
+      // IRREVERSIBLE (gated behind a renderer confirm): wipe every history row
+      // stored under this exact account value plus its per-role rank anchors.
+      // Touches no config — a detected account was never a configured label.
+      deps.history.deleteByAccount(account);
+      deps.rankAnchors.removeAccount(account);
+      return accountList();
     },
     getRanks: () => rankSummaries(deps),
     mostPlayedHeroes: () => mostPlayedHeroesByAccount(deps),
@@ -498,11 +523,6 @@ function seedImportedAccounts(deps: DataProviderDeps, games: GameRecord[]): numb
   }
   if (added) deps.persistAccounts(accounts);
   return added;
-}
-
-/** Shape the accounts map (battleTag → label) into the contract's summary list. */
-function accountList(accounts: Record<string, string>): AccountSummary[] {
-  return Object.entries(accounts).map(([battleTag, label]) => ({ battleTag, label: label || battleTag }));
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { MatchRecord } from './model';
 import type { GameRecord } from './analytics';
 import { resolveAccount } from './resolvers/account';
+import { UNKNOWN_ACCOUNT } from './accountsManage';
 import { resolveRole } from './resolvers/role';
 import { resolveResult } from './resolvers/result';
 import { resolveGepMapName } from './maps';
@@ -32,7 +33,7 @@ export function matchToGame(
   return {
     matchId: record.matchId,
     timestamp: record.endedAt ?? now(),
-    account: resolveAccount(record.battleTag, accounts) ?? record.battleTag ?? 'Unknown',
+    account: resolveAccount(record.battleTag, accounts) ?? record.battleTag ?? UNKNOWN_ACCOUNT,
     role,
     map: resolveGepMapName(record.mapName) ?? 'Unknown',
     result,

@@ -73,6 +73,7 @@ function harness(config: AppConfig = appConfig()) {
   const history = fakeHistory();
   const notifications: Array<{ title: string; body: string }> = [];
   const captures: Array<{ matchId: string; onSaved: (relPaths: string[]) => void }> = [];
+  const logged: Array<{ matchId: string; account: string; configured: boolean }> = [];
   const deps: MatchPipelineDeps = {
     history,
     aggregator: { handle: () => null },
@@ -86,8 +87,11 @@ function harness(config: AppConfig = appConfig()) {
       notifications.push({ title, body });
     },
     log: () => {},
+    onGameLogged: (payload) => {
+      logged.push(payload);
+    },
   };
-  return { pipeline: createMatchPipeline(deps), history, notifications, captures };
+  return { pipeline: createMatchPipeline(deps), history, notifications, captures, logged };
 }
 
 describe('createMatchPipeline — recordGame dedupe', () => {
@@ -175,6 +179,34 @@ describe('createMatchPipeline — competitive capture gate', () => {
     pipeline.addMatch({ ...capturedMatch('gep-qp'), gameType: 'quickplay' });
     expect(history.games).toHaveLength(0);
     expect(captures).toHaveLength(0); // no screenshot capture scheduled for a dropped game
+  });
+});
+
+describe('createMatchPipeline — onGameLogged (F4)', () => {
+  it('fires once per newly recorded match with the account and its configured status', () => {
+    const { pipeline, logged } = harness(); // config maps Player#1234 → Main
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Main' }));
+    expect(logged).toEqual([{ matchId: 'c-1', account: 'Main', configured: true }]);
+  });
+
+  it('marks an unmapped account as not configured', () => {
+    const { pipeline, logged } = harness();
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Rando#4521' }));
+    expect(logged).toEqual([{ matchId: 'c-1', account: 'Rando#4521', configured: false }]);
+  });
+
+  it('does not fire for a dropped (non-competitive) match or a duplicate', () => {
+    const { pipeline, logged } = harness();
+    pipeline.recordGame(game({ matchId: 'qp', result: 'Win', gameType: 'Unranked' }));
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Main' }));
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Loss', account: 'Main' })); // duplicate id
+    expect(logged.map((p) => p.matchId)).toEqual(['c-1']);
+  });
+
+  it('resolves a captured live match through addMatch and announces it', () => {
+    const { pipeline, logged } = harness();
+    pipeline.addMatch(capturedMatch('gep-1')); // battleTag Player#1234 → Main
+    expect(logged).toEqual([{ matchId: 'gep-1', account: 'Main', configured: true }]);
   });
 });
 

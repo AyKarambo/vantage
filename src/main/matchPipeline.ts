@@ -6,6 +6,8 @@ import type { GepMessage, MatchRecord } from '../core/model';
 import { matchToGame } from '../core/gameRecord';
 import { streak, type GameRecord } from '../core/analytics';
 import { isCompetitive } from '../core/matchFilter';
+import { isConfiguredAccount } from '../core/accountsManage';
+import type { GameLoggedPayload } from '../shared/contract';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
 } from '../core/breakReminder';
@@ -31,6 +33,13 @@ export interface MatchPipelineDeps {
   notify(title: string, body: string): void;
   /** Diagnostic logging sink (console in production). */
   log(...args: unknown[]): void;
+  /**
+   * Fired once per NEWLY recorded competitive match (live or hand-logged),
+   * carrying the account it landed on and whether that account is configured —
+   * the composition root pushes this to the renderer so it can auto-switch the
+   * account filter. Optional: tests and headless paths can omit it.
+   */
+  onGameLogged?(payload: GameLoggedPayload): void;
 }
 
 /**
@@ -59,6 +68,13 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   function recordGame(game: GameRecord): boolean {
     if (!isCompetitive(game.gameType)) return false;
     if (!deps.history.add(game)) return false;
+    // Announce the newly recorded match so the renderer can follow onto the
+    // account just played. `configured` says whether it maps to a known account.
+    deps.onGameLogged?.({
+      matchId: game.matchId,
+      account: game.account,
+      configured: isConfiguredAccount(game.account, deps.getConfig().accounts),
+    });
     const s = streak(deps.history.all());
     const { fire, state } = nextBreakReminder(s, deps.getConfig().breakReminder, reminderState);
     reminderState = state;

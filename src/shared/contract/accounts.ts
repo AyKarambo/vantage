@@ -5,11 +5,33 @@
  * Electron-free so main, preload and the renderer bundle can all share it.
  */
 import type { Role } from '../../core/model';
+import type { AccountKind } from '../../core/accountsManage';
 
-/** One tracked account. */
+/**
+ * One row of the account manager. Beyond the configured `battleTag → label`
+ * mapping this now also carries accounts only DETECTED in history (a raw
+ * BattleTag never labelled, or the `Unknown` bucket), so they can be managed:
+ * `kind` discriminates them and `games` is how many stored matches are
+ * attributed to the account.
+ */
 export interface AccountSummary {
   battleTag: string;
   label: string;
+  kind: AccountKind;
+  games: number;
+}
+
+/**
+ * Pushed to the renderer (via `onGameLogged`) whenever a competitive match is
+ * newly recorded (live or hand-logged). Carries the account it landed on and
+ * whether that account maps to a configured/known account, so the renderer can
+ * auto-switch the dashboard's account filter onto it.
+ */
+export interface GameLoggedPayload {
+  matchId: string;
+  account: string;
+  /** True when {@link account} maps to a configured/known account. */
+  configured: boolean;
 }
 
 /** Create or edit an account. `previousBattleTag` renames the key (removes the old entry). */

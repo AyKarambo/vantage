@@ -18,7 +18,7 @@ import type {
   ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput,
   IgnorePendingReviewsInput,
 } from './inputs';
-import type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
+import type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
 import type { ImportFileResult } from './importFile';
 import type { Role } from '../../core/model';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
@@ -44,8 +44,14 @@ export interface OwStatsApi {
   listAccounts(): Promise<AccountSummary[]>;
   /** Create or edit an account; returns the updated list. */
   saveAccount(input: AccountInput): Promise<AccountSummary[]>;
-  /** Delete an account by battleTag; returns the updated list. */
+  /** Delete a CONFIGURED account by battleTag — removes the label only, history is untouched. */
   deleteAccount(battleTag: string): Promise<AccountSummary[]>;
+  /**
+   * IRREVERSIBLY delete a detected-but-unlabeled account (a raw BattleTag or the
+   * `Unknown` bucket): drops its history rows and per-account rank anchors. The
+   * renderer must gate this behind a confirm dialog. Returns the updated list.
+   */
+  deleteDetectedAccount(account: string): Promise<AccountSummary[]>;
   /** Computed current rank for each anchored (account, role). */
   getRanks(): Promise<RankSummary[]>;
   /** Per-account, per-role most-played hero names (desc by play count) — the Log Match shortlist. */
@@ -167,6 +173,8 @@ export interface OwStatsApi {
   onGepStatus(cb: (s: GepStatusPayload) => void): () => void;
   /** Subscribe to live sync progress (fires per exported game); returns an unsubscribe function. */
   onSyncProgress(cb: (p: SyncProgress) => void): () => void;
+  /** Subscribe to newly recorded competitive matches (live or hand-logged); returns an unsubscribe function. */
+  onGameLogged(cb: (p: GameLoggedPayload) => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -184,6 +192,7 @@ export const EVENT_CHANNELS = {
   onLogEntry: 'push:log-entry',
   onGepStatus: 'push:gep-status',
   onSyncProgress: 'push:sync-progress',
+  onGameLogged: 'push:game-logged',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**
@@ -205,6 +214,7 @@ export const IPC_CHANNELS = {
   listAccounts: 'accounts:list',
   saveAccount: 'accounts:save',
   deleteAccount: 'accounts:delete',
+  deleteDetectedAccount: 'accounts:delete-detected',
   getRanks: 'rank:list',
   mostPlayedHeroes: 'hero:most-played',
   setRankAnchor: 'rank:set-anchor',

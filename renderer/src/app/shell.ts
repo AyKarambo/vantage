@@ -6,7 +6,8 @@
  */
 import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
-import type { DashboardData, GepStatusPayload } from '../../../src/shared/contract';
+import type { DashboardData, GameLoggedPayload, GepStatusPayload } from '../../../src/shared/contract';
+import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
@@ -197,8 +198,26 @@ export class App {
       if (s.data && !s.stale && !s.error) this.statusLabel.textContent = statusText(s.data);
     }, 60_000);
     void store.refresh();
+    // Follow onto the account a newly logged competitive match landed on (F4).
+    bridge.onGameLogged((payload) => this.onGameLogged(payload));
     // The first-run demo prompt + tour are driven from onState once real data
     // has loaded (so the persisted demo choice is known before we decide).
+  }
+
+  /**
+   * A competitive match was just recorded (live or hand-logged). When the view
+   * is scoped to a specific account and the match landed on a DIFFERENT
+   * configured/known account, switch the account filter onto it so the dashboard
+   * follows the account being played — never from "All accounts", never for an
+   * Unknown/unmapped account (see {@link shouldAutoSwitch}). Otherwise just pull
+   * the fresh data in so the new match shows without waiting for a window focus.
+   */
+  private onGameLogged(payload: GameLoggedPayload): void {
+    if (shouldAutoSwitch(store.get().filters.account, payload)) {
+      store.setFilters({ account: payload.account }); // persists + refreshes
+    } else {
+      void store.refresh();
+    }
   }
 
   private build(): HTMLElement {

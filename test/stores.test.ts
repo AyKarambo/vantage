@@ -167,6 +167,20 @@ describe('RankAnchorStore', () => {
     expect(s.get('Alt', 'damage')).toBeTruthy();
   });
 
+  it('removeAccount drops every anchor for an account across roles, leaving others (F3)', () => {
+    const s = new RankAnchorStore(dir);
+    s.set({ account: 'Rando#4521', role: 'tank', tier: 'Gold', division: 3, progressPct: 40, setAt: 1 });
+    s.set({ account: 'Rando#4521', role: 'damage', tier: 'Silver', division: 2, progressPct: 10, setAt: 1 });
+    s.set({ account: 'Karambo', role: 'support', tier: 'Bronze', division: 5, progressPct: 0, setAt: 1 });
+    expect(s.removeAccount('Rando#4521')).toBe(2);
+    expect(s.get('Rando#4521', 'tank')).toBeUndefined();
+    expect(s.get('Rando#4521', 'damage')).toBeUndefined();
+    expect(s.get('Karambo', 'support')).toBeTruthy();
+    // Persisted, and removing an absent account is a no-op.
+    expect(new RankAnchorStore(dir).get('Karambo', 'support')).toBeTruthy();
+    expect(s.removeAccount('Ghost')).toBe(0);
+  });
+
   it('relocate re-points and reloads from the new dir', () => {
     const s = new RankAnchorStore(dir);
     s.set({ account: 'Main', role: 'tank', tier: 'Gold', division: 3, progressPct: 40, setAt: 1 });

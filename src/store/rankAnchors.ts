@@ -53,6 +53,19 @@ export class RankAnchorStore {
     return record;
   }
 
+  /** Drop every anchor keyed to an account (across roles) — the rank-anchor half
+   *  of deleting a detected account. Returns how many anchors were removed. */
+  removeAccount(account: string): number {
+    let changed = 0;
+    for (const a of Object.values(this.state)) {
+      if (a.account !== account) continue;
+      delete this.state[rankKey(a.account, a.role)];
+      changed++;
+    }
+    if (changed) this.save();
+    return changed;
+  }
+
   /** Move every anchor from one account label to another (keeps rank tracks intact on rename). */
   relabel(from: string, to: string): number {
     if (from === to) return 0;

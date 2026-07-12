@@ -4,6 +4,7 @@ import { DatabaseSync, type StatementSync, type SQLInputValue } from 'node:sqlit
 import type { GameRecord, MatchReview } from '../core/analytics';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
 import { resolveGepMapName } from '../core/maps';
+import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 
 /**
  * Reconstruct a {@link GameRecord} from its stored `data` blob, normalizing a
@@ -107,6 +108,7 @@ export class HistoryStore {
   private importedCountStmt!: StatementSync;
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
+  private deleteByAccountStmt!: StatementSync;
 
   constructor(dir: string) {
     this.dir = dir;
@@ -163,6 +165,43 @@ export class HistoryStore {
     }
     this.updateStmt.run(...updateValues(game));
     return true;
+  }
+
+  /**
+   * Best-effort recovery of legacy `Unknown` rows: for each row stored under
+   * {@link UNKNOWN_ACCOUNT}, re-resolve the local roster BattleTag against the
+   * current accounts map and, when it now maps to a configured account, rewrite
+   * the row's account to that label. Idempotent — a recovered row is no longer
+   * `Unknown`, so a re-run skips it; rows with no recoverable/mapping tag stay
+   * Unknown. Returns how many rows were re-attributed.
+   */
+  reresolve(accounts: Record<string, string>): number {
+    const rows = this.allStmt.all()
+      .map((row) => parseGame(row.data))
+      .filter((g) => g.account === UNKNOWN_ACCOUNT);
+    if (!rows.length) return 0;
+    let changed = 0;
+    this.tx(() => {
+      for (const g of rows) {
+        const label = recoverableAccount(g.roster, accounts);
+        if (!label || label === g.account) continue;
+        g.account = label;
+        this.updateStmt.run(...updateValues(g));
+        changed++;
+      }
+    });
+    return changed;
+  }
+
+  /**
+   * IRREVERSIBLY delete every game stored under an exact account value (a raw
+   * BattleTag or the `Unknown` bucket) — the destructive half of managing a
+   * detected-but-unlabeled account. Matches the denormalized `account` column
+   * exactly, so it never touches a configured account's relabelled rows. Returns
+   * how many rows were removed.
+   */
+  deleteByAccount(account: string): number {
+    return Number(this.deleteByAccountStmt.run(account).changes);
   }
 
   /** Rewrite the account label on every matching game (one transaction). Returns the count changed. */
@@ -400,6 +439,7 @@ export class HistoryStore {
     this.deleteImportedStmt = this.db.prepare(
       `DELETE FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
     );
+    this.deleteByAccountStmt = this.db.prepare('DELETE FROM games WHERE account = ?');
   }
 
   /**

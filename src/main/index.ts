@@ -31,7 +31,7 @@ import { createDataProvider } from './dataProvider';
 import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GepStatusPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -117,6 +117,13 @@ function main(): void {
   // One-time import of a pre-SQLite history.json — kept frozen as a backup. The
   // legacy file always lived in the default data dir, wherever the DB is now.
   migrateJsonHistory(history, path.join(dataDir, 'history.json'));
+
+  // Best-effort, idempotent legacy recovery (Feedback F1): re-attribute rows
+  // stored as `account: 'Unknown'` whose captured local roster BattleTag now
+  // maps to a configured account, so they leave the Unknown bucket. Only helps
+  // pre-#129 rows that still carry a local roster tag; the rest stay Unknown.
+  const recoveredUnknown = history.reresolve(config.accounts);
+  if (recoveredUnknown) log.info('store', 'recovered legacy Unknown rows', { count: recoveredUnknown });
 
   // First-run detection is config-driven, not file-existence: HistoryStore's
   // constructor above already created history.db in dataDir, so a "does
@@ -234,6 +241,8 @@ function main(): void {
   }
 
   let pushSyncProgress: (done: number, total: number) => void = () => {};
+  // Filled in once the dashboard window exists (mirrors pushEntry/pushSyncProgress).
+  let pushGameLogged: (payload: GameLoggedPayload) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
@@ -273,6 +282,9 @@ function main(): void {
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
+    // Auto-switch (Feedback F4): tell the renderer which account a newly recorded
+    // competitive match landed on, so it can follow onto a configured account.
+    onGameLogged: (payload) => pushGameLogged(payload),
   });
 
   // Truthful connection indicator: folds GEP signals into the four-state
@@ -421,6 +433,7 @@ function main(): void {
     tray.setHealth(p.state);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
+  pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
