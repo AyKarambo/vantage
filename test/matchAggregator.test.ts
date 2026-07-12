@@ -114,6 +114,30 @@ describe('MatchAggregator per-hero stats', () => {
     expect(ph.Tracer).toMatchObject({ eliminations: 10, deaths: 2, assists: 3, damage: 4000, role: 'damage' });
     expect(ph.Genji).toMatchObject({ eliminations: 15, deaths: 4, assists: 4, damage: 10000 });
   });
+
+  it('records on-hero minutes and merges same-hero swap segments into one line', () => {
+    let t = 0;
+    const agg = new MatchAggregator(() => t);
+    const at = (ms: number, m: GepMessage) => {
+      t = ms;
+      return agg.handle(m);
+    };
+    at(0, event('match_start'));
+    agg.handle(info('game_info', 'battle_tag', 'P#1'));
+    agg.handle(info('match_info', 'pseudo_match_id', 'm-merge'));
+    // Tracer 60s in, swap to Genji at 3 min, back to Tracer at 5 min, end at 10 min.
+    at(60_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 10, deaths: 2, assists: 3, damage: 4000 }));
+    at(180_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', role: 'damage', kills: 18, deaths: 4, assists: 5, damage: 9000 }));
+    at(300_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', kills: 25, deaths: 5, assists: 7, damage: 12000 }));
+    agg.handle(info('match_info', 'match_outcome', 'Victory'));
+    const rec = at(600_000, event('match_end'));
+
+    expect(rec?.perHero).toHaveLength(2); // Tracer collapsed from two segments
+    const ph = Object.fromEntries((rec!.perHero ?? []).map((h) => [h.hero, h]));
+    // First hero clock starts at match start (0): Tracer 0→3min + 5→10min = 8 min.
+    expect(ph.Tracer).toMatchObject({ eliminations: 17, deaths: 3, assists: 5, damage: 7000, minutes: 8 });
+    expect(ph.Genji).toMatchObject({ eliminations: 8, deaths: 2, assists: 2, damage: 5000, minutes: 2 });
+  });
 });
 
 describe('MatchAggregator roster retention', () => {

@@ -51,6 +51,7 @@ describe('matchToGame', () => {
     expect(game?.perHero).toEqual([{
       hero: 'Tracer', role: 'damage',
       eliminations: 20, deaths: 5, assists: 7, damage: 9000, healing: 0, mitigation: 0,
+      minutes: 10, // single hero → time on hero = match duration
     }]);
   });
 

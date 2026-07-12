@@ -4,6 +4,7 @@
  * Pure and I/O-free — consumed by both main and the browser preview.
  */
 import type { GameRecord, HeroSummary, HeroStat } from './types';
+import { mergeHeroStats } from '../perHero';
 
 /** Exact per-hero stats for the local player, aggregated across games. */
 export function heroStats(games: GameRecord[]): HeroSummary[] {
@@ -13,8 +14,10 @@ export function heroStats(games: GameRecord[]): HeroSummary[] {
     const decidedWin = g.result === 'Win' ? 1 : 0;
     const decidedLoss = g.result === 'Loss' ? 1 : 0;
     const minutes = g.durationMinutes ?? 0;
+    // Merge same-hero swap segments first, so a hero used twice in one match
+    // counts as one game and isn't double-summed.
     const rows: HeroStat[] = g.perHero?.length
-      ? g.perHero
+      ? mergeHeroStats(g.perHero)
       : g.heroes.map((hero) => ({ hero, role: g.role, eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 }));
 
     const sharedMinutes = rows.length ? minutes / rows.length : 0;
@@ -33,7 +36,8 @@ export function heroStats(games: GameRecord[]): HeroSummary[] {
       t.games += 1;
       t.wins += decidedWin;
       t.losses += decidedLoss;
-      t.minutes += sharedMinutes;
+      // Prefer the hero's real on-hero minutes; fall back to an equal split.
+      t.minutes += r.minutes != null ? r.minutes : sharedMinutes;
       totals.set(r.hero, t);
     }
   }

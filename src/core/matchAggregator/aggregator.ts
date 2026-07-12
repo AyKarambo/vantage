@@ -9,6 +9,7 @@
  * normalized messages in (guardrail #1: GEP is the only live data source).
  */
 import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from '../model';
+import { mergeHeroStats } from '../perHero';
 import { K } from './keys';
 import { asNumber, asString, parseRoster } from './gepValues';
 
@@ -118,10 +119,16 @@ export class MatchAggregator {
   private trackHero(player: RosterPlayer): void {
     const c = this.current;
     if (player.heroName && player.heroName !== c.currentHero) {
-      if (c.currentHero) c.perHero.push(closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum));
+      const nowMs = this.now();
+      if (c.currentHero) {
+        const minutes = Math.max(0, (nowMs - (c.currentHeroStartMs ?? nowMs)) / 60000);
+        c.perHero.push(closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum, minutes));
+      }
       c.currentHero = player.heroName;
       c.currentRole = player.heroRole ?? c.currentRole;
       c.heroStart = { ...c.lastCum }; // new hero starts at the swap-point cumulative
+      // First hero's clock starts at match start; later heroes at the swap moment.
+      c.currentHeroStartMs = c.perHero.length === 0 && c.record.startedAt != null ? c.record.startedAt : nowMs;
     } else if (player.heroRole) {
       c.currentRole = player.heroRole;
     }
@@ -164,11 +171,14 @@ export class MatchAggregator {
     }
 
     if (this.current.currentHero) {
+      const endMs = rec.endedAt ?? this.now();
+      const minutes = Math.max(0, (endMs - (this.current.currentHeroStartMs ?? endMs)) / 60000);
       this.current.perHero.push(
-        closeHero(this.current.currentHero, this.current.currentRole, this.current.heroStart, this.current.lastCum),
+        closeHero(this.current.currentHero, this.current.currentRole, this.current.heroStart, this.current.lastCum, minutes),
       );
     }
-    if (this.current.perHero.length) rec.perHero = this.current.perHero;
+    // Collapse same-hero swap segments (Tracer → Genji → Tracer) into one line each.
+    if (this.current.perHero.length) rec.perHero = mergeHeroStats(this.current.perHero);
 
     if (this.current.rosterAll.size) {
       rec.roster = [...this.current.rosterAll.entries()]
@@ -227,6 +237,8 @@ interface MutableMatch {
   perHero: HeroStat[];
   currentHero?: string;
   currentRole?: string;
+  /** Wall-clock ms the current hero segment began (match start for the first hero). */
+  currentHeroStartMs?: number;
   heroStart: Snap;
   lastCum: Snap;
 }
@@ -254,9 +266,13 @@ function slotOf(key: string): number {
   return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
 }
 
-/** A hero's stats = cumulative-out − cumulative-in, floored at 0. */
-function closeHero(hero: string, role: string | undefined, start: Snap, end: Snap): HeroStat {
-  return {
+/**
+ * A hero's stats = cumulative-out − cumulative-in, floored at 0. `minutes` is the
+ * timed segment length; it's only attached when positive, so a degenerate 0-length
+ * segment stays absent and consumers fall back to an equal split.
+ */
+function closeHero(hero: string, role: string | undefined, start: Snap, end: Snap, minutes: number): HeroStat {
+  const stat: HeroStat = {
     hero,
     role: toRole(role),
     eliminations: Math.max(0, end.eliminations - start.eliminations),
@@ -266,6 +282,8 @@ function closeHero(hero: string, role: string | undefined, start: Snap, end: Sna
     healing: Math.max(0, end.healing - start.healing),
     mitigation: Math.max(0, end.mitigation - start.mitigation),
   };
+  if (minutes > 0) stat.minutes = minutes;
+  return stat;
 }
 
 function toRole(raw: string | undefined): Role | undefined {

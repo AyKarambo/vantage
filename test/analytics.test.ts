@@ -99,6 +99,20 @@ describe('heroStats', () => {
     expect(ana.totals.healing).toBe(21000);
     expect(ana.kda).toBeCloseTo((16 + 36) / 10);
   });
+
+  it('merges same-hero swap segments so a hero used twice in one match counts once', () => {
+    const games: GameRecord[] = [
+      game({ result: 'Win', map: 'A', role: 'damage', heroes: ['Tracer', 'Genji'], durationMinutes: 10,
+        perHero: [
+          { hero: 'Tracer', role: 'damage', eliminations: 5, deaths: 1, assists: 2, damage: 2000, healing: 0, mitigation: 0, minutes: 3 },
+          { hero: 'Genji', role: 'damage', eliminations: 4, deaths: 2, assists: 1, damage: 1500, healing: 0, mitigation: 0, minutes: 2 },
+          { hero: 'Tracer', role: 'damage', eliminations: 7, deaths: 1, assists: 3, damage: 3000, healing: 0, mitigation: 0, minutes: 5 },
+        ] }),
+    ];
+    const byHeroName = Object.fromEntries(heroStats(games).map((h) => [h.hero, h]));
+    expect(byHeroName.Tracer.games).toBe(1); // not 2 — swap segments merged
+    expect(byHeroName.Tracer.totals.damage).toBe(5000);
+  });
 });
 
 describe('sample dataset', () => {

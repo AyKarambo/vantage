@@ -25,6 +25,7 @@ import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
+import { heroLines } from '../../../src/core/perHero';
 import { PALETTE, wrHsl } from '../theme';
 import type { ViewContext } from './view';
 
@@ -88,7 +89,7 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
   return [
     header(d, ctx),
     scoreboardSection(d),
-    perHeroSection(d.perHero),
+    perHeroSection(d.perHero, d.durationMinutes),
     competitiveSection(d.competitive, d.srDelta),
     gradesSection(d, ctx),
     playerHistorySection(d),
@@ -175,31 +176,40 @@ function scoreboardSection(d: MatchDetail): HTMLElement | null {
 
 // --- per-hero tabs ------------------------------------------------------------
 
-function perHeroSection(perHero: HeroStat[]): HTMLElement | null {
+function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined): HTMLElement | null {
   if (!perHero.length) return null;
+  // Counting stats are per-10-minutes on that hero (real swap-timed minutes when
+  // available, else an equal split of the match); KDA stays a raw ratio. A match
+  // with no usable duration dashes the per-10 stats but still shows KDA.
+  const lines = heroLines(perHero, durationMinutes);
   const body = h('div', { class: 'stat-grid stat-grid--wide' });
   const draw = (hero: string): void => {
-    const s = perHero.find((x) => x.hero === hero) ?? perHero[0];
-    const kda = (s.eliminations + s.assists) / Math.max(s.deaths, 1);
+    const s = lines.find((x) => x.hero === hero) ?? lines[0];
+    const p = s.per10;
     render(body,
-      statBox(String(s.eliminations), 'Eliminations'),
-      statBox(String(s.assists), 'Assists'),
-      statBox(String(s.deaths), 'Deaths'),
-      statBox(kda.toFixed(1), 'KDA'),
-      statBox(fmt(s.damage), 'Damage'),
-      statBox(fmt(s.healing), 'Healing'),
-      statBox(fmt(s.mitigation), 'Mitigation'),
+      statBox(per10Fixed(p?.eliminations), 'Elims/10'),
+      statBox(per10Fixed(p?.assists), 'Assists/10'),
+      statBox(per10Fixed(p?.deaths), 'Deaths/10'),
+      statBox(s.kda.toFixed(1), 'KDA'),
+      statBox(fmt(p?.damage), 'DMG/10'),
+      statBox(fmt(p?.healing), 'HEAL/10'),
+      statBox(fmt(p?.mitigation), 'MIT/10'),
     );
   };
-  draw(perHero[0].hero);
-  const tabs = perHero.length > 1
+  draw(lines[0].hero);
+  const tabs = lines.length > 1
     ? segmented({
-        options: perHero.map((s) => ({ value: s.hero, label: s.hero })),
-        value: perHero[0].hero,
+        options: lines.map((s) => ({ value: s.hero, label: s.hero })),
+        value: lines[0].hero,
         onChange: draw,
       })
     : null;
-  return card({ title: 'Per hero', sub: 'your line on each hero this match', actions: tabs }, body);
+  return card({ title: 'Per hero', sub: 'per 10 minutes on hero · KDA is a ratio', actions: tabs }, body);
+}
+
+/** Per-10 for the E/D/A stats: one decimal, or a dash when minutes are unknown. */
+function per10Fixed(v: number | undefined): string {
+  return v == null ? '–' : v.toFixed(1);
 }
 
 // --- competitive progress (calculated from your rank anchor + logged SR) ------

@@ -25,6 +25,8 @@ export function matchToGame(
           hero: record.heroes[0], role,
           eliminations: record.eliminations ?? 0, deaths: record.deaths ?? 0, assists: record.assists ?? 0,
           damage: record.damage ?? 0, healing: record.healing ?? 0, mitigation: record.mitigation ?? 0,
+          // Single hero → the whole match was spent on it.
+          ...(record.durationMinutes != null ? { minutes: record.durationMinutes } : {}),
         }]
       : undefined;
   return {

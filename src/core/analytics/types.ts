@@ -178,7 +178,7 @@ export interface FocusEntry extends FocusItem {
 export interface HeroSummary extends WinLoss {
   hero: string;
   role?: Role;
-  totals: Omit<HeroStat, 'hero' | 'role'>;
+  totals: Omit<HeroStat, 'hero' | 'role' | 'minutes'>;
   /** Per-10-minute averages (null when no duration data). */
   per10: Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'> | null;
   kda: number; // (elims + assists) / max(deaths, 1)

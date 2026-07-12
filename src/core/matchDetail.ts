@@ -8,6 +8,7 @@ import { sourceOf } from './source';
 import { rankAfterMatch, rankKey, type RankAnchorMap } from './rank';
 import { resolveRole } from './resolvers/role';
 import { playerHistory } from './playerIndex';
+import { mergeHeroStats } from './perHero';
 
 /**
  * Full drill-down payload for one match. Pure and I/O-free, mirroring the
@@ -45,7 +46,7 @@ export function matchDetail(
     performance: game.performance,
     finalScore: game.finalScore,
     heroes: game.heroes,
-    perHero: game.perHero ?? [],
+    perHero: mergeHeroStats(game.perHero ?? []),
     mental: game.mental,
     review: game.review,
     scoreboard: scoreboardOf(game),
@@ -63,7 +64,7 @@ export function matchDetail(
 function scoreboardOf(game: GameRecord): ScoreboardEntry[] | undefined {
   if (game.roster?.length) return game.roster.map((p) => rosterEntry(p, game));
   if (game.perHero?.length) {
-    return game.perHero.map((s) => ({
+    return mergeHeroStats(game.perHero).map((s) => ({
       name: game.account,
       hero: s.hero,
       role: s.role,

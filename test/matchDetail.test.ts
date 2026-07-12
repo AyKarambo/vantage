@@ -158,6 +158,22 @@ describe('matchDetail degradation contract', () => {
     expect(d!.screenshots).toEqual(['vantage-media://screenshots/full-1/end-of-match.png']);
   });
 
+  it('merges duplicate same-hero perHero segments at read time (panel + local scoreboard)', () => {
+    const dup = minimal({
+      matchId: 'dup-1', durationMinutes: 10, heroes: ['Tracer', 'Genji'],
+      perHero: [
+        { hero: 'Tracer', role: 'damage', eliminations: 5, deaths: 1, assists: 2, damage: 2000, healing: 0, mitigation: 0, minutes: 3 },
+        { hero: 'Genji', role: 'damage', eliminations: 4, deaths: 2, assists: 1, damage: 1500, healing: 0, mitigation: 0, minutes: 2 },
+        { hero: 'Tracer', role: 'damage', eliminations: 7, deaths: 1, assists: 3, damage: 3000, healing: 0, mitigation: 0, minutes: 5 },
+      ],
+    });
+    const d = matchDetail([dup], 'dup-1')!;
+    expect(d.perHero).toHaveLength(2); // one chip per hero, not three
+    expect(d.perHero.find((s) => s.hero === 'Tracer')).toMatchObject({ eliminations: 12, damage: 5000, minutes: 8 });
+    // No roster → local-only scoreboard fallback, which merges too.
+    expect(d.scoreboard).toHaveLength(2);
+  });
+
   it('falls back to local-only scoreboard rows from perHero when no roster exists', () => {
     const g = minimal({
       matchId: 'per-hero-only',
