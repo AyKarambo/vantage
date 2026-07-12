@@ -122,6 +122,12 @@ export interface OwStatsApi {
   getAppSettings(): Promise<AppUiSettings>;
   /** Persist app-behavior settings; returns the applied values. */
   setAppSettings(patch: Partial<AppUiSettings>): Promise<AppUiSettings>;
+  /**
+   * Store the Overwolf dev key at ~/.ow-cli/dev-key (where the launcher reads it)
+   * — a secret, never persisted into app config. Returns whether a key is now
+   * present. Takes effect on the next launch (Dev Mode auth is start-time).
+   */
+  setDevKey(key: string): Promise<{ hasKey: boolean }>;
   /** Version + build/runtime facts + support contact (the About screen). */
   getAppInfo(): Promise<AppInfo>;
   /** Open a maintainer-provided external URL (mailto:/https:) via the sanctioned
@@ -241,6 +247,7 @@ export const IPC_CHANNELS = {
   getGepStatus: 'status:gep',
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',
+  setDevKey: 'settings:set-dev-key',
   getAppInfo: 'app:info',
   openExternal: 'app:open-external',
   getDataLocation: 'settings:get-data-location',
