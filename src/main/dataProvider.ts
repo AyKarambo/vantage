@@ -559,7 +559,6 @@ function rankSummaries(deps: DataProviderDeps): RankSummary[] {
       division: s?.division ?? a.division,
       progressPct: s?.progressPct ?? a.progressPct,
       protected: s?.protected ?? false,
-      needsReanchor: s?.needsReanchor ?? false,
     };
   });
 }

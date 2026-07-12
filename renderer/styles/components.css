@@ -1085,6 +1085,16 @@ table.data tbody tr:hover {
   color: var(--accent-bright);
   font-size: 12px;
 }
+/* Account name over its calculated rank line (when an anchor is set). */
+.acct-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.acct-menu-label .acct-menu-rank {
+  font-size: 11px;
+}
 .acct-menu-sep {
   height: 1px;
   background: var(--border);

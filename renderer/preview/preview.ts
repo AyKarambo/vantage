@@ -126,7 +126,7 @@ const previewRanks = (): RankSummary[] => {
       account: a.account, role: a.role,
       tier: s?.tier ?? a.tier, division: s?.division ?? a.division,
       progressPct: s?.progressPct ?? a.progressPct,
-      protected: s?.protected ?? false, needsReanchor: s?.needsReanchor ?? false,
+      protected: s?.protected ?? false,
     };
   });
 };

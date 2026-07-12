@@ -3,8 +3,9 @@ import type { AccountSummary, RankSummary, Role } from '../../../../src/shared/c
 import { bridge } from '../../bridge';
 import { button, card, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
-import { rankLabel, roleLabel } from '../../format';
+import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
+import { rankParts } from '../../../../src/core/rankDisplay';
 import { store } from '../../store';
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string }> = [
@@ -143,10 +144,12 @@ export function accountsCard(): HTMLElement {
   }
 
   function ranksLine(account: string, accRanks: RankSummary[]): HTMLElement {
-    const pills = accRanks.map((r) => pill(
-      `${roleLabel(r.role)}: ${r.needsReanchor ? `${rankLabel(r.tier, r.division)} · set %` : `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct)}%`}${r.protected ? ' 🛡' : ''}`,
-      'accent',
-    ));
+    const pills = accRanks.map((r) => {
+      // Shared rank parts — no movement arrow here (Overview KPI only), identical
+      // shield/buffer rendering to every other surface.
+      const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected });
+      return pill(`${roleLabel(r.role)}: ${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`, 'accent');
+    });
     return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' } },
       ...(pills.length ? pills : [h('span', { class: 'hint' }, 'No rank set yet')]),
       button('Set rank', { variant: 'ghost', onClick: () => openSetRank(account, accRanks, reload) }),
@@ -184,7 +187,9 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
       if (ex) {
         state.tier = ex.tier;
         state.division = ex.division;
-        state.pct = ex.needsReanchor ? '' : String(Math.round(ex.progressPct));
+        // Seed the % from the tracked rank (a negative protected buffer seeds as-is —
+        // the picker accepts negatives and its hint explains rank protection).
+        state.pct = String(Math.round(ex.progressPct));
       }
     };
     seed(state.role);

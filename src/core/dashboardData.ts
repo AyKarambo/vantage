@@ -19,7 +19,7 @@ import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
-import { currentRank, rankKey, type RankAnchorMap } from './rank';
+import { currentRank, rankKey, rankToPoints, type RankAnchorMap } from './rank';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
@@ -65,6 +65,9 @@ export function computeDashboard(
   // so switching accounts in the sidebar re-points the rank too.
   const primaryAccount = filters.account && filters.account !== 'all' ? filters.account : topAccount(all);
   const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount, filters.role);
+  // Per-account rank for the sidebar's account-switcher popover — the account's
+  // most-played anchored role, no movement (the arrow is Overview-KPI-only).
+  const accountRanks = accountRanksOf(all, manual?.rankAnchors);
   // Long ranges (all-time, >90d) bucket the trend by week; a season (~63d) and
   // shorter windows stay daily, matching the pre-'season' behavior of the old 90.
   const days = filters.days ?? 30;
@@ -110,6 +113,7 @@ export function computeDashboard(
     streak: streak(games),
     progression: progression(games),
     ...(primaryRank ? { primaryRank } : {}),
+    accountRanks,
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
     byRole: byRole(games),
     byAccount: byAccount(games),
@@ -314,13 +318,37 @@ function primaryRankOf(
   // Honor an active Role filter that has an anchor here; else most-played.
   const filtered = anchored.find((r) => r === roleFilter);
   const role = filtered ?? mostPlayed;
+  const anchor = anchors[rankKey(account, role)];
   const rank = currentRank(all, anchors, account, role);
-  if (!rank) return undefined;
+  if (!rank || !anchor) return undefined;
   return {
     account, role,
     tier: rank.tier, division: rank.division, progressPct: rank.progressPct,
-    protected: rank.protected, needsReanchor: rank.needsReanchor,
+    protected: rank.protected,
+    // Net anchor→now movement in ladder %-points (positive = climbed). Measured
+    // over the FULL history for this (account, role) — like the rank itself — so
+    // it is independent of the active date filter (spec Area A).
+    movement: rankToPoints(rank) - rankToPoints(anchor),
   };
+}
+
+/**
+ * The per-account rank shown in the account-switcher popover: each account's
+ * most-played anchored role's calculated rank (no active Role filter, no
+ * movement arrow). Only accounts with a rank anchor appear; the "All accounts"
+ * scope has no single rank and is simply absent from the map.
+ */
+function accountRanksOf(
+  all: GameRecord[],
+  anchors: RankAnchorMap | undefined,
+): DashboardData['accountRanks'] {
+  const out: DashboardData['accountRanks'] = {};
+  if (!anchors) return out;
+  for (const account of distinct(all.map((g) => g.account))) {
+    const r = primaryRankOf(all, anchors, account);
+    if (r) out[account] = { tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected };
+  }
+  return out;
 }
 
 const distinct = <T>(arr: T[]): T[] => [...new Set(arr)];

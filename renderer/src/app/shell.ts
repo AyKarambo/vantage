@@ -19,6 +19,7 @@ import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, signed } from '../format';
+import { rankParts } from '../../../src/core/rankDisplay';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
@@ -471,14 +472,27 @@ export class App {
   private openAccountSwitcher(anchor: HTMLElement, d: DashboardData): void {
     const current = d.filters.account;
     openPopover(anchor, (close) => {
-      const item = (label: string, active: boolean, run: () => void): HTMLElement =>
-        h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
-          h('span', null, label),
+      // A per-account rank line, when that account has an anchor set. Same shared
+      // parts as every other surface (no movement arrow — Overview KPI only), so
+      // protection reads identically here. "All accounts" has no single rank.
+      const rankSub = (account: string): HTMLElement | null => {
+        const rk = d.accountRanks[account];
+        if (!rk) return null;
+        const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected });
+        return h('span', { class: 'acct-menu-rank u-dim' }, `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`);
+      };
+      const item = (label: string, active: boolean, run: () => void, account?: string): HTMLElement => {
+        const sub = account ? rankSub(account) : null;
+        return h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
+          sub
+            ? h('span', { class: 'acct-menu-label' }, h('span', null, label), sub)
+            : h('span', null, label),
           active ? h('span', { class: 'acct-menu-check' }, '✓') : null,
         );
+      };
       return h('div', { class: 'acct-menu' },
         item('All accounts', current === 'all', () => store.setFilters({ account: 'all' })),
-        ...d.options.accounts.map((a) => item(a, current === a, () => store.setFilters({ account: a }))),
+        ...d.options.accounts.map((a) => item(a, current === a, () => store.setFilters({ account: a }), a)),
         h('div', { class: 'acct-menu-sep' }),
         item('Manage accounts →', false, () => store.setView('settings')),
       );
@@ -684,10 +698,11 @@ function routeKey(view: ViewId, matchId?: string): string {
 function rankLine(d: DashboardData): string {
   const r = d.primaryRank;
   if (r) {
-    if (r.needsReanchor) return `${rankLabel(r.tier, r.division)} · set %`;
-    // A protected rank carries a negative %; the shield keeps that from reading as broken.
-    const shield = r.protected ? ' 🛡' : '';
-    return `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct)}%${shield}`;
+    // Shared parts — no `movement` passed, so the sidebar shows no arrow (that's
+    // the Overview KPI's job). The shield keeps a protected negative % from reading
+    // as broken.
+    const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected });
+    return `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
   }
   return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }

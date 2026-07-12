@@ -73,10 +73,6 @@ export function rankTrendFor(games: GameRecord[], refOrdinal: number, anchors: R
 
     const start = computeRank(anchor, comps(games, account, role, anchor.setAt, measurableStart - 1));
     const end = computeRank(anchor, comps(games, account, role, anchor.setAt, refOrdinal));
-    // Forward-defensive: the current engine never emits needsReanchor=true from computeRank
-    // (every applyMatch/stateFromAnchor branch sets it false) — the guard exists so a future
-    // engine change degrades to silence rather than fabricated evidence.
-    if (start.needsReanchor || end.needsReanchor) continue;
 
     // ASYMMETRIC bars (err toward silence): CLIMBING silences on any net-positive movement,
     // however thin the sample — nagging a provably-climbing player is the one outcome the

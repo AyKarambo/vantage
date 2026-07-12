@@ -34,17 +34,12 @@ export interface RankAnchor extends RankPosition {
 export interface RankState extends RankPosition {
   /**
    * Holding the division after a loss that would have dropped it — `progressPct` carries
-   * the true negative value instead of clamping to 0. A further loss demotes; a win or
-   * draw adds its delta on top of the carry, clearing protection once the total is
-   * positive again. Mirrors Overwatch's rank-protection buffer (shown negative in-game).
+   * the true negative value instead of clamping to 0. A further loss demotes (carrying the
+   * buffer into the lower division and clearing protection); a win or draw adds its delta on
+   * top of the carry, clearing protection once the total is positive again. Mirrors
+   * Overwatch's rank-protection buffer (shown negative in-game).
    */
   protected: boolean;
-  /**
-   * A protected loss demoted the division and the new intra-division % is
-   * unknown — the app does not fabricate it. `progressPct` is meaningless while
-   * this is true; the next logged match (or a manual re-anchor) sets the %.
-   */
-  needsReanchor: boolean;
 }
 
 /** One competitive match's contribution to the ladder. */

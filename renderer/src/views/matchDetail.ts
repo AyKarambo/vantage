@@ -8,7 +8,8 @@
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
+import { fmt, relTime, roleLabel, signed } from '../format';
+import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
@@ -227,6 +228,15 @@ const NOTE_SUB: Record<string, string> = {
 function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HTMLElement | null {
   if (!c) return null;
   const withinDivision = c.progressPct != null ? c.progressPct / 100 : null;
+  // Shared rank parts (no movement arrow on match detail). A reconstructed
+  // (backward) match flattens protection, so never draw the 🛡 there even if a
+  // stray flag leaked through — it would imply a live buffer it doesn't have (G5).
+  const parts = c.tier != null && c.division != null
+    ? rankParts({
+        tier: c.tier, division: c.division, progressPct: c.progressPct ?? 0,
+        protected: (c.protected ?? false) && c.note !== 'reconstructed',
+      })
+    : null;
   return card(
     {
       title: 'Competitive progress',
@@ -234,23 +244,20 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
       actions: pill(NOTE_LABEL[c.note] ?? c.note, 'accent'),
     },
     h('div', { class: 'detail-progress' },
-      c.tier != null && c.division != null
+      parts
         ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-            h('span', { class: 'detail-rank' }, rankLabel(c.tier, c.division)),
-            c.protected ? pill('🛡 Rank protected', 'draw') : null,
+            h('span', { class: 'detail-rank' }, parts.rankLabel),
+            parts.shield ? pill('🛡 Rank protected', 'draw') : null,
           )
         : null,
-      c.needsReanchor
-        ? h('div', { class: 'hint', style: { color: 'var(--loss-text)' } },
-            'Demoted after a protected loss — set your new rank on the Settings › Accounts panel to resume tracking.')
-        : c.protected
-          // Protected = a negative carry; a clamped division bar labelled "-19%"
-          // reads as broken, so show the buffer state as a hint instead.
-          ? h('div', { class: 'hint' },
-              `Holding the division — ${Math.round(c.progressPct ?? 0)}% into the rank-protection buffer.`)
-          : withinDivision != null
-            ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
-            : null,
+      parts?.shield
+        // Protected = a negative carry; a clamped division bar labelled "-19%"
+        // reads as broken, so show the buffer state as a hint instead.
+        ? h('div', { class: 'hint' },
+            `Holding the division — ${parts.bufferPctText} into the rank-protection buffer.`)
+        : withinDivision != null
+          ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
+          : null,
       // The SR change logged for this specific match — always shown when set
       // (typed or back-computed), regardless of whether a rank anchor exists.
       srDelta != null
@@ -412,7 +419,7 @@ function buildMatchEditor(
     }
     anchorTier = r.tier;
     anchorDivision = r.division;
-    anchorPct = r.needsReanchor ? '' : String(Math.round(r.progressPct));
+    anchorPct = String(Math.round(r.progressPct));
   };
 
   openModal((close) => {

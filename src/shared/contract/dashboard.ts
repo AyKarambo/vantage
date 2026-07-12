@@ -124,8 +124,20 @@ export interface DashboardData {
     division: number;
     progressPct: number;
     protected: boolean;
-    needsReanchor: boolean;
+    /**
+     * Net anchor→now movement in ladder %-points (positive = climbed, negative =
+     * dropped, 0 = no matches since the anchor). Measured over the FULL history
+     * for this (account, role), so it is independent of the active date filter.
+     * Drives the Overview Rank KPI's ▴/▾/neutral arrow (that surface only).
+     */
+    movement: number;
   };
+  /**
+   * Per-account calculated rank for the sidebar account-switcher popover: account
+   * name → its most-played anchored role's rank + protection. Only accounts with a
+   * rank anchor appear; carries no movement (the arrow is Overview-KPI-only).
+   */
+  accountRanks: Record<string, { tier: string; division: number; progressPct: number; protected: boolean }>;
   session: Session | null;
   byRole: Group[];
   byAccount: Group[];

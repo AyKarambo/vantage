@@ -154,9 +154,8 @@ function competitiveOf(
       note: game.timestamp >= anchor.setAt ? 'calculated' : 'reconstructed',
       tier: rank.tier,
       division: rank.division,
-      progressPct: rank.needsReanchor ? undefined : rank.progressPct,
+      progressPct: rank.progressPct,
       protected: rank.protected,
-      needsReanchor: rank.needsReanchor,
     };
   }
 

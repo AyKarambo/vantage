@@ -54,7 +54,7 @@ function prevCompTs(games: GameRecord[], account: string, role: Role, beforeTs: 
  * The rank held **immediately after** the match at `matchTs` for one (account,
  * role), or null without an anchor. Matches at/after the anchor replay forward
  * (protection-aware, unchanged); matches before it reconstruct backward in
- * scalar space (protection flattened, `needsReanchor` false).
+ * scalar space (protection flattened, always unprotected).
  */
 export function rankAfterMatch(
   games: GameRecord[],
@@ -70,7 +70,7 @@ export function rankAfterMatch(
   // Backward: subtract every comp match strictly after the target, up to the
   // anchor reading, from the anchor's scalar.
   const points = rankToPoints(anchor) - sumSr(games, account, role, (ts) => ts > matchTs && ts <= anchor.setAt);
-  return { ...pointsToRank(points), protected: false, needsReanchor: false };
+  return { ...pointsToRank(points), protected: false };
 }
 
 /** The reconstructed rank **immediately before** the match at `matchTs` (i.e. after the previous comp match). */
