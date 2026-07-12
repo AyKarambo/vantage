@@ -32,8 +32,11 @@ export function parseRoster(value: unknown): RosterPlayer | undefined {
     deaths: asNumber(pick('deaths')),
     assists: asNumber(pick('assists')),
     damage: asNumber(pick('damage', 'hero_damage', 'heroDamage', 'damage_dealt')),
-    healing: asNumber(pick('healing', 'healing_done', 'healingDone')),
-    mitigation: asNumber(pick('mitigation', 'damage_mitigated', 'damageMitigated')),
+    // GEP's real roster keys are the past-tense `healed`/`mitigated` (seen in a
+    // live capture) — without these aliases a support's healing/mitigation was
+    // silently dropped from the scoreboard.
+    healing: asNumber(pick('healing', 'healed', 'healing_done', 'healingDone')),
+    mitigation: asNumber(pick('mitigation', 'mitigated', 'damage_mitigated', 'damageMitigated')),
   };
   return player;
 }

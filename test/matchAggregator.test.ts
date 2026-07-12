@@ -248,6 +248,15 @@ describe('parseRoster', () => {
     expect(q?.isLocal).toBe(false);
   });
 
+  it("reads GEP's past-tense healed/mitigated roster keys", () => {
+    // The exact shape from a live capture — a support's healing/mitigation would
+    // otherwise be dropped from the scoreboard.
+    const p = parseRoster({ player_name: 'HAYAA', battlenet_tag: 'hayaa#21775', hero_name: 'BRIGITTE', damage: 1562.64, healed: 5705.57, mitigated: 793.834 });
+    expect(p?.healing).toBe(5705.57);
+    expect(p?.mitigation).toBe(793.834);
+    expect(p?.damage).toBe(1562.64);
+  });
+
   it('parses JSON strings and object values with field aliases', () => {
     const a = parseRoster('{"battletag":"A#1","hero_name":"Ana","hero_role":"support","healing_done":12000}');
     expect(a?.battleTag).toBe('A#1');
