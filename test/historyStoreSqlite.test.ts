@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { HistoryStore, DB_FILE } from '../src/store/history';
 import type { GameRecord } from '../src/core/analytics';
+import type { MatchRecord } from '../src/core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
 import { resolveMapId } from '../src/core/resolvers/mapId';
 
@@ -31,6 +32,11 @@ afterEach(() => {
 const g = (p: Partial<GameRecord>): GameRecord => ({
   matchId: 'm', timestamp: 0, account: 'Main', role: 'damage', map: 'Ilios',
   result: 'Win', gameType: 'Competitive', heroes: [], ...p,
+});
+
+const pm = (p: Partial<MatchRecord>): MatchRecord => ({
+  matchId: 'm', battleTag: 'Player#1234', mapName: 'Ilios', queueType: 'role',
+  heroRole: 'damage', gameType: 'competitive', heroes: ['Tracer'], ...p,
 });
 
 describe('HistoryStore (SQLite) — reresolve backfill', () => {
@@ -117,6 +123,64 @@ describe('HistoryStore (SQLite) — core interface', () => {
     const h = open(tmp());
     h.add(rich);
     expect(h.all()[0]).toEqual(rich);
+  });
+});
+
+describe('HistoryStore (SQLite) — pending (no-outcome) holding store', () => {
+  it('addPending inserts once and dedupes by matchId; hasPending/pendingCount track membership', () => {
+    const h = open(tmp());
+    expect(h.addPending(pm({ matchId: 'a', endedAt: 10 }))).toBe(true);
+    expect(h.addPending(pm({ matchId: 'a', endedAt: 99 }))).toBe(false); // same id → ignored
+    expect(h.hasPending('a')).toBe(true);
+    expect(h.hasPending('nope')).toBe(false);
+    expect(h.pendingCount()).toBe(1);
+    // The dedupe never overwrote the original row's data.
+    expect(h.allPending()[0].endedAt).toBe(10);
+  });
+
+  it('allPending returns held records ordered by endedAt, and never touches games/count', () => {
+    const h = open(tmp());
+    h.addPending(pm({ matchId: 'late', endedAt: 3_000 }));
+    h.addPending(pm({ matchId: 'early', endedAt: 1_000 }));
+    h.addPending(pm({ matchId: 'mid', endedAt: 2_000 }));
+    expect(h.allPending().map((r) => r.matchId)).toEqual(['early', 'mid', 'late']);
+    // Pending rows are a SEPARATE table — they never enter the analyzable history.
+    expect(h.count()).toBe(0);
+    expect(h.all()).toHaveLength(0);
+  });
+
+  it('takePending returns then removes the record; a second take is undefined', () => {
+    const h = open(tmp());
+    h.addPending(pm({ matchId: 'a', endedAt: 5, heroes: ['Ana'] }));
+    const taken = h.takePending('a');
+    expect(taken?.matchId).toBe('a');
+    expect(taken?.heroes).toEqual(['Ana']);
+    expect(h.hasPending('a')).toBe(false);
+    expect(h.pendingCount()).toBe(0);
+    expect(h.takePending('a')).toBeUndefined();
+    expect(h.takePending('never')).toBeUndefined();
+  });
+
+  it('losslessly round-trips a rich MatchRecord and survives close + reopen for un-taken rows', () => {
+    const dir = tmp();
+    const first = open(dir);
+    const rich = pm({
+      matchId: 'rich', endedAt: 1_700_000_000_000, outcome: undefined,
+      heroes: ['Ana', 'Kiriko'], roster: [{ battleTag: 'Me#1', heroName: 'Ana', isLocal: true }],
+      eliminations: 12, deaths: 4, durationMinutes: 11.5, finalScore: '2-2',
+    });
+    first.addPending(rich);
+    first.addPending(pm({ matchId: 'b', endedAt: 20 }));
+    first.close();
+
+    const reopened = open(dir);
+    expect(reopened.pendingCount()).toBe(2);
+    expect(reopened.allPending().find((r) => r.matchId === 'rich')).toEqual(rich);
+    // A taken row is gone after reopen; the untouched one persists.
+    reopened.takePending('b');
+    reopened.close();
+    const again = open(dir);
+    expect(again.allPending().map((r) => r.matchId)).toEqual(['rich']);
   });
 });
 

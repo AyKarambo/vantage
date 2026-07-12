@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseSync, type StatementSync, type SQLInputValue } from 'node:sqlite';
 import type { GameRecord, MatchReview } from '../core/analytics';
+import type { MatchRecord } from '../core/model';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
 
 /** Basename of the SQLite database inside the store's directory. */
@@ -33,6 +34,23 @@ CREATE INDEX IF NOT EXISTS idx_games_account   ON games(account);
 CREATE INDEX IF NOT EXISTS idx_games_timestamp ON games(timestamp);
 CREATE INDEX IF NOT EXISTS idx_games_map        ON games(map);
 CREATE INDEX IF NOT EXISTS idx_games_role       ON games(role);
+`;
+
+/**
+ * Holding table for competitive matches that played but arrived without a GEP
+ * `match_outcome` (win/loss/draw) — {@link matchToGame} can't resolve them, so
+ * rather than drop the played match they wait here until the user sets a result
+ * in Review. Deliberately SEPARATE from `games`: a pending row is a raw
+ * {@link MatchRecord}, never an analyzable {@link GameRecord}, so it can never
+ * leak into analytics, the rank engine, or Notion export. `data` holds the full
+ * `JSON.stringify(MatchRecord)`; `endedAt` is denormalized only for ordering.
+ */
+const PENDING_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS pending_matches (
+  matchId  TEXT PRIMARY KEY,
+  endedAt  INTEGER,
+  data     TEXT NOT NULL
+);
 `;
 
 const INSERT_SQL =
@@ -94,6 +112,12 @@ export class HistoryStore {
   private importedCountStmt!: StatementSync;
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
+  private addPendingStmt!: StatementSync;
+  private allPendingStmt!: StatementSync;
+  private hasPendingStmt!: StatementSync;
+  private getPendingStmt!: StatementSync;
+  private deletePendingStmt!: StatementSync;
+  private pendingCountStmt!: StatementSync;
 
   constructor(dir: string) {
     this.dir = dir;
@@ -194,6 +218,48 @@ export class HistoryStore {
   /** Total number of stored games. */
   count(): number {
     return Number(this.countStmt.get()?.c ?? 0);
+  }
+
+  // --- pending (no-outcome) holding store --------------------------------------
+
+  /**
+   * Hold a played competitive match that arrived without a resolvable GEP
+   * outcome, so it can be completed by hand in Review instead of being dropped.
+   * Dedupes by `matchId`; returns true only if newly held.
+   */
+  addPending(rec: MatchRecord): boolean {
+    return Number(this.addPendingStmt.run(rec.matchId, rec.endedAt ?? null, JSON.stringify(rec)).changes) > 0;
+  }
+
+  /** Every held pending match, oldest first (by `endedAt`). */
+  allPending(): MatchRecord[] {
+    return this.allPendingStmt.all().map((row) => JSON.parse(String(row.data)) as MatchRecord);
+  }
+
+  /** True if a pending match with this id is currently held. */
+  hasPending(matchId: string): boolean {
+    return this.hasPendingStmt.get(matchId) !== undefined;
+  }
+
+  /**
+   * Remove and return a held pending match (SELECT then DELETE in one
+   * transaction) — the resolve path takes it out of the holding store before
+   * running it back through the normal history pipeline. Undefined if unknown.
+   */
+  takePending(matchId: string): MatchRecord | undefined {
+    let rec: MatchRecord | undefined;
+    this.tx(() => {
+      const row = this.getPendingStmt.get(matchId);
+      if (!row) return;
+      rec = JSON.parse(String(row.data)) as MatchRecord;
+      this.deletePendingStmt.run(matchId);
+    });
+    return rec;
+  }
+
+  /** How many matches are waiting for a result (the "Needs result" badge). */
+  pendingCount(): number {
+    return Number(this.pendingCountStmt.get()?.c ?? 0);
   }
 
   /**
@@ -391,6 +457,7 @@ export class HistoryStore {
     this.db.exec('PRAGMA journal_mode = DELETE;');
     this.db.exec('PRAGMA synchronous = FULL;');
     this.db.exec(SCHEMA_SQL);
+    this.db.exec(PENDING_SCHEMA_SQL);
     this.migrate();
     this.insertStmt = this.db.prepare(INSERT_SQL);
     this.updateStmt = this.db.prepare(UPDATE_SQL);
@@ -410,6 +477,15 @@ export class HistoryStore {
     this.deleteImportedStmt = this.db.prepare(
       `DELETE FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
     );
+    // Pending (no-outcome) holding store — see PENDING_SCHEMA_SQL.
+    this.addPendingStmt = this.db.prepare(
+      `INSERT INTO pending_matches (matchId, endedAt, data) VALUES (?, ?, ?) ON CONFLICT(matchId) DO NOTHING`,
+    );
+    this.allPendingStmt = this.db.prepare('SELECT data FROM pending_matches ORDER BY endedAt');
+    this.hasPendingStmt = this.db.prepare('SELECT 1 FROM pending_matches WHERE matchId = ?');
+    this.getPendingStmt = this.db.prepare('SELECT data FROM pending_matches WHERE matchId = ?');
+    this.deletePendingStmt = this.db.prepare('DELETE FROM pending_matches WHERE matchId = ?');
+    this.pendingCountStmt = this.db.prepare('SELECT COUNT(*) AS c FROM pending_matches');
   }
 
   /**
