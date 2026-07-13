@@ -326,7 +326,7 @@ function buildForm(
     if (!r) return;
     state.anchorTier = r.tier;
     state.anchorDivision = r.division;
-    state.anchorPct = r.needsReanchor ? '' : String(Math.round(r.progressPct));
+    state.anchorPct = String(Math.round(r.progressPct));
   };
 
   // Rank block: SR every match, plus the one-time anchor. Everything is

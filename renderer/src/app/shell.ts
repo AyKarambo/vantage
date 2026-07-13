@@ -6,7 +6,8 @@
  */
 import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
-import type { DashboardData, GepStatusPayload } from '../../../src/shared/contract';
+import type { DashboardData, GameLoggedPayload, GepStatusPayload } from '../../../src/shared/contract';
+import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
@@ -18,6 +19,7 @@ import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, signed } from '../format';
+import { rankParts } from '../../../src/core/rankDisplay';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
@@ -53,7 +55,34 @@ const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about']);
 interface NavItem {
   id: ViewId;
   label: string;
-  icon: string;
+  /** A text glyph (rendered as-is) or a prebuilt inline-SVG node (appended). */
+  icon: string | Node;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * The Targets nav glyph: a pennant flying from a pole (a goal flag), drawn inline
+ * in `currentColor` so it tracks the nav item's colour and active state — the same
+ * technique as {@link ../components/roleIcon}. Deliberately distinct from Review's
+ * wavy `⚑` text glyph so the two never read as the same icon.
+ */
+function goalFlagIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '15');
+  svg.setAttribute('height', '15');
+  svg.setAttribute('aria-hidden', 'true');
+  const pole = document.createElementNS(SVG_NS, 'line');
+  for (const [k, v] of Object.entries({ x1: 6, y1: 3, x2: 6, y2: 21, stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' })) {
+    pole.setAttribute(k, String(v));
+  }
+  const pennant = document.createElementNS(SVG_NS, 'path');
+  pennant.setAttribute('d', 'M6 4l11 3.2L6 11z');
+  pennant.setAttribute('fill', 'currentColor');
+  svg.appendChild(pole);
+  svg.appendChild(pennant);
+  return svg;
 }
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
@@ -73,7 +102,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'mental', label: 'Mental', icon: '◐' },
       { id: 'trends', label: 'Trends', icon: '◔' },
       { id: 'readiness', label: 'Readiness', icon: '◆' },
-      { id: 'targets', label: 'Targets', icon: '✦' },
+      { id: 'targets', label: 'Targets', icon: goalFlagIcon() },
     ],
   },
   {
@@ -183,8 +212,26 @@ export class App {
       if (s.data && !s.stale && !s.error) this.statusLabel.textContent = statusText(s.data);
     }, 60_000);
     void store.refresh();
+    // Follow onto the account a newly logged competitive match landed on (F4).
+    bridge.onGameLogged((payload) => this.onGameLogged(payload));
     // The first-run demo prompt + tour are driven from onState once real data
     // has loaded (so the persisted demo choice is known before we decide).
+  }
+
+  /**
+   * A competitive match was just recorded (live or hand-logged). When the view
+   * is scoped to a specific account and the match landed on a DIFFERENT
+   * configured/known account, switch the account filter onto it so the dashboard
+   * follows the account being played — never from "All accounts", never for an
+   * Unknown/unmapped account (see {@link shouldAutoSwitch}). Otherwise just pull
+   * the fresh data in so the new match shows without waiting for a window focus.
+   */
+  private onGameLogged(payload: GameLoggedPayload): void {
+    if (shouldAutoSwitch(store.get().filters.account, payload)) {
+      store.setFilters({ account: payload.account }); // persists + refreshes
+    } else {
+      void store.refresh();
+    }
   }
 
   private build(): HTMLElement {
@@ -406,6 +453,8 @@ export class App {
           class: 'nav-item',
           on: { click: () => store.setView(item.id) },
         },
+          // icon is a text glyph or a prebuilt SVG node; h() appends a Node as-is
+          // and stringifies a glyph, so both render correctly.
           h('span', { class: 'nav-icon' }, item.icon),
           item.label,
         );
@@ -436,14 +485,27 @@ export class App {
   private openAccountSwitcher(anchor: HTMLElement, d: DashboardData): void {
     const current = d.filters.account;
     openPopover(anchor, (close) => {
-      const item = (label: string, active: boolean, run: () => void): HTMLElement =>
-        h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
-          h('span', null, label),
+      // A per-account rank line, when that account has an anchor set. Same shared
+      // parts as every other surface (no movement arrow — Overview KPI only), so
+      // protection reads identically here. "All accounts" has no single rank.
+      const rankSub = (account: string): HTMLElement | null => {
+        const rk = d.accountRanks[account];
+        if (!rk) return null;
+        const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected });
+        return h('span', { class: 'acct-menu-rank u-dim' }, `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`);
+      };
+      const item = (label: string, active: boolean, run: () => void, account?: string): HTMLElement => {
+        const sub = account ? rankSub(account) : null;
+        return h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
+          sub
+            ? h('span', { class: 'acct-menu-label' }, h('span', null, label), sub)
+            : h('span', null, label),
           active ? h('span', { class: 'acct-menu-check' }, '✓') : null,
         );
+      };
       return h('div', { class: 'acct-menu' },
         item('All accounts', current === 'all', () => store.setFilters({ account: 'all' })),
-        ...d.options.accounts.map((a) => item(a, current === a, () => store.setFilters({ account: a }))),
+        ...d.options.accounts.map((a) => item(a, current === a, () => store.setFilters({ account: a }), a)),
         h('div', { class: 'acct-menu-sep' }),
         item('Manage accounts →', false, () => store.setView('settings')),
       );
@@ -649,10 +711,11 @@ function routeKey(view: ViewId, matchId?: string): string {
 function rankLine(d: DashboardData): string {
   const r = d.primaryRank;
   if (r) {
-    if (r.needsReanchor) return `${rankLabel(r.tier, r.division)} · set %`;
-    // A protected rank carries a negative %; the shield keeps that from reading as broken.
-    const shield = r.protected ? ' 🛡' : '';
-    return `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct)}%${shield}`;
+    // Shared parts — no `movement` passed, so the sidebar shows no arrow (that's
+    // the Overview KPI's job). The shield keeps a protected negative % from reading
+    // as broken.
+    const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected });
+    return `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
   }
   return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }

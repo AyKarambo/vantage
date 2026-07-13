@@ -1,5 +1,5 @@
 import type { GameRecord } from './analytics';
-import type { RosterPlayer } from './model';
+import type { RosterPlayer, Role } from './model';
 import type { MatchDetail, ScoreboardEntry } from '../shared/contract';
 import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
 import { progression } from './progression';
@@ -7,7 +7,9 @@ import { classifyGameType } from './matchFilter';
 import { sourceOf } from './source';
 import { rankAfterMatch, rankKey, type RankAnchorMap } from './rank';
 import { resolveRole } from './resolvers/role';
+import { roleOfHero } from './heroes';
 import { playerHistory } from './playerIndex';
+import { mergeHeroStats } from './perHero';
 
 /**
  * Full drill-down payload for one match. Pure and I/O-free, mirroring the
@@ -45,13 +47,12 @@ export function matchDetail(
     performance: game.performance,
     finalScore: game.finalScore,
     heroes: game.heroes,
-    perHero: game.perHero ?? [],
+    perHero: mergeHeroStats(game.perHero ?? []),
     mental: game.mental,
     review: game.review,
     scoreboard: scoreboardOf(game),
     competitive: competitiveOf(game, competitiveContext, all, anchors),
     playerHistory: playerHistory(all, game),
-    screenshots: (game.screenshots ?? []).map(toMediaUrl),
   };
 }
 
@@ -61,9 +62,9 @@ export function matchDetail(
  * neither exists — the section is omitted, not faked.
  */
 function scoreboardOf(game: GameRecord): ScoreboardEntry[] | undefined {
-  if (game.roster?.length) return game.roster.map((p) => rosterEntry(p, game));
+  if (game.roster?.length) return orderScoreboard(game.roster.map((p) => rosterEntry(p, game)));
   if (game.perHero?.length) {
-    return game.perHero.map((s) => ({
+    return mergeHeroStats(game.perHero).map((s) => ({
       name: game.account,
       hero: s.hero,
       role: s.role,
@@ -83,7 +84,9 @@ function rosterEntry(p: RosterPlayer, game: GameRecord): ScoreboardEntry {
   return {
     name: p.battleTag ?? 'Unknown',
     hero: p.heroName,
-    role: p.isLocal ? game.role : resolveRole(undefined, p.heroRole),
+    // Local row keeps its authoritative queue role; for others prefer GEP's
+    // heroRole, else derive from the hero (never guessed for an unknown hero).
+    role: p.isLocal ? game.role : (resolveRole(undefined, p.heroRole) ?? roleOfHero(p.heroName)),
     team: p.team,
     isLocal: Boolean(p.isLocal),
     eliminations: p.kills,
@@ -93,6 +96,36 @@ function rosterEntry(p: RosterPlayer, game: GameRecord): ScoreboardEntry {
     healing: p.healing,
     mitigation: p.mitigation,
   };
+}
+
+/** 5v5 role order within a team; openQ/unknown/unreported roles sort last. */
+const ROLE_RANK: Record<string, number> = { tank: 0, damage: 1, support: 2 };
+function roleRank(role: Role | undefined): number {
+  return role != null && role in ROLE_RANK ? ROLE_RANK[role] : 3;
+}
+
+/**
+ * Order scoreboard rows for the TAB screen: the tracked player's team first, then
+ * within each team Tank → DPS → DPS → Support → Support (unresolved roles last),
+ * tie-broken local-first then original slot. Rows are never moved across teams.
+ */
+function orderScoreboard(entries: ScoreboardEntry[]): ScoreboardEntry[] {
+  const localTeam = entries.find((e) => e.isLocal)?.team;
+  return entries
+    .map((entry, slot) => ({ entry, slot }))
+    .sort((a, b) => {
+      const at = a.entry.team === localTeam ? 0 : 1;
+      const bt = b.entry.team === localTeam ? 0 : 1;
+      if (at !== bt) return at - bt;
+      const ar = roleRank(a.entry.role);
+      const br = roleRank(b.entry.role);
+      if (ar !== br) return ar - br;
+      const al = a.entry.isLocal ? 0 : 1;
+      const bl = b.entry.isLocal ? 0 : 1;
+      if (al !== bl) return al - bl;
+      return a.slot - b.slot;
+    })
+    .map((x) => x.entry);
 }
 
 /**
@@ -120,9 +153,8 @@ function competitiveOf(
       note: game.timestamp >= anchor.setAt ? 'calculated' : 'reconstructed',
       tier: rank.tier,
       division: rank.division,
-      progressPct: rank.needsReanchor ? undefined : rank.progressPct,
+      progressPct: rank.progressPct,
       protected: rank.protected,
-      needsReanchor: rank.needsReanchor,
     };
   }
 
@@ -132,10 +164,4 @@ function competitiveOf(
   );
   const p = progression(scoped.length ? scoped : [game]);
   return { note: 'estimate', tier: p.tier, division: p.division, progressPct: p.progressPct, delta: p.delta };
-}
-
-/** Renderer-facing URL served by the read-only vantage-media:// protocol. */
-function toMediaUrl(relPath: string): string {
-  const clean = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
-  return `vantage-media://screenshots/${clean.split('/').map(encodeURIComponent).join('/')}`;
 }

@@ -4,6 +4,7 @@ import type { MatchMental, TargetGrade } from '../core/analytics';
 import { leaverFlags } from '../core/leaver';
 import { commsTone } from '../core/comms';
 import { gameTypeLabel } from '../core/matchFilter';
+import { noneLikeOption } from './gametrackerSchema';
 
 /** A {@link MatchRecord} plus the resolved Notion values for the four core fields. */
 export interface ResolvedMatch {
@@ -57,6 +58,15 @@ export class NotionWriter {
      * single-source databases, so the database-id parent still resolves correctly.
      */
     private readonly dataSourceId?: string,
+    /**
+     * The `select` option names each subjective select column defines (from the
+     * cached shape validation, keyed by canonical column name). Used only to
+     * decide whether an UNSET Comms / Improvement Target should be written as the
+     * database's own "none"-like option instead of left blank (spec E2) — see
+     * {@link subjectiveProps}. Empty by default: with no discovered options the
+     * writer keeps its original omit-on-create / blank-on-update behaviour.
+     */
+    private readonly subjectiveSelectOptions: Readonly<Record<string, readonly string[]>> = {},
   ) {}
 
   async createMatchPage(m: ResolvedMatch): Promise<string> {
@@ -161,6 +171,15 @@ export class NotionWriter {
    * omits any column with no value, leaving it blank for the user to fill in.
    * `forUpdate: true` (update) actively blanks a present-but-now-empty column
    * so a locally-cleared flag/grade clears the Notion cell too.
+   *
+   * Exception (spec E2): when Comms or Improvement Target is UNSET *and* that
+   * column offers a `none`-like select option, the discovered option name is
+   * written verbatim on BOTH create and update instead of omitting/blanking —
+   * the option is never auto-created, so a database without one keeps the
+   * original behaviour. Leaver is excluded. A column that HAS a value never gets
+   * "none". Note: `matchExportSignature` doesn't encode "none", so a row already
+   * synced blank is NOT retroactively "none"-filled — it only picks the option up
+   * on its next real create/update.
    */
   private subjectiveProps(m: ResolvedMatch, opts: { forUpdate: boolean }): Record<string, any> {
     const props: Record<string, any> = {};
@@ -169,11 +188,11 @@ export class NotionWriter {
     if (this.writableColumns.has('Comms')) {
       const tone = commsTone(mental);
       if (tone) props['Comms'] = select(tone);
-      else if (opts.forUpdate) props['Comms'] = { select: null };
+      else this.writeUnsetSelect(props, 'Comms', opts);
     }
     if (this.writableColumns.has('Improvement Target')) {
       if (m.improvementGrade) props['Improvement Target'] = select(GRADE_TO_NOTION[m.improvementGrade]);
-      else if (opts.forUpdate) props['Improvement Target'] = { select: null };
+      else this.writeUnsetSelect(props, 'Improvement Target', opts);
     }
     if (this.writableColumns.has('Leaver')) {
       const leaver = leaverFlags(mental);
@@ -188,6 +207,19 @@ export class NotionWriter {
       props['Toxic Mates'] = { checkbox: Boolean(mental?.toxicMates) };
     }
     return props;
+  }
+
+  /**
+   * Emit the value for an unset subjective SELECT column: the database's own
+   * `none`-like option (verbatim) when it defines one — on create AND update —
+   * else the original behaviour (omit on create, explicit `select: null` on
+   * update to clear a previously-set cell). Shared by Comms and Improvement
+   * Target so the two can't drift.
+   */
+  private writeUnsetSelect(props: Record<string, any>, column: string, opts: { forUpdate: boolean }): void {
+    const none = noneLikeOption(this.subjectiveSelectOptions[column]);
+    if (none) props[column] = select(none);
+    else if (opts.forUpdate) props[column] = { select: null };
   }
 }
 

@@ -1047,7 +1047,6 @@ describe('export → import round-trip', () => {
       srDelta: -19,
       finalScore: '2-1',
       // Documented local-only fields that must NOT survive the round-trip.
-      screenshots: ['shot.png'],
       roster: [{ battleTag: 'Foe#1', heroName: 'Mercy' }],
       importedAt: 1_700_000_000_000,
     } as GameRecord;
@@ -1072,7 +1071,6 @@ describe('export → import round-trip', () => {
     const back = games[0];
     expect(back.srDelta).toBe(-19);
     expect(back.finalScore).toBe('2-1');
-    expect(back.screenshots).toBeUndefined();
     expect(back.roster).toBeUndefined();
     expect(back.importedAt).toBeUndefined();
   });

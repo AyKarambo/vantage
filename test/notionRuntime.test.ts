@@ -76,7 +76,18 @@ vi.mock('@notionhq/client', () => ({
 
 import { NotionRuntime, type NotionRuntimeDeps } from '../src/main/notionRuntime';
 import { OutboxStore } from '../src/store/outbox';
+import { matchExportSignature } from '../src/core/targets';
+import type { GameRecord } from '../src/core/analytics';
 import type { SubjectiveColumnDiag } from '../src/shared/contract';
+
+/** A minimal competitive GameRecord for the unsynced-count fixtures. */
+function game(matchId: string, overrides: Partial<GameRecord> = {}): GameRecord {
+  return {
+    matchId, timestamp: Date.now(), account: 'Main', role: 'damage',
+    map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: ['Tracer'],
+    ...overrides,
+  } as GameRecord;
+}
 
 /** A minimal Gametracker row for dedup/cleanup fixtures — mirrors `dedup.ts`'s `rowRefOf` projection. */
 function row(id: string, opts: { matchId?: string; createdTime?: string } = {}) {
@@ -126,7 +137,7 @@ function baseDeps(overrides: Partial<NotionRuntimeDeps> = {}): NotionRuntimeDeps
       mapAliases: {},
     }) as any,
     reloadConfig: vi.fn(),
-    trackedGames: () => 0,
+    historyGames: () => [],
     importedMatches: () => 0,
     onTokenState: vi.fn(),
     onError: vi.fn(),
@@ -381,6 +392,59 @@ describe('NotionRuntime — authored ids + ledger reach the exporter', () => {
 
     const status = runtime.status();
     expect(status.connected).toBe(true);
+  });
+});
+
+describe('NotionRuntime.status — unsynced + competitive counts (spec E3)', () => {
+  it('counts never-exported OR changed-since-export competitive games against the configured db, ignoring filters', () => {
+    const outbox = new OutboxStore(tmpDir());
+    const currentSig = matchExportSignature(game('probe'), undefined); // blank match signature
+    // synced: ledgered with the CURRENT signature → not unsynced.
+    outbox.recordExport('synced-1', { pageId: 'p-synced', signature: currentSig, databaseId: 'db-1' });
+    // changed: ledgered but with a STALE signature → unsynced (update).
+    outbox.recordExport('changed-1', { pageId: 'p-changed', signature: 'stale-signature', databaseId: 'db-1' });
+
+    const games = [
+      game('new-1'), // never exported → unsynced
+      game('new-2'), // never exported → unsynced
+      game('changed-1'), // changed → unsynced
+      game('synced-1'), // unchanged → NOT unsynced
+      game('qp-1', { gameType: 'Quick Play' }), // non-competitive → excluded from both counts
+    ];
+
+    // The full unfiltered list is passed straight through — no dashboard filter
+    // narrows it, so a date/role filter in the UI can't change these numbers.
+    const runtime = new NotionRuntime(baseDeps({ outbox, historyGames: () => games }));
+    const status = runtime.status();
+
+    expect(status.unsyncedGames).toBe(3);
+    expect(status.competitiveGames).toBe(4);
+  });
+
+  it('reports 0 unsynced but a positive competitive count when everything is synced (→ "up to date")', () => {
+    const outbox = new OutboxStore(tmpDir());
+    const currentSig = matchExportSignature(game('probe'), undefined);
+    outbox.recordExport('a', { pageId: 'pa', signature: currentSig, databaseId: 'db-1' });
+    outbox.recordExport('b', { pageId: 'pb', signature: currentSig, databaseId: 'db-1' });
+
+    const runtime = new NotionRuntime(baseDeps({
+      outbox,
+      historyGames: () => [game('a'), game('b')],
+    }));
+    const status = runtime.status();
+
+    expect(status.unsyncedGames).toBe(0);
+    expect(status.competitiveGames).toBe(2);
+  });
+
+  it('reports 0/0 when there are no competitive games at all (→ "no competitive games yet")', () => {
+    const runtime = new NotionRuntime(baseDeps({
+      historyGames: () => [game('qp', { gameType: 'Quick Play' })],
+    }));
+    const status = runtime.status();
+
+    expect(status.unsyncedGames).toBe(0);
+    expect(status.competitiveGames).toBe(0);
   });
 });
 

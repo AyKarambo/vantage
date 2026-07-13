@@ -1,8 +1,10 @@
 import type { MatchRecord } from './model';
 import type { GameRecord } from './analytics';
 import { resolveAccount } from './resolvers/account';
+import { UNKNOWN_ACCOUNT } from './accountsManage';
 import { resolveRole } from './resolvers/role';
 import { resolveResult } from './resolvers/result';
+import { resolveMapId } from './resolvers/mapId';
 
 /**
  * Convert a raw capture record into an analyzable, resolved game — the one
@@ -24,14 +26,16 @@ export function matchToGame(
           hero: record.heroes[0], role,
           eliminations: record.eliminations ?? 0, deaths: record.deaths ?? 0, assists: record.assists ?? 0,
           damage: record.damage ?? 0, healing: record.healing ?? 0, mitigation: record.mitigation ?? 0,
+          // Single hero → the whole match was spent on it.
+          ...(record.durationMinutes != null ? { minutes: record.durationMinutes } : {}),
         }]
       : undefined;
   return {
     matchId: record.matchId,
     timestamp: record.endedAt ?? now(),
-    account: resolveAccount(record.battleTag, accounts) ?? record.battleTag ?? 'Unknown',
+    account: resolveAccount(record.battleTag, accounts) ?? record.battleTag ?? UNKNOWN_ACCOUNT,
     role,
-    map: record.mapName ?? 'Unknown',
+    map: resolveMapId(record.mapName) ?? 'Unknown',
     result,
     gameType: record.gameType ?? 'Unknown',
     durationMinutes: record.durationMinutes,

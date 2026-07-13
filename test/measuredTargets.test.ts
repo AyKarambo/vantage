@@ -70,6 +70,71 @@ describe('matchStatValue — per-10 / ratio', () => {
   });
 });
 
+describe('matchStatValue — role/hero scope (D)', () => {
+  // A 20-minute Bastion + Tracer match: equal-split → 10 minutes each hero.
+  const multi = (): GameRecord =>
+    game({
+      role: 'damage',
+      durationMinutes: 20,
+      perHero: [
+        hero({ hero: 'Bastion', role: 'damage', damage: 40000 }),
+        hero({ hero: 'Tracer', role: 'damage', damage: 12000 }),
+      ],
+    });
+
+  it('an empty scope object is identical to no scope (unscoped unchanged)', () => {
+    const g = multi();
+    expect(matchStatValue(g, 'Damage', {})).toBe(matchStatValue(g, 'Damage'));
+    expect(matchStatValue(g, 'Damage')).toBe(26000); // (40000 + 12000) × 10 / 20
+  });
+
+  it('hero scope measures only that hero over its own minutes', () => {
+    // Tracer: 12000 damage over its 10 equal-split minutes → 12000 per 10.
+    expect(matchStatValue(multi(), 'Damage', { heroScope: 'Tracer' })).toBe(12000);
+  });
+
+  it('hero scope folds casing / accents / punctuation via heroMatchKey', () => {
+    expect(matchStatValue(multi(), 'Damage', { heroScope: 'tracer' })).toBe(12000);
+  });
+
+  it('a match with no in-scope hero is skipped (null), never a miss', () => {
+    const g = game({ durationMinutes: 20, perHero: [hero({ hero: 'Bastion', role: 'damage', damage: 40000 })] });
+    expect(matchStatValue(g, 'Damage', { heroScope: 'Tracer' })).toBeNull();
+  });
+
+  it('role scope counts only that role’s heroes', () => {
+    const g = game({
+      role: 'support',
+      durationMinutes: 20,
+      perHero: [
+        hero({ hero: 'Ana', role: 'support', healing: 10000, damage: 3000 }),
+        hero({ hero: 'Genji', role: 'damage', healing: 0, damage: 9000 }),
+      ],
+    });
+    // Support scope → Ana only (10 min): 10000 healing → 10000 per 10.
+    expect(matchStatValue(g, 'Healing', { roleScope: 'support' })).toBe(10000);
+    // Damage scope → Genji only (10 min): 9000 damage → 9000 per 10.
+    expect(matchStatValue(g, 'Damage', { roleScope: 'damage' })).toBe(9000);
+  });
+
+  it('a role-scoped target skips open-queue matches (but hero-only scope still applies)', () => {
+    const g = game({ role: 'openQ', durationMinutes: 20, perHero: [hero({ hero: 'Ana', role: 'support', healing: 10000 })] });
+    expect(matchStatValue(g, 'Healing', { roleScope: 'support' })).toBeNull();
+    // 10000 healing over the single hero's 20 min → 5000 per 10.
+    expect(matchStatValue(g, 'Healing', { heroScope: 'Ana' })).toBe(5000);
+  });
+
+  it('a contradictory role+hero combo matches no row → permanently skipped', () => {
+    const g = game({ durationMinutes: 20, perHero: [hero({ hero: 'Tracer', role: 'damage', damage: 12000 })] });
+    expect(matchStatValue(g, 'Damage', { roleScope: 'support', heroScope: 'Tracer' })).toBeNull();
+  });
+
+  it('a role-scoped target skips rows whose role GEP never reported', () => {
+    const g = game({ durationMinutes: 20, perHero: [hero({ hero: 'Tracer', role: undefined, damage: 12000 })] });
+    expect(matchStatValue(g, 'Damage', { roleScope: 'damage' })).toBeNull();
+  });
+});
+
 describe('evaluateMeasured — Hit / Partial / Missed bands (m = 10%)', () => {
   it('≥ grades hit / partial / missed', () => {
     const t = target('Damage ≥ 9000');
@@ -91,6 +156,19 @@ describe('evaluateMeasured — Hit / Partial / Missed bands (m = 10%)', () => {
   });
   it('returns null (skip) when the match cannot be measured', () => {
     expect(evaluateMeasured(game({ durationMinutes: 10 }), target('Damage ≥ 9000'))).toBeNull();
+  });
+
+  it('threads the target’s scope so a scoped target grades a different value', () => {
+    const g = game({
+      durationMinutes: 20,
+      perHero: [
+        hero({ hero: 'Bastion', role: 'damage', damage: 40000 }),
+        hero({ hero: 'Tracer', role: 'damage', damage: 12000 }),
+      ],
+    });
+    // Unscoped 26000 ≥ 15000 → hit; scoped to Tracer (12000) → below 13500 → missed.
+    expect(evaluateMeasured(g, target('Damage ≥ 15000'))?.grade).toBe('hit');
+    expect(evaluateMeasured(g, target('Damage ≥ 15000', { heroScope: 'Tracer' }))?.grade).toBe('missed');
   });
 });
 
@@ -124,6 +202,23 @@ describe('effectiveImprovementGrade — export signature reflects measured grade
     expect(easy).not.toBe(hard);
     expect(matchExportSignature(g, easy)).not.toBe(matchExportSignature(g, hard));
   });
+
+  // D5: editing a target's SCOPE re-derives the grade, so the export signature
+  // flips and the affected exported match goes unsynced — same mechanism as a
+  // rule edit, driven purely by the scope fields.
+  it('a scope edit that flips a match grade flips the export signature (change detected)', () => {
+    const g = game({
+      durationMinutes: 20,
+      perHero: [
+        hero({ hero: 'Bastion', role: 'damage', damage: 40000 }),
+        hero({ hero: 'Tracer', role: 'damage', damage: 12000 }),
+      ],
+    });
+    const global = effectiveImprovementGrade(g, [target('Damage ≥ 15000')], new Set(['t'])); // hit
+    const scoped = effectiveImprovementGrade(g, [target('Damage ≥ 15000', { heroScope: 'Tracer' })], new Set(['t'])); // missed
+    expect(global).not.toBe(scoped);
+    expect(matchExportSignature(g, global)).not.toBe(matchExportSignature(g, scoped));
+  });
 });
 
 describe('buildTargets — measured targets auto-grade from stats', () => {
@@ -151,5 +246,24 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
     const [s] = buildTargets(games, false, [t]);
     expect(s.hits).toBe(1); // derived hit wins over the stored 'missed'
     expect(s.attempts).toBe(1);
+  });
+
+  it('scopes auto-grading to a single hero and round-trips the scope onto the summary', () => {
+    const t = target('Damage ≥ 15000', { createdAt: 0, heroScope: 'Tracer' });
+    const games = [
+      game({
+        result: 'Win', durationMinutes: 20,
+        perHero: [hero({ hero: 'Bastion', role: 'damage', damage: 40000 }), hero({ hero: 'Tracer', role: 'damage', damage: 20000 })],
+      }), // Tracer 20000 per 10 → hit
+      game({
+        result: 'Loss', durationMinutes: 20,
+        perHero: [hero({ hero: 'Bastion', role: 'damage', damage: 40000 })],
+      }), // no Tracer → skipped
+    ];
+    const [s] = buildTargets(games, false, [t]);
+    expect(s.attempts).toBe(1);
+    expect(s.hits).toBe(1);
+    expect(s.heroScope).toBe('Tracer'); // D1 round-trip through scoring.ts
+    expect(s.roleScope).toBeUndefined();
   });
 });

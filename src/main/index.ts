@@ -18,12 +18,12 @@ import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
-import { ScreenshotService } from './screenshots';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
 import { computeDevMode } from '../core/devMode';
 import { resolveMapId } from '../core/resolvers/mapId';
+import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -34,7 +34,7 @@ import { createDataProvider } from './dataProvider';
 import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GepStatusPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -90,7 +90,7 @@ function main(): void {
 
   // Backfill for installs that used the legacy `historyDbFolder` ("move
   // history DB" feature): that setting only ever relocated history.db, so its
-  // manual.json/outbox.json/rankAnchors.json/screenshots/history.json still
+  // manual.json/outbox.json/rankAnchors.json/history.json still
   // sit in the default userData/data dir. Once `dataFolder`/`historyDbFolder`
   // resolves every store (including the side-stores) to that legacy folder,
   // those files would silently look empty/missing there. One-time, idempotent,
@@ -120,11 +120,18 @@ function main(): void {
   // One-time import of a pre-SQLite history.json — kept frozen as a backup. The
   // legacy file always lived in the default data dir, wherever the DB is now.
   migrateJsonHistory(history, path.join(dataDir, 'history.json'));
-  // One-time, idempotent: re-resolve numeric GEP map ids stored on older rows to
-  // names now that the id→name table exists (e.g. "1207" → "Nepal"). A re-run
-  // rewrites nothing. Account can't be recovered for legacy "Unknown" rows.
-  const remapped = history.reresolve((g) => ({ map: resolveMapId(g.map) }));
-  if (remapped) log.info('store', 'backfilled map names on existing rows', { rows: remapped });
+  // One-time, idempotent backfill of existing rows now that the resolvers exist:
+  //  - re-resolve numeric GEP map ids to names (e.g. "1207" → "Nepal", "4140" →
+  //    "Neon Junction") and fold the legacy "Neon Junktion" spelling; and
+  //  - re-attribute legacy `account: 'Unknown'` rows whose captured local roster
+  //    BattleTag now maps to a configured account (Feedback F1) — only pre-#129
+  //    rows that still carry a local roster tag; the rest stay Unknown.
+  // A re-run rewrites nothing.
+  const backfilled = history.reresolve((g) => ({
+    map: resolveMapId(g.map),
+    account: g.account === UNKNOWN_ACCOUNT ? recoverableAccount(g.roster, config.accounts) : undefined,
+  }));
+  if (backfilled) log.info('store', 'backfilled map names / recovered Unknown rows', { rows: backfilled });
 
   // First-run detection is config-driven, not file-existence: HistoryStore's
   // constructor above already created history.db in dataDir, so a "does
@@ -154,20 +161,15 @@ function main(): void {
   const activeMapNames = (): string[] =>
     mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps.filter((m) => m.isActive).map((m) => m.name);
   const aggregator = new MatchAggregator();
-  const screenshots = new ScreenshotService(path.join(dataDir, 'screenshots'), log.adapter('shots'));
-  screenshots.registerProtocol();
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
-  // The migration executor repoints every store at once; `ScreenshotService`
-  // is constructed against `<dataDir>/screenshots` (not the bare data dir), so
-  // its `Relocatable` wraps the join the same way the constructor above did.
+  // The migration executor repoints every store at once.
   const migrationStores = (): DataMigrationStores => ({
     history,
     manualLog: manual,
     outbox,
     rankAnchors,
     masterData: masterDataStore,
-    screenshots: { relocate: (newDir) => screenshots.relocate(path.join(newDir, 'screenshots')) },
   });
 
   /** True iff `dir` already holds a Vantage history database. */
@@ -242,11 +244,15 @@ function main(): void {
   }
 
   let pushSyncProgress: (done: number, total: number) => void = () => {};
+  // Filled in once the dashboard window exists (mirrors pushEntry/pushSyncProgress).
+  let pushGameLogged: (payload: GameLoggedPayload) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
     reloadConfig: () => (config = loadConfig()),
-    trackedGames: () => history.count(),
+    // Unfiltered history — NotionRuntime.status() counts the competitive games
+    // that still need syncing (never-exported / changed-since-export) itself.
+    historyGames: () => history.all(),
     importedMatches: () => history.importedCount('notion'),
     onTokenState: (tokenSet) => tray.setState({ tokenSet }),
     onError: (title, body) => {
@@ -272,20 +278,18 @@ function main(): void {
     mapNames: allMapNames,
   });
 
-  // Fires the live "a match was logged" push to an open dashboard (placeholder
-  // until the window exists, like publishStatus below).
-  let pushGameLogged: (game: { matchId: string }) => void = () => {};
   // Fires when the pending ("needs result") set changes, so an open Review
-  // screen re-fetches (same placeholder-until-window pattern as pushGameLogged).
+  // screen re-fetches (placeholder until the window exists, like pushGameLogged).
   let pushPendingChanged: () => void = () => {};
   const pipeline = createMatchPipeline({
     history,
     aggregator,
-    screenshots,
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
-    onGameLogged: (game) => pushGameLogged(game),
+    // Tell the renderer which account a newly recorded competitive match landed on
+    // — drives the live dashboard refresh and the F4 account auto-switch.
+    onGameLogged: (payload) => pushGameLogged(payload),
     onPendingChanged: () => pushPendingChanged(),
   });
 
@@ -454,7 +458,7 @@ function main(): void {
     tray.setHealth(p.state);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
-  pushGameLogged = (game) => dashboard.push(EVENT_CHANNELS.onGameLogged, { matchId: game.matchId });
+  pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
   pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
   statusMonitor.start();
 
@@ -543,8 +547,8 @@ function main(): void {
 /**
  * Legacy-`historyDbFolder` backfill (finding: side-stores silently orphaned).
  * That old setting only ever relocated `history.db`; every other data file
- * (`manual.json`, `outbox.json`, `rankAnchors.json`, `screenshots/`, and the
- * frozen `history.json` backup) still lives in `defaultDir`. Now that
+ * (`manual.json`, `outbox.json`, `rankAnchors.json`, and the frozen
+ * `history.json` backup) still lives in `defaultDir`. Now that
  * `dataFolder`/`historyDbFolder` resolves every store to `targetDir`, those
  * files must move over too — but only per-file, only when the file is
  * genuinely missing at `targetDir` (never overwrite something already there),
@@ -571,16 +575,6 @@ function backfillLegacySideStores(defaultDir: string, targetDir: string, log: Pi
     } catch (err) {
       log.error('store', 'legacy side-store backfill failed', { file: name, from, to, error: String(err) });
     }
-  }
-  const shotsFrom = path.join(defaultDir, 'screenshots');
-  const shotsTo = path.join(targetDir, 'screenshots');
-  try {
-    if (!fs.existsSync(shotsTo) && fs.existsSync(shotsFrom)) {
-      fs.renameSync(shotsFrom, shotsTo);
-      log.info('store', 'legacy side-store backfilled', { file: 'screenshots', from: shotsFrom, to: shotsTo });
-    }
-  } catch (err) {
-    log.error('store', 'legacy side-store backfill failed', { file: 'screenshots', from: shotsFrom, to: shotsTo, error: String(err) });
   }
 }
 

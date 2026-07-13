@@ -3,6 +3,7 @@
  * definition and the scored summary shown on the dashboard, plus the small
  * clamp helper both the sample and scoring paths need.
  */
+import type { Role } from '../model';
 
 export type TargetMode = 'self' | 'measured';
 
@@ -13,6 +14,14 @@ export interface AuthoredTarget {
   mode: TargetMode;
   /** Legacy field kept for old manual.json files; new writes are always 'season'. */
   scope?: 'match' | 'season';
+  /**
+   * Measured-target scope (D). When set, the rule is evaluated only over the
+   * in-scope hero rows of a match: `roleScope` restricts to one role (and skips
+   * open-queue matches), `heroScope` restricts to a single hero (folded by
+   * {@link ../heroes heroMatchKey}). Both absent = evaluate globally (legacy).
+   */
+  roleScope?: Role;
+  heroScope?: string;
   rule: string;
   createdAt: number;
   /** Active targets are the ones graded on the Review screen. */
@@ -29,6 +38,9 @@ export interface TargetSummary {
   name: string;
   mode: TargetMode;
   rule: string;
+  /** Measured-target scope (D), round-tripped so the builder can pre-fill on edit. */
+  roleScope?: Role;
+  heroScope?: string;
   hitRate: number; // 0..1
   hits: number;
   attempts: number;

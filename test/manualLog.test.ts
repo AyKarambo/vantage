@@ -71,6 +71,28 @@ describe('ManualStore', () => {
     expect(store.targets()[0].name).toBe('t1');
   });
 
+  it('addTarget persists a measured target’s roleScope/heroScope across instances', () => {
+    const store = new ManualStore(dir);
+    store.addTarget({ ...target('t1'), mode: 'measured', rule: 'Damage ≥ 9000', roleScope: 'damage', heroScope: 'Tracer' });
+    const t = new ManualStore(dir).targets()[0];
+    expect(t.roleScope).toBe('damage');
+    expect(t.heroScope).toBe('Tracer');
+  });
+
+  it('updateTarget persists roleScope/heroScope, and clears them when the patch omits them', () => {
+    const store = new ManualStore(dir);
+    store.addTarget(target('t1'));
+    store.updateTarget('t1', { name: 'scoped', mode: 'measured', rule: 'Healing ≥ 9000', roleScope: 'support', heroScope: 'Ana' });
+    let t = new ManualStore(dir).targets()[0];
+    expect(t.roleScope).toBe('support');
+    expect(t.heroScope).toBe('Ana');
+    // Switching back to self-rated (no scope in the patch) clears the saved scope.
+    store.updateTarget('t1', { name: 'unscoped', mode: 'self', rule: 'You grade it' });
+    t = new ManualStore(dir).targets()[0];
+    expect(t.roleScope).toBeUndefined();
+    expect(t.heroScope).toBeUndefined();
+  });
+
   it('active toggle persists across instances', () => {
     const store = new ManualStore(dir);
     store.addTarget(target('t1'));

@@ -1,5 +1,6 @@
 /** Presentation helpers — pure formatting, shared across every view. */
 import type { Role, Streak } from '../../src/shared/contract';
+import { rankLabelOf } from '../../src/core/rankDisplay';
 
 /** Display copy for each queue role; the canonical role → label mapping. */
 export const ROLE_LABEL: Record<string, string> = {
@@ -40,10 +41,8 @@ export function streakText(s: Streak): string {
   return s.type === 'none' ? '–' : `${s.type}${s.count}`;
 }
 
-/** rankLabel('Gold', 3) → "Gold 3". */
-export function rankLabel(tier: string, division: number): string {
-  return `${tier} ${division}`;
-}
+/** rankLabel('Gold', 3) → "Gold 3". Re-exports the shared core rank renderer. */
+export const rankLabel = rankLabelOf;
 
 const DAY = 86400000;
 

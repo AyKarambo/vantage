@@ -20,7 +20,6 @@ describe('rank engine — basic movement', () => {
     const s = computeRank(anchorAt('Gold', 3, 40), []);
     expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 40 });
     expect(s.protected).toBe(false);
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('a win adds % within the division', () => {
@@ -61,7 +60,6 @@ describe('rank engine — rank protection', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20)]);
     expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -10 });
     expect(s.protected).toBe(true);
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('a win while protected pays down the negative carry before climbing', () => {
@@ -74,7 +72,6 @@ describe('rank engine — rank protection', () => {
     const s = computeRank(anchorAt('Gold', 3, 10), [loss(-20), win(6)]);
     expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -4 }); // -10 + 6
     expect(s.protected).toBe(true);
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('regression: a protected loss\'s negative carry offsets the next win\'s gain', () => {
@@ -100,20 +97,17 @@ describe('rank engine — rank protection', () => {
     // Buffer at demotion = 10 - 20 - 18 = -28 below the Gold 3 floor → Gold 4 at 100-28.
     expect(pos(s)).toEqual({ tier: 'Gold', division: 4, progressPct: 72 });
     expect(s.protected).toBe(false);
-    expect(s.needsReanchor).toBe(false); // no freeze — the demoted rank keeps tracking
   });
 
   it('demotion within a tier goes to the next-lower division (1 → 2)', () => {
     const s = computeRank(anchorAt('Platinum', 1, 0), [loss(-20), loss(-20)]);
     // -40 below the Platinum 1 floor → Platinum 2 at 100-40.
     expect(pos(s)).toEqual({ tier: 'Platinum', division: 2, progressPct: 60 });
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('demotion from the lowest division (5) drops to the tier below at division 1', () => {
     const s = computeRank(anchorAt('Platinum', 5, 0), [loss(-20), loss(-20)]);
     expect(pos(s)).toEqual({ tier: 'Gold', division: 1, progressPct: 60 });
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('cannot demote below Bronze 5 — floors at 0%', () => {
@@ -127,7 +121,6 @@ describe('rank engine — rank protection', () => {
     // Demote to Gold 4 · 72%, then the two wins climb from there: +30 → Gold 3 · 2%, +30 → 32%.
     expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: 32 });
     expect(s.protected).toBe(false);
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('carries the exact buffer into the lower division (Gold 3 −18% → Gold 4 · 82%)', () => {
@@ -177,7 +170,6 @@ describe('applyMatch / stateFromAnchor primitives', () => {
     const s = stateFromAnchor(anchorAt('Gold', 3, -19));
     expect(pos(s)).toEqual({ tier: 'Gold', division: 3, progressPct: -19 });
     expect(s.protected).toBe(true);
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('an extreme negative anchor % floors at -100 (still protected)', () => {
@@ -197,7 +189,6 @@ describe('applyMatch / stateFromAnchor primitives', () => {
     const s = computeRank(anchorAt('Gold', 3, -19), [loss(-5)]);
     // -24 below the Gold 3 floor → Gold 4 at 100-24.
     expect(pos(s)).toEqual({ tier: 'Gold', division: 4, progressPct: 76 });
-    expect(s.needsReanchor).toBe(false);
   });
 
   it('a match with no srDelta does not move a mid-division rank', () => {

@@ -8,6 +8,16 @@ import { card } from '../../components/primitives';
 import { subjectiveColumnsSection } from './subjectiveColumnsCard';
 import { schemaProvisionSection } from './schemaProvisionCard';
 
+/**
+ * The connected-state summary: how many competitive games still need syncing, or
+ * "up to date" (all synced) / "no competitive games yet" (nothing to sync ever) —
+ * the two ways `unsyncedGames` can be `0` (spec E3).
+ */
+function syncSummary(s: NotionStatus): string {
+  if (s.unsyncedGames > 0) return `${s.unsyncedGames} game${s.unsyncedGames === 1 ? '' : 's'} to sync`;
+  return s.competitiveGames > 0 ? 'up to date' : 'no competitive games yet';
+}
+
 /** Top-of-screen status readout; `s === null` means the initial fetch hasn't resolved yet. */
 export function statusCard(s: NotionStatus | null): HTMLElement {
   if (!s) {
@@ -38,9 +48,7 @@ export function statusCard(s: NotionStatus | null): HTMLElement {
         h('div', { class: 'row-main' },
           h('div', { class: 'row-name', style: { color: 'var(--win-text)' } }, 'Connected to Notion'),
           h('div', { class: 'u-dim', style: { fontSize: '11.5px', marginTop: '2px' } },
-            s.databaseTitle
-              ? `${s.databaseTitle} — ${s.trackedGames} tracked game${s.trackedGames === 1 ? '' : 's'} ready to sync`
-              : `${s.trackedGames} tracked game${s.trackedGames === 1 ? '' : 's'} ready to sync`),
+            s.databaseTitle ? `${s.databaseTitle} — ${syncSummary(s)}` : syncSummary(s)),
         ),
       ),
       subjectiveColumnsSection(s.subjectiveColumns),

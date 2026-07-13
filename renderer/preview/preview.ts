@@ -9,7 +9,7 @@
  */
 import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
-  DashboardFilters, DataLocationResult, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
+  DashboardFilters, DataLocationResult, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
   RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
@@ -19,6 +19,8 @@ import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/core/dashboardData';
+import { isCompetitive } from '../../src/core/matchFilter';
+import { mergeAccountList, isConfiguredAccount } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
 import {
@@ -114,7 +116,7 @@ const anchorMap = (): RankAnchorMap => {
   return out;
 };
 const accountList = (): AccountSummary[] =>
-  Object.entries(previewAccounts).map(([battleTag, label]) => ({ battleTag, label: label || battleTag }));
+  mergeAccountList(previewAccounts, dataset().map((g) => g.account));
 const previewRanks = (): RankSummary[] => {
   const games = dataset();
   const map = anchorMap();
@@ -124,7 +126,7 @@ const previewRanks = (): RankSummary[] => {
       account: a.account, role: a.role,
       tier: s?.tier ?? a.tier, division: s?.division ?? a.division,
       progressPct: s?.progressPct ?? a.progressPct,
-      protected: s?.protected ?? false, needsReanchor: s?.needsReanchor ?? false,
+      protected: s?.protected ?? false,
     };
   });
 };
@@ -250,6 +252,7 @@ if (gepParam === 'cycle') {
 }
 
 const syncListeners = new Set<(p: SyncProgress) => void>();
+const gameLoggedListeners = new Set<(p: GameLoggedPayload) => void>();
 
 // Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
 let previewImportedMatches = 0;
@@ -270,12 +273,16 @@ let previewFolderPickCount = 0;
 
 function notionStatusFor(databaseId: string | undefined): NotionStatus {
   const db = CANNED_DATABASES.find((d) => d.id === databaseId);
+  // The preview has no real export ledger, so treat every competitive game as
+  // still needing a sync — enough to exercise the "Sync N games" copy.
+  const competitiveGames = dataset().filter((g) => isCompetitive(g.gameType)).length;
   return {
     tokenSet: notionTokenSet,
     databaseConfigured: Boolean(db),
     connected: notionTokenSet && Boolean(db),
     gametrackerUrl: db?.url,
-    trackedGames: dataset().length,
+    unsyncedGames: competitiveGames,
+    competitiveGames,
     databaseSource: db ? 'selected' : 'none',
     databaseId: db?.id,
     databaseTitle: db?.title,
@@ -391,11 +398,12 @@ const mock: OwStatsApi = {
   },
   logMatch: async (input: ManualMatchInput) => {
     const matchId = `manual-${Date.now()}`;
+    const account = input.account || Object.values(previewAccounts)[0] || 'You';
     const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
     logged.push({
       matchId,
       timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
-      account: input.account || Object.values(previewAccounts)[0] || 'You',
+      account,
       role: input.role,
       map: input.map,
       result: input.result,
@@ -411,6 +419,8 @@ const mock: OwStatsApi = {
       previewReviews[matchId] = { at: Date.now(), grades, flags: input.mental ?? {} };
       save(REVIEWS_KEY, previewReviews);
     }
+    // Mirror the app's onGameLogged push so the auto-switch (F4) is exercisable here.
+    for (const cb of gameLoggedListeners) cb({ matchId, account, configured: isConfiguredAccount(account, previewAccounts) });
     return { matchId };
   },
   editMatch: async (input: MatchEditInput) => {
@@ -467,6 +477,20 @@ const mock: OwStatsApi = {
   deleteAccount: async (battleTag: string) => {
     delete previewAccounts[battleTag];
     save(ACCOUNTS_KEY, previewAccounts);
+    return accountList();
+  },
+  deleteDetectedAccount: async (account: string) => {
+    // IRREVERSIBLE: drop logged rows under this account + its rank anchors,
+    // mirroring the app. (Demo-season rows aren't stored here, so only logged
+    // detected accounts are removable in the preview.)
+    for (let i = logged.length - 1; i >= 0; i--) {
+      if (logged[i].account === account) logged.splice(i, 1);
+    }
+    for (const key of Object.keys(previewAnchors)) {
+      if (previewAnchors[key].account === account) delete previewAnchors[key];
+    }
+    save(LOGGED_KEY, logged);
+    save(ANCHORS_KEY, previewAnchors);
     return accountList();
   },
   getRanks: async () => previewRanks(),
@@ -553,6 +577,10 @@ const mock: OwStatsApi = {
     t.name = input.name;
     t.mode = input.mode;
     t.rule = input.rule;
+    if (input.roleScope != null) t.roleScope = input.roleScope;
+    else delete t.roleScope;
+    if (input.heroScope != null) t.heroScope = input.heroScope;
+    else delete t.heroScope;
     save(TARGETS_KEY, targets);
   },
   setTargetActive: async (id: string, active: boolean) => {
@@ -630,7 +658,10 @@ const mock: OwStatsApi = {
     syncListeners.add(cb);
     return () => syncListeners.delete(cb);
   },
-  onGameLogged: (_cb: (p: { matchId: string }) => void) => () => {},
+  onGameLogged: (cb: (p: GameLoggedPayload) => void) => {
+    gameLoggedListeners.add(cb);
+    return () => gameLoggedListeners.delete(cb);
+  },
   onPendingChanged: (_cb: () => void) => () => {},
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {

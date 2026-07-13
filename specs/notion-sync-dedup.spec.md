@@ -59,8 +59,7 @@ ledger state.
   the redundant copies (Notion trash — restorable ~30 days). Reports archived/kept/failed
   counts. Nothing is ever archived implicitly by sync or import.
 - `ImportResult` gains `duplicates?: number`; the sync card's import summary and toast show it.
-- Docs: README Notion section updated; `specs/notion-import.spec.md` amended to reference this
-  spec where its dedupe/idempotency claims are superseded.
+- Docs: README Notion section updated.
 
 ## Out-of-Scope
 

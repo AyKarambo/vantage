@@ -7,6 +7,7 @@ import type { GameRecord } from '../src/core/analytics';
 import type { MatchRecord } from '../src/core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
 import { resolveMapId } from '../src/core/resolvers/mapId';
+import { recoverableAccount } from '../src/core/accountsManage';
 
 // SQLite keeps the file open (and locked, on Windows), so every store instance
 // and temp dir created here is tracked and torn down after each test.
@@ -91,15 +92,6 @@ describe('HistoryStore (SQLite) — core interface', () => {
     expect(h.all()[0].performance).toBeUndefined();
   });
 
-  it('addScreenshots appends, and is false for unknown id or empty list', () => {
-    const h = open(tmp());
-    h.add(g({ matchId: 'a', screenshots: ['one.png'] }));
-    expect(h.addScreenshots('a', ['two.png'])).toBe(true);
-    expect(h.all()[0].screenshots).toEqual(['one.png', 'two.png']);
-    expect(h.addScreenshots('a', [])).toBe(false);
-    expect(h.addScreenshots('nope', ['x.png'])).toBe(false);
-  });
-
   it('clearReview removes a review and is false when there is none', () => {
     const h = open(tmp());
     h.add(g({ matchId: 'a', review: { at: 1, grades: { t1: 'hit' }, flags: {} } }));
@@ -115,7 +107,7 @@ describe('HistoryStore (SQLite) — core interface', () => {
       durationMinutes: 12.5, heroes: ['Ana', 'Kiriko'],
       perHero: [{ hero: 'Ana', role: 'support', eliminations: 10, deaths: 3, assists: 20, damage: 5000, healing: 9000, mitigation: 0 }],
       roster: [{ battleTag: 'Me#1', heroName: 'Ana', isLocal: true }],
-      finalScore: '2-1', screenshots: ['a.png'],
+      finalScore: '2-1',
       mental: { tilt: true, positiveComms: true },
       review: { at: 1_700_000_001_000, grades: { t1: 'hit' }, flags: { toxicMates: true } },
       importedAt: 1_700_000_002_000,
@@ -261,6 +253,77 @@ describe('HistoryStore (SQLite) — relocate', () => {
     expect(() => s.relocate(b)).toThrow(/already exists/);
     // Original still usable and intact after the refused move.
     expect(s.count()).toBe(1);
+  });
+});
+
+describe('HistoryStore (SQLite) — deleteByAccount (F3)', () => {
+  it('irreversibly removes only the rows stored under the exact account value, reporting the count', () => {
+    const dir = tmp();
+    const h = open(dir);
+    h.addMany([
+      g({ matchId: 'a', account: 'Rando#4521' }),
+      g({ matchId: 'b', account: 'Rando#4521' }),
+      g({ matchId: 'c', account: 'Karambo' }),
+      g({ matchId: 'd', account: 'Unknown' }),
+    ]);
+    expect(h.deleteByAccount('Rando#4521')).toBe(2);
+    expect(h.all().map((x) => x.matchId).sort()).toEqual(['c', 'd']);
+    // A second call is a no-op.
+    expect(h.deleteByAccount('Rando#4521')).toBe(0);
+    // Persisted across a close + reopen.
+    h.close();
+    expect(open(dir).all().map((x) => x.matchId).sort()).toEqual(['c', 'd']);
+  });
+
+  it('deletes the Unknown bucket without touching a configured account of another name', () => {
+    const h = open(tmp());
+    h.addMany([g({ matchId: 'u1', account: 'Unknown' }), g({ matchId: 'u2', account: 'Unknown' }), g({ matchId: 'k', account: 'Karambo' })]);
+    expect(h.deleteByAccount('Unknown')).toBe(2);
+    expect(h.all().map((x) => x.account)).toEqual(['Karambo']);
+  });
+});
+
+describe('HistoryStore (SQLite) — Unknown-account recovery (F1) via reresolve', () => {
+  const localRoster = (battleTag: string) => [
+    { battleTag: 'Enemy#1', heroName: 'Reaper' },
+    { battleTag, heroName: 'Ana', isLocal: true },
+  ];
+  // The startup recovery pass: re-attribute an 'Unknown' row from its local
+  // roster BattleTag, expressed through the general reresolve() primitive.
+  const recover = (accounts: Record<string, string>) => (game: GameRecord) =>
+    game.account === 'Unknown' ? { account: recoverableAccount(game.roster, accounts) } : {};
+
+  it('re-attributes Unknown rows whose local roster tag now maps to a configured account', () => {
+    const h = open(tmp());
+    h.addMany([
+      g({ matchId: 'a', account: 'Unknown', roster: localRoster('Karambo#21234') }),
+      g({ matchId: 'b', account: 'Unknown', roster: localRoster('Karambo#21234') }),
+    ]);
+    expect(h.reresolve(recover({ 'Karambo#21234': 'Karambo' }))).toBe(2);
+    expect(h.all().every((x) => x.account === 'Karambo')).toBe(true);
+  });
+
+  it('leaves Unknown rows whose tag maps to nothing, and is idempotent', () => {
+    const h = open(tmp());
+    h.addMany([
+      g({ matchId: 'a', account: 'Unknown', roster: localRoster('Karambo#21234') }),
+      g({ matchId: 'b', account: 'Unknown' }), // no roster → not recoverable
+      g({ matchId: 'c', account: 'Unknown', roster: localRoster('Stranger#9') }), // no config mapping
+    ]);
+    const accounts = { 'Karambo#21234': 'Karambo' };
+    expect(h.reresolve(recover(accounts))).toBe(1);
+    // b and c stay Unknown; a became Karambo.
+    expect(h.all().find((x) => x.matchId === 'a')?.account).toBe('Karambo');
+    expect(h.all().filter((x) => x.account === 'Unknown').map((x) => x.matchId).sort()).toEqual(['b', 'c']);
+    // Idempotent: the recovered row is no longer Unknown, so a re-run changes nothing.
+    expect(h.reresolve(recover(accounts))).toBe(0);
+  });
+
+  it('only touches Unknown rows — never a configured account already attributed', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'k', account: 'Karambo', roster: localRoster('Karambo#21234') }));
+    expect(h.reresolve(recover({ 'Karambo#21234': 'Alt' }))).toBe(0); // 'k' isn't Unknown, so it's untouched
+    expect(h.all()[0].account).toBe('Karambo');
   });
 });
 

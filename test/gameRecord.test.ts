@@ -51,6 +51,7 @@ describe('matchToGame', () => {
     expect(game?.perHero).toEqual([{
       hero: 'Tracer', role: 'damage',
       eliminations: 20, deaths: 5, assists: 7, damage: 9000, healing: 0, mitigation: 0,
+      minutes: 10, // single hero → time on hero = match duration
     }]);
   });
 
@@ -73,6 +74,16 @@ describe('matchToGame', () => {
     const game = matchToGame(base(), ACCOUNTS);
     expect(game?.finalScore).toBeUndefined();
     expect(game?.roster).toBeUndefined();
+  });
+
+  it('resolves a raw GEP numeric map id to its canonical name ("4140" → Neon Junction)', () => {
+    const game = matchToGame(base({ mapName: '4140' }), ACCOUNTS);
+    expect(game?.map).toBe('Neon Junction');
+  });
+
+  it('leaves an unknown map value untouched and still falls back to Unknown when absent', () => {
+    expect(matchToGame(base({ mapName: 'Ilios' }), ACCOUNTS)?.map).toBe('Ilios');
+    expect(matchToGame(base({ mapName: undefined }), ACCOUNTS)?.map).toBe('Unknown');
   });
 
   it('falls back to the battleTag when no account mapping matches', () => {

@@ -4,6 +4,20 @@ import { DatabaseSync, type StatementSync, type SQLInputValue } from 'node:sqlit
 import type { GameRecord, MatchReview } from '../core/analytics';
 import type { MatchRecord } from '../core/model';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
+import { resolveMapId } from '../core/resolvers/mapId';
+
+/**
+ * Reconstruct a {@link GameRecord} from its stored `data` blob, normalizing a
+ * legacy raw GEP map value (Neon Junction persisted as the numeric id `"4140"`
+ * or the old "Neon Junktion" spelling) to the canonical map name so old rows
+ * display and group correctly on load.
+ */
+function parseGame(data: unknown): GameRecord {
+  const game = JSON.parse(String(data)) as GameRecord;
+  const map = resolveMapId(game.map);
+  if (map && map !== game.map) game.map = map;
+  return game;
+}
 
 /** Basename of the SQLite database inside the store's directory. */
 export const DB_FILE = 'history.db';
@@ -112,6 +126,7 @@ export class HistoryStore {
   private importedCountStmt!: StatementSync;
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
+  private deleteByAccountStmt!: StatementSync;
   private addPendingStmt!: StatementSync;
   private allPendingStmt!: StatementSync;
   private hasPendingStmt!: StatementSync;
@@ -128,7 +143,7 @@ export class HistoryStore {
 
   /** Snapshot of every stored game, in insertion order. */
   all(): GameRecord[] {
-    return this.allStmt.all().map((row) => JSON.parse(String(row.data)) as GameRecord);
+    return this.allStmt.all().map((row) => parseGame(row.data));
   }
 
   /** True if a game with this match id is already stored. */
@@ -177,11 +192,22 @@ export class HistoryStore {
     return true;
   }
 
+  /**
+   * IRREVERSIBLY delete every game stored under an exact account value (a raw
+   * BattleTag or the `Unknown` bucket) — the destructive half of managing a
+   * detected-but-unlabeled account. Matches the denormalized `account` column
+   * exactly, so it never touches a configured account's relabelled rows. Returns
+   * how many rows were removed.
+   */
+  deleteByAccount(account: string): number {
+    return Number(this.deleteByAccountStmt.run(account).changes);
+  }
+
   /** Rewrite the account label on every matching game (one transaction). Returns the count changed. */
   relabelAccount(from: string, to: string): number {
     if (from === to) return 0;
     const games = this.allStmt.all()
-      .map((row) => JSON.parse(String(row.data)) as GameRecord)
+      .map((row) => parseGame(row.data))
       .filter((g) => g.account === from);
     if (!games.length) return 0;
     this.tx(() => {
@@ -289,19 +315,9 @@ export class HistoryStore {
    * are treated as `'notion'`. Returns the removed games.
    */
   removeImported(source: 'notion' | 'file'): GameRecord[] {
-    const removed = this.selectImportedStmt.all(source).map((row) => JSON.parse(String(row.data)) as GameRecord);
+    const removed = this.selectImportedStmt.all(source).map((row) => parseGame(row.data));
     if (removed.length) this.deleteImportedStmt.run(source);
     return removed;
-  }
-
-  /** Append end-of-match capture paths to a stored game; false if the id is unknown. */
-  addScreenshots(matchId: string, screenshots: string[]): boolean {
-    if (!screenshots.length) return false;
-    const game = this.getOne(matchId);
-    if (!game) return false;
-    game.screenshots = [...(game.screenshots ?? []), ...screenshots];
-    this.updateStmt.run(...updateValues(game));
-    return true;
   }
 
   /** Attach (or replace) the manual review on a stored game; false if the id is unknown. */
@@ -487,6 +503,7 @@ export class HistoryStore {
     this.deleteImportedStmt = this.db.prepare(
       `DELETE FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
     );
+    this.deleteByAccountStmt = this.db.prepare('DELETE FROM games WHERE account = ?');
     // Pending (no-outcome) holding store — see PENDING_SCHEMA_SQL.
     this.addPendingStmt = this.db.prepare(
       `INSERT INTO pending_matches (matchId, endedAt, data) VALUES (?, ?, ?) ON CONFLICT(matchId) DO NOTHING`,
@@ -520,7 +537,7 @@ export class HistoryStore {
 
   private getOne(matchId: string): GameRecord | undefined {
     const row = this.getStmt.get(matchId);
-    return row ? (JSON.parse(String(row.data)) as GameRecord) : undefined;
+    return row ? (parseGame(row.data)) : undefined;
   }
 
   private tx(body: () => void): void {

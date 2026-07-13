@@ -46,8 +46,10 @@ export interface DataProvider {
   listAccounts(): AccountSummary[];
   /** Create or edit an account; returns the updated list. */
   saveAccount(input: AccountInput): AccountSummary[];
-  /** Delete an account by battleTag; returns the updated list. */
+  /** Delete a CONFIGURED account by battleTag — removes the label only (history untouched). */
   deleteAccount(battleTag: string): AccountSummary[];
+  /** IRREVERSIBLY delete a detected-unlabelled account: drops its history rows + rank anchors. */
+  deleteDetectedAccount(account: string): AccountSummary[];
   /** Computed current rank for each anchored (account, role). */
   getRanks(): RankSummary[];
   /** Per-account, per-role most-played hero names (desc by play count), over the full unfiltered history. */
@@ -126,7 +128,7 @@ export interface DataProvider {
   getAppInfo(): AppInfo;
   /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
   openExternal(url: string): Promise<void>;
-  /** Where Vantage's data folder currently lives (DB + manual data + screenshots). */
+  /** Where Vantage's data folder currently lives (DB + manual data). */
   getDataLocation(): DataLocation;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder; async (shows a dialog). */
   chooseDataFolder(): Promise<DataLocationResult>;

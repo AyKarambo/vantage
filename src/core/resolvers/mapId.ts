@@ -19,6 +19,7 @@ export const MAP_ID_TO_NAME: Record<string, string> = {
   '468': 'Numbani',
   '2892': 'Midtown',
   '2360': 'Paraíso',
+  '4140': 'Neon Junction',
   // Control
   '1634': 'Lijiang Tower', '1719': 'Lijiang Tower', // + Lunar New Year
   '3314': 'Antarctic Peninsula',
@@ -50,13 +51,23 @@ export const MAP_ID_TO_NAME: Record<string, string> = {
 };
 
 /**
- * Resolve a GEP `match_info.map` value: a numeric id → its canonical name; a value
- * that is already a name, or a numeric id not in the table, passes through unchanged.
+ * Legacy / variant map-NAME spellings that fold to the current canonical name, so
+ * a value already stored (or reported) under an old spelling still resolves. Numeric
+ * ids live in {@link MAP_ID_TO_NAME} above.
+ */
+export const MAP_NAME_ALIASES: Record<string, string> = {
+  'Neon Junktion': 'Neon Junction', // older builds spelled it with a 'k'
+};
+
+/**
+ * Resolve a GEP `match_info.map` value: a numeric id → its canonical name; a legacy
+ * name spelling → the canonical one; a value already canonical, or a numeric id not
+ * in the table, passes through unchanged.
  */
 export function resolveMapId(value: string | number | undefined | null): string | undefined {
   if (value === undefined || value === null) return undefined;
   const s = String(value).trim();
   if (s === '') return undefined;
   if (/^\d+$/.test(s)) return MAP_ID_TO_NAME[s] ?? s;
-  return s;
+  return MAP_NAME_ALIASES[s] ?? s;
 }

@@ -37,7 +37,6 @@ const full = (): GameRecord => ({
     { battleTag: 'Nova#11214', heroName: 'Ana', heroRole: 'support', team: 0, kills: 4, deaths: 5, assists: 20, damage: 3000, healing: 9000, mitigation: 0 },
     { battleTag: 'Enemy#9', heroName: 'Reinhardt', heroRole: 'tank', team: 1, kills: 14, deaths: 6, assists: 4, damage: 8000, healing: 0, mitigation: 12000 },
   ],
-  screenshots: ['full-1/end-of-match.png'],
   mental: { tilt: true },
 });
 
@@ -67,7 +66,6 @@ describe('matchDetail degradation contract', () => {
     expect(d!.perHero).toEqual([]);
     expect(d!.scoreboard).toBeUndefined();
     expect(d!.playerHistory).toEqual([]);
-    expect(d!.screenshots).toEqual([]);
     expect(d!.performance).toBeUndefined();
   });
 
@@ -153,9 +151,46 @@ describe('matchDetail degradation contract', () => {
     // Player history spans the whole history.
     expect(d!.playerHistory).toHaveLength(1);
     expect(d!.playerHistory[0]).toMatchObject({ name: 'Nova#11214', encounters: 1 });
+  });
 
-    // Screenshots become read-only vantage-media:// URLs.
-    expect(d!.screenshots).toEqual(['vantage-media://screenshots/full-1/end-of-match.png']);
+  it('orders each team 5v5 (tank, dps, dps, support, support) and derives role from hero when GEP omits it', () => {
+    const g = minimal({
+      matchId: '5v5-1',
+      role: 'support', // the local player's queue role
+      roster: [
+        { battleTag: 'Mercy#1', heroName: 'Mercy', heroRole: 'support', team: 0 },
+        { battleTag: 'Me#1', heroName: 'Ana', team: 0, isLocal: true },
+        { battleTag: 'Rein#1', heroName: 'Reinhardt', heroRole: 'tank', team: 0 },
+        { battleTag: 'Genji#1', heroName: 'Genji', team: 0 }, // heroRole MISSING → derived from hero
+        { battleTag: 'Ashe#1', heroName: 'Ashe', heroRole: 'damage', team: 0 },
+        { battleTag: 'Sig#1', heroName: 'Sigma', heroRole: 'tank', team: 1 },
+      ],
+    });
+    const d = matchDetail([g], '5v5-1')!;
+    const team0 = d.scoreboard!.filter((e) => e.team === 0).map((e) => e.role);
+    expect(team0).toEqual(['tank', 'damage', 'damage', 'support', 'support']);
+    // Genji's role was derived from the hero (GEP gave no heroRole).
+    expect(d.scoreboard!.find((e) => e.hero === 'Genji')!.role).toBe('damage');
+    // Within the support bucket the local player sorts first.
+    expect(d.scoreboard!.filter((e) => e.team === 0 && e.role === 'support')[0].isLocal).toBe(true);
+    // The tracked player's team renders before the enemy team.
+    expect(d.scoreboard!.map((e) => e.team)).toEqual([0, 0, 0, 0, 0, 1]);
+  });
+
+  it('merges duplicate same-hero perHero segments at read time (panel + local scoreboard)', () => {
+    const dup = minimal({
+      matchId: 'dup-1', durationMinutes: 10, heroes: ['Tracer', 'Genji'],
+      perHero: [
+        { hero: 'Tracer', role: 'damage', eliminations: 5, deaths: 1, assists: 2, damage: 2000, healing: 0, mitigation: 0, minutes: 3 },
+        { hero: 'Genji', role: 'damage', eliminations: 4, deaths: 2, assists: 1, damage: 1500, healing: 0, mitigation: 0, minutes: 2 },
+        { hero: 'Tracer', role: 'damage', eliminations: 7, deaths: 1, assists: 3, damage: 3000, healing: 0, mitigation: 0, minutes: 5 },
+      ],
+    });
+    const d = matchDetail([dup], 'dup-1')!;
+    expect(d.perHero).toHaveLength(2); // one chip per hero, not three
+    expect(d.perHero.find((s) => s.hero === 'Tracer')).toMatchObject({ eliminations: 12, damage: 5000, minutes: 8 });
+    // No roster → local-only scoreboard fallback, which merges too.
+    expect(d.scoreboard).toHaveLength(2);
   });
 
   it('falls back to local-only scoreboard rows from perHero when no roster exists', () => {
@@ -170,12 +205,6 @@ describe('matchDetail degradation contract', () => {
       name: 'Main', hero: 'Ana', isLocal: true, healing: 11000,
     });
     expect(d!.scoreboard![0].team).toBeUndefined();
-  });
-
-  it('normalizes screenshot paths (backslashes, leading slashes) into URLs', () => {
-    const g = minimal({ matchId: 's-1', screenshots: ['s-1\\end-of-match.png'] });
-    const d = matchDetail([g], 's-1');
-    expect(d!.screenshots).toEqual(['vantage-media://screenshots/s-1/end-of-match.png']);
   });
 });
 

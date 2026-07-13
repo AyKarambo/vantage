@@ -11,6 +11,7 @@
  */
 import type { GameRecord, MatchMental, TargetGrade } from '../analytics';
 import { commsTone } from '../comms';
+import { isCompetitive } from '../matchFilter';
 
 /**
  * Internal id the Notion import bookkeeping grade is stored under
@@ -56,4 +57,66 @@ function mergedFlagsForSignature(a: MatchMental | undefined, b: MatchMental | un
   if (tone === 'positive') flags.push('positiveComms');
   else if (tone) flags.push(`comms:${tone}`);
   return flags.sort();
+}
+
+/**
+ * The export-ledger facts the unsynced count needs for one match, read against
+ * the configured Gametracker database: the page it was last exported to
+ * (`undefined` = never exported into that database) and the content signature
+ * recorded at that write.
+ */
+export interface MatchExportLedger {
+  pageId: string | undefined;
+  signature: string | undefined;
+}
+
+/**
+ * Whether a game still needs to be pushed to Notion — the SAME create/update/skip
+ * rule {@link ../notion/notionExporter NotionExporter} applies: it's never been
+ * exported into the target database (no ledgered page id → a create) OR its
+ * content changed since the last export (recorded signature ≠ the `current` one →
+ * an update). Only an unchanged, already-ledgered match is "synced". Keeping this
+ * in lockstep with the exporter is why the in-app count and a real sync agree.
+ */
+export function gameNeedsSync(current: string, ledger: MatchExportLedger): boolean {
+  if (ledger.pageId === undefined) return true;
+  return ledger.signature !== current;
+}
+
+/**
+ * Count competitive games that still need a Notion sync. The caller passes
+ * UNFILTERED history (spec E3: dashboard filters are ignored); non-competitive
+ * rows — pre-update history Vantage no longer tracks — are excluded here, so the
+ * count matches the exporter's competitive-only scope. `signatureOf` computes a
+ * game's current export signature (grade + mental flags); `ledgerOf` returns its
+ * recorded state against the configured database.
+ *
+ * Known transient over-count (spec E4): right after upgrading from a pre-ledger
+ * install, legacy `processed[]` rows and rows the user hand-added in Notion have
+ * no `records` entry yet, so `ledgerOf(...).pageId` is `undefined` and they read
+ * as "needs sync" until the next `export()` adopts + ledgers them. This resolves
+ * itself on the first sync; it never over-writes or duplicates anything.
+ */
+export function countUnsyncedGames(
+  games: readonly GameRecord[],
+  signatureOf: (game: GameRecord) => string,
+  ledgerOf: (matchId: string) => MatchExportLedger,
+): number {
+  let n = 0;
+  for (const g of games) {
+    if (!isCompetitive(g.gameType)) continue;
+    if (gameNeedsSync(signatureOf(g), ledgerOf(g.matchId))) n++;
+  }
+  return n;
+}
+
+/**
+ * How many competitive games the (unfiltered) history holds — the denominator
+ * that tells "no competitive games yet" (`0`) apart from "all synced"
+ * (`countUnsyncedGames` is `0` while this is `> 0`).
+ */
+export function countCompetitiveGames(games: readonly GameRecord[]): number {
+  let n = 0;
+  for (const g of games) if (isCompetitive(g.gameType)) n++;
+  return n;
 }

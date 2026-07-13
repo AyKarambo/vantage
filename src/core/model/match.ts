@@ -40,6 +40,13 @@ export interface HeroStat {
   damage: number;
   healing: number;
   mitigation: number;
+  /**
+   * Real time on this hero, in fractional minutes, when the aggregator could
+   * time the hero swaps (first hero starts at match start, last ends at match
+   * end). Absent on older records and manual logs — consumers fall back to an
+   * equal split of the match duration (see {@link ../perHero}).
+   */
+  minutes?: number;
 }
 
 /**

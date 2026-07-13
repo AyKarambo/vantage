@@ -95,7 +95,7 @@ $mapParaiso = "Para" + [char]0x00ED + "so"        # Paraíso
 $mapCatalog = @(
     "New Queen Street", "Colosseo", $mapEsperanca, "Runasapi", "Redwood Dam",
     "King's Row", "Midtown", "Eichenwalde", "Hollywood", "Numbani",
-    "Blizzard World", $mapParaiso, "Neon Junktion", "Circuit Royal", "Dorado",
+    "Blizzard World", $mapParaiso, "Neon Junction", "Circuit Royal", "Dorado",
     "Havana", "Junkertown", "Rialto", "Route 66", "Shambali Monastery",
     "Watchpoint: Gibraltar", "Antarctic Peninsula", "Busan", "Ilios",
     "Lijiang Tower", "Nepal", "Oasis", "Samoa", "New Junk City", "Suravasa",
@@ -118,8 +118,8 @@ $mapLookup = @{}
 foreach ($m in $mapCatalog) {
     $mapLookup[(Get-NormalizedMap $m)] = $m
 }
-# Explicit alias normalization can't reconcile (c vs k): source "Neon Junction".
-$mapLookup[(Get-NormalizedMap "Neon Junction")] = "Neon Junktion"
+# Explicit alias: reconcile the old 'k' spelling in source files to Vantage's "Neon Junction".
+$mapLookup[(Get-NormalizedMap "Neon Junktion")] = "Neon Junction"
 
 # --- Frontmatter parsing ----------------------------------------------------
 

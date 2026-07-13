@@ -12,7 +12,10 @@ import {
   type AppConfig,
 } from './config';
 import type { GameRecord } from '../core/analytics';
-import { matchExportSignature, effectiveImprovementGrade, type AuthoredTarget } from '../core/targets';
+import {
+  matchExportSignature, effectiveImprovementGrade, countUnsyncedGames, countCompetitiveGames,
+  type AuthoredTarget,
+} from '../core/targets';
 import type {
   CleanupDuplicatesResult, ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
   SchemaProvisionStatus, SubjectiveColumnDiag,
@@ -34,8 +37,13 @@ export interface NotionRuntimeDeps {
   config: () => AppConfig;
   /** Re-load config.local.json into the owner after this runtime persisted to it. */
   reloadConfig: () => void;
-  /** Games available to push, for the status card. */
-  trackedGames: () => number;
+  /**
+   * The UNFILTERED local history, so the status card can count competitive games
+   * that still need syncing (never-exported OR changed-since-export) against the
+   * configured database, ignoring dashboard filters (spec E3). Non-competitive
+   * rows are filtered out inside the count helper.
+   */
+  historyGames: () => GameRecord[];
   /** How many local matches came from a Notion import (deletable for a clean re-import). */
   importedMatches: () => number;
   /** Mirror the token presence into the tray. */
@@ -88,6 +96,10 @@ export class NotionRuntime {
   // Subjective columns the configured database defines (Comms, Improvement Target,
   // Leaver, …), so the writer may set them. Same presence guard as hasPlayedAt.
   private writableColumns: ReadonlySet<string> = new Set();
+  // The select option names each subjective select column defines (from validate),
+  // so the writer can write the database's own "none"-like option for an unset
+  // Comms / Improvement Target instead of leaving it blank (spec E2).
+  private subjectiveSelectOptions: Record<string, string[]> = {};
   // Per-column schema diagnostics for the 5 optional subjective columns (A.7),
   // cached from the last `validate()` so `status()` can surface them without
   // re-checking the network. Undefined = not yet validated (or nothing configured).
@@ -112,6 +124,7 @@ export class NotionRuntime {
     this.hasPlayedAt = false;
     this.hasSrDelta = false;
     this.writableColumns = new Set();
+    this.subjectiveSelectOptions = {};
     this.subjectiveDiagnostics = undefined;
     this.mapsRelationDbId = undefined;
     this.gametrackerSourceId = undefined;
@@ -133,12 +146,14 @@ export class NotionRuntime {
     const { notion } = this.deps.config();
     const tokenSet = Boolean(getNotionToken());
     const databaseConfigured = Boolean(notion.gametrackerDatabaseId);
+    const games = this.deps.historyGames();
     return {
       tokenSet,
       databaseConfigured,
       connected: tokenSet && databaseConfigured && Boolean(this.exporter),
       gametrackerUrl: notion.gametrackerUrl || undefined,
-      trackedGames: this.deps.trackedGames(),
+      unsyncedGames: this.unsyncedCount(games, notion.gametrackerDatabaseId || undefined),
+      competitiveGames: countCompetitiveGames(games),
       databaseSource: notionDatabaseSource(),
       databaseId: notion.gametrackerDatabaseId || undefined,
       databaseTitle: this.shapeCheck?.title,
@@ -149,6 +164,29 @@ export class NotionRuntime {
       subjectiveColumns: this.subjectiveDiagnostics,
       schemaProvision: this.schemaProvision,
     };
+  }
+
+  /**
+   * How many competitive games still need syncing to the configured database:
+   * never-exported OR changed-since-export, using the SAME signature + ledger the
+   * exporter does so the count and a real sync agree (spec E3). Uses the live
+   * authored targets/ids (re-read here, never cached) so a measured grade folds
+   * into the signature identically to `export()`. `0` when no database is
+   * configured — there is no ledger to diff against, and the sync UI is gated on
+   * `connected` anyway.
+   */
+  private unsyncedCount(games: GameRecord[], databaseId: string | undefined): number {
+    if (!databaseId) return 0;
+    const authoredTargets = this.deps.authoredTargets?.() ?? [];
+    const authoredTargetIds = this.deps.authoredTargetIds?.() ?? new Set<string>();
+    return countUnsyncedGames(
+      games,
+      (g) => matchExportSignature(g, effectiveImprovementGrade(g, authoredTargets, authoredTargetIds)),
+      (matchId) => ({
+        pageId: this.deps.outbox.pageIdFor(matchId, databaseId),
+        signature: this.deps.outbox.signatureFor(matchId, databaseId),
+      }),
+    );
   }
 
   async export(games: GameRecord[]): Promise<ExportResult> {
@@ -376,6 +414,7 @@ export class NotionRuntime {
       this.hasPlayedAt = result.hasPlayedAt;
       this.hasSrDelta = result.hasSrDelta;
       this.writableColumns = new Set(result.subjectiveColumns);
+      this.subjectiveSelectOptions = result.subjectiveSelectOptions;
       this.subjectiveDiagnostics = result.subjectiveColumnDiagnostics;
       this.mapsRelationDbId = result.mapRelationDbId;
       this.gametrackerSourceId = result.dataSourceId;
@@ -384,6 +423,7 @@ export class NotionRuntime {
       this.hasPlayedAt = false;
       this.hasSrDelta = false;
       this.writableColumns = new Set();
+      this.subjectiveSelectOptions = {};
       this.subjectiveDiagnostics = undefined;
       this.mapsRelationDbId = undefined;
       this.gametrackerSourceId = undefined;
@@ -398,7 +438,7 @@ export class NotionRuntime {
     const cfg = this.deps.config();
     const writer = new NotionWriter(
       this.client, cfg.notion.gametrackerDatabaseId, this.hasPlayedAt, this.writableColumns, this.hasSrDelta,
-      this.gametrackerSourceId,
+      this.gametrackerSourceId, this.subjectiveSelectOptions,
     );
     // Prefer an explicitly configured Maps database, else the one discovered off
     // the Gametracker's `Map` relation — so maps resolve even when the user only

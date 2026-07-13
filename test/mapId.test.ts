@@ -22,6 +22,12 @@ describe('resolveMapId', () => {
     expect(resolveMapId('999999')).toBe('999999');
   });
 
+  it('resolves Neon Junction (GEP id 4140) and folds the legacy "Neon Junktion" spelling', () => {
+    expect(resolveMapId('4140')).toBe('Neon Junction');
+    expect(resolveMapId('Neon Junktion')).toBe('Neon Junction');
+    expect(resolveMapId('Neon Junction')).toBe('Neon Junction');
+  });
+
   it('returns undefined for empty/nullish', () => {
     expect(resolveMapId(undefined)).toBeUndefined();
     expect(resolveMapId(null)).toBeUndefined();

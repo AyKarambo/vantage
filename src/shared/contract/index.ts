@@ -57,7 +57,8 @@ export type {
 } from './inputs';
 
 // Accounts + rank
-export type { AccountSummary, AccountInput, RankAnchorInput, RankSummary } from './accounts';
+export type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
+export type { AccountKind } from '../../core/accountsManage';
 
 // Local file import (Settings → Data)
 export type { ImportFileResult } from './importFile';

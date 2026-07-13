@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { AuthoredTarget, TargetMode } from '../core/targets';
+import type { Role } from '../core/model';
 
 interface ManualState {
   /** Improvement targets the player authored in the builder. */
@@ -49,14 +50,23 @@ export class ManualStore {
     if (this.state.targets.length !== before) this.save();
   }
 
-  /** Edit name/mode/rule in place — createdAt and lifecycle state are preserved
-   *  so accrued grades keep counting across edits. */
-  updateTarget(id: string, patch: { name: string; mode: TargetMode; rule: string }): void {
+  /** Edit name/mode/rule (and measured scope) in place — createdAt and lifecycle
+   *  state are preserved so accrued grades keep counting across edits. An absent
+   *  `roleScope`/`heroScope` in the patch clears any previously-saved scope
+   *  (e.g. switching a measured target back to self-rated). */
+  updateTarget(
+    id: string,
+    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string },
+  ): void {
     const t = this.state.targets.find((x) => x.id === id);
     if (!t) return;
     t.name = patch.name;
     t.mode = patch.mode;
     t.rule = patch.rule;
+    if (patch.roleScope != null) t.roleScope = patch.roleScope;
+    else delete t.roleScope;
+    if (patch.heroScope != null) t.heroScope = patch.heroScope;
+    else delete t.heroScope;
     this.save();
   }
 

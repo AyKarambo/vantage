@@ -129,8 +129,19 @@ export interface NotionStatus {
   connected: boolean;
   /** Deep link to the Notion database, if known. */
   gametrackerUrl?: string;
-  /** How many tracked games are available to push. */
-  trackedGames: number;
+  /**
+   * How many competitive games still need a Notion sync — never-exported OR
+   * changed-since-export against the configured database, ignoring dashboard
+   * filters (spec E3). `0` means "up to date" when `competitiveGames > 0`, and
+   * "no competitive games yet" when `competitiveGames === 0`.
+   */
+  unsyncedGames: number;
+  /**
+   * Total competitive games in the (unfiltered) local history. Lets the UI tell
+   * "no competitive games yet" (this is `0`) from "up to date" (`unsyncedGames`
+   * is `0` but this is `> 0`).
+   */
+  competitiveGames: number;
   /** Where the configured database id came from. */
   databaseSource: 'selected' | 'appsettings' | 'none';
   /** The configured database id, for exact matching in the picker. */

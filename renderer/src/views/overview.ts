@@ -2,7 +2,8 @@
 import { h } from '../dom';
 import type { DashboardData, Group, SessionRecap } from '../../../src/shared/contract';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
-import { dateLong, greeting, int, pct, rankLabel, signed, streakText } from '../format';
+import { dateLong, greeting, int, pct, signed, streakText } from '../format';
+import { rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
@@ -103,20 +104,23 @@ function kpiRow(d: DashboardData): HTMLElement {
 /**
  * Rank KPI — the user's real anchored rank when set, else the winrate heuristic.
  * The anchored rank always wins, so setting a rank in Settings is reflected here.
+ * This is the ONE surface that shows the anchor→now movement arrow (▴/▾/neutral),
+ * so it's the only caller that passes `movement` to the shared rank renderer —
+ * and the arrow is truthful (no more hard-coded `dir: 'up'`).
  */
 function rankKpi(d: DashboardData): HTMLElement {
   const r = d.primaryRank;
   if (r) {
+    const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected, movement: r.movement });
+    const arrow = p.movementDir === 'up' ? '▴ ' : p.movementDir === 'down' ? '▾ ' : '';
+    const context = r.protected ? `${p.bufferPctText} · rank protected` : `${p.bufferPctText} in division`;
     return kpiCard({
       label: 'Rank',
-      value: `${rankLabel(r.tier, r.division)}${r.protected ? ' 🛡' : ''}`,
+      value: `${p.rankLabel}${p.shield ? ' 🛡' : ''}`,
       delta: {
-        text: r.needsReanchor
-          ? 'set % after demotion'
-          : r.protected
-            ? `${Math.round(r.progressPct)}% · rank protected`
-            : `${Math.round(r.progressPct)}% in division`,
-        dir: 'up',
+        text: `${arrow}${context}`,
+        // Colour the arrow only when it actually points — neutral stays unstyled.
+        ...(p.movementDir === 'up' ? { dir: 'up' as const } : p.movementDir === 'down' ? { dir: 'down' as const } : {}),
       },
     });
   }

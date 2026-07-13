@@ -93,6 +93,43 @@ export function presentSubjectiveColumns(
     .map(([name]) => name);
 }
 
+/**
+ * The `select` option NAMES the live schema defines for each subjective column
+ * that is a `select` (guarded on `type === 'select'`, so a wrong-typed column
+ * contributes nothing). Keyed by canonical column name, verbatim from
+ * `properties[col].select.options[].name` — casing preserved so the writer can
+ * echo a discovered "None"/"none"/"N/A" back exactly (spec E1). Columns absent,
+ * wrong-typed, or with no options are simply omitted from the map.
+ */
+export function subjectiveSelectOptions(
+  properties: Record<string, { type?: string; select?: { options?: Array<{ name?: string }> } } | undefined>,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [column, expectedType] of Object.entries(OPTIONAL_SUBJECTIVE_PROPERTIES)) {
+    if (expectedType !== 'select') continue;
+    const prop = properties[column];
+    if (prop?.type !== 'select') continue;
+    const names = (prop.select?.options ?? [])
+      .map((o) => o?.name)
+      .filter((n): n is string => typeof n === 'string');
+    out[column] = names;
+  }
+  return out;
+}
+
+/**
+ * The discovered option NAME to write when a subjective select has no value — the
+ * first option whose name is `none` case-insensitively (trimmed), returned
+ * VERBATIM so the writer echoes the database's own casing (e.g. `None`). Undefined
+ * when the column offers no such option, in which case the writer keeps today's
+ * omit-on-create / blank-on-update behaviour and NEVER auto-creates the option
+ * (spec E2). Deliberately narrow — only literal `none`, not `n/a`/`no`/etc — to
+ * avoid mislabelling a user's own option as the unset sentinel.
+ */
+export function noneLikeOption(optionNames: readonly string[] | undefined): string | undefined {
+  return (optionNames ?? []).find((name) => name.trim().toLowerCase() === 'none');
+}
+
 /** Notion property type, keyed by the property name, as returned by `dataSources.retrieve`. */
 export type SubjectiveColumnStatus = 'available' | 'wrong-type' | 'near-miss' | 'missing';
 

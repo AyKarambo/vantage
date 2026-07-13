@@ -58,11 +58,9 @@ function noOutcomeMatch(matchId: string, over: Partial<MatchRecord> = {}): Match
 function fakeHistory() {
   const games: GameRecord[] = [];
   const pending: MatchRecord[] = [];
-  const attached: Array<{ matchId: string; screenshots: string[] }> = [];
   return {
     games,
     pending,
-    attached,
     add(g: GameRecord): boolean {
       if (games.some((x) => x.matchId === g.matchId)) return false;
       games.push(g);
@@ -70,11 +68,6 @@ function fakeHistory() {
     },
     all(): GameRecord[] {
       return [...games];
-    },
-    addScreenshots(matchId: string, screenshots: string[]): boolean {
-      if (!games.some((x) => x.matchId === matchId) || !screenshots.length) return false;
-      attached.push({ matchId, screenshots });
-      return true;
     },
     addPending(rec: MatchRecord): boolean {
       if (pending.some((x) => x.matchId === rec.matchId)) return false;
@@ -98,24 +91,18 @@ function fakeHistory() {
 function harness(config: AppConfig = appConfig()) {
   const history = fakeHistory();
   const notifications: Array<{ title: string; body: string }> = [];
-  const captures: Array<{ matchId: string; onSaved: (relPaths: string[]) => void }> = [];
-  const logged: string[] = [];
+  const logged: Array<{ matchId: string; account: string; configured: boolean }> = [];
   let pendingSignals = 0;
   const deps: MatchPipelineDeps = {
     history,
     aggregator: { handle: () => null },
-    screenshots: {
-      capture: (matchId, onSaved) => {
-        captures.push({ matchId, onSaved });
-      },
-    },
     getConfig: () => config,
     notify: (title, body) => {
       notifications.push({ title, body });
     },
     log: () => {},
-    onGameLogged: (g) => {
-      logged.push(g.matchId);
+    onGameLogged: (payload) => {
+      logged.push(payload);
     },
     onPendingChanged: () => {
       pendingSignals++;
@@ -125,7 +112,6 @@ function harness(config: AppConfig = appConfig()) {
     pipeline: createMatchPipeline(deps),
     history,
     notifications,
-    captures,
     logged,
     pendingSignals: () => pendingSignals,
   };
@@ -212,62 +198,56 @@ describe('createMatchPipeline — competitive capture gate', () => {
   });
 
   it('drops a non-competitive match delivered through addMatch (feed path)', () => {
-    const { pipeline, history, captures } = harness();
+    const { pipeline, history } = harness();
     pipeline.addMatch({ ...capturedMatch('gep-qp'), gameType: 'quickplay' });
     expect(history.games).toHaveLength(0);
-    expect(captures).toHaveLength(0); // no screenshot capture scheduled for a dropped game
   });
 });
 
-describe('createMatchPipeline — onGameLogged live signal', () => {
-  it('fires once per newly-logged competitive game, not for dupes or non-competitive', () => {
+describe('createMatchPipeline — onGameLogged (F4)', () => {
+  it('fires once per newly recorded match with the account and its configured status', () => {
+    const { pipeline, logged } = harness(); // config maps Player#1234 → Main
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Main' }));
+    expect(logged).toEqual([{ matchId: 'c-1', account: 'Main', configured: true }]);
+  });
+
+  it('marks an unmapped account as not configured', () => {
     const { pipeline, logged } = harness();
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Rando#4521' }));
+    expect(logged).toEqual([{ matchId: 'c-1', account: 'Rando#4521', configured: false }]);
+  });
 
-    expect(pipeline.recordGame(game({ matchId: 'c-1', result: 'Win' }))).toBe(true);
-    expect(logged).toEqual(['c-1']);
+  it('does not fire for a dropped (non-competitive) match or a duplicate', () => {
+    const { pipeline, logged } = harness();
+    pipeline.recordGame(game({ matchId: 'qp', result: 'Win', gameType: 'Unranked' }));
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Main' }));
+    pipeline.recordGame(game({ matchId: 'c-1', result: 'Loss', account: 'Main' })); // duplicate id
+    expect(logged.map((p) => p.matchId)).toEqual(['c-1']);
+  });
 
-    // Duplicate matchId → no second signal.
-    pipeline.recordGame(game({ matchId: 'c-1', result: 'Loss' }));
-    expect(logged).toEqual(['c-1']);
-
-    // Non-competitive → dropped before the signal.
-    pipeline.recordGame(game({ matchId: 'qp-1', result: 'Win', gameType: 'Unranked' }));
-    expect(logged).toEqual(['c-1']);
-
-    // A new competitive game through the feed/addMatch path → fires again.
-    pipeline.addMatch(capturedMatch('gep-2'));
-    expect(logged).toEqual(['c-1', 'gep-2']);
+  it('resolves a captured live match through addMatch and announces it', () => {
+    const { pipeline, logged } = harness();
+    pipeline.addMatch(capturedMatch('gep-1')); // battleTag Player#1234 → Main
+    expect(logged).toEqual([{ matchId: 'gep-1', account: 'Main', configured: true }]);
   });
 });
 
-describe('createMatchPipeline — addMatch screenshots', () => {
-  it('resolves the record into history and attaches captured screenshots via the callback', () => {
-    const { pipeline, history, captures } = harness();
+describe('createMatchPipeline — addMatch', () => {
+  it('resolves the record into history exactly once, ignoring a duplicate', () => {
+    const { pipeline, history } = harness();
 
     pipeline.addMatch(capturedMatch('gep-1'));
     expect(history.games).toHaveLength(1);
     expect(history.games[0]).toMatchObject({ matchId: 'gep-1', result: 'Win', account: 'Main' });
-    expect(captures).toHaveLength(1);
-    expect(captures[0].matchId).toBe('gep-1');
 
-    // The capture completes later; its saved paths land on the stored game.
-    captures[0].onSaved(['gep-1/end-of-match.png']);
-    expect(history.attached).toEqual([
-      { matchId: 'gep-1', screenshots: ['gep-1/end-of-match.png'] },
-    ]);
-  });
-
-  it('never schedules a capture for a duplicate match', () => {
-    const { pipeline, captures } = harness();
     pipeline.addMatch(capturedMatch('gep-1'));
-    pipeline.addMatch(capturedMatch('gep-1'));
-    expect(captures).toHaveLength(1);
+    expect(history.games).toHaveLength(1);
   });
 });
 
 describe('createMatchPipeline — uncertain matches held for Review', () => {
   it('holds a played competitive match with no GEP outcome (never in history), and notifies', () => {
-    const { pipeline, history, notifications, captures } = harness();
+    const { pipeline, history, notifications } = harness();
 
     pipeline.addMatch(noOutcomeMatch('gep-no-result'));
 
@@ -281,8 +261,6 @@ describe('createMatchPipeline — uncertain matches held for Review', () => {
         body: 'A match ended without a confirmed result — set it in Review, or dismiss it if it wasn’t a real match.',
       },
     ]);
-    // No screenshot capture for a match that never reached history.
-    expect(captures).toHaveLength(0);
   });
 
   it('holds a competitive (RANKED) match with no result — the regression: not auto-logged, not dropped', () => {
@@ -298,12 +276,11 @@ describe('createMatchPipeline — uncertain matches held for Review', () => {
     // game_type AND no outcome. It classifies as neither competitive nor a known
     // non-competitive mode, so it must be HELD for the user — never silently
     // dropped. This is the key new assertion.
-    const { pipeline, history, notifications, captures } = harness();
+    const { pipeline, history, notifications } = harness();
     pipeline.addMatch(noOutcomeMatch('swap-drop', { gameType: undefined }));
     expect(history.games).toHaveLength(0);
     expect(history.pending.map((r) => r.matchId)).toEqual(['swap-drop']);
     expect(notifications).toHaveLength(1);
-    expect(captures).toHaveLength(0);
   });
 
   it('holds an unknown-game_type match that DOES carry a result — not auto-logged, not dropped', () => {
@@ -355,7 +332,7 @@ describe('createMatchPipeline — uncertain matches held for Review', () => {
     expect(history.games).toHaveLength(1);
     expect(history.games[0]).toMatchObject({ matchId: 'gep-no-result', result: 'Win', account: 'Main' });
     // Resolving runs the same path as a live game, so the live signal fires.
-    expect(logged).toEqual(['gep-no-result']);
+    expect(logged.map((p) => p.matchId)).toEqual(['gep-no-result']);
   });
 
   it('resolvePending maps Loss/Draw onto the raw outcome and returns false for an unknown id', () => {
@@ -386,7 +363,7 @@ describe('createMatchPipeline — uncertain matches held for Review', () => {
     expect(history.pending).toHaveLength(0);
     expect(history.games).toHaveLength(1);
     expect(history.games[0]).toMatchObject({ matchId: 'swap-confirm', result: 'Loss', gameType: 'Competitive' });
-    expect(logged).toEqual(['swap-confirm']);
+    expect(logged.map((p) => p.matchId)).toEqual(['swap-confirm']);
   });
 
   it('dismissPending removes a held match (never logged), returns true, and fires onPendingChanged', () => {

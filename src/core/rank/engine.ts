@@ -70,24 +70,24 @@ export function applyMatch(state: RankState, match: RankMatchInput): RankState {
     // already protected is the second dip → carry the buffer down into a real, tracked
     // position. Both resolve through the shared carry and clear protection.
     if (next > 0 || state.protected) {
-      return { ...carry(state, next), protected: false, needsReanchor: false };
+      return { ...carry(state, next), protected: false };
     }
     // First loss into the buffer: hold the division, keep the true (negative) carry —
     // the next match's delta is added on top of it, not on top of a phantom 0.
-    return { tier: state.tier, division: state.division, progressPct: next, protected: true, needsReanchor: false };
+    return { tier: state.tier, division: state.division, progressPct: next, protected: true };
   }
 
   // Win or Draw: pay down any outstanding carry, then climb through the shared carry.
   if (next > 0) {
-    return { ...carry(state, next), protected: false, needsReanchor: false };
+    return { ...carry(state, next), protected: false };
   }
   if (state.protected) {
     // Didn't fully clear the buffer — stays protected at the smaller negative carry.
-    return { tier: state.tier, division: state.division, progressPct: next, protected: true, needsReanchor: false };
+    return { tier: state.tier, division: state.division, progressPct: next, protected: true };
   }
   // A non-protected win/draw that lands <= 0 (a negative delta) floors at the division's
   // 0% — it must NOT demote (demotion only ever happens by passing through protection).
-  return { tier: state.tier, division: state.division, progressPct: 0, protected: false, needsReanchor: false };
+  return { tier: state.tier, division: state.division, progressPct: 0, protected: false };
 }
 
 /**
@@ -104,7 +104,6 @@ export function stateFromAnchor(anchor: RankAnchor): RankState {
     division: clamp(anchor.division, 1, 5),
     progressPct: p,
     protected: p < 0,
-    needsReanchor: false,
   };
 }
 

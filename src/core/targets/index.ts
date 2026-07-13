@@ -21,7 +21,7 @@ export type { TargetTemplate } from './templates';
 export { TARGET_TEMPLATES } from './templates';
 
 // Automatic grading of measured (⚡) targets from match stats
-export type { MeasuredOp, ParsedRule } from './measured';
+export type { MeasuredOp, ParsedRule, MeasuredScope } from './measured';
 export {
   parseMeasuredRule, formatMeasuredRule, matchStatValue, evaluateMeasured, foldMeasuredGradesForExport,
   effectiveImprovementGrade,
@@ -31,8 +31,13 @@ export {
 export { stepFor, COARSE_FACTOR } from './stepSizes';
 
 // Notion export bookkeeping: the hidden internal-id constant + the export
-// content signature that drives changed-since-last-export detection.
-export { NOTION_IMPROVEMENT_TARGET_ID, matchExportSignature } from './notionBookkeeping';
+// content signature that drives changed-since-last-export detection, plus the
+// pure "needs sync" / unsynced-count helpers the Notion status card reads.
+export {
+  NOTION_IMPROVEMENT_TARGET_ID, matchExportSignature,
+  gameNeedsSync, countUnsyncedGames, countCompetitiveGames,
+  type MatchExportLedger,
+} from './notionBookkeeping';
 
 // Aggregate improvement grade derivation (Notion `Improvement Target` export).
 export { aggregateImprovementGrade } from './aggregateGrade';

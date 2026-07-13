@@ -17,8 +17,8 @@ describe('default master-data snapshot', () => {
     for (const name of STADIUM_ONLY_MAPS) {
       expect(DEFAULT_MASTER_DATA.maps.find((m) => m.name === name), name).toBeUndefined();
     }
-    // Neon Junktion is a normal Hybrid map and must stay.
-    expect(DEFAULT_MASTER_DATA.maps.find((m) => m.name === 'Neon Junktion')).toBeDefined();
+    // Neon Junction is a normal Hybrid map and must stay.
+    expect(DEFAULT_MASTER_DATA.maps.find((m) => m.name === 'Neon Junction')).toBeDefined();
   });
 
   it('ships known-withheld maps inactive (AC 31)', () => {

@@ -2,8 +2,8 @@ import { Client } from '@notionhq/client';
 import { MAP_MODES } from '../core/maps';
 import {
   buildGametrackerProperties, diagnoseSubjectiveColumns, hasPlayedAtColumn, hasSrDeltaColumn,
-  mapRelationSourceId, planColumnProvision, presentSubjectiveColumns, validateGametrackerShape,
-  type ColumnProvisionPlan, type ShapeValidation,
+  mapRelationSourceId, planColumnProvision, presentSubjectiveColumns, subjectiveSelectOptions,
+  validateGametrackerShape, type ColumnProvisionPlan, type ShapeValidation,
 } from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary, SubjectiveColumnDiag } from '../shared/contract';
 export type { NotionDatabaseSummary, NotionPageSummary };
@@ -25,6 +25,13 @@ export interface ValidateResult extends ShapeValidation {
   hasSrDelta: boolean;
   /** Subjective columns present on the database, so the writer may set them (Comms, Leaver, …). */
   subjectiveColumns: string[];
+  /**
+   * The `select` option names each subjective select column defines, keyed by
+   * canonical column name — so the writer can write a database's own "none"-like
+   * option for an unset Comms / Improvement Target (spec E2) instead of leaving
+   * it blank. Verbatim casing; wrong-typed/absent columns are omitted.
+   */
+  subjectiveSelectOptions: Record<string, string[]>;
   /** Per-column schema diagnostics for all 5 optional subjective columns (available/wrong-type/near-miss/missing). */
   subjectiveColumnDiagnostics: SubjectiveColumnDiag[];
   /** The database the `Map` relation points at — lets the exporter resolve maps without a configured mapsDatabaseId. */
@@ -145,6 +152,7 @@ export class NotionAdmin {
       hasPlayedAt: hasPlayedAtColumn(properties),
       hasSrDelta: hasSrDeltaColumn(properties),
       subjectiveColumns: presentSubjectiveColumns(properties),
+      subjectiveSelectOptions: subjectiveSelectOptions(properties),
       subjectiveColumnDiagnostics: diagnoseSubjectiveColumns(properties),
       mapRelationDbId: mapRelationSourceId(properties),
       dataSourceId,

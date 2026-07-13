@@ -254,6 +254,29 @@ describe('NotionAdmin.validate', () => {
     expect(result.mapRelationDbId).toBe('maps-ds-99');
   });
 
+  it('surfaces each subjective select column\'s option names (so the writer can echo a "none" option)', async () => {
+    const client = mockClient();
+    client.databases.retrieve.mockResolvedValue({
+      title: [{ plain_text: 'Gametracker' }],
+      data_sources: [{ id: 'ds-id' }],
+    });
+    client.dataSources.retrieve.mockResolvedValue({
+      properties: {
+        Comms: { type: 'select', select: { options: [{ name: 'positive' }, { name: 'None' }] } },
+        'Improvement Target': { type: 'select', select: { options: [{ name: 'hit' }, { name: 'None' }] } },
+        Leaver: { type: 'rich_text' }, // wrong type → contributes no options
+      },
+    });
+
+    const admin = new NotionAdmin(client);
+    const result = await admin.validate('db-id', { requireMapRelation: false });
+
+    expect(result.subjectiveSelectOptions).toEqual({
+      Comms: ['positive', 'None'],
+      'Improvement Target': ['hit', 'None'],
+    });
+  });
+
   it('returns per-column subjective diagnostics: wrong-type (actualType), near-miss (actualName), missing, available', async () => {
     const client = mockClient();
     client.databases.retrieve.mockResolvedValue({

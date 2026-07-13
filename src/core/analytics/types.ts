@@ -92,8 +92,6 @@ export interface GameRecord {
   /** Latest roster snapshot per slot — whatever teams GEP reported (may be
    *  local team only). Absent on older records and manual logs. */
   roster?: RosterPlayer[];
-  /** End-of-match capture files, relative to the screenshots root. */
-  screenshots?: string[];
   /** Manual self-report captured in the Log Match card, if the player added one. */
   mental?: MatchMental;
   /** The saved Review-screen read (target grades + feel flags), if graded. */
@@ -178,7 +176,7 @@ export interface FocusEntry extends FocusItem {
 export interface HeroSummary extends WinLoss {
   hero: string;
   role?: Role;
-  totals: Omit<HeroStat, 'hero' | 'role'>;
+  totals: Omit<HeroStat, 'hero' | 'role' | 'minutes'>;
   /** Per-10-minute averages (null when no duration data). */
   per10: Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'> | null;
   kda: number; // (elims + assists) / max(deaths, 1)

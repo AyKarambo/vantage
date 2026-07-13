@@ -2,13 +2,14 @@
  * Match detail — the parameterized drill-down behind a Matches row click.
  * Every section renders only when its data exists, so the page degrades
  * tier-by-tier: a minimal legacy record still gets a full header, richer
- * records add scoreboard, tabs, progress, player history, and screenshots.
+ * records add scoreboard, tabs, progress, and player history.
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, relTime, roleLabel, rankLabel, signed } from '../format';
+import { fmt, relTime, roleLabel, signed } from '../format';
+import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
@@ -25,6 +26,7 @@ import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
+import { heroLines } from '../../../src/core/perHero';
 import { PALETTE, wrHsl } from '../theme';
 import type { ViewContext } from './view';
 
@@ -88,11 +90,10 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
   return [
     header(d, ctx),
     scoreboardSection(d),
-    perHeroSection(d.perHero),
+    perHeroSection(d.perHero, d.durationMinutes),
     competitiveSection(d.competitive, d.srDelta),
     gradesSection(d, ctx),
     playerHistorySection(d),
-    screenshotsSection(d.screenshots),
   ].filter((n): n is HTMLElement => n != null);
 }
 
@@ -179,31 +180,40 @@ function scoreboardSection(d: MatchDetail): HTMLElement | null {
 
 // --- per-hero tabs ------------------------------------------------------------
 
-function perHeroSection(perHero: HeroStat[]): HTMLElement | null {
+function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined): HTMLElement | null {
   if (!perHero.length) return null;
+  // Counting stats are per-10-minutes on that hero (real swap-timed minutes when
+  // available, else an equal split of the match); KDA stays a raw ratio. A match
+  // with no usable duration dashes the per-10 stats but still shows KDA.
+  const lines = heroLines(perHero, durationMinutes);
   const body = h('div', { class: 'stat-grid stat-grid--wide' });
   const draw = (hero: string): void => {
-    const s = perHero.find((x) => x.hero === hero) ?? perHero[0];
-    const kda = (s.eliminations + s.assists) / Math.max(s.deaths, 1);
+    const s = lines.find((x) => x.hero === hero) ?? lines[0];
+    const p = s.per10;
     render(body,
-      statBox(String(s.eliminations), 'Eliminations'),
-      statBox(String(s.assists), 'Assists'),
-      statBox(String(s.deaths), 'Deaths'),
-      statBox(kda.toFixed(1), 'KDA'),
-      statBox(fmt(s.damage), 'Damage'),
-      statBox(fmt(s.healing), 'Healing'),
-      statBox(fmt(s.mitigation), 'Mitigation'),
+      statBox(per10Fixed(p?.eliminations), 'Elims/10'),
+      statBox(per10Fixed(p?.assists), 'Assists/10'),
+      statBox(per10Fixed(p?.deaths), 'Deaths/10'),
+      statBox(s.kda.toFixed(1), 'KDA'),
+      statBox(fmt(p?.damage), 'DMG/10'),
+      statBox(fmt(p?.healing), 'HEAL/10'),
+      statBox(fmt(p?.mitigation), 'MIT/10'),
     );
   };
-  draw(perHero[0].hero);
-  const tabs = perHero.length > 1
+  draw(lines[0].hero);
+  const tabs = lines.length > 1
     ? segmented({
-        options: perHero.map((s) => ({ value: s.hero, label: s.hero })),
-        value: perHero[0].hero,
+        options: lines.map((s) => ({ value: s.hero, label: s.hero })),
+        value: lines[0].hero,
         onChange: draw,
       })
     : null;
-  return card({ title: 'Per hero', sub: 'your line on each hero this match', actions: tabs }, body);
+  return card({ title: 'Per hero', sub: 'per 10 minutes on hero · KDA is a ratio', actions: tabs }, body);
+}
+
+/** Per-10 for the E/D/A stats: one decimal, or a dash when minutes are unknown. */
+function per10Fixed(v: number | undefined): string {
+  return v == null ? '–' : v.toFixed(1);
 }
 
 // --- competitive progress (calculated from your rank anchor + logged SR) ------
@@ -221,6 +231,15 @@ const NOTE_SUB: Record<string, string> = {
 function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HTMLElement | null {
   if (!c) return null;
   const withinDivision = c.progressPct != null ? c.progressPct / 100 : null;
+  // Shared rank parts (no movement arrow on match detail). A reconstructed
+  // (backward) match flattens protection, so never draw the 🛡 there even if a
+  // stray flag leaked through — it would imply a live buffer it doesn't have (G5).
+  const parts = c.tier != null && c.division != null
+    ? rankParts({
+        tier: c.tier, division: c.division, progressPct: c.progressPct ?? 0,
+        protected: (c.protected ?? false) && c.note !== 'reconstructed',
+      })
+    : null;
   return card(
     {
       title: 'Competitive progress',
@@ -228,23 +247,20 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
       actions: pill(NOTE_LABEL[c.note] ?? c.note, 'accent'),
     },
     h('div', { class: 'detail-progress' },
-      c.tier != null && c.division != null
+      parts
         ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-            h('span', { class: 'detail-rank' }, rankLabel(c.tier, c.division)),
-            c.protected ? pill('🛡 Rank protected', 'draw') : null,
+            h('span', { class: 'detail-rank' }, parts.rankLabel),
+            parts.shield ? pill('🛡 Rank protected', 'draw') : null,
           )
         : null,
-      c.needsReanchor
-        ? h('div', { class: 'hint', style: { color: 'var(--loss-text)' } },
-            'Demoted after a protected loss — set your new rank on the Settings › Accounts panel to resume tracking.')
-        : c.protected
-          // Protected = a negative carry; a clamped division bar labelled "-19%"
-          // reads as broken, so show the buffer state as a hint instead.
-          ? h('div', { class: 'hint' },
-              `Holding the division — ${Math.round(c.progressPct ?? 0)}% into the rank-protection buffer.`)
-          : withinDivision != null
-            ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
-            : null,
+      parts?.shield
+        // Protected = a negative carry; a clamped division bar labelled "-19%"
+        // reads as broken, so show the buffer state as a hint instead.
+        ? h('div', { class: 'hint' },
+            `Holding the division — ${parts.bufferPctText} into the rank-protection buffer.`)
+        : withinDivision != null
+          ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
+          : null,
       // The SR change logged for this specific match — always shown when set
       // (typed or back-computed), regardless of whether a rank anchor exists.
       srDelta != null
@@ -406,7 +422,7 @@ function buildMatchEditor(
     }
     anchorTier = r.tier;
     anchorDivision = r.division;
-    anchorPct = r.needsReanchor ? '' : String(Math.round(r.progressPct));
+    anchorPct = String(Math.round(r.progressPct));
   };
 
   openModal((close) => {
@@ -620,20 +636,5 @@ function encounterRow(p: PlayerEncounter): HTMLElement {
       `${p.encounters} prior ${p.encounters === 1 ? 'match' : 'matches'}${wl}`),
     h('span', { class: 'u-dim mono', style: { fontSize: '11px', minWidth: '46px', textAlign: 'right' } },
       relTime(p.lastSeen)),
-  );
-}
-
-// --- screenshots gallery ---------------------------------------------------------
-
-function screenshotsSection(shots: string[]): HTMLElement {
-  if (!shots.length) {
-    // Collapsed: the section is reserved, not populated (capture is best-effort).
-    return card({ title: 'Screenshots', sub: 'end-of-match captures' },
-      h('div', { class: 'hint' }, 'No screenshots were captured for this match.'));
-  }
-  return card({ title: 'Screenshots', sub: 'end-of-match captures' },
-    h('div', { class: 'shot-grid' },
-      ...shots.map((src) => h('img', { class: 'shot', src, alt: 'End-of-match screenshot', loading: 'lazy' })),
-    ),
   );
 }
