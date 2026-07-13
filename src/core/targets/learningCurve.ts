@@ -58,6 +58,15 @@ export interface LearningCurvePoint {
   /** Wilson 95% interval on `roll`; {0,1} when roll is null. */
   ciLow: number;
   ciHigh: number;
+  /**
+   * Rolling hit-rate over the trailing graded games — the EXECUTION signal. This
+   * usually rises BEFORE winrate does (you're doing the new thing on purpose), so
+   * it's the leading indicator that practice is working. Null until ROLL_MIN graded
+   * games accrue (self-rated targets need Review grades; measured auto-grade).
+   */
+  hitRoll: number | null;
+  /** Graded games backing `hitRoll`. */
+  hitGraded: number;
 }
 
 export interface TargetLearningCurve {
@@ -78,6 +87,15 @@ export interface TargetLearningCurve {
   reboundIndex: number | null;
   /** Current rolling winrate minus baseline, in points (signed); null without a baseline. */
   reboundPts: number | null;
+  /** Current rolling hit-rate (execution); null until enough graded games. */
+  execCurrent: number | null;
+  /** Execution has risen off its low — you're hitting the target more often lately. */
+  execRising: boolean;
+  /**
+   * Execution is improving while winrate hasn't rebounded yet (phase building/
+   * climbing) — the leading signal that practice is landing before the wins follow.
+   */
+  execLeads: boolean;
   phase: LearningPhase;
 }
 
@@ -109,14 +127,21 @@ export function targetLearningCurve(games: GameRecord[], t: AuthoredTarget): Tar
   const decidedSince = sincePts.filter(isDecided).length;
 
   const points: LearningCurvePoint[] = sincePts.map((a, i) => {
-    const window = sincePts.slice(0, i + 1).filter(isDecided).slice(-ROLL_WINDOW);
-    const rollDecided = window.length;
-    if (rollDecided < ROLL_MIN) {
-      return { index: i + 1, timestamp: a.timestamp, result: a.result, grade: a.grade, roll: null, rollDecided, ciLow: 0, ciHigh: 1 };
-    }
-    const wins = window.filter((w) => w.result === 'Win').length;
-    const ci = wilson(wins, rollDecided);
-    return { index: i + 1, timestamp: a.timestamp, result: a.result, grade: a.grade, roll: wins / rollDecided, rollDecided, ciLow: ci.low, ciHigh: ci.high };
+    const prefix = sincePts.slice(0, i + 1);
+    // Winrate — trailing decided games (the outcome).
+    const decWindow = prefix.filter(isDecided).slice(-ROLL_WINDOW);
+    const rollDecided = decWindow.length;
+    const wins = decWindow.filter((w) => w.result === 'Win').length;
+    const roll = rollDecided < ROLL_MIN ? null : wins / rollDecided;
+    const ci = roll == null ? { low: 0, high: 1 } : wilson(wins, rollDecided);
+    // Execution — trailing graded games' hit-rate (the leading signal).
+    const gradedWindow = prefix.filter((p) => p.grade != null).slice(-ROLL_WINDOW);
+    const hitGraded = gradedWindow.length;
+    const hitRoll = hitGraded < ROLL_MIN ? null : gradedWindow.filter((p) => p.grade === 'hit').length / hitGraded;
+    return {
+      index: i + 1, timestamp: a.timestamp, result: a.result, grade: a.grade,
+      roll, rollDecided, ciLow: ci.low, ciHigh: ci.high, hitRoll, hitGraded,
+    };
   });
 
   const nonNull = points.filter((p): p is LearningCurvePoint & { roll: number } => p.roll != null);
@@ -160,6 +185,16 @@ export function targetLearningCurve(games: GameRecord[], t: AuthoredTarget): Tar
     phase = troughRoll != null && currentRoll > troughRoll + DIP_EPS ? 'climbing' : 'building';
   else phase = 'steady';
 
+  // Execution (the leading indicator): is your rolling hit-rate rising off its low,
+  // and is it doing so while winrate is still below baseline? Then practice is
+  // landing ahead of the wins — the honest "it's working" signal during the dip.
+  const execPoints = points.filter((p): p is LearningCurvePoint & { hitRoll: number } => p.hitRoll != null);
+  const execCurrent = execPoints.length ? execPoints[execPoints.length - 1].hitRoll : null;
+  let execTrough: number | null = null;
+  for (const p of execPoints) if (execTrough == null || p.hitRoll < execTrough) execTrough = p.hitRoll;
+  const execRising = execCurrent != null && execTrough != null && execCurrent > execTrough + DIP_EPS;
+  const execLeads = execRising && (phase === 'building' || phase === 'climbing');
+
   return {
     targetId: t.id,
     mode: t.mode,
@@ -172,6 +207,9 @@ export function targetLearningCurve(games: GameRecord[], t: AuthoredTarget): Tar
     troughIndex,
     reboundIndex,
     reboundPts,
+    execCurrent,
+    execRising,
+    execLeads,
     phase,
   };
 }

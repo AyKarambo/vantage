@@ -115,11 +115,24 @@ export function targetTrend(curve: TargetLearningCurve): HTMLElement {
       statBox(curve.baseline != null ? pct(curve.baseline) : '—', beforeLabel),
       statBox(lastRoll ? pct(lastRoll.roll ?? 0) : '—', recentLabel),
     ),
+    // Execution is the leading signal — surface it prominently when it's climbing
+    // ahead of winrate (the honest "it's working" cue during a dip).
+    curve.execLeads
+      ? h('div', {
+          style: {
+            marginTop: '10px', padding: '8px 10px', borderRadius: 'var(--r-sm)',
+            background: 'var(--surface-3, rgba(255,255,255,0.04))', borderLeft: `2px solid ${PALETTE.mid}`,
+            color: PALETTE.mid, fontSize: '11.5px', lineHeight: '1.5', fontWeight: '500',
+          },
+        }, `You’re hitting the target more often lately${curve.execCurrent != null ? ` (${pct(curve.execCurrent)})` : ''} — execution is climbing before winrate does. That’s the sign practice is landing; keep going.`)
+      : null,
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5', color: 'var(--muted)' } }, REFRAME),
     showTrough ? h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } }, TROUGH) : null,
-    h('div', { style: { marginTop: '10px' } },
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      'Purple = winrate (the outcome). Amber dashed = hit-rate — how often you’re hitting the target — which usually climbs first.'),
+    h('div', { style: { marginTop: '8px' } },
       chartCard(
-        { title: 'Rolling winrate', columns: LEARNING_CURVE_COLUMNS, rows: learningCurveRows(curve) },
+        { title: 'Rolling winrate + hit-rate', columns: LEARNING_CURVE_COLUMNS, rows: learningCurveRows(curve) },
         learningCurveChart(curve),
       ),
     ),
