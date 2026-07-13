@@ -2,6 +2,7 @@ import { winLoss, type GameRecord, type TargetGrade } from '../analytics';
 import { sampleTargets } from './sampleTargets';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
 import { evaluateMeasured } from './measured';
+import { targetLearningCurve } from './learningCurve';
 import type { AuthoredTarget, TargetSummary } from './types';
 
 /**
@@ -63,6 +64,8 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number): 
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,
+    // The Focus Trend learning curve — live targets only (archived stay light).
+    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t) }),
   };
 }
 
@@ -99,6 +102,8 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number): 
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,
+    // The Focus Trend learning curve — live targets only (archived stay light).
+    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t) }),
   };
 }
 
