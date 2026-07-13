@@ -20,6 +20,13 @@ const game = (timestamp: number, result: Result): GameRecord => ({
 const run = (results: string, startTs: number): GameRecord[] =>
   [...results].map((c, i) => game(startTs + i, c === 'W' ? 'Win' : c === 'L' ? 'Loss' : 'Draw'));
 
+/** Build graded games from space-separated Result+grade tokens (e.g. "Wh Lm Lh"). */
+const gradedGames = (spec: string, startTs: number): GameRecord[] =>
+  spec.trim().split(/\s+/).map((tok, i) => ({
+    ...game(startTs + i, tok[0] === 'W' ? 'Win' : tok[0] === 'L' ? 'Loss' : 'Draw'),
+    review: { at: 0, grades: { T: (tok[1] === 'h' ? 'hit' : tok[1] === 'p' ? 'partial' : 'missed') as 'hit' | 'partial' | 'missed' }, flags: {} },
+  }));
+
 const selfTarget = (over: Partial<AuthoredTarget> = {}): AuthoredTarget => ({
   id: 'T', name: 'focus', mode: 'self', rule: '', createdAt: 0, isActive: true, activatedAt: 100, ...over,
 });
@@ -108,6 +115,39 @@ describe('targetLearningCurve', () => {
         expect(['building', 'climbing']).toContain(c.phase);
       }
     }
+  });
+});
+
+describe('targetLearningCurve — execution (hit-rate) overlay', () => {
+  it('rolls a hit-rate over graded games, null until ROLL_MIN graded, rising as hits accrue', () => {
+    const t = selfTarget();
+    // all wins so winrate is out of the way; grades go missed → hit, so hit-rate rises.
+    const since = gradedGames('Wm Wm Wm Wh Wh Wh Wh Wh Wh Wh Wh Wh', 100);
+    const c = targetLearningCurve([...run('WWWWWLLLLL', 1), ...since], t);
+    expect(c.points[3].hitRoll).toBeNull(); // 4 graded < ROLL_MIN
+    expect(c.points[4].hitRoll).not.toBeNull(); // the 5th graded game
+    expect(c.execCurrent).not.toBeNull();
+    expect(c.execRising).toBe(true);
+  });
+
+  it('flags execution LEADING winrate: hit-rate rising while winrate is still below baseline', () => {
+    const t = selfTarget();
+    // baseline 0.5; losing games (winrate stays below baseline) but hitting the target
+    // more and more (missed → hit) — the "practice is landing before the wins" case.
+    const since = gradedGames('Lm Lm Lm Lh Lh Lh Wh Lh Wh Lh Wh Lh', 100);
+    const c = targetLearningCurve([...run('WWWWWLLLLL', 1), ...since], t);
+    expect(c.baseline).toBeCloseTo(0.5);
+    expect(['building', 'climbing']).toContain(c.phase); // winrate below baseline
+    expect(c.execRising).toBe(true); // hit-rate climbed from misses to hits
+    expect(c.execLeads).toBe(true); // execution improving ahead of the wins
+  });
+
+  it('does not flag execution leading once winrate has already paid off', () => {
+    const t = selfTarget();
+    const since = gradedGames('Lm Lm Lh Lh Lh Wh Wh Wh Wh Wh Wh Wh Wh Wh', 100);
+    const c = targetLearningCurve([...run('WWWWWLLLLL', 1), ...since], t);
+    expect(c.phase).toBe('paying-off');
+    expect(c.execLeads).toBe(false); // winrate already rebounded — nothing to "lead"
   });
 });
 

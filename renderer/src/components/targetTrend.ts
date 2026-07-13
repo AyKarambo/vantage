@@ -19,6 +19,7 @@ import { PALETTE } from '../theme';
 import { button, statBox } from './primitives';
 import { chartCard } from './chartCard';
 import { learningCurveChart, learningCurveRows, LEARNING_CURVE_COLUMNS } from '../charts/plots';
+import { openFocusTrendGuide } from '../app/focusTrendGuide';
 
 /** Header + sub, verbatim from the spec — the panel's framing. */
 const HEADER = 'Since you started focusing this';
@@ -109,17 +110,40 @@ export function targetTrend(curve: TargetLearningCurve): HTMLElement {
       background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
     },
   },
-    h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '13px', fontWeight: '600' } }, HEADER),
+    h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px' } },
+      h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '13px', fontWeight: '600' } }, HEADER),
+      // Local-only affordance: opening the guide drawer is modal and never notifies
+      // the store, so no re-render can land mid-click (the mid-press swallow, PR #36).
+      h('button', {
+        class: 'inline-link',
+        title: 'How to read this chart',
+        style: { fontSize: '11.5px', flex: '0 0 auto', whiteSpace: 'nowrap' },
+        on: { click: () => openFocusTrendGuide() },
+      }, '? How to read this'),
+    ),
     h('div', { class: 'hint', style: { marginTop: '3px', lineHeight: '1.5' } }, SUB),
     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' } },
       statBox(curve.baseline != null ? pct(curve.baseline) : '—', beforeLabel),
       statBox(lastRoll ? pct(lastRoll.roll ?? 0) : '—', recentLabel),
     ),
+    // Execution is the leading signal — surface it prominently when it's climbing
+    // ahead of winrate (the honest "it's working" cue during a dip).
+    curve.execLeads
+      ? h('div', {
+          style: {
+            marginTop: '10px', padding: '8px 10px', borderRadius: 'var(--r-sm)',
+            background: 'var(--surface-3, rgba(255,255,255,0.04))', borderLeft: `2px solid ${PALETTE.mid}`,
+            color: PALETTE.mid, fontSize: '11.5px', lineHeight: '1.5', fontWeight: '500',
+          },
+        }, `You’re hitting the target more often lately${curve.execCurrent != null ? ` (${pct(curve.execCurrent)})` : ''} — execution is climbing before winrate does. That’s the sign practice is landing; keep going.`)
+      : null,
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5', color: 'var(--muted)' } }, REFRAME),
     showTrough ? h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } }, TROUGH) : null,
-    h('div', { style: { marginTop: '10px' } },
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      'Purple = winrate (the outcome). Amber dashed = hit-rate — how often you’re hitting the target — which usually climbs first.'),
+    h('div', { style: { marginTop: '8px' } },
       chartCard(
-        { title: 'Rolling winrate', columns: LEARNING_CURVE_COLUMNS, rows: learningCurveRows(curve) },
+        { title: 'Rolling winrate + hit-rate', columns: LEARNING_CURVE_COLUMNS, rows: learningCurveRows(curve) },
         learningCurveChart(curve),
       ),
     ),

@@ -146,6 +146,38 @@ export function learningCurveChart(curve: TargetLearningCurve): HTMLElement {
     }));
   }
 
+  // 6b. Execution overlay — the rolling HIT-RATE (how often you're hitting the target
+  //     lately), an amber dashed line. It usually rises BEFORE winrate does, so a
+  //     rising amber line during a dip is the honest "practice is landing" cue.
+  const hitRuns: Array<Array<{ x: number; y: number }>> = [];
+  let hitRun: Array<{ x: number; y: number }> = [];
+  curve.points.forEach((p, i) => {
+    if (p.hitRoll == null) {
+      if (hitRun.length) { hitRuns.push(hitRun); hitRun = []; }
+      return;
+    }
+    hitRun.push({ x: xAt(i), y: yFrac(p.hitRoll) });
+  });
+  if (hitRun.length) hitRuns.push(hitRun);
+  const hasExec = hitRuns.some((r) => r.length >= 2);
+  for (const hr of hitRuns) {
+    if (hr.length < 2) continue;
+    s.appendChild(svgEl('path', {
+      d: hr.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' '),
+      fill: 'none', stroke: PALETTE.mid, 'stroke-width': 2, 'stroke-dasharray': '5 3',
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round', opacity: heroOpacity,
+    }));
+  }
+
+  // Legend — the two lines, shown only once the execution line has data.
+  if (hasExec) {
+    const ly = top + 5;
+    s.appendChild(svgEl('line', { x1: padL + 4, y1: ly, x2: padL + 20, y2: ly, stroke: PALETTE.accent, 'stroke-width': 2.5 }));
+    s.appendChild(svgText(padL + 24, ly + 3, 'winrate', { anchor: 'start', size: 8.5, fill: PALETTE.dim }));
+    s.appendChild(svgEl('line', { x1: padL + 74, y1: ly, x2: padL + 92, y2: ly, stroke: PALETTE.mid, 'stroke-width': 2, 'stroke-dasharray': '5 3' }));
+    s.appendChild(svgText(padL + 96, ly + 3, 'hit-rate', { anchor: 'start', size: 8.5, fill: PALETTE.dim }));
+  }
+
   // 7. Rebound marker — a faint vertical line where the rolling winrate sustainably
   //    crossed back over baseline.
   if (curve.reboundIndex != null) {
@@ -191,8 +223,9 @@ export function learningCurveChart(curve: TargetLearningCurve): HTMLElement {
 function tooltipFor(p: LearningCurvePoint, baseline: number | null): string {
   const grade = p.grade ? `, target ${p.grade}` : '';
   const vsBase = baseline != null ? ` · vs before focus ${pct(baseline)}` : '';
+  const exec = p.hitRoll != null ? ` · hit-rate ${pct(p.hitRoll)}` : '';
   return `${shortDate(p.timestamp)} · game ${p.index} · rolling ${pct(p.roll ?? 0)} (${p.rollDecided} of ${ROLL_WINDOW} decided)`
-    + ` · 95% CI ${pct(p.ciLow)}–${pct(p.ciHigh)}${vsBase} · this game: ${p.result}${grade}`;
+    + ` · 95% CI ${pct(p.ciLow)}–${pct(p.ciHigh)}${vsBase}${exec} · this game: ${p.result}${grade}`;
 }
 
 /**
@@ -229,6 +262,7 @@ export const LEARNING_CURVE_COLUMNS: ChartTableColumn[] = [
   { key: 'grade', label: 'grade' },
   { key: 'roll', label: 'rolling %' },
   { key: 'ci', label: 'CI' },
+  { key: 'hit', label: 'hit-rate' },
 ];
 
 /** Table rows for {@link learningCurveChart}'s text alternative (accessibility). */
@@ -240,5 +274,6 @@ export function learningCurveRows(curve: TargetLearningCurve): ChartTableRow[] {
     grade: p.grade ?? '–',
     roll: p.roll != null ? pct(p.roll) : '–',
     ci: p.roll != null ? `${pct(p.ciLow)}–${pct(p.ciHigh)}` : '–',
+    hit: p.hitRoll != null ? pct(p.hitRoll) : '–',
   }));
 }
