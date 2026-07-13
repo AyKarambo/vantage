@@ -19,6 +19,7 @@ import { PALETTE } from '../theme';
 import { button, statBox } from './primitives';
 import { chartCard } from './chartCard';
 import { learningCurveChart, learningCurveRows, LEARNING_CURVE_COLUMNS } from '../charts/plots';
+import { openFocusTrendGuide } from '../app/focusTrendGuide';
 
 /** Header + sub, verbatim from the spec — the panel's framing. */
 const HEADER = 'Since you started focusing this';
@@ -109,7 +110,17 @@ export function targetTrend(curve: TargetLearningCurve): HTMLElement {
       background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
     },
   },
-    h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '13px', fontWeight: '600' } }, HEADER),
+    h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px' } },
+      h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '13px', fontWeight: '600' } }, HEADER),
+      // Local-only affordance: opening the guide drawer is modal and never notifies
+      // the store, so no re-render can land mid-click (the mid-press swallow, PR #36).
+      h('button', {
+        class: 'inline-link',
+        title: 'How to read this chart',
+        style: { fontSize: '11.5px', flex: '0 0 auto', whiteSpace: 'nowrap' },
+        on: { click: () => openFocusTrendGuide() },
+      }, '? How to read this'),
+    ),
     h('div', { class: 'hint', style: { marginTop: '3px', lineHeight: '1.5' } }, SUB),
     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' } },
       statBox(curve.baseline != null ? pct(curve.baseline) : '—', beforeLabel),
