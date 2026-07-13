@@ -63,24 +63,35 @@ The only code imported by **both** processes, barreled through
 |--------|---------|
 | [`index.ts`](../../src/main/index.ts) | **The composition root.** Single-instance lock, constructs and wires everything, starts the chosen sensor / dev modes. Start reading here. |
 | [`gep.ts`](../../src/main/gep.ts) | `GepService` — subscribes to Overwolf GEP, normalizes events to `GepMessage`, emits `message`/`status`/`log`. |
-| [`matchPipeline.ts`](../../src/main/matchPipeline.ts) | `createMatchPipeline()` — `feed` (GEP msg → aggregator), `addMatch`, `recordGame` (dedupe, break reminder, screenshots, persist). |
+| [`matchPipeline.ts`](../../src/main/matchPipeline.ts) | `createMatchPipeline()` — `feed` (GEP msg → aggregator), `addMatch`, `recordGame` (dedupe, break reminder, persist). |
 | [`dashboard/`](../../src/main/dashboard) | `dashboardWindow.ts` (frameless BrowserWindow — context-isolated, sandboxed, navigation-locked), `webContentsSecurity.ts` (`hardenWebContents()` — denies popups + navigation), `ipcHandlers.ts` (channel registration), `provider.ts` (`createDataProvider()` — implements the read/write API over stores + core). |
 | [`preload.ts`](../../src/main/preload.ts) | Generates `window.owstats` from `IPC_CHANNELS` via contextBridge. Mechanical — you rarely touch it. |
-| [`config/`](../../src/main/config) | `appConfig.ts` (defaults ← appsettings.json ← config.local.json ← env), `notionToken.ts` (safeStorage-encrypted token). |
+| [`config/`](../../src/main/config) | `appConfig.ts` (defaults ← appsettings.json ← config.local.json ← env — including the chosen data-folder path), `notionToken.ts` (safeStorage-encrypted token). This is where app *configuration* lives; user *data* lives in `src/store/` below. |
 | [`counterwatch.ts`](../../src/main/counterwatch.ts) | `CounterwatchReader` — alternative sensor; watches Counterwatch's IndexedDB. |
 | [`notionRuntime.ts`](../../src/main/notionRuntime.ts) | Notion lifecycle: token → client stack → export/status/admin. Stays inert without a token. |
 | [`tray.ts`](../../src/main/tray.ts) | Tray icon, context menu, toast notifications. |
 | [`simulate.ts`](../../src/main/simulate.ts) / [`recorder.ts`](../../src/main/recorder.ts) | Dev tooling: synthetic match feed; GEP record/replay (`.jsonl`). |
-| [`screenshots.ts`](../../src/main/screenshots.ts) | End-of-match capture + read-only `vantage-media://` protocol. |
 | [`autolaunch.ts`](../../src/main/autolaunch.ts) | Run-at-login wiring. |
 
-## `src/store/` — persistence (JSON under `userData/data/`)
+## `src/store/` — persistence (the user's data folder — default or chosen)
+
+Every store is dir-injected (constructor takes the data folder) and Electron-free, so
+they're all unit-testable with plain temp directories. `historyLocation.ts` resolves
+*which* folder that is (configured folder, trimmed and resolved, else the default
+`<userData>/data`); `dataMigration.ts` is the copy-verify-commit-delete executor behind
+*Settings → Data storage*'s "Change…" / first-run "Choose folder…" (adopt-in-place when
+the target already holds Vantage data, full relocate otherwise).
 
 | Store | File on disk | Holds |
 |-------|-------------|-------|
-| [`history.ts`](../../src/store/history.ts) | `history.json` | Every tracked `GameRecord`; screenshots and reviews attach here. Atomic writes (tmp + rename). |
+| [`history.ts`](../../src/store/history.ts) | `history.db` (SQLite, via `node:sqlite`) | Every tracked `GameRecord`, including reviews. Denormalized columns for querying, full JSON in a `data` column as the reconstruction source of truth. |
+| [`historyMigration.ts`](../../src/store/historyMigration.ts) | reads `history.json` | One-time, idempotent import of the legacy pre-SQLite `history.json` into `history.db` on first launch; never modifies or deletes the legacy file afterwards (kept as a frozen backup). |
+| [`historyLocation.ts`](../../src/store/historyLocation.ts) | — | Pure folder resolution: configured folder vs. default `<userData>/data`. |
+| [`dataMigration.ts`](../../src/store/dataMigration.ts) | — | Relocates/adopts every store's files as one atomic operation when the user changes the data folder. |
 | [`manualLog.ts`](../../src/store/manualLog.ts) | `manual.json` | Authored improvement targets and their lifecycle. |
 | [`outbox.ts`](../../src/store/outbox.ts) | `outbox.json` | Notion export dedupe (processed matchIds) + retry queue. |
+| [`rankAnchors.ts`](../../src/store/rankAnchors.ts) | `rankAnchors.json` | Per-(account, role) "this is my rank now" anchors the calculated-rank engine replays SR deltas from. |
+| [`masterData.ts`](../../src/store/masterData.ts) | `masterData.json` | User add/edit/remove overrides over the compiled hero/map/season catalog (only the deltas, so app-shipped updates still show through). |
 
 ## `src/notion/` — optional export edge
 

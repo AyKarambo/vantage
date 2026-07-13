@@ -91,7 +91,8 @@ Run `npm run test:watch` while developing.
 2. Replay it anytime: `OW_SYNC_REPLAY=<path-to.jsonl> npm start`. The recording flows
    through the *real* `pipeline.feed()` → aggregator → history path.
 3. For a quick smoke test, `OW_SYNC_SIMULATE=1 npm start` feeds one synthetic match
-   (`SIM-` prefixed matchId — safe to delete from `history.json` afterwards).
+   (`SIM-` prefixed matchId — safe to remove afterwards from the Matches screen, or by
+   deleting its row from `history.db` directly).
 
 ## Working on the Notion export
 
@@ -100,7 +101,9 @@ Run `npm run test:watch` while developing.
 - The schema (required properties, select options) is pure data in
   [`gametrackerSchema.ts`](../../src/notion/gametrackerSchema.ts) — change it there and
   both auto-create and validation follow.
-- Dedupe lives in `outbox.json`; delete it to re-export everything.
+- Dedupe lives in `outbox.json`; delete it (from the data folder — see
+  [01 — Getting started](01-getting-started.md#where-the-app-keeps-its-data)) to
+  re-export everything.
 - Remember guardrail 5: export is opt-in and user-initiated. Nothing may push data out
   automatically.
 

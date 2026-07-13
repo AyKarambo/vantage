@@ -76,9 +76,9 @@ function identityCard(versionEl: HTMLElement): HTMLElement {
 function promiseCard(): HTMLElement {
   return card({ title: 'Account-safe & private' },
     h('div', { class: 'stack', style: { gap: '12px', marginTop: '4px' } },
-      promiseItem('🛡', 'Zero ban risk',
-        'Live match data comes only from Overwolf’s sanctioned Game Events Provider. Vantage never ' +
-        'reads game memory, never injects, and never exposes hidden information.'),
+      promiseItem('🛡', 'Sanctioned data source',
+        'Live match data comes only from Overwolf’s Game Events Provider (GEP), a sanctioned game-data ' +
+        'API. Vantage never reads game memory, never injects, and never exposes hidden information.'),
       promiseItem('🔒', 'Local-first',
         'Your match history, targets, and mental notes stay on this device. The only outbound path is ' +
         'Notion export — your own token, your explicit action.'),
@@ -104,7 +104,7 @@ function supportCard(emailSupport: () => void): HTMLElement {
       h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
         button('Email support', { variant: 'soft', onClick: emailSupport }),
       ),
-      h('div', { class: 'hint' }, 'MIT licensed · © Timo Seikel'),
+      h('div', { class: 'hint' }, 'Free to use · MIT licensed · © Timo Seikel'),
       h('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '2px' } },
         aboutLink('Data storage location →', () => store.setView('settings')),
         aboutLink('Open the debug log →', () => store.setView('logs')),

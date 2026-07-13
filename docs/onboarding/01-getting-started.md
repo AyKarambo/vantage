@@ -48,7 +48,7 @@ npm start
 ```
 
 Launches the real frameless window from the tray. If you have no recorded history yet
-(`history.json` empty), the dashboard automatically falls back to the deterministic
+(an empty `history.db`), the dashboard automatically falls back to the deterministic
 sample dataset and shows a "demo" badge — so the app is fully explorable without ever
 playing a match.
 
@@ -145,24 +145,40 @@ live pipeline.
 
 ## Where the app keeps its data
 
-Everything lives under Electron's `userData` directory
-(`%APPDATA%/ow.vantage/` on Windows):
+Everything lives in a **data folder** — by default under Electron's `userData`
+directory (`%APPDATA%/ow.vantage/data/` on Windows), but the user can point it
+elsewhere. On first launch (before the demo-data prompt) Vantage asks where to keep
+its data: the default folder, preselected, or a folder picked via the native dialog,
+validated as creatable and writable. Pointing it at a folder that already holds
+Vantage data (say, a OneDrive backup from another machine) **adopts** that data
+as-is rather than overwriting or migrating it — no copy, no delete of either side.
+Existing installs updating to this version keep their current location with no
+prompt. The same choose/adopt flow is available later from *Settings → Data
+storage*, which relocates every file with a copy-verify-then-delete guarantee (see
+[`src/store/dataMigration.ts`](../../src/store/dataMigration.ts)).
 
 ```
+<data folder>/             # default: userData/data/, or wherever the user pointed it
+├── history.db             # every tracked game, SQLite (see src/store/history.ts)
+├── history.json           # legacy pre-SQLite backup, imported once then left frozen
+├── manual.json            # authored improvement targets
+├── outbox.json            # Notion export dedupe + retry queue
+├── rankAnchors.json       # per-(account, role) "this is my rank now" anchors
+└── masterData.json        # user overrides to the hero/map/season catalog
+
 userData/
-├── data/
-│   ├── history.json      # every tracked game (GameRecord[])
-│   ├── manual.json       # authored improvement targets
-│   ├── outbox.json       # Notion export dedupe + retry queue
-│   └── screenshots/      # end-of-match captures, one folder per match
-├── recordings/           # OW_SYNC_RECORD output (.jsonl)
-├── notion-token.bin      # Notion token, encrypted via Electron safeStorage
-└── config.local.json     # user config overrides (merged over appsettings.json)
+├── data/                  # (see above, unless relocated)
+├── recordings/            # OW_SYNC_RECORD output (.jsonl)
+├── notion-token.bin       # Notion token, encrypted via Electron safeStorage
+└── config.local.json      # user config overrides (merged over appsettings.json,
+                            #   includes the chosen data-folder path)
 ```
 
-Deleting `history.json` puts you back in demo mode. None of this is ever committed —
-tokens and user data stay on the machine (guardrails 2 and 5 in
-[`CLAUDE.md`](../../CLAUDE.md)).
+`history.db` is the live, queryable store — a legacy `history.json` (if present from
+before the SQLite migration) is imported once on first launch and then kept
+untouched as a frozen backup; it is never written to or read from again. None of
+this is ever committed — tokens and user data stay on the machine (guardrails 2 and
+5 in [`CLAUDE.md`](../../CLAUDE.md)).
 
 ## A good first hour
 

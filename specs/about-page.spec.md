@@ -1,51 +1,42 @@
 ---
 slug: about-page
 status: done
-updated: 2026-07-07
+updated: 2026-07-13
 ---
 
 # Spec: About screen (`about-page`)
 
-**Slug:** `about-page` · **Status:** Draft (autonomous run — gates pre-approved by the user)
-**Source:** Feature request 2026-07-07 — "a new about page showing version number and other
-stuff that should be displayed in an about page."
-**Related:** `screen-settings.spec.md` (today's home of the version string), `live-status.spec.md`
-(the account-safety promise), `window-nav-hardening.spec.md` (external-link opening).
+**Slug:** `about-page`
+**Related:** `screen-settings.spec.md` (Diagnostics links here), `live-status.spec.md`
+(account-safety wording), `window-nav-hardening.spec.md` (external-link opening).
 
 ## Intent (WHAT & WHY)
 
-Vantage has no place that answers, in one glance, *"what is this app, which version am I on, is it
-safe, how do I get help, and what do I paste into a bug report?"* Today the only version signal is a
-single grey line buried at the bottom of **Settings → Diagnostics** — `Vantage 0.1.0 · support:
-timo.seikel@gmail.com` ([settings.ts](../renderer/src/views/settings.ts)) — built from the two-field
-`AppInfo` contract (`{ version, supportEmail }`).
+The About screen answers, in one glance, *"what is this app, which version am I on, is it
+safe, how do I get help, and what do I paste into a bug report?"* It is the single
+permanent, user-facing home for three things:
 
-A dedicated **About screen** is the conventional, expected home for that information. It matters here
-for three concrete reasons:
+1. **Support & diagnosability.** The app version *and* the runtime build
+   (ow-electron/Electron/Chromium/Node/V8/OS) sit behind a one-click **Copy diagnostics**
+   shortcut, turning a support round-trip into a paste.
+2. **Trust — the product's promise, restated in-app.** Vantage is **account-safe** (reads
+   only Overwolf's sanctioned GEP feed — never game memory, no injection, no hidden
+   information) and **local-first** (data stays on the device; the only outbound path is the
+   user's own Notion export). The About screen states these plainly, and notes the app is
+   **free to use**.
+3. **Polish.** A store-quality desktop app has an About screen.
 
-1. **Support & diagnosability.** When a user hits a bug, we need the app version *and* the runtime
-   build (ow-electron/Electron/Chromium/Node/OS). Today they'd have to dig; there's no copyable
-   block. An About screen with a one-click "Copy diagnostics" shortcut turns a support round-trip
-   into a paste.
-2. **Trust — the product's whole promise, restated in-app.** Vantage's differentiator is that it is
-   **account-safe** (reads only Overwolf's sanctioned GEP feed — never game memory, no injection,
-   zero ban risk) and **local-first** (data stays on the device; the only outbound path is the
-   user's own Notion export). Those promises live in the constitution and onboarding, but nowhere
-   permanent and user-facing. The About screen is their natural home.
-3. **Polish.** A store-quality desktop app has an About screen; its absence is a visible rough edge.
+## Behavior (WHAT it is)
 
-## In-Scope
-
-- **A new top-level "About" screen**, registered as a routable view and reachable from:
-  - the sidebar **App** group (next to Settings), and
-  - the **command palette** (Ctrl+K nav list).
-  It is a normal top-level view — restorable as the last-visited screen on relaunch, dedupe-safe,
-  and account-agnostic (suppresses the global filter bar, like `readiness`).
+- **A top-level "About" screen**, a routable view reachable from the sidebar **App** group
+  (next to Settings) and the **command palette** (Ctrl+K nav list). It restores as the
+  last-visited screen on relaunch, is dedupe-safe, and is account-agnostic (suppresses the
+  global filter bar, like `readiness`).
 - **Identity block:** the Vantage brand mark, the "Vantage" wordmark, the product tagline
   ("Account-safe Overwatch stats coach"), and the **version number shown prominently** (e.g.
   `Version 0.1.0`).
-- **Account-safety & privacy promises**, restated plainly: GEP-only / zero-ban-risk, and
-  local-first / opt-in Notion export.
+- **Account-safety & privacy promises**, stated plainly: GEP-only sanctioned data source;
+  local-first with opt-in Notion export; free to use.
 - **Build & runtime block** (for support), as labelled rows: app version, ow-electron/Electron
   version, Chromium, Node, V8, platform + OS release, and a dev-vs-packaged indicator.
 - **"Copy diagnostics" action:** copies a plain-text block (product + version + build/runtime +
@@ -56,15 +47,14 @@ for three concrete reasons:
   `shell.openExternal` path** (see Constraints), never as in-app navigations.
 - **Convenience links** to existing surfaces, as in-app navigations (not duplicated controls): the
   data-storage folder (→ Settings) and the debug log (→ Logs).
-- **Contract extension:** widen the typed `AppInfo` with the build/runtime fields, populated only at
-  the main-process edge (`app.getVersion()`, `process.versions`, `process.platform`, `os.release()`,
-  `app.isPackaged`). Add a minimal, scheme-allowlisted `openExternal(url)` bridge method routed to
+- **Contract:** the typed `AppInfo` carries the build/runtime fields, populated only at the
+  main-process edge (`app.getVersion()`, `process.versions`, `process.platform`, `os.release()`,
+  `app.isPackaged`). A minimal, scheme-allowlisted `openExternal(url)` bridge method routes to
   `shell.openExternal`.
-- **Settings cleanup:** replace the Settings → Diagnostics version one-liner with a compact
-  **"About Vantage →"** link to the new screen, so identity/version has a single source of truth.
-- **Preview harness:** stub the extended `AppInfo` and `openExternal` in
-  `renderer/preview/preview.ts` so the About screen renders fully in the browser harness with no
-  Overwolf runtime.
+- **Settings:** Settings → Diagnostics carries a compact **"About Vantage →"** link to this
+  screen rather than an inline version line, so identity/version has a single source of truth.
+- **Preview harness:** `renderer/preview/preview.ts` stubs the `AppInfo` fields and
+  `openExternal` so the screen renders fully in the browser harness with no Overwolf runtime.
 
 ## Out-of-Scope
 
@@ -72,8 +62,7 @@ for three concrete reasons:
   (`npm run publish:release`); the About screen neither checks nor installs versions.
 - **No changelog / release-notes rendering.** (May link out later; not rendered here.)
 - **No network calls from About** — no telemetry, no version-check ping. The screen is fully offline.
-- **No redesign of onboarding or marketing copy.** About only *restates* existing promises.
-- **No i18n / localization** (app is English-only today).
+- **No i18n / localization** (the app is English-only).
 - **The support email, license, and links are not user-configurable.**
 - **No arbitrary external web links beyond what a maintainer explicitly hard-codes** (e.g. support
   mailto); no dynamic/user-supplied URLs are ever passed to the opener.
@@ -84,23 +73,23 @@ for three concrete reasons:
   **main edge only**; `src/core/` receives already-collected `AppInfo` and merely *formats* it. No
   Electron/Overwolf import enters `core/`.
 - **Guardrail 4 (CSP-friendly renderer).** `hardenWebContents` denies popups and `preventDefault`s
-  every in-window navigation, so a bare `<a href>` click is swallowed. Therefore **all outbound
-  links must go through a main-process `shell.openExternal`** via the new `openExternal(url)` IPC
-  method, which **validates the scheme against an allowlist (`mailto:`, `https:`)** before opening.
-  No inline scripts, no `eval`, no remote/CDN code. Clipboard uses the standard async
-  `navigator.clipboard.writeText` available in the renderer (no new remote surface).
+  every in-window navigation, so a bare `<a href>` click is swallowed. All outbound links therefore
+  go through the main-process `shell.openExternal` via the `openExternal(url)` IPC method, which
+  **validates the scheme against an allowlist (`mailto:`, `https:`)** before opening. No inline
+  scripts, no `eval`, no remote/CDN code. Clipboard uses the standard async
+  `navigator.clipboard.writeText` (no new remote surface).
 - **Guardrail 5 (local-first).** About performs no outbound data flow; the only network-capable
   action is the user explicitly clicking a hard-coded support/`mailto:` link.
-- **Typed contract end-to-end.** The `AppInfo` widening and `openExternal` method flow through
+- **Typed contract end-to-end.** The `AppInfo` fields and `openExternal` method flow through
   `api.ts` (interface + `IPC_CHANNELS`), preload, the provider, and the renderer bridge with **no
-  `any`** across the boundary. The `satisfies` invariants in `api.ts` must still compile.
+  `any`** across the boundary; the `satisfies` invariants in `api.ts` compile.
 - **Composition-first renderer.** The view composes existing `components/` primitives (`card`,
   `button`, `pill`/`chip`, etc.) via `h()`; it does not hand-roll bespoke markup or restyle globally.
 - **Preview-driveable.** The screen renders fully in `npm run preview` using stubbed `AppInfo`
   (`version: 'preview'` plus placeholder build fields) and a no-op/stub `openExternal`.
 - **Definition of Done** (from CLAUDE.md): `npm test` green; `npm run typecheck` clean (main +
-  renderer); the new pure `core/` formatter ships with vitest tests; docs updated for the new screen
-  (README / screens list) since a user-visible surface is added.
+  renderer); the pure `core/` formatter has vitest tests; README / screens list mentions the
+  About screen.
 
 ## Acceptance Criteria
 
@@ -119,7 +108,7 @@ for three concrete reasons:
 4. **Build & runtime rows.**
    Given I am on the About screen, When it renders, Then I see labelled rows for at least: app
    version, ow-electron/Electron, Chromium, Node, V8, platform + OS release, and whether the build is
-   packaged or a dev build — each populated from the extended `AppInfo` (real values in the app,
+   packaged or a dev build — each populated from the `AppInfo` fields (real values in the app,
    stub values in preview).
 
 5. **Copy diagnostics.**
@@ -130,8 +119,9 @@ for three concrete reasons:
 
 6. **Account-safety & privacy promises are present.**
    Given I am on the About screen, When it renders, Then it states, in plain language, both that
-   Vantage reads only Overwolf's GEP feed (account-safe / zero ban risk) and that data is
-   local-first with Notion export as the only opt-in outbound path.
+   Vantage reads only Overwolf's sanctioned GEP feed (account-safe — no game memory reads, no
+   injection, no hidden information) and that data is local-first with Notion export as the only
+   opt-in outbound path. It also notes, in plain language, that the app is free to use.
 
 7. **Support link opens safely.**
    Given I click the support-email link, When the click is handled, Then it opens the OS mail client
@@ -144,9 +134,9 @@ for three concrete reasons:
    the URL (no `shell.openExternal` call for that URL).
 
 9. **Settings single-sources identity.**
-   Given I open Settings → Diagnostics, When it renders, Then the old inline `Vantage <version> ·
-   support: …` one-liner is gone and replaced by an **"About Vantage →"** link that navigates to the
-   About screen; the version is authoritative on the About screen.
+   Given I open Settings → Diagnostics, When it renders, Then it shows an **"About Vantage →"** link
+   that navigates to the About screen (no inline `Vantage <version> · support: …` line); the version
+   is authoritative on the About screen.
 
 10. **Convenience links navigate in-app.**
     Given I am on the About screen, When I click the data-storage or debug-log convenience link, Then
@@ -160,38 +150,31 @@ for three concrete reasons:
 
 12. **Definition of Done holds.**
     Given the change is complete, When I run `npm test` and `npm run typecheck`, Then both pass; And
-    the new `core/` formatter has vitest coverage; And the screens doc/README lists the About screen.
+    the `core/` formatter has vitest coverage; And the screens doc/README lists the About screen.
 
-## Resolved questions
+## Design decisions
 
-Because the user asked me to "continue all SDD steps on my own", the following were decided
-autonomously (override any via `/revise`):
-
-1. **New screen vs. expanded Settings card.** → **A dedicated top-level About screen** in the App nav
-   group. The request explicitly says "a new about page." The existing Settings version line becomes
-   a link into it (single source of truth), so nothing is duplicated. (AC 1, 9.)
-2. **What "other stuff" to include.** → Identity + prominent version; account-safety & local-first
-   promises; a build/runtime block for support; Copy-diagnostics; support mailto; license (MIT) +
-   copyright; convenience links to Data storage and Logs. Deliberately excluded: updater, changelog,
-   telemetry (see Out-of-Scope).
-3. **How to surface richer version data.** → **Widen the `AppInfo` contract** with build/runtime
-   fields gathered at the main edge (`process.versions`, `process.platform`, `os.release()`,
-   `app.isPackaged`). `core/` stays pure and only formats. Rejected: reading these in the renderer
-   (would need Electron in the renderer — guardrail violation).
-4. **Outbound links under the nav-hardening lock.** → Add a minimal **`openExternal(url)`** bridge
-   that validates the scheme (`mailto:`/`https:`) and calls the already-sanctioned
-   `shell.openExternal`. Rejected: relying on `<a href>` (swallowed by `hardenWebContents`) and
-   passing arbitrary/user URLs to the opener (only hard-coded maintainer links are used). (AC 7, 8.)
-5. **Copy-diagnostics home.** → A pure `src/core/about.ts` formatter, unit-tested, reused by both the
-   on-screen rows and the clipboard string, satisfying DoD #3. (AC 5.)
+- **A dedicated top-level About screen** in the App nav group (not an expanded Settings card); the
+  Settings version line is a link into it, so identity/version has one source of truth. (AC 1, 9.)
+- **What it shows:** identity + prominent version; account-safety & local-first promises + the
+  free-to-use note; a build/runtime block for support; Copy-diagnostics; support mailto; license
+  (MIT) + copyright; convenience links to Data storage and Logs. Deliberately excluded: updater,
+  changelog, telemetry (see Out-of-Scope).
+- **Richer version data via the `AppInfo` contract**, gathered at the main edge
+  (`process.versions`, `process.platform`, `os.release()`, `app.isPackaged`); `core/` stays pure and
+  only formats. Reading these in the renderer would need Electron there (guardrail violation).
+- **Outbound links under the nav-hardening lock** go through the scheme-validated
+  (`mailto:`/`https:`) `openExternal(url)` bridge to the sanctioned `shell.openExternal`; a bare
+  `<a href>` is swallowed by `hardenWebContents`, and only hard-coded maintainer links are used.
+  (AC 7, 8.)
+- **Copy-diagnostics** is a pure `src/core/about.ts` formatter, unit-tested, reused by both the
+  on-screen rows and the clipboard string. (AC 5.)
 
 ## Open Questions
 
-- **Repository / homepage link.** Should About link out to a public repo/website? Deferred — no
-  canonical public URL is committed in the repo today, and `openExternal` already supports `https:`
-  if/when one is chosen. Support `mailto:` ships in v1; a repo link is a one-line follow-up.
-- **License text depth.** Show just "MIT © Timo Seikel", or a full license/third-party
-  acknowledgements list (Overwolf GEP, Electron, Notion SDK)? v1 shows the short line; a
-  third-party-credits section can be added later without contract changes.
-- **Brand mark asset.** Reuse the existing sidebar `.brand-mark` styling, or a larger dedicated
-  About logo? Resolve during techplan against available assets (`assets/appicon.png`).
+- **Repository / homepage link.** No canonical public URL is committed today; `openExternal` already
+  supports `https:` if/when one is chosen. Support `mailto:` ships now; a repo link is a one-line
+  follow-up.
+- **License text depth.** The short line ("MIT © Timo Seikel") is shown; a full third-party
+  acknowledgements list (Overwolf GEP, Electron, Notion SDK) can be added later without contract
+  changes.
