@@ -18,7 +18,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
@@ -392,7 +392,11 @@ function buildMatchEditor(
   // Full hero set (a hand-logged match can have several) — a role-filtered chip
   // grid, so editing never collapses the list to just the first hero.
   const heroes = new Set<string>(d.heroes);
-  let srDelta: number | undefined = d.srDelta;
+  // SR entry pre-fills a suggested ±25 (Win/Loss) the player fine-tunes with the
+  // wheel — GEP never reports SR. A stored value, or a manual edit, takes precedence.
+  let srEdited = d.srDelta != null;
+  let srDelta: number | undefined =
+    d.srDelta ?? (isComp && state.result !== 'Draw' ? Number(suggestedSrDelta(state.result)) : undefined);
   let performance: number | undefined = d.performance;
   // SR entry mirrors the log card: nudge the change, or set the rank you ended
   // at (main back-computes the %). The Set-current fields seed from the rank shown
@@ -452,7 +456,14 @@ function buildMatchEditor(
       saveBtn.disabled = editable && resolveMap() == null;
     };
 
-    const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => (state.result = v) });
+    const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => {
+      state.result = v;
+      // Re-suggest the SR change for the new result unless the player set it themselves.
+      if (isComp && !srEdited) {
+        srDelta = v !== 'Draw' ? Number(suggestedSrDelta(v)) : undefined;
+        paintSr();
+      }
+    } });
     const mapField = field('Map',
       mapPicker({
         value: state.map,
@@ -519,6 +530,7 @@ function buildMatchEditor(
         field(optionalLabel('Skill rating change (%)'),
           srDeltaInput(srDelta != null ? String(srDelta) : '', (v) => {
             srDelta = v.trim() === '' ? undefined : Number(v);
+            srEdited = true;
           })));
     };
     if (isComp) paintSr();

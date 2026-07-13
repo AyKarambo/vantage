@@ -15,7 +15,7 @@ import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
-import { srDeltaInput } from '../components/srControls';
+import { srDeltaInput, suggestedSrDelta } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { store } from '../store';
@@ -201,10 +201,13 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   // Seed from any already-stored rating (mirrors the match-detail editor) so an
   // imported / previously-rated game shows its value here instead of "Not rated".
   let performance: number | undefined = m.performance;
-  // Manual SR % — only offered for competitive games (GEP can't report it).
-  // Seeded from the row's current delta so an already-set value shows here.
+  // Manual SR % — only offered for competitive games (GEP can't report it). Seeds
+  // from any stored delta, else a suggested ±25 (Win/Loss) the player fine-tunes
+  // with the wheel; blank clears it.
   const isComp = classifyGameType(m.gameType) === 'competitive';
-  let srText = m.srDelta != null ? String(m.srDelta) : '';
+  let srText = m.srDelta != null
+    ? String(m.srDelta)
+    : (isComp && m.result !== 'Draw' ? suggestedSrDelta(m.result) : '');
 
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
@@ -220,8 +223,8 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
 
   const doSave = (): void => {
     // Send the SR % only for competitive matches and only when the field parses
-    // to a finite number. Blank leaves it unchanged — clearing an SR stays a
-    // match-editor action, never a side effect of grading a review.
+    // to a finite number. The field pre-fills a suggested ±25, so saving records
+    // it unless the player clears the field (blank leaves the stored SR unchanged).
     const t = srText.trim();
     let srDelta: number | undefined;
     if (isComp && t !== '') {
