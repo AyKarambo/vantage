@@ -18,7 +18,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
@@ -26,7 +26,7 @@ import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
-import { heroLines } from '../../../src/core/perHero';
+import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
 import { PALETTE, wrHsl } from '../theme';
 import type { ViewContext } from './view';
 
@@ -186,9 +186,13 @@ function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined
   // available, else an equal split of the match); KDA stays a raw ratio. A match
   // with no usable duration dashes the per-10 stats but still shows KDA.
   const lines = heroLines(perHero, durationMinutes);
+  // With more than one hero, lead with an "All" tab combining every hero's stats
+  // (per-10 over the whole match); a single-hero match already IS its own total.
+  const all = combinedHeroLine(perHero, durationMinutes);
+  const tabLines = all && lines.length > 1 ? [all, ...lines] : lines;
   const body = h('div', { class: 'stat-grid stat-grid--wide' });
   const draw = (hero: string): void => {
-    const s = lines.find((x) => x.hero === hero) ?? lines[0];
+    const s = tabLines.find((x) => x.hero === hero) ?? tabLines[0];
     const p = s.per10;
     render(body,
       statBox(per10Fixed(p?.eliminations), 'Elims/10'),
@@ -200,11 +204,11 @@ function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined
       statBox(fmt(p?.mitigation), 'MIT/10'),
     );
   };
-  draw(lines[0].hero);
-  const tabs = lines.length > 1
+  draw(tabLines[0].hero);
+  const tabs = tabLines.length > 1
     ? segmented({
-        options: lines.map((s) => ({ value: s.hero, label: s.hero })),
-        value: lines[0].hero,
+        options: tabLines.map((s) => ({ value: s.hero, label: s.hero })),
+        value: tabLines[0].hero,
         onChange: draw,
       })
     : null;
@@ -388,7 +392,11 @@ function buildMatchEditor(
   // Full hero set (a hand-logged match can have several) — a role-filtered chip
   // grid, so editing never collapses the list to just the first hero.
   const heroes = new Set<string>(d.heroes);
-  let srDelta: number | undefined = d.srDelta;
+  // SR entry pre-fills a suggested ±25 (Win/Loss) the player fine-tunes with the
+  // wheel — GEP never reports SR. A stored value, or a manual edit, takes precedence.
+  let srEdited = d.srDelta != null;
+  let srDelta: number | undefined =
+    d.srDelta ?? (isComp && state.result !== 'Draw' ? Number(suggestedSrDelta(state.result)) : undefined);
   let performance: number | undefined = d.performance;
   // SR entry mirrors the log card: nudge the change, or set the rank you ended
   // at (main back-computes the %). The Set-current fields seed from the rank shown
@@ -448,7 +456,14 @@ function buildMatchEditor(
       saveBtn.disabled = editable && resolveMap() == null;
     };
 
-    const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => (state.result = v) });
+    const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => {
+      state.result = v;
+      // Re-suggest the SR change for the new result unless the player set it themselves.
+      if (isComp && !srEdited) {
+        srDelta = v !== 'Draw' ? Number(suggestedSrDelta(v)) : undefined;
+        paintSr();
+      }
+    } });
     const mapField = field('Map',
       mapPicker({
         value: state.map,
@@ -515,6 +530,7 @@ function buildMatchEditor(
         field(optionalLabel('Skill rating change (%)'),
           srDeltaInput(srDelta != null ? String(srDelta) : '', (v) => {
             srDelta = v.trim() === '' ? undefined : Number(v);
+            srEdited = true;
           })));
     };
     if (isComp) paintSr();

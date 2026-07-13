@@ -10,9 +10,20 @@ import { h } from '../dom';
 import { segmented, select } from './primitives';
 import { attachWheelNudge } from './wheelStepper';
 import { TIERS } from '../../../src/core/rank';
+import type { Result } from '../../../src/shared/contract';
 
 /** The SR-entry mode: nudge the change (±%) or set the current rank outright. */
 export type SrMode = 'change' | 'set-current';
+
+/**
+ * The SR-% change to pre-fill for a result — a starting point the player fine-tunes
+ * with the wheel, since GEP never reports SR. Win/Loss suggest ±25 (a typical
+ * competitive swing); a Draw suggests no change. Shared by every SR-entry surface
+ * (quick log, match editor, Review) so the suggestion can't drift between them.
+ */
+export function suggestedSrDelta(result: Result): string {
+  return result === 'Win' ? '25' : result === 'Loss' ? '-25' : '0';
+}
 
 /** Divisions high→low for the rank picker (5 = lowest band, 1 = highest). */
 const DIVISIONS = [5, 4, 3, 2, 1];

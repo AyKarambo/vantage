@@ -119,3 +119,28 @@ export function heroLines(perHero: HeroStat[], matchMinutes: number | undefined)
     };
   });
 }
+
+/**
+ * The whole-match aggregate line for the "All" tab: every hero's counting stats
+ * summed, KDA over the combined totals, and per-10 over the full match duration
+ * (all heroes together span the match). Its `hero` label is `'All'`. Returns
+ * `null` when there are no hero lines. Reuses {@link heroLines} so the per-10
+ * math and dash behaviour stay identical to the per-hero tabs.
+ */
+export function combinedHeroLine(perHero: HeroStat[], matchMinutes: number | undefined): HeroLine | null {
+  if (!perHero.length) return null;
+  const total = mergeHeroStats(perHero).reduce<HeroStat>(
+    (a, s) => {
+      a.eliminations += s.eliminations;
+      a.deaths += s.deaths;
+      a.assists += s.assists;
+      a.damage += s.damage;
+      a.healing += s.healing;
+      a.mitigation += s.mitigation;
+      return a;
+    },
+    { hero: 'All', eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 },
+  );
+  // One synthetic hero spanning the whole match → per-10 divides by matchMinutes.
+  return heroLines([total], matchMinutes)[0];
+}

@@ -25,6 +25,11 @@
   padding: 0;
   overflow: hidden;
 }
+/* Flush cards zero the body padding for edge-to-edge rows (tables, scoreboard);
+   restore padding around the header so its title isn't jammed into the corner. */
+.card--flush > .card-head {
+  padding: 15px 16px 0;
+}
 
 .card-head {
   display: flex;

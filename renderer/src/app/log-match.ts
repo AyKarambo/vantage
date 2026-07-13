@@ -19,7 +19,7 @@ import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
@@ -29,9 +29,6 @@ import type { ViewContext } from '../views/view';
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 
 /** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
-function presetFor(result: Result): string {
-  return result === 'Win' ? '25' : result === 'Loss' ? '-25' : '0';
-}
 /** "Played" backfill choices — end-of-game time relative to now, in minutes. */
 const PLAYED_OFFSETS: Array<{ label: string; minutes: number }> = [
   { label: 'Just now', minutes: 0 },
@@ -143,7 +140,7 @@ function buildForm(
     // starting rank gets established there (replacing the old one-time-setup
     // block); otherwise default to nudging the change.
     srMode: hasAnchor(defaultAccount, initialRole) ? 'change' : 'set-current',
-    srDelta: presetFor('Win'),
+    srDelta: suggestedSrDelta('Win'),
     srEdited: false,
     anchorTier: 'Gold',
     anchorDivision: 3,
@@ -251,7 +248,7 @@ function buildForm(
       state.result = v;
       // Re-preset the SR delta from the result, but only while the player hasn't
       // touched it — a manual value must survive a result change.
-      if (!state.srEdited) state.srDelta = presetFor(state.result);
+      if (!state.srEdited) state.srDelta = suggestedSrDelta(state.result);
       paintRank();
     },
   });
