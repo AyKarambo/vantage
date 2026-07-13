@@ -28,6 +28,10 @@ describe('resolveMapId', () => {
     expect(resolveMapId('Neon Junction')).toBe('Neon Junction');
   });
 
+  it('resolves Aatlis (GEP id 3893)', () => {
+    expect(resolveMapId('3893')).toBe('Aatlis');
+  });
+
   it('returns undefined for empty/nullish', () => {
     expect(resolveMapId(undefined)).toBeUndefined();
     expect(resolveMapId(null)).toBeUndefined();

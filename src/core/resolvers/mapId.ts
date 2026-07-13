@@ -45,6 +45,7 @@ export const MAP_ID_TO_NAME: Record<string, string> = {
   // Flashpoint
   '3603': 'New Junk City',
   '3390': 'Suravasa',
+  '3893': 'Aatlis',
   // Clash
   '4439': 'Hanaoka',
   '4448': 'Throne of Anubis',
