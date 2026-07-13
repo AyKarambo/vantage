@@ -19,7 +19,6 @@ function el(tag: string, attrs: Record<string, string | number>): SVGElement {
 const fill = (d: string): SVGElement => el('path', { d, fill: 'currentColor' });
 const ring = (cx: number, cy: number, r: number): SVGElement =>
   el('circle', { cx, cy, r, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 });
-const dot = (cx: number, cy: number, r: number): SVGElement => el('circle', { cx, cy, r, fill: 'currentColor' });
 const bar = (x1: number, y1: number, x2: number, y2: number): SVGElement =>
   el('line', { x1, y1, x2, y2, stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' });
 
@@ -28,8 +27,12 @@ type IconKey = 'tank' | 'damage' | 'support' | 'unknown';
 const SHAPES: Record<IconKey, () => SVGElement[]> = {
   // Shield.
   tank: () => [fill('M12 2l8 3v6.2C20 16 16.4 20 12 22 7.6 20 4 16 4 11.2V5z')],
-  // Target reticle (offense).
-  damage: () => [ring(12, 12, 8), bar(12, 1, 12, 6), bar(12, 18, 12, 23), bar(1, 12, 6, 12), bar(18, 12, 23, 12), dot(12, 12, 2.4)],
+  // Damage — Overwatch's offensive glyph: three pointed vertical bars (centre tallest).
+  damage: () => [
+    fill('M5 11 L6.5 8.5 L8 11 L8 19.5 L5 19.5 Z'),
+    fill('M10.4 8.5 L12 5 L13.6 8.5 L13.6 19.5 L10.4 19.5 Z'),
+    fill('M16 11 L17.5 8.5 L19 11 L19 19.5 L16 19.5 Z'),
+  ],
   // Support cross.
   support: () => [fill('M9.5 3h5v6h6v5h-6v6h-5v-6h-6V9h6z')],
   // Neutral unknown.
