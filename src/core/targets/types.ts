@@ -4,6 +4,7 @@
  * clamp helper both the sample and scoring paths need.
  */
 import type { Role } from '../model';
+import type { TargetLearningCurve } from './learningCurve';
 
 export type TargetMode = 'self' | 'measured';
 
@@ -53,6 +54,12 @@ export interface TargetSummary {
   activatedAt?: number;
   /** Matches played since activation, over unfiltered history (active only) — the staleness match count. */
   matchesSinceActive?: number;
+  /**
+   * The "Focus Trend" learning curve — rolling winrate since you flagged this
+   * target vs your pre-flag baseline (see {@link ./learningCurve}). Present for
+   * live (non-archived) targets only; drives the phase chip + trend panel.
+   */
+  learning?: TargetLearningCurve;
 }
 
 /** Clamp a ratio into the valid 0..1 winrate/hitrate range. */

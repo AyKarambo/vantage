@@ -9,6 +9,7 @@ import { pct } from '../../format';
 import { PALETTE } from '../../theme';
 import { sparkline } from '../../charts/plots';
 import { badge, button, card, chip } from '../../components/primitives';
+import { phaseChip, focusTrendDisclosure } from '../../components/targetTrend';
 import { openModal } from '../../components/overlay';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
@@ -25,6 +26,9 @@ export function libraryCard(ctx: ViewContext, onEdit: (t: TargetSummary) => void
 
 function targetRow(t: TargetSummary, ctx: ViewContext, onEdit: (t: TargetSummary) => void): HTMLElement {
   const accent = t.mode === 'measured' ? PALETTE.win : PALETTE.accent;
+  // Opt-in Focus Trend disclosure (live targets carrying a learning model only).
+  // Its toggle is local-only, so appending its panel here can't be torn out mid-click.
+  const disc = focusTrendDisclosure(t);
   return h('div', { class: 'target-row' },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
       h('div', { class: 'row-main' },
@@ -35,6 +39,7 @@ function targetRow(t: TargetSummary, ctx: ViewContext, onEdit: (t: TargetSummary
         h('div', { class: 'mono u-dim', style: { fontSize: '10.5px', marginTop: '3px' } }, t.rule),
       ),
       sparkline(t.spark, { width: 150, height: 34, color: accent, fill: true }),
+      t.learning ? phaseChip(t.learning) : null,
       h('div', { style: { textAlign: 'right', width: '56px', flex: '0 0 auto' } },
         h('div', { class: 'mono', style: { fontSize: '16px', fontWeight: '600' } }, t.attempts ? pct(t.hitRate) : 'New'),
         h('div', { class: 'u-dim', style: { fontSize: '10px' } }, `${t.hits} / ${t.attempts}`),
@@ -42,17 +47,20 @@ function targetRow(t: TargetSummary, ctx: ViewContext, onEdit: (t: TargetSummary
     ),
     winSplit('win when hit', t.winWhenHit, PALETTE.win, PALETTE.winText),
     winSplit('when missed', t.winWhenMissed, 'rgba(255,255,255,0.16)', PALETTE.muted),
-    rowActions(t, ctx, onEdit),
+    rowActions(t, ctx, onEdit, disc?.toggle),
+    disc?.panel ?? null,
   );
 }
 
-/** Lifecycle controls: Active = graded on Review; Archive keeps history restorable. */
-function rowActions(t: TargetSummary, ctx: ViewContext, onEdit: (t: TargetSummary) => void): HTMLElement {
+/** Lifecycle controls: Active = graded on Review; Archive keeps history restorable.
+ *  `trend` (the Focus-trend disclosure toggle) sits with the other row actions. */
+function rowActions(t: TargetSummary, ctx: ViewContext, onEdit: (t: TargetSummary) => void, trend?: HTMLElement): HTMLElement {
   const refreshAfter = (p: Promise<void>): void => { void p.then(() => ctx.refresh()); };
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' } },
     chip(t.isActive ? '◎ Active on Review' : 'Inactive', t.isActive,
       () => refreshAfter(bridge.setTargetActive(t.id, !t.isActive))),
     h('span', { style: { flex: '1' } }),
+    trend ?? null,
     button('Edit', { variant: 'ghost', onClick: () => onEdit(t) }),
     // Archive is reversible → no confirmation, immediate with Undo (delete keeps its modal).
     button('Archive', {

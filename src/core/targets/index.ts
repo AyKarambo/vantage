@@ -41,3 +41,13 @@ export {
 
 // Aggregate improvement grade derivation (Notion `Improvement Target` export).
 export { aggregateImprovementGrade } from './aggregateGrade';
+
+// Focus Trend — the per-target learning curve (rolling winrate since flagged vs
+// a real pre-flag baseline, Wilson-banded). Pure; attached to TargetSummary.
+export { targetTimeline, type OrderedAttempt } from './timeline';
+export { wilson } from './wilson';
+export {
+  targetLearningCurve,
+  ROLL_WINDOW, ROLL_MIN, BASELINE_WINDOW, MIN_BASELINE, MIN_RENDER, MIN_VERDICT, DIP_EPS,
+  type LearningPhase, type LearningCurvePoint, type TargetLearningCurve,
+} from './learningCurve';

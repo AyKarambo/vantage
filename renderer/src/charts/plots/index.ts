@@ -20,3 +20,4 @@ export type { DonutSlice } from './donutChart';
 export { readinessChart, supercompensationSchematic } from './readinessChart';
 export { ratingChart } from './ratingChart';
 export type { RatingPoint } from './ratingChart';
+export { learningCurveChart, practiceJSchematic, learningCurveRows, LEARNING_CURVE_COLUMNS } from './learningCurveChart';
