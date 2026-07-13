@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeHeroStats, heroLines, effectiveHeroMinutes } from '../src/core/perHero';
+import { mergeHeroStats, heroLines, effectiveHeroMinutes, combinedHeroLine } from '../src/core/perHero';
 import type { HeroStat } from '../src/core/model';
 
 const stat = (p: Partial<HeroStat> & { hero: string }): HeroStat => ({
@@ -83,5 +83,35 @@ describe('heroLines', () => {
     ], 10);
     expect(lines.map((l) => l.hero)).toEqual(['Tracer', 'Genji']);
     expect(lines[0].per10?.damage).toBe(1200); // (200+400) * 10 / (2+3)
+  });
+});
+
+describe('combinedHeroLine ("All" tab)', () => {
+  it('sums every hero and computes per-10 over the whole match', () => {
+    const line = combinedHeroLine([
+      stat({ hero: 'Tracer', eliminations: 12, assists: 4, deaths: 3, damage: 300, minutes: 5 }),
+      stat({ hero: 'Genji', eliminations: 8, assists: 2, deaths: 1, damage: 500, minutes: 5 }),
+    ], 10)!;
+    expect(line.hero).toBe('All');
+    expect(line.totals.damage).toBe(800);
+    expect(line.per10?.damage).toBe(800); // 800 * 10 / 10 (whole match)
+    expect(line.kda).toBeCloseTo((20 + 6) / 4); // combined (elim + assist) / deaths
+  });
+
+  it('dashes per-10 without a duration, still shows KDA, and is null with no heroes', () => {
+    const noDur = combinedHeroLine([stat({ hero: 'Tracer', eliminations: 6, assists: 2, deaths: 2 })], undefined)!;
+    expect(noDur.per10).toBeNull();
+    expect(noDur.kda).toBeCloseTo((6 + 2) / 2);
+    expect(combinedHeroLine([], 10)).toBeNull();
+  });
+
+  it('merges hero-swap duplicates before combining', () => {
+    const line = combinedHeroLine([
+      stat({ hero: 'Tracer', damage: 200, minutes: 2 }),
+      stat({ hero: 'Genji', damage: 500, minutes: 5 }),
+      stat({ hero: 'Tracer', damage: 400, minutes: 3 }),
+    ], 10)!;
+    expect(line.totals.damage).toBe(1100); // 200 + 500 + 400
+    expect(line.per10?.damage).toBe(1100); // over the 10-min match
   });
 });

@@ -26,7 +26,7 @@ import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
-import { heroLines } from '../../../src/core/perHero';
+import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
 import { PALETTE, wrHsl } from '../theme';
 import type { ViewContext } from './view';
 
@@ -186,9 +186,13 @@ function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined
   // available, else an equal split of the match); KDA stays a raw ratio. A match
   // with no usable duration dashes the per-10 stats but still shows KDA.
   const lines = heroLines(perHero, durationMinutes);
+  // With more than one hero, lead with an "All" tab combining every hero's stats
+  // (per-10 over the whole match); a single-hero match already IS its own total.
+  const all = combinedHeroLine(perHero, durationMinutes);
+  const tabLines = all && lines.length > 1 ? [all, ...lines] : lines;
   const body = h('div', { class: 'stat-grid stat-grid--wide' });
   const draw = (hero: string): void => {
-    const s = lines.find((x) => x.hero === hero) ?? lines[0];
+    const s = tabLines.find((x) => x.hero === hero) ?? tabLines[0];
     const p = s.per10;
     render(body,
       statBox(per10Fixed(p?.eliminations), 'Elims/10'),
@@ -200,11 +204,11 @@ function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined
       statBox(fmt(p?.mitigation), 'MIT/10'),
     );
   };
-  draw(lines[0].hero);
-  const tabs = lines.length > 1
+  draw(tabLines[0].hero);
+  const tabs = tabLines.length > 1
     ? segmented({
-        options: lines.map((s) => ({ value: s.hero, label: s.hero })),
-        value: lines[0].hero,
+        options: tabLines.map((s) => ({ value: s.hero, label: s.hero })),
+        value: tabLines[0].hero,
         onChange: draw,
       })
     : null;
