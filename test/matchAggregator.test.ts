@@ -4,6 +4,7 @@ import type { GepMessage } from '../src/core/model';
 import { resolveRole } from '../src/core/resolvers/role';
 import { resolveResult } from '../src/core/resolvers/result';
 import { buildCompetitiveMatch } from '../src/main/simulate';
+import { matchToGame } from '../src/core/gameRecord';
 
 const info = (feature: string, key: string, value: unknown): GepMessage => ({
   kind: 'info',
@@ -183,7 +184,103 @@ describe('MatchAggregator roster retention', () => {
   });
 });
 
+describe('MatchAggregator local player from roster is_local', () => {
+  it('identifies the local player via the GEP is_local flag when game_info.battle_tag is absent', () => {
+    const agg = new MatchAggregator(() => 1000);
+    const seq: GepMessage[] = [
+      event('match_start'),
+      // NO game_info.battle_tag — exactly the situation that produced "Unknown".
+      info('match_info', 'pseudo_match_id', 'loc-1'),
+      info('match_info', 'map', 1207), // numeric map id
+      // enemy team: numeric hero id, is_local 0 — must be ignored for local stats
+      info('roster', 'roster_6', { player_name: 'ENEMY', battle_tag: 'Enemy#9', is_local: 0, is_myteam: 0, hero_name: 418, kills: 20, team: 0 }),
+      // the local player: real GEP field names, is_local:1, string hero (own team)
+      info('roster', 'roster_2', { player_name: 'KARAMBO', battle_tag: 'Karambo#21234', is_local: 1, is_myteam: 1, hero_name: 'Tracer', hero_role: 'DAMAGE', kills: 15, deaths: 4, assists: 6, damage: 9000, team: 1 }),
+      info('match_info', 'match_outcome', 'Victory'),
+    ];
+    let rec = null;
+    for (const m of seq) rec = agg.handle(m) ?? rec;
+    rec = agg.handle(event('match_end'));
+    expect(rec).not.toBeNull();
+
+    // battleTag seeded from the local roster entry → no longer "Unknown".
+    expect(rec!.battleTag).toBe('Karambo#21234');
+    expect(rec!.mapName).toBe('Nepal'); // numeric map id resolved
+    expect(rec!.heroes).toEqual(['Tracer']); // local per-hero accumulated
+    expect(rec!.eliminations).toBe(15);
+
+    // The local roster entry is flagged; the enemy is not.
+    expect(rec!.roster!.find((p) => p.isLocal)?.battleTag).toBe('Karambo#21234');
+    expect(rec!.roster!.find((p) => p.battleTag === 'Enemy#9')?.isLocal).toBeFalsy();
+
+    // End-to-end: account resolves to the configured label (never "Unknown").
+    const game = matchToGame(rec!, { 'Karambo#21234': 'Main' });
+    expect(game?.account).toBe('Main');
+    expect(game?.map).toBe('Nepal');
+  });
+});
+
+describe('MatchAggregator roster teardown (slots cleared to {} before match_end)', () => {
+  it('retains the last rich snapshot per slot when GEP blanks the roster at match end', () => {
+    // Mirrors a real capture: full roster rows stream in, then every slot is
+    // reset to `{}` as the scoreboard tears down — and only AFTER that does
+    // match_end fire. The empty snapshots must not blank the scoreboard.
+    const agg = new MatchAggregator(() => 1000);
+    const seq: GepMessage[] = [
+      event('match_start'),
+      info('match_info', 'pseudo_match_id', 'td-1'),
+      info('match_info', 'map', 1207),
+      info('roster', 'roster_9', { player_name: 'KARAMBO', battlenet_tag: 'Karambo#21442', is_local: true, hero_name: 'Shion', hero_role: 'DAMAGE', kills: 16, deaths: 4, assists: 2, damage: 8433, team: 1 }),
+      info('roster', 'roster_1', { player_name: 'ADMONI', battlenet_tag: 'Admoni#1955', is_local: false, hero_name: 'Cassidy', hero_role: 'DAMAGE', kills: 16, deaths: 3, damage: 11334, team: 1 }),
+      info('roster', 'roster_4', { player_name: 'ENEMY', battlenet_tag: 'Kittens#2693', is_local: false, hero_name: 'Roadhog', hero_role: 'TANK', kills: 11, deaths: 6, damage: 7895, team: 0 }),
+      info('match_info', 'match_outcome', 'victory'),
+      // Match teardown: every slot blanked BEFORE match_end (the bug trigger).
+      info('roster', 'roster_1', {}),
+      info('roster', 'roster_4', {}),
+      info('roster', 'roster_9', {}),
+    ];
+    let rec = null;
+    for (const m of seq) rec = agg.handle(m) ?? rec;
+    rec = agg.handle(event('match_end'));
+    expect(rec).not.toBeNull();
+
+    // The full scoreboard survived the blanking — one rich row per slot.
+    expect(rec!.roster).toHaveLength(3);
+    const bySlot = Object.fromEntries((rec!.roster ?? []).map((p) => [p.battleTag, p]));
+    expect(bySlot['Karambo#21442']).toMatchObject({ heroName: 'Shion', kills: 16, isLocal: true });
+    expect(bySlot['Admoni#1955']).toMatchObject({ heroName: 'Cassidy', kills: 16, team: 1 });
+    expect(bySlot['Kittens#2693']).toMatchObject({ heroName: 'Roadhog', team: 0 });
+    expect(bySlot['Kittens#2693'].isLocal).toBeFalsy();
+
+    // The local player's own line is intact too (the blank {} for the local
+    // slot must not zero out the aggregated stats).
+    expect(rec!.battleTag).toBe('Karambo#21442');
+    expect(rec!.mapName).toBe('Nepal');
+    expect(rec!.heroes).toEqual(['Shion']);
+    expect(rec!.eliminations).toBe(16);
+    expect(rec!.deaths).toBe(4);
+  });
+});
+
 describe('parseRoster', () => {
+  it('parses the real GEP field names (battle_tag / battlenet_tag / player_name / is_local)', () => {
+    const p = parseRoster({ player_name: 'KARAMBO', battle_tag: 'Karambo#21234', is_local: 1, hero_name: 'Tracer', hero_role: 'DAMAGE' });
+    expect(p?.battleTag).toBe('Karambo#21234');
+    expect(p?.isLocal).toBe(true);
+    const q = parseRoster({ battlenet_tag: 'Chongy#21205', is_local: false, hero_name: 'CASSIDY' });
+    expect(q?.battleTag).toBe('Chongy#21205');
+    expect(q?.isLocal).toBe(false);
+  });
+
+  it("reads GEP's past-tense healed/mitigated roster keys", () => {
+    // The exact shape from a live capture — a support's healing/mitigation would
+    // otherwise be dropped from the scoreboard.
+    const p = parseRoster({ player_name: 'HAYAA', battlenet_tag: 'hayaa#21775', hero_name: 'BRIGITTE', damage: 1562.64, healed: 5705.57, mitigated: 793.834 });
+    expect(p?.healing).toBe(5705.57);
+    expect(p?.mitigation).toBe(793.834);
+    expect(p?.damage).toBe(1562.64);
+  });
+
   it('parses JSON strings and object values with field aliases', () => {
     const a = parseRoster('{"battletag":"A#1","hero_name":"Ana","hero_role":"support","healing_done":12000}');
     expect(a?.battleTag).toBe('A#1');

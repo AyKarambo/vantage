@@ -10,8 +10,8 @@ import type { RankAnchorMap } from '../../core/rank';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogLevel,
-  ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary,
-  RankAnchorInput, RankSummary, RendererErrorInput, ReviewInput, TargetEditInput,
+  ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
+  RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
 } from '../../shared/contract';
 
@@ -122,6 +122,8 @@ export interface DataProvider {
   getAppSettings(): AppUiSettings;
   /** Apply + persist app-behavior settings; returns the applied values. */
   setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
+  /** Persist the Overwolf dev key to ~/.ow-cli/dev-key; returns whether one is now present. */
+  setDevKey(key: string): { hasKey: boolean };
   /** Version + build/runtime facts + support contact (the About screen). */
   getAppInfo(): AppInfo;
   /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
@@ -136,6 +138,12 @@ export interface DataProvider {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
+  /** Played competitive matches held without a GEP outcome, awaiting a manual result (the "Needs result" section). */
+  pendingMatches(): PendingMatch[];
+  /** Complete a held pending match with a win/loss/draw — moves it into history via the normal pipeline. */
+  resolvePendingMatch(matchId: string, result: Result): void;
+  /** Dismiss a held pending match without logging it (the user's "not a real match" verdict). */
+  dismissPendingMatch(matchId: string): void;
   /** The effective master data (defaults ⊕ overrides) — feeds the dashboard read + the editor. */
   effectiveMasterData(): MasterData;
   /** Add/edit a hero; persists the delta and returns the new effective master data. */

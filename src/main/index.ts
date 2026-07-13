@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-  loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath, type AppConfig,
+  loadConfig, saveLocalConfig, saveLocalUiConfig, saveLocalAccounts, getNotionToken, userConfigPath,
+  setDevKey as saveDevKey, hasDevKey, type AppConfig,
 } from './config';
 import { NotionRuntime } from './notionRuntime';
 import { OutboxStore } from '../store/outbox';
@@ -20,6 +21,9 @@ import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
+import { computeDevMode } from '../core/devMode';
+import { resolveMapId } from '../core/resolvers/mapId';
+import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -116,13 +120,18 @@ function main(): void {
   // One-time import of a pre-SQLite history.json — kept frozen as a backup. The
   // legacy file always lived in the default data dir, wherever the DB is now.
   migrateJsonHistory(history, path.join(dataDir, 'history.json'));
-
-  // Best-effort, idempotent legacy recovery (Feedback F1): re-attribute rows
-  // stored as `account: 'Unknown'` whose captured local roster BattleTag now
-  // maps to a configured account, so they leave the Unknown bucket. Only helps
-  // pre-#129 rows that still carry a local roster tag; the rest stay Unknown.
-  const recoveredUnknown = history.reresolve(config.accounts);
-  if (recoveredUnknown) log.info('store', 'recovered legacy Unknown rows', { count: recoveredUnknown });
+  // One-time, idempotent backfill of existing rows now that the resolvers exist:
+  //  - re-resolve numeric GEP map ids to names (e.g. "1207" → "Nepal", "4140" →
+  //    "Neon Junction") and fold the legacy "Neon Junktion" spelling; and
+  //  - re-attribute legacy `account: 'Unknown'` rows whose captured local roster
+  //    BattleTag now maps to a configured account (Feedback F1) — only pre-#129
+  //    rows that still carry a local roster tag; the rest stay Unknown.
+  // A re-run rewrites nothing.
+  const backfilled = history.reresolve((g) => ({
+    map: resolveMapId(g.map),
+    account: g.account === UNKNOWN_ACCOUNT ? recoverableAccount(g.roster, config.accounts) : undefined,
+  }));
+  if (backfilled) log.info('store', 'backfilled map names / recovered Unknown rows', { rows: backfilled });
 
   // First-run detection is config-driven, not file-existence: HistoryStore's
   // constructor above already created history.db in dataDir, so a "does
@@ -269,15 +278,19 @@ function main(): void {
     mapNames: allMapNames,
   });
 
+  // Fires when the pending ("needs result") set changes, so an open Review
+  // screen re-fetches (placeholder until the window exists, like pushGameLogged).
+  let pushPendingChanged: () => void = () => {};
   const pipeline = createMatchPipeline({
     history,
     aggregator,
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
-    // Auto-switch (Feedback F4): tell the renderer which account a newly recorded
-    // competitive match landed on, so it can follow onto a configured account.
+    // Tell the renderer which account a newly recorded competitive match landed on
+    // — drives the live dashboard refresh and the F4 account auto-switch.
     onGameLogged: (payload) => pushGameLogged(payload),
+    onPendingChanged: () => pushPendingChanged(),
   });
 
   // Truthful connection indicator: folds GEP signals into the four-state
@@ -307,6 +320,8 @@ function main(): void {
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
     persistSessionSettings: (sessionSettings) => saveLocalConfig({ sessionSettings }),
     recordGame: (game) => pipeline.recordGame(game),
+    resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),
+    dismissPending: (matchId) => pipeline.dismissPending(matchId),
     notify: (title, body) => tray.notify(title, body),
     // Demo season draws only from the active competitive pool (spec AC 24).
     sampleGames: () => generateSampleGames(180, 42, activeMapNames()),
@@ -321,6 +336,7 @@ function main(): void {
         // toggle look "dead" (it re-painted with the stale old value).
         runAtLogin: config.runAtLogin,
         demoPreference: config.ui.demoPreference,
+        devMode: config.ui.devMode,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -337,10 +353,17 @@ function main(): void {
           saveLocalUiConfig({ demoPreference: patch.demoPreference });
           config = loadConfig();
         }
+        // Dev Mode is a next-launch preference the launcher (scripts/ow-dev.mjs)
+        // reads; persisting it here is enough — no live process change.
+        if (patch.devMode !== undefined) {
+          saveLocalUiConfig({ devMode: patch.devMode });
+          config = loadConfig();
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
           demoPreference: config.ui.demoPreference,
+          devMode: config.ui.devMode,
         };
       },
     },
@@ -354,7 +377,16 @@ function main(): void {
       platform: process.platform,
       osRelease: os.release(),
       packaged: app.isPackaged,
+      // Truthful dev-mode read: unpackaged AND dev credentials in the env at
+      // start (injected by scripts/ow-dev.mjs) — see core/devMode.
+      devMode: computeDevMode({ packaged: app.isPackaged, env: process.env }),
     }),
+    // Store the Overwolf dev key where the launcher reads it (~/.ow-cli/dev-key),
+    // never in app config. Takes effect next launch (Dev Mode auth is start-time).
+    setDevKey: (key: string) => {
+      saveDevKey(key);
+      return { hasKey: hasDevKey() };
+    },
     openExternal: (url) => shell.openExternal(url),
     dataLocation: {
       get: () => ({ ...currentDataLocation(), ...(firstRunNeedsDataChoice ? { needsFirstRunChoice: true } : {}) }),
@@ -427,6 +459,7 @@ function main(): void {
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
+  pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock

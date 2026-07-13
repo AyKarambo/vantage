@@ -27,20 +27,29 @@ function run(n: number, results: Result[], p: Partial<GameRecord>): GameRecord[]
   return Array.from({ length: n }, (_, i) => game({ result: results[i % results.length], ...p }));
 }
 
-describe('focusEntries — cross-dimension merge', () => {
-  it('flags net-losing maps, heroes and roles, each tagged by dimension', () => {
-    // 6 games, 5L 1W, all on one map / one hero / one role → all three flagged.
+describe('focusEntries — maps-only', () => {
+  it('flags a net-losing map only, even when the same games also net-lose a hero and role', () => {
+    // 6 games, 5L 1W, all on one map / one hero / one role → only the map surfaces.
     const games = run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], {
       map: 'Midtown', role: 'tank', heroes: ['Reinhardt'],
     });
     const entries = focusEntries(games);
-    expect(entries.map((e) => `${e.dimension}:${e.key}`).sort()).toEqual(
-      ['hero:Reinhardt', 'map:Midtown', 'role:tank'],
-    );
-    for (const e of entries) expect(e).toMatchObject({ net: 4, games: 6, wins: 1, losses: 5 });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      dimension: 'map', key: 'Midtown', net: 4, games: 6, wins: 1, losses: 5,
+    });
   });
 
-  it('excludes groups at or below net 0', () => {
+  it('produces no rows when only a hero/role is net-losing and no single map reaches the floor', () => {
+    // role tank / hero Reinhardt are net-losing overall (5L1W) but spread one
+    // game per map, so no map individually reaches the 3-game floor.
+    const results: Result[] = ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'];
+    const games = results.map((result, i) =>
+      game({ result, map: `Solo-${i}`, role: 'tank', heroes: ['Reinhardt'] }));
+    expect(focusEntries(games)).toHaveLength(0);
+  });
+
+  it('excludes maps at or below net 0', () => {
     const games = [
       ...run(4, ['Win', 'Win', 'Win', 'Loss'], { map: 'Busan' }), // net -2
       ...run(4, ['Win', 'Win', 'Loss', 'Loss'], { map: 'Oasis' }), // net 0
@@ -48,49 +57,36 @@ describe('focusEntries — cross-dimension merge', () => {
     expect(focusEntries(games)).toHaveLength(0);
   });
 
-  it('respects per-dimension minimum-game floors (map/hero 3, role 5)', () => {
-    // 4 losses on the same role but scattered maps/heroes: nothing reaches its
-    // floor (role needs 5). A 5th loss flags the role — and only the role.
-    const four = Array.from({ length: 4 }, (_, i) =>
-      game({ result: 'Loss', role: 'support', map: `M${i}`, heroes: [`H${i}`] }));
-    expect(focusEntries(four)).toHaveLength(0);
+  it('drops the Unknown map bucket — a missing map id cannot surface as a row', () => {
+    const games = run(5, ['Loss'], { map: '' });
+    expect(focusEntries(games)).toHaveLength(0);
+  });
 
-    const five = [...four, game({ result: 'Loss', role: 'support', map: 'M9', heroes: ['H9'] })];
-    const entries = focusEntries(five);
+  it('respects the map minimum-game floor of 3', () => {
+    const two = run(2, ['Loss'], { map: 'Ilios' });
+    expect(focusEntries(two)).toHaveLength(0);
+
+    const three = [...two, game({ result: 'Loss', map: 'Ilios' })];
+    const entries = focusEntries(three);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ dimension: 'role', key: 'support', net: 5 });
+    expect(entries[0]).toMatchObject({ dimension: 'map', key: 'Ilios', net: 3 });
   });
 
   it('ranks by net descending, ties broken by more games', () => {
     const games = [
-      // Everything on role openQ, balanced to net 0 overall so no role entry.
-      ...run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], { map: 'P', role: 'openQ' }), // map P: net 4, 6g
-      ...run(4, ['Loss', 'Loss', 'Loss', 'Win'], { map: 'Q', role: 'openQ' }), // map Q: net 2, 4g
-      // hero H: net 4 but 8 games → outranks P on the tie.
-      ...Array.from({ length: 8 }, (_, i) =>
-        game({ result: i < 6 ? 'Loss' : 'Win', role: 'openQ', map: `R${i % 4}`, heroes: ['H'] })),
-      // R0..R3 get 2 games each (2L or 1L1W) — R0/R1 are 2 losses but <3 games.
-      ...run(14, ['Win'], { role: 'openQ' }), // balance openQ to net 0 (19L vs 16W → need 3W more)
-      ...run(3, ['Win'], { role: 'openQ' }),
+      ...run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], { map: 'P' }), // net 4, 6g
+      ...run(4, ['Loss', 'Loss', 'Loss', 'Win'], { map: 'Q' }), // net 2, 4g
+      ...run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win'], { map: 'R' }), // net 4, 8g — ties P, wins on games
     ];
     const entries = focusEntries(games);
-    expect(entries.map((e) => `${e.dimension}:${e.key}`)).toEqual(['hero:H', 'map:P', 'map:Q']);
+    expect(entries.map((e) => e.key)).toEqual(['R', 'P', 'Q']);
   });
 
-  it('caps the merged list at 12', () => {
-    // 13 net-losing maps (3 losses each) → maps alone exceed the cap; roles pile on top.
+  it('caps the list at 12', () => {
+    // 13 net-losing maps (3 losses each) exceed the cap.
     const games = Array.from({ length: 13 }, (_, m) => run(3, ['Loss'], { map: `Map-${m}` })).flat();
     expect(focusEntries(games)).toHaveLength(12);
-  });
-
-  it('counts a game toward every hero played in it and ignores the Unknown bucket', () => {
-    const games = run(3, ['Loss'], { heroes: ['Ana', 'Zenyatta'], map: 'Z' });
-    const entries = focusEntries(games);
-    const heroes = entries.filter((e) => e.dimension === 'hero').map((e) => e.key).sort();
-    expect(heroes).toEqual(['Ana', 'Zenyatta']);
-    // heroes: [] games never produce an 'Unknown' hero entry.
-    const noHeroes = run(3, ['Loss'], { heroes: [], map: 'Y' });
-    expect(focusEntries(noHeroes).some((e) => e.dimension === 'hero')).toBe(false);
+    expect(focusEntries(games).every((e) => e.dimension === 'map')).toBe(true);
   });
 });
 
@@ -169,8 +165,8 @@ describe('linkFocusTargets', () => {
   }
   const at = (i: number, result: Result, p: Partial<GameRecord> = {}): GameRecord =>
     game({ result, timestamp: T0 + i * HOUR, ...p });
-  /** A single map entry to link against. */
-  const entriesFor = (games: GameRecord[]) => focusEntries(games).filter((e) => e.dimension === 'map');
+  /** All entries are map entries now — a thin alias kept for readability. */
+  const entriesFor = (games: GameRecord[]) => focusEntries(games);
 
   it('links by case-insensitive name substring and computes the since-flagged delta', () => {
     // Before the flag: 1W4L (20%). Since: 3W1L (75%). Flag at i=5. Net stays 1.
@@ -239,16 +235,11 @@ describe('linkFocusTargets', () => {
     expect(linked.progress?.deltaPts).toBeUndefined();
   });
 
-  it('matches across apostrophe styles and role display labels', () => {
-    // Curly apostrophe in the target name still links the straight-quoted key…
+  it('matches across apostrophe styles', () => {
+    // Curly apostrophe in the target name still links the straight-quoted key.
     const mapGames = [0, 1, 2].map((i) => at(i, 'Loss', { map: "King's Row" }));
     const curly = target('Practice King’s Row: warm up unranked');
     expect(linkFocusTargets(entriesFor(mapGames), [curly], mapGames)[0].progress?.targetId).toBe(curly.id);
-    // …and a role prefill written with the display label links the openQ key.
-    const roleGames = [0, 1, 2, 3, 4].map((i) => at(i, 'Loss', { role: 'openQ', map: `M${i}` }));
-    const label = target('Practice Open Q: warm up unranked + review one replay');
-    const entries = focusEntries(roleGames).filter((e) => e.dimension === 'role');
-    expect(linkFocusTargets(entries, [label], roleGames)[0].progress?.targetId).toBe(label.id);
   });
 
   it('links a multi-word key even when the target drops the apostrophe', () => {
@@ -260,29 +251,29 @@ describe('linkFocusTargets', () => {
 
   it('does not link a short key that only matches across word boundaries', () => {
     // "Plan a warmup routine" flattens to "…planawarmup…" which *contains* "ana",
-    // but token-run matching must not link the hero Ana to it.
-    const anaGames = [0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Ana'], map: `A${i}` }));
-    const anaEntries = focusEntries(anaGames).filter((e) => e.dimension === 'hero');
+    // but token-run matching must not link a map key "Ana" to it.
+    const anaGames = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Ana' }));
     const decoyForAna = target('Plan a warmup routine before ranked');
-    expect(linkFocusTargets(anaEntries, [decoyForAna], anaGames)[0].progress).toBeUndefined();
+    expect(linkFocusTargets(entriesFor(anaGames), [decoyForAna], anaGames)[0].progress).toBeUndefined();
 
     // Same class: "Help me improve aim" flattens to a string containing "mei".
-    const meiGames = [0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Mei'], map: `B${i}` }));
-    const meiEntries = focusEntries(meiGames).filter((e) => e.dimension === 'hero');
+    const meiGames = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Mei' }));
     const decoyForMei = target('Help me improve aim');
-    expect(linkFocusTargets(meiEntries, [decoyForMei], meiGames)[0].progress).toBeUndefined();
+    expect(linkFocusTargets(entriesFor(meiGames), [decoyForMei], meiGames)[0].progress).toBeUndefined();
   });
 
-  it('links hero and role entries too', () => {
-    const games = [
-      ...[0, 1, 2].map((i) => at(i, 'Loss', { heroes: ['Ana'], map: `H${i}` })),
-      ...[3, 4, 5, 6, 7].map((i) => at(i, 'Loss', { role: 'support', map: `R${i}` })),
-    ];
-    const entries = focusEntries(games);
-    const linked = linkFocusTargets(entries, [target('Practice Ana: aim drills'), target('Fix my SUPPORT games')], games);
-    expect(linked.find((e) => e.dimension === 'hero' && e.key === 'Ana')?.progress).toBeDefined();
-    expect(linked.find((e) => e.dimension === 'role' && e.key === 'support')?.progress).toBeDefined();
-    expect(linked.find((e) => e.dimension === 'map')?.progress).toBeUndefined();
+  it('a map-named active target still links; a hero/role-named legacy target never links (no error)', () => {
+    const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Busan', heroes: ['Ana'], role: 'support' }));
+    const mapTarget = target('Practice Busan: warm up unranked');
+    const legacyHeroRoleTargets = [target('Practice Ana: aim drills'), target('Fix my SUPPORT games')];
+
+    const [linkedToMap] = linkFocusTargets(entriesFor(games), [mapTarget], games);
+    expect(linkedToMap.dimension).toBe('map');
+    expect(linkedToMap.progress?.targetId).toBe(mapTarget.id);
+
+    const [neverLinked] = linkFocusTargets(entriesFor(games), legacyHeroRoleTargets, games);
+    expect(neverLinked.dimension).toBe('map');
+    expect(neverLinked.progress).toBeUndefined();
   });
 });
 
@@ -291,12 +282,12 @@ describe('dashboard focusItems payload', () => {
   const at = (i: number, result: Result, p: Partial<GameRecord> = {}): GameRecord =>
     game({ result, timestamp: T0 + i * HOUR, ...p });
 
-  it('ships the cross-dimension list on DashboardData', () => {
+  it('ships the map-only focus list on DashboardData', () => {
     const games = run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], {
       map: 'Midtown', role: 'tank', heroes: ['Reinhardt'],
     });
     const d = computeDashboard(games, { days: 'all' }, demo);
-    expect(d.focusItems.map((e) => e.dimension).sort()).toEqual(['hero', 'map', 'role']);
+    expect(d.focusItems.every((e) => e.dimension === 'map')).toBe(true);
     expect(d.focusItems.every((e) => e.net > 0)).toBe(true);
   });
 

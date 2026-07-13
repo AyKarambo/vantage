@@ -21,8 +21,9 @@
     "assets:store": "node scripts/make-store-assets.mjs",
     "assets:screens": "npm run build:preview && ow-electron scripts/capture-screenshots.cjs",
     "assets:app-screens": "npm run build && ow-electron scripts/capture-app-screenshots.cjs",
-    "start": "npm run make-icon && npm run build && ow-electron .",
-    "dev": "npm run make-icon && npm run build && ow-electron .",
+    "start": "npm run make-icon && npm run build && node scripts/ow-dev.mjs .",
+    "dev": "npm run make-icon && npm run build && node scripts/ow-dev.mjs .",
+    "dev:check": "node scripts/ow-dev.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest",
     "release": "npm run make-icon && npm run build && ow-electron-builder --win --x64 --publish=never",
@@ -85,8 +86,9 @@
     "@notionhq/client": "^5.22.0"
   },
   "devDependencies": {
-    "@overwolf/ow-electron": "39.6.1",
-    "@overwolf/ow-electron-builder": "26.8.5",
+    "@overwolf/ow-cli": "^0.1.6",
+    "@overwolf/ow-electron": "39.8.10-beta.12",
+    "@overwolf/ow-electron-builder": "26.9.0-beta.5",
     "@overwolf/ow-electron-packages-types": "^1.1.4",
     "@types/node": "^22.20.0",
     "esbuild": "^0.28.1",
@@ -97,6 +99,7 @@
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.1": true,
-    "@overwolf/ow-electron@39.6.1": true
+    "@overwolf/ow-electron@39.8.10-beta.12": true,
+    "@overwolf/ow-cli@0.1.6": true
   }
 }

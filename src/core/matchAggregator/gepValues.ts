@@ -5,6 +5,7 @@
  * stateful accumulator so it stays trivially unit-testable.
  */
 import type { RosterPlayer } from '../model';
+import { resolveHeroName } from '../resolvers/hero';
 
 /** Parse a roster value (object or JSON string) into a RosterPlayer, tolerating field aliases. */
 export function parseRoster(value: unknown): RosterPlayer | undefined {
@@ -18,16 +19,24 @@ export function parseRoster(value: unknown): RosterPlayer | undefined {
     return undefined;
   };
   const player: RosterPlayer = {
-    battleTag: asString(pick('battleTag', 'battletag', 'name', 'player', 'playerName')),
-    heroName: asString(pick('heroName', 'hero_name', 'hero', 'character')),
+    battleTag: asString(pick('battleTag', 'battletag', 'battle_tag', 'battlenet_tag', 'name', 'player', 'playerName', 'player_name')),
+    // Documented Overwatch GEP flag marking the tracked (local) player — the
+    // identity signal the pipeline used to throw away.
+    isLocal: asBool(pick('is_local', 'isLocal', 'local')),
+    // GEP delivers hero names in ALL CAPS — canonicalize so they match the
+    // proper-case names the rest of the app and the user's history key on.
+    heroName: resolveHeroName(asString(pick('heroName', 'hero_name', 'hero', 'character'))),
     heroRole: asString(pick('heroRole', 'hero_role', 'role')),
     team: asNumber(pick('team', 'team_id', 'teamId')),
     kills: asNumber(pick('kills', 'eliminations', 'elims')),
     deaths: asNumber(pick('deaths')),
     assists: asNumber(pick('assists')),
     damage: asNumber(pick('damage', 'hero_damage', 'heroDamage', 'damage_dealt')),
-    healing: asNumber(pick('healing', 'healing_done', 'healingDone')),
-    mitigation: asNumber(pick('mitigation', 'damage_mitigated', 'damageMitigated')),
+    // GEP's real roster keys are the past-tense `healed`/`mitigated` (seen in a
+    // live capture) — without these aliases a support's healing/mitigation was
+    // silently dropped from the scoreboard.
+    healing: asNumber(pick('healing', 'healed', 'healing_done', 'healingDone')),
+    mitigation: asNumber(pick('mitigation', 'mitigated', 'damage_mitigated', 'damageMitigated')),
   };
   return player;
 }
@@ -70,6 +79,18 @@ export function asNumber(value: unknown): number | undefined {
   if (typeof value === 'string') {
     const n = Number(value.replace(/[, ]/g, ''));
     if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/** Coerce a GEP flag (`0|1`, `true|false`, or `"true"/"false"`) into a boolean; undefined otherwise. */
+export function asBool(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase();
+    if (s === 'true' || s === '1') return true;
+    if (s === 'false' || s === '0' || s === '') return false;
   }
   return undefined;
 }

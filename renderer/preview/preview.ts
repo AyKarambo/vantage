@@ -189,6 +189,7 @@ let appSettings: AppUiSettings = {
   closeToTray: true,
   runAtLogin: false,
   demoPreference: 'on',
+  devMode: true,
   ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
 };
 // ?demo=on|off|unset overrides the persisted choice — lets design QA preview the
@@ -661,12 +662,14 @@ const mock: OwStatsApi = {
     gameLoggedListeners.add(cb);
     return () => gameLoggedListeners.delete(cb);
   },
+  onPendingChanged: (_cb: () => void) => () => {},
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {
     appSettings = { ...appSettings, ...patch };
     save(APP_SETTINGS_KEY, appSettings);
     return appSettings;
   },
+  setDevKey: async (key: string) => ({ hasKey: key.trim().length > 0 }),
   getAppInfo: async () => ({
     version: 'preview',
     supportEmail: 'timo.seikel@gmail.com',
@@ -677,6 +680,7 @@ const mock: OwStatsApi = {
     platform: 'browser',
     osRelease: 'preview',
     packaged: false,
+    devMode: false,
   }),
   openExternal: async (url: string) => {
     // No shell in the browser harness — echo the intent so links stay debuggable.
@@ -719,6 +723,10 @@ const mock: OwStatsApi = {
     delete previewReviews[matchId];
     save(REVIEWS_KEY, previewReviews);
   },
+  // No pending (no-outcome) matches exist in the browser harness — the pending
+  // store is a real-app SQLite table. The stubs keep the UI buildable/typed.
+  resolvePendingMatch: async () => {},
+  dismissPendingMatch: async () => {},
   previewPendingReviewIgnore: async (input) => ({ count: eligibleForIgnore(input).length }),
   ignorePendingReviews: async (input) => {
     const eligible = eligibleForIgnore(input);

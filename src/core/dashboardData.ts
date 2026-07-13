@@ -23,7 +23,7 @@ import { currentRank, rankKey, rankToPoints, type RankAnchorMap } from './rank';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
-import type { DashboardData, DashboardFilters, MatchRow, MasterData } from '../shared/contract';
+import type { DashboardData, DashboardFilters, MatchRow, MasterData, PendingMatch } from '../shared/contract';
 
 /** Manual (◎) data the player authored, threaded in from the main-process store. */
 export interface ManualData {
@@ -46,6 +46,10 @@ export function computeDashboard(
   demo: DemoContext,
   manual?: ManualData,
   masterData: MasterData = DEFAULT_MASTER_DATA,
+  // Held "needs result" matches (no GEP outcome) — assembled by the main process
+  // from the SEPARATE pending store and threaded through unchanged. Pure here:
+  // this function never reads history for them, so they can't touch analytics.
+  pendingMatches: PendingMatch[] = [],
 ): DashboardData {
   // Effective map-mode + season boundaries come from the (possibly user-edited)
   // master data so an edited mode/season is honored everywhere; both default to
@@ -144,6 +148,7 @@ export function computeDashboard(
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
     reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),
     pendingReviews: pending.length,
+    pendingMatches,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
     staleness: manual?.staleness ?? DEFAULT_STALENESS,
     // Readiness is a per-person verdict → computed over the UNFILTERED

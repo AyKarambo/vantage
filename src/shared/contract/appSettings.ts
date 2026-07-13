@@ -11,6 +11,13 @@ export interface AppUiSettings {
   runAtLogin: boolean;
   /** First-run demo-data choice ('unset' until the user is asked). */
   demoPreference: DemoPreference;
+  /**
+   * Whether Dev Mode is enabled for the *next* launch: the `scripts/ow-dev.mjs`
+   * launcher only injects Overwolf dev credentials when this is not false.
+   * Applying a change needs a restart (Dev Mode auth is start-time). Meaningful
+   * only for unpackaged/dev runs; ignored by a packaged build.
+   */
+  devMode: boolean;
 }
 
 export interface AppInfo {
@@ -30,6 +37,12 @@ export interface AppInfo {
   osRelease: string;
   /** True for an installed/packaged build, false in dev and the browser preview. */
   packaged: boolean;
+  /**
+   * True when the app is actually running in ow-electron Dev Mode — unpackaged
+   * AND launched with Overwolf dev credentials in the environment. Drives the
+   * "Dev Mode" indicator; never true for a packaged build (see core/devMode).
+   */
+  devMode: boolean;
 }
 
 /** Where Vantage's data folder (DB + manual data) currently lives (Settings screen). */

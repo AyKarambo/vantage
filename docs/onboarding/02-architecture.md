@@ -51,10 +51,9 @@ matchToGame(record, accounts)   src/core/gameRecord.ts
    │  (account, role, result, map) → GameRecord
    ▼
 pipeline.recordGame(game)       src/main/matchPipeline.ts
-   │  dedupes by matchId, evaluates the break reminder,
-   │  kicks off async screenshot capture
+   │  dedupes by matchId, evaluates the break reminder
    ▼
-HistoryStore.add(game)          src/store/history.ts → userData/data/history.json
+HistoryStore.add(game)          src/store/history.ts → <data folder>/history.db (SQLite)
    ▼
 DataProvider.getDashboard()     src/main/dashboard/provider.ts
    │  computeDashboard(games, filters) — src/core/dashboardData.ts
@@ -82,14 +81,32 @@ The three data shapes along the way:
 Manual entries (the Log Match card) skip the aggregator: `DataProvider.logMatch()`
 builds a `GameRecord` directly and feeds it into the same `recordGame` path.
 
+### GEP value quirks & live refresh
+
+Two things the pipeline handles that aren't obvious from the flow above:
+
+- **Numeric GEP values are ids, not names** (documented Overwatch GEP behaviour).
+  `match_info.map` is a numeric map id (e.g. `1207`); [`resolveMapId`](../../src/core/resolvers/mapId.ts)
+  maps it to the canonical name (`Nepal`) from Overwolf's official id→name table. The **local
+  player** is identified via the roster `is_local` flag
+  ([`gepValues.parseRoster`](../../src/core/matchAggregator/gepValues.ts)) — the aggregator seeds
+  `battleTag` from that entry, so the account resolves even when the `game_info.battle_tag` event
+  never arrives. (Enemy-team hero names arrive only as ids until a coming GEP release; the local
+  team — and thus your own hero stats — already get names.)
+- **Live logging.** `recordGame` fires an `onGameLogged` push; an already-open dashboard subscribes
+  (`bridge.onGameLogged → store.refresh()`), so a just-finished match appears without a reopen. A
+  one-time, idempotent `HistoryStore.reresolve` backfills map names onto older rows at startup.
+
 ## The composition root
 
 [`src/main/index.ts`](../../src/main/index.ts) is the only place where things get wired
-together, in order: config → stores → aggregator → screenshots → Notion runtime →
-pipeline + data provider (via `createMatchPipeline()` / `createDataProvider()` factory
-functions) → tray → dashboard window. Everything is constructor-injected — no globals,
-no service locators. Factories receive `getConfig: () => AppConfig` *thunks* rather than
-config values, so a config reload takes effect without a restart.
+together, in order: config → data-folder resolution (default, chosen, or adopted — see
+[01 — Getting started](01-getting-started.md#where-the-app-keeps-its-data)) → stores →
+aggregator → Notion runtime → pipeline + data provider (via `createMatchPipeline()` /
+`createDataProvider()` factory functions) → tray → dashboard window. Everything is
+constructor-injected — no globals, no service locators. Factories receive
+`getConfig: () => AppConfig` *thunks* rather than config values, so a config reload
+takes effect without a restart.
 
 This DI style is also the testing story: tests construct the unit with `vi.fn()` fakes
 instead of module-mocking.

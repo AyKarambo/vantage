@@ -9,11 +9,13 @@
  * re-render locally (no refetch); `gradedThisSession` keeps the list honest.
  */
 import { h, render } from '../dom';
-import type { MatchMental, MatchRow, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { MatchMental, MatchRow, PendingMatch, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { parseMeasuredRule } from '../../../src/core/targets';
+import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { srDeltaInput } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { store } from '../store';
@@ -40,18 +42,18 @@ export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
   const pending = d.reviewInbox.filter((m) => !gradedThisSession.has(m.matchId));
+  // No-outcome matches held for manual completion — filtered by the session set
+  // so a just-resolved row disappears immediately, before the refetch lands.
+  const needsResult = (d.pendingMatches ?? []).filter((m) => !resolvedThisSession.has(m.matchId));
 
-  const head = viewHead(
-    'Review',
-    pending.length
-      ? `${pending.length} tracked game${pending.length === 1 ? '' : 's'} need your read — grade your targets and flag how it felt`
-      : 'Grade your targets and flag how it felt on the games you play',
-  );
+  const head = viewHead('Review', subtitle(pending.length, needsResult.length));
+  const needsResultSection = needsResult.length ? needsResultCard(needsResult) : null;
 
   if (!pending.length) {
     return h('div', { class: 'view', style: { maxWidth: '760px' } },
       head,
       activeStrip(active),
+      needsResultSection,
       card({ variant: 'raised' }, emptyState('All caught up — every tracked game has your read. 🎯', true)),
     );
   }
@@ -59,7 +61,101 @@ export function review(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view', style: { maxWidth: '760px' } },
     head,
     activeStrip(active),
+    needsResultSection,
     h('div', { class: 'stack', style: { gap: '10px' } }, ...pending.map((m, i) => item(m, active, i === 0))),
+  );
+}
+
+/** The Review head subtitle, reflecting both the needs-result and grading backlogs. */
+function subtitle(gradeCount: number, needsResultCount: number): string {
+  const parts: string[] = [];
+  if (needsResultCount) parts.push(`${needsResultCount} match${needsResultCount === 1 ? '' : 'es'} to confirm or dismiss`);
+  if (gradeCount) parts.push(`${gradeCount} tracked game${gradeCount === 1 ? '' : 's'} need your read`);
+  return parts.length
+    ? `${parts.join(' · ')} — grade your targets and flag how it felt`
+    : 'Grade your targets and flag how it felt on the games you play';
+}
+
+/**
+ * Matches resolved in this session, so their row hides on the local re-render
+ * before the pending-store refetch arrives (mirrors {@link gradedThisSession}).
+ */
+const resolvedThisSession = new Set<string>();
+
+/**
+ * "Needs review" — played matches GEP didn't confirm as clean trackable games:
+ * no win/loss, an unknown/missing game_type (e.g. after an account swap), or
+ * both. Rather than silently drop a possibly-real match, Vantage holds it here
+ * for the user to curate. Sits ABOVE the grading inbox (rendered even when the
+ * inbox is empty). Setting a result runs the held match back through the normal
+ * history pipeline; dismissing drops it without ever logging it.
+ */
+function needsResultCard(items: PendingMatch[]): HTMLElement {
+  return card({ variant: 'raised', class: 'review-needs-result' },
+    h('div', { class: 'review-section-label' },
+      `Needs review — ${items.length} ${items.length === 1 ? 'match' : 'matches'} GEP didn’t confirm`),
+    h('div', { class: 'hint', style: { marginTop: '-6px', marginBottom: '4px' } },
+      'Set a result to track it, or dismiss if it wasn’t a real match.'),
+    h('div', { class: 'stack', style: { gap: '10px', marginTop: '10px' } }, ...items.map(needsResultRow)),
+  );
+}
+
+/** GEP's own outcome vocabulary, for the "GEP: …" reported-result hint chip. */
+const GEP_RESULT_LABEL: Record<Result, string> = { Win: 'Victory', Loss: 'Defeat', Draw: 'Draw' };
+
+/**
+ * One "Needs review" row: the auto badge, the match facts, an optional
+ * GEP-reported-result hint, the W/L/D confirm buttons (the reported result
+ * pre-highlighted for a one-click confirm), and a subtle Dismiss action.
+ */
+function needsResultRow(m: PendingMatch): HTMLElement {
+  const options: Result[] = ['Win', 'Loss', 'Draw'];
+  const actions: HTMLButtonElement[] = [];
+  const disableAll = (): void => { for (const b of actions) b.disabled = true; };
+  const buttons = options.map((result) =>
+    button(result, {
+      // Pre-highlight the result GEP actually reported (when it did) so a match
+      // that HAS a result is one click to confirm.
+      variant: m.reportedResult === result ? 'soft' : 'default',
+      onClick: () => {
+        disableAll();
+        void bridge.resolvePendingMatch(m.matchId, result).then(() => {
+          resolvedThisSession.add(m.matchId);
+          toast(`Result set — ${m.map} · ${result}`);
+          store.rerender();
+          void store.refresh();
+        });
+      },
+    }));
+  const dismiss = button('Not a real match', {
+    variant: 'ghost',
+    class: 'review-dismiss',
+    title: 'Discard this match — it won’t be tracked',
+    onClick: () => {
+      disableAll();
+      void bridge.dismissPendingMatch(m.matchId).then(() => {
+        // Reuse the resolved-this-session set so the row hides immediately,
+        // before the pending-store refetch lands.
+        resolvedThisSession.add(m.matchId);
+        toast(`Dismissed — ${m.map}`);
+        store.rerender();
+        void store.refresh();
+      });
+    },
+  });
+  actions.push(...buttons, dismiss);
+  return h('div', { class: 'review-row' },
+    h('span', { class: 'review-auto', title: 'auto-detected — GEP didn’t confirm a result' }, '⚡'),
+    h('div', { class: 'row-main', style: { minWidth: '0' } },
+      h('div', { style: { fontSize: '13px' } }, m.map),
+      h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
+        `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
+    ),
+    m.reportedResult
+      ? h('span', { class: 'pill is-accent', title: 'the result GEP reported', style: { whiteSpace: 'nowrap' } },
+          `GEP: ${GEP_RESULT_LABEL[m.reportedResult]}`)
+      : null,
+    h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, ...buttons, dismiss),
   );
 }
 
@@ -105,6 +201,10 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   // Seed from any already-stored rating (mirrors the match-detail editor) so an
   // imported / previously-rated game shows its value here instead of "Not rated".
   let performance: number | undefined = m.performance;
+  // Manual SR % — only offered for competitive games (GEP can't report it).
+  // Seeded from the row's current delta so an already-set value shows here.
+  const isComp = classifyGameType(m.gameType) === 'competitive';
+  let srText = m.srDelta != null ? String(m.srDelta) : '';
 
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
@@ -119,7 +219,20 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   markFocus();
 
   const doSave = (): void => {
-    void bridge.saveReview({ matchId: m.matchId, grades, flags, ...(performance != null ? { performance } : {}) }).then(() => {
+    // Send the SR % only for competitive matches and only when the field parses
+    // to a finite number. Blank leaves it unchanged — clearing an SR stays a
+    // match-editor action, never a side effect of grading a review.
+    const t = srText.trim();
+    let srDelta: number | undefined;
+    if (isComp && t !== '') {
+      const n = Number(t);
+      if (Number.isFinite(n)) srDelta = n;
+    }
+    void bridge.saveReview({
+      matchId: m.matchId, grades, flags,
+      ...(performance != null ? { performance } : {}),
+      ...(srDelta !== undefined ? { srDelta } : {}),
+    }).then(() => {
       gradedThisSession.add(m.matchId);
       kbHook = null;
       onSaved();
@@ -151,6 +264,14 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
     )),
     section('◎ How it felt', mentalFlagsRow(flags)),
     section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
+    // Competitive only — GEP can't report SR, so the player enters what the game
+    // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
+    isComp
+      ? section('◎ SR change (%)', h('div', { class: 'stack', style: { gap: '6px' } },
+          srDeltaInput(srText, (v) => { srText = v; }),
+          h('div', { class: 'hint' }, "the % the game showed (e.g. +22 or −19) — GEP can't report this"),
+        ))
+      : null,
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),

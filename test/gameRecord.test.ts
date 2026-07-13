@@ -95,4 +95,23 @@ describe('matchToGame', () => {
     const game = matchToGame(base({ endedAt: undefined }), ACCOUNTS, () => 42);
     expect(game?.timestamp).toBe(42);
   });
+
+  it('does not fabricate an SR delta for a competitive game (GEP reports none)', () => {
+    // GEP reports no rank/SR, so a live-captured competitive game carries no
+    // delta — the player sets it by hand on Review or in the match editor. The
+    // old preset (±25) polluted the calculated rank and is gone.
+    expect(matchToGame(base({ outcome: 'Victory' }), ACCOUNTS)?.srDelta).toBeUndefined();
+    expect(matchToGame(base({ outcome: 'Defeat' }), ACCOUNTS)?.srDelta).toBeUndefined();
+    expect(matchToGame(base({ outcome: 'Draw' }), ACCOUNTS)?.srDelta).toBeUndefined();
+  });
+
+  it('does not invent an SR delta for a non-competitive record', () => {
+    const game = matchToGame(base({ gameType: 'Quick Play', outcome: 'Victory' }), ACCOUNTS);
+    expect(game?.srDelta).toBeUndefined();
+  });
+
+  it('passes a real reported SR delta through unchanged', () => {
+    const game = matchToGame(base({ srDelta: -12 }), ACCOUNTS);
+    expect(game?.srDelta).toBe(-12);
+  });
 });

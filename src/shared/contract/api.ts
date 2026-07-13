@@ -20,7 +20,7 @@ import type {
 } from './inputs';
 import type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
 import type { ImportFileResult } from './importFile';
-import type { Role } from '../../core/model';
+import type { Role, Result } from '../../core/model';
 import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
@@ -128,6 +128,12 @@ export interface OwStatsApi {
   getAppSettings(): Promise<AppUiSettings>;
   /** Persist app-behavior settings; returns the applied values. */
   setAppSettings(patch: Partial<AppUiSettings>): Promise<AppUiSettings>;
+  /**
+   * Store the Overwolf dev key at ~/.ow-cli/dev-key (where the launcher reads it)
+   * — a secret, never persisted into app config. Returns whether a key is now
+   * present. Takes effect on the next launch (Dev Mode auth is start-time).
+   */
+  setDevKey(key: string): Promise<{ hasKey: boolean }>;
   /** Version + build/runtime facts + support contact (the About screen). */
   getAppInfo(): Promise<AppInfo>;
   /** Open a maintainer-provided external URL (mailto:/https:) via the sanctioned
@@ -143,6 +149,17 @@ export interface OwStatsApi {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
+  /**
+   * Complete a held "needs result" match by setting its win/loss/draw: it moves
+   * out of the pending store and into history through the normal pipeline.
+   */
+  resolvePendingMatch(matchId: string, result: Result): Promise<void>;
+  /**
+   * Dismiss a held "needs result" match without logging it — the user's verdict
+   * that it wasn't a real/trackable game. Removes it from the pending store;
+   * it never enters history.
+   */
+  dismissPendingMatch(matchId: string): Promise<void>;
   /** Read-only: how many pending matches "Ignore all" would affect right now (beyond the capped inbox rows). */
   previewPendingReviewIgnore(input: IgnorePendingReviewsInput): Promise<{ count: number }>;
   /** Bulk-saves an empty review for every matching pending match; returns their ids for Undo. */
@@ -173,8 +190,11 @@ export interface OwStatsApi {
   onGepStatus(cb: (s: GepStatusPayload) => void): () => void;
   /** Subscribe to live sync progress (fires per exported game); returns an unsubscribe function. */
   onSyncProgress(cb: (p: SyncProgress) => void): () => void;
-  /** Subscribe to newly recorded competitive matches (live or hand-logged); returns an unsubscribe function. */
+  /** Subscribe to newly recorded competitive matches (live or hand-logged) — drives the
+   *  live dashboard refresh + account auto-switch; returns an unsubscribe function. */
   onGameLogged(cb: (p: GameLoggedPayload) => void): () => void;
+  /** Subscribe to "the pending (needs-result) set changed" (a match was held or resolved); returns an unsubscribe function. */
+  onPendingChanged(cb: () => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -193,6 +213,7 @@ export const EVENT_CHANNELS = {
   onGepStatus: 'push:gep-status',
   onSyncProgress: 'push:sync-progress',
   onGameLogged: 'push:game-logged',
+  onPendingChanged: 'push:pending-changed',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**
@@ -251,6 +272,7 @@ export const IPC_CHANNELS = {
   getGepStatus: 'status:gep',
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',
+  setDevKey: 'settings:set-dev-key',
   getAppInfo: 'app:info',
   openExternal: 'app:open-external',
   getDataLocation: 'settings:get-data-location',
@@ -258,6 +280,8 @@ export const IPC_CHANNELS = {
   setDataFolder: 'settings:set-data-folder',
   chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
   clearReview: 'manual:clear-review',
+  resolvePendingMatch: 'manual:resolve-pending-match',
+  dismissPendingMatch: 'manual:dismiss-pending-match',
   previewPendingReviewIgnore: 'manual:preview-ignore-pending-reviews',
   ignorePendingReviews: 'manual:ignore-pending-reviews',
   clearReviews: 'manual:clear-reviews',

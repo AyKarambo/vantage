@@ -11,7 +11,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
-  MatchEditInput, RankAnchorInput, RendererErrorInput, ReviewInput, TargetEditInput,
+  MatchEditInput, RankAnchorInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
@@ -82,6 +82,9 @@ export function registerDashboardIpc(provider: DataProvider): void {
         rankAnchors: provider.rankAnchorMap(),
       },
       provider.effectiveMasterData(),
+      // Held "needs result" matches ride on the same payload the Review screen
+      // reads — sourced from the SEPARATE pending store, never from history.
+      provider.pendingMatches(),
     ),
   );
   // Every filter-scoped read must resolve a `{ season: id }` filter against the
@@ -204,6 +207,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.setAppSettings, (_e, patch: Partial<AppUiSettings>) =>
     provider.setAppSettings(patch),
   );
+  handle(ch.setDevKey, (_e, key: string) => provider.setDevKey(key));
   handle(ch.getAppInfo, () => provider.getAppInfo());
   handle(ch.openExternal, (_e, url: string) => provider.openExternal(url));
 
@@ -217,6 +221,16 @@ export function registerDashboardIpc(provider: DataProvider): void {
 
   handle(ch.clearReview, (_e, matchId: string) => {
     provider.clearReview(matchId);
+  });
+
+  // "Needs result" resolve: complete a held no-outcome match with a win/loss/draw.
+  handle(ch.resolvePendingMatch, (_e, matchId: string, result: Result) => {
+    provider.resolvePendingMatch(matchId, result);
+  });
+
+  // "Needs result" dismiss: drop a held match the user says wasn't a real game.
+  handle(ch.dismissPendingMatch, (_e, matchId: string) => {
+    provider.dismissPendingMatch(matchId);
   });
 
   // Editable master data (heroes/maps/seasons) + the Update fetch.

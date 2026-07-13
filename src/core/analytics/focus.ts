@@ -1,22 +1,24 @@
 /**
- * Cross-dimension focus derivation — the "work on these" hub behind the Focus
- * screen. Merges net-losing maps, heroes and roles into one ranked list, adds
- * a per-entry trend verdict (is it getting better or worse?), and links entries
- * to authored improvement targets so the screen can show whether focusing is
- * actually working. Pure and I/O-free — consumed by dashboardData.
+ * Map-focus derivation — the "work on these" hub behind the Focus screen.
+ * Ranks net-losing maps (net = losses − wins), adds a per-entry trend verdict
+ * (is it getting better or worse?), and links entries to authored improvement
+ * targets so the screen can show whether focusing is actually working. Pure
+ * and I/O-free — consumed by dashboardData.
+ *
+ * Maps-only for now (issue #B) — the deeper cross-dimension rework (hero/role
+ * focus) is deferred; {@link FocusEntry.dimension} always holds `'map'` here.
  */
-import { byHero, focusBy, winLoss } from './grouping';
+import { focusBy, winLoss } from './grouping';
 import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, WinLoss } from './types';
 import type { AuthoredTarget } from '../targets/types';
 // Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
 // analytics back, and this keeps the module graph cycle-free at runtime.
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 
-/** Per-dimension minimum sample before a group can be flagged. Roles are only
- *  four broad buckets, so they get a higher floor than maps/heroes. */
-const MIN_GAMES: Record<FocusDimension, number> = { map: 3, hero: 3, role: 5 };
+/** Minimum sample before a map can be flagged. */
+const MAP_MIN_GAMES = 3;
 
-/** Merged-list cap — enough to fill the screen, short enough to stay a priority list. */
+/** List cap — enough to fill the screen, short enough to stay a priority list. */
 const MAX_ENTRIES = 12;
 
 /** A trend needs at least this many games to split into two meaningful halves. */
@@ -36,17 +38,12 @@ export function focusGamesFor(games: GameRecord[], dimension: FocusDimension, ke
 }
 
 /**
- * The cross-dimension "work on these" ranking: net-losing (net > 0) maps,
- * heroes and roles merged into one list, tagged by dimension, worst deficit
- * first (ties: more games first), capped at {@link MAX_ENTRIES}. Entries with
+ * The "work on these" ranking: net-losing (net > 0) maps, worst deficit first
+ * (ties: more games first), capped at {@link MAX_ENTRIES}. Entries with
  * enough games in range also carry a {@link FocusTrend} verdict.
  */
 export function focusEntries(games: GameRecord[]): FocusEntry[] {
-  const tagged: FocusEntry[] = [
-    ...withDimension(focusBy(games, (g) => g.map, MIN_GAMES.map), 'map'),
-    ...withDimension(focusByHero(games, MIN_GAMES.hero), 'hero'),
-    ...withDimension(focusBy(games, (g) => g.role, MIN_GAMES.role), 'role'),
-  ];
+  const tagged = withDimension(focusByMap(games), 'map');
   return tagged
     .filter((e) => e.net > 0)
     .sort((a, b) => b.net - a.net || b.games - a.games)
@@ -118,15 +115,11 @@ export function linkFocusTargets(
 // --- helpers ----------------------------------------------------------------
 
 /**
- * Hero variant of {@link focusBy}: a game counts toward every hero played in it
- * (same convention as {@link byHero}). The 'Unknown' placeholder bucket (games
- * logged without heroes) is dropped — a placeholder can't be practiced.
+ * Map variant of {@link focusBy} that drops the 'Unknown' placeholder bucket
+ * (games logged without a map id) — a placeholder can't be practiced.
  */
-function focusByHero(games: GameRecord[], minGames: number): FocusItem[] {
-  return byHero(games)
-    .filter((g) => g.key !== 'Unknown' && g.games >= minGames)
-    .map((g) => ({ ...g, net: g.losses - g.wins }))
-    .sort((a, b) => b.net - a.net);
+function focusByMap(games: GameRecord[]): FocusItem[] {
+  return focusBy(games, (g) => g.map, MAP_MIN_GAMES).filter((g) => g.key !== 'Unknown');
 }
 
 function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntry[] {

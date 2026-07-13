@@ -17,7 +17,11 @@ import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
 import { mergeAccountList } from '../core/accountsManage';
-import type { Role } from '../core/model';
+import { resolveRole } from '../core/resolvers/role';
+import { resolveAccount } from '../core/resolvers/account';
+import { resolveMapId } from '../core/resolvers/mapId';
+import { resolveResult } from '../core/resolvers/result';
+import type { Role, Result, MatchRecord } from '../core/model';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -27,7 +31,7 @@ import type { RankAnchorStore } from '../store/rankAnchors';
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
-  GepStatusPayload, ImportFileResult, MatchEditInput, RankSummary,
+  GepStatusPayload, ImportFileResult, MatchEditInput, PendingMatch, RankSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -40,8 +44,9 @@ import type { GameRecord } from '../core/analytics';
 
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
-  /** Durable game history: dataset reads plus review + manual-layer writes. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'removeImported' | 'importedCount'>;
+  /** Durable game history: dataset reads plus review + manual-layer writes, account
+   *  management (relabel/delete), and the pending-store read. */
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'removeImported' | 'importedCount' | 'allPending'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -79,6 +84,10 @@ export interface DataProviderDeps {
   persistSessionSettings(s: SessionSettings): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
   recordGame(g: GameRecord): boolean;
+  /** Match-pipeline entry to complete a held pending match (takes it out of the pending store into history). */
+  resolvePending(matchId: string, result: Result): boolean;
+  /** Match-pipeline entry to dismiss a held pending match (removes it from the pending store; never logged). */
+  dismissPending(matchId: string): boolean;
   /** Surface a user-facing notification (the tray balloon in production). */
   notify(title: string, body: string): void;
   /** Demo dataset shown until the first real game is tracked. */
@@ -92,6 +101,8 @@ export interface DataProviderDeps {
     get(): AppUiSettings;
     apply(patch: Partial<AppUiSettings>): AppUiSettings;
   };
+  /** Persist the Overwolf dev key to ~/.ow-cli/dev-key; returns whether one is now present. */
+  setDevKey(key: string): { hasKey: boolean };
   /** Version + build/runtime facts + support contact for the About screen. */
   appInfo(): AppInfo;
   /** Open an external URL — the composition root's `shell.openExternal`. */
@@ -141,6 +152,9 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     saveReview: (input) => {
       deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
+      // GEP can't report SR, so the player may set it here (competitive only);
+      // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
+      if (input.srDelta !== undefined) deps.history.editManual(input.matchId, { srDelta: input.srDelta });
     },
     importReviews: (inputs) =>
       deps.history.setReviews(inputs.map((i) => ({
@@ -456,6 +470,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     getGepStatus: () => deps.gepStatus(),
     getAppSettings: () => deps.appSettings.get(),
     setAppSettings: (patch) => deps.appSettings.apply(patch),
+    setDevKey: (key) => deps.setDevKey(key),
     getAppInfo: () => deps.appInfo(),
     // Scheme-guarded before it ever reaches the shell: a disallowed URL is a no-op.
     openExternal: async (url) => { await openIfAllowed(url, deps.openExternal); },
@@ -465,6 +480,16 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     chooseFirstRunDataFolder: () => deps.dataLocation.chooseFirstRun(),
     clearReview: (matchId) => {
       deps.history.clearReview(matchId);
+    },
+    pendingMatches: () => {
+      const accounts = deps.getConfig().accounts;
+      return deps.history.allPending().map((rec) => toPendingMatch(rec, accounts));
+    },
+    resolvePendingMatch: (matchId, result) => {
+      deps.resolvePending(matchId, result);
+    },
+    dismissPendingMatch: (matchId) => {
+      deps.dismissPending(matchId);
     },
     effectiveMasterData,
     masterDataUpsertHero: (entry) => {
@@ -523,6 +548,29 @@ function seedImportedAccounts(deps: DataProviderDeps, games: GameRecord[]): numb
   }
   if (added) deps.persistAccounts(accounts);
   return added;
+}
+
+/**
+ * Summarize a held raw {@link MatchRecord} into the lean {@link PendingMatch} the
+ * Review screen renders — resolving map/role/account with the SAME resolvers the
+ * live capture path ({@link matchToGame}) uses, so a resolved result looks
+ * identical to an auto-tracked one. Never produces a GameRecord: a pending match
+ * stays out of history/analytics until the user sets its result.
+ */
+function toPendingMatch(rec: MatchRecord, accounts: Record<string, string>): PendingMatch {
+  return {
+    matchId: rec.matchId,
+    map: resolveMapId(rec.mapName) ?? 'Unknown',
+    heroes: rec.heroes,
+    role: resolveRole(rec.queueType, rec.heroRole) ?? 'openQ',
+    account: resolveAccount(rec.battleTag, accounts) ?? rec.battleTag ?? 'Unknown',
+    timestamp: rec.endedAt ?? 0,
+    rosterCount: rec.roster?.length ?? 0,
+    // A held match can still carry a GEP-reported outcome (it was held for an
+    // unknown game_type, not necessarily a missing result) — surface it so
+    // Review can hint it and make confirming it one click.
+    ...(resolveResult(rec.outcome) ? { reportedResult: resolveResult(rec.outcome) } : {}),
+  };
 }
 
 /**

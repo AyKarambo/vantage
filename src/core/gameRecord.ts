@@ -4,7 +4,7 @@ import { resolveAccount } from './resolvers/account';
 import { UNKNOWN_ACCOUNT } from './accountsManage';
 import { resolveRole } from './resolvers/role';
 import { resolveResult } from './resolvers/result';
-import { resolveGepMapName } from './maps';
+import { resolveMapId } from './resolvers/mapId';
 
 /**
  * Convert a raw capture record into an analyzable, resolved game — the one
@@ -35,7 +35,7 @@ export function matchToGame(
     timestamp: record.endedAt ?? now(),
     account: resolveAccount(record.battleTag, accounts) ?? record.battleTag ?? UNKNOWN_ACCOUNT,
     role,
-    map: resolveGepMapName(record.mapName) ?? 'Unknown',
+    map: resolveMapId(record.mapName) ?? 'Unknown',
     result,
     gameType: record.gameType ?? 'Unknown',
     durationMinutes: record.durationMinutes,
@@ -43,5 +43,9 @@ export function matchToGame(
     perHero,
     finalScore: record.finalScore,
     roster: record.roster,
+    // GEP reports no rank/SR, so a live-captured game carries no delta (stays
+    // undefined) unless one was actually reported; the player sets it by hand on
+    // Review or in the match editor. Never fabricated from the result.
+    srDelta: record.srDelta,
   };
 }

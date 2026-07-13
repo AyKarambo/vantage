@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseSync, type StatementSync, type SQLInputValue } from 'node:sqlite';
 import type { GameRecord, MatchReview } from '../core/analytics';
+import type { MatchRecord } from '../core/model';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
-import { resolveGepMapName } from '../core/maps';
-import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
+import { resolveMapId } from '../core/resolvers/mapId';
 
 /**
  * Reconstruct a {@link GameRecord} from its stored `data` blob, normalizing a
@@ -14,7 +14,7 @@ import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
  */
 function parseGame(data: unknown): GameRecord {
   const game = JSON.parse(String(data)) as GameRecord;
-  const map = resolveGepMapName(game.map);
+  const map = resolveMapId(game.map);
   if (map && map !== game.map) game.map = map;
   return game;
 }
@@ -48,6 +48,23 @@ CREATE INDEX IF NOT EXISTS idx_games_account   ON games(account);
 CREATE INDEX IF NOT EXISTS idx_games_timestamp ON games(timestamp);
 CREATE INDEX IF NOT EXISTS idx_games_map        ON games(map);
 CREATE INDEX IF NOT EXISTS idx_games_role       ON games(role);
+`;
+
+/**
+ * Holding table for competitive matches that played but arrived without a GEP
+ * `match_outcome` (win/loss/draw) — {@link matchToGame} can't resolve them, so
+ * rather than drop the played match they wait here until the user sets a result
+ * in Review. Deliberately SEPARATE from `games`: a pending row is a raw
+ * {@link MatchRecord}, never an analyzable {@link GameRecord}, so it can never
+ * leak into analytics, the rank engine, or Notion export. `data` holds the full
+ * `JSON.stringify(MatchRecord)`; `endedAt` is denormalized only for ordering.
+ */
+const PENDING_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS pending_matches (
+  matchId  TEXT PRIMARY KEY,
+  endedAt  INTEGER,
+  data     TEXT NOT NULL
+);
 `;
 
 const INSERT_SQL =
@@ -110,6 +127,13 @@ export class HistoryStore {
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
   private deleteByAccountStmt!: StatementSync;
+  private addPendingStmt!: StatementSync;
+  private allPendingStmt!: StatementSync;
+  private hasPendingStmt!: StatementSync;
+  private getPendingStmt!: StatementSync;
+  private deletePendingStmt!: StatementSync;
+  private removePendingStmt!: StatementSync;
+  private pendingCountStmt!: StatementSync;
 
   constructor(dir: string) {
     this.dir = dir;
@@ -169,32 +193,6 @@ export class HistoryStore {
   }
 
   /**
-   * Best-effort recovery of legacy `Unknown` rows: for each row stored under
-   * {@link UNKNOWN_ACCOUNT}, re-resolve the local roster BattleTag against the
-   * current accounts map and, when it now maps to a configured account, rewrite
-   * the row's account to that label. Idempotent — a recovered row is no longer
-   * `Unknown`, so a re-run skips it; rows with no recoverable/mapping tag stay
-   * Unknown. Returns how many rows were re-attributed.
-   */
-  reresolve(accounts: Record<string, string>): number {
-    const rows = this.allStmt.all()
-      .map((row) => parseGame(row.data))
-      .filter((g) => g.account === UNKNOWN_ACCOUNT);
-    if (!rows.length) return 0;
-    let changed = 0;
-    this.tx(() => {
-      for (const g of rows) {
-        const label = recoverableAccount(g.roster, accounts);
-        if (!label || label === g.account) continue;
-        g.account = label;
-        this.updateStmt.run(...updateValues(g));
-        changed++;
-      }
-    });
-    return changed;
-  }
-
-  /**
    * IRREVERSIBLY delete every game stored under an exact account value (a raw
    * BattleTag or the `Unknown` bucket) — the destructive half of managing a
    * detected-but-unlabeled account. Matches the denormalized `account` column
@@ -221,9 +219,83 @@ export class HistoryStore {
     return games.length;
   }
 
+  /**
+   * One-time re-resolution of stored rows: apply `fn` to each game and rewrite
+   * only those whose `map`/`account` actually changed — idempotent, so a second
+   * run rewrites nothing. Config-free: the caller injects the resolver (which
+   * knows the map catalog / accounts). Returns the count rewritten.
+   */
+  reresolve(fn: (g: GameRecord) => { map?: string; account?: string }): number {
+    const games = this.allStmt.all().map((row) => JSON.parse(String(row.data)) as GameRecord);
+    const changed: GameRecord[] = [];
+    for (const g of games) {
+      const patch = fn(g);
+      let dirty = false;
+      if (patch.map !== undefined && patch.map !== g.map) { g.map = patch.map; dirty = true; }
+      if (patch.account !== undefined && patch.account !== g.account) { g.account = patch.account; dirty = true; }
+      if (dirty) changed.push(g);
+    }
+    if (!changed.length) return 0;
+    this.tx(() => {
+      for (const g of changed) this.updateStmt.run(...updateValues(g));
+    });
+    return changed.length;
+  }
+
   /** Total number of stored games. */
   count(): number {
     return Number(this.countStmt.get()?.c ?? 0);
+  }
+
+  // --- pending (no-outcome) holding store --------------------------------------
+
+  /**
+   * Hold a played competitive match that arrived without a resolvable GEP
+   * outcome, so it can be completed by hand in Review instead of being dropped.
+   * Dedupes by `matchId`; returns true only if newly held.
+   */
+  addPending(rec: MatchRecord): boolean {
+    return Number(this.addPendingStmt.run(rec.matchId, rec.endedAt ?? null, JSON.stringify(rec)).changes) > 0;
+  }
+
+  /** Every held pending match, oldest first (by `endedAt`). */
+  allPending(): MatchRecord[] {
+    return this.allPendingStmt.all().map((row) => JSON.parse(String(row.data)) as MatchRecord);
+  }
+
+  /** True if a pending match with this id is currently held. */
+  hasPending(matchId: string): boolean {
+    return this.hasPendingStmt.get(matchId) !== undefined;
+  }
+
+  /**
+   * Remove and return a held pending match (SELECT then DELETE in one
+   * transaction) — the resolve path takes it out of the holding store before
+   * running it back through the normal history pipeline. Undefined if unknown.
+   */
+  takePending(matchId: string): MatchRecord | undefined {
+    let rec: MatchRecord | undefined;
+    this.tx(() => {
+      const row = this.getPendingStmt.get(matchId);
+      if (!row) return;
+      rec = JSON.parse(String(row.data)) as MatchRecord;
+      this.deletePendingStmt.run(matchId);
+    });
+    return rec;
+  }
+
+  /**
+   * Remove a held pending match without returning it — the dismiss path, when
+   * the user decides it wasn't a real/trackable game. It never enters history.
+   * Returns true only if a row was actually deleted (false for an unknown id).
+   */
+  removePending(matchId: string): boolean {
+    return Number(this.removePendingStmt.run(matchId).changes) > 0;
+  }
+
+  /** How many matches are waiting for a result (the "Needs result" badge). */
+  pendingCount(): number {
+    return Number(this.pendingCountStmt.get()?.c ?? 0);
   }
 
   /**
@@ -411,6 +483,7 @@ export class HistoryStore {
     this.db.exec('PRAGMA journal_mode = DELETE;');
     this.db.exec('PRAGMA synchronous = FULL;');
     this.db.exec(SCHEMA_SQL);
+    this.db.exec(PENDING_SCHEMA_SQL);
     this.migrate();
     this.insertStmt = this.db.prepare(INSERT_SQL);
     this.updateStmt = this.db.prepare(UPDATE_SQL);
@@ -431,6 +504,16 @@ export class HistoryStore {
       `DELETE FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
     );
     this.deleteByAccountStmt = this.db.prepare('DELETE FROM games WHERE account = ?');
+    // Pending (no-outcome) holding store — see PENDING_SCHEMA_SQL.
+    this.addPendingStmt = this.db.prepare(
+      `INSERT INTO pending_matches (matchId, endedAt, data) VALUES (?, ?, ?) ON CONFLICT(matchId) DO NOTHING`,
+    );
+    this.allPendingStmt = this.db.prepare('SELECT data FROM pending_matches ORDER BY endedAt');
+    this.hasPendingStmt = this.db.prepare('SELECT 1 FROM pending_matches WHERE matchId = ?');
+    this.getPendingStmt = this.db.prepare('SELECT data FROM pending_matches WHERE matchId = ?');
+    this.deletePendingStmt = this.db.prepare('DELETE FROM pending_matches WHERE matchId = ?');
+    this.removePendingStmt = this.db.prepare('DELETE FROM pending_matches WHERE matchId = ?');
+    this.pendingCountStmt = this.db.prepare('SELECT COUNT(*) AS c FROM pending_matches');
   }
 
   /**

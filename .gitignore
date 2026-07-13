@@ -19,6 +19,9 @@ config.local.json
 secrets/
 *.secret
 
+# spec-driven-development gate files (specs live in GitHub issues, not the tree)
+.claude/sdd/
+
 # generated icons (created by scripts/make-tray-icon.mjs)
 assets/tray.png
 assets/appicon.png

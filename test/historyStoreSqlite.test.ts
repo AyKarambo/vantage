@@ -4,7 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { HistoryStore, DB_FILE } from '../src/store/history';
 import type { GameRecord } from '../src/core/analytics';
+import type { MatchRecord } from '../src/core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
+import { resolveMapId } from '../src/core/resolvers/mapId';
+import { recoverableAccount } from '../src/core/accountsManage';
 
 // SQLite keeps the file open (and locked, on Windows), so every store instance
 // and temp dir created here is tracked and torn down after each test.
@@ -30,6 +33,32 @@ afterEach(() => {
 const g = (p: Partial<GameRecord>): GameRecord => ({
   matchId: 'm', timestamp: 0, account: 'Main', role: 'damage', map: 'Ilios',
   result: 'Win', gameType: 'Competitive', heroes: [], ...p,
+});
+
+const pm = (p: Partial<MatchRecord>): MatchRecord => ({
+  matchId: 'm', battleTag: 'Player#1234', mapName: 'Ilios', queueType: 'role',
+  heroRole: 'damage', gameType: 'competitive', heroes: ['Tracer'], ...p,
+});
+
+describe('HistoryStore (SQLite) — reresolve backfill', () => {
+  it('re-resolves a stored numeric map id to a name, idempotently, only rewriting changed rows', () => {
+    const dir = tmp();
+    const h = open(dir);
+    h.addMany([
+      g({ matchId: 'a', map: '1207' }), // raw GEP id → Nepal
+      g({ matchId: 'b', map: "King's Row" }), // already a name → untouched
+    ]);
+    const remap = () => h.reresolve((game) => ({ map: resolveMapId(game.map) }));
+    expect(remap()).toBe(1); // only 'a' changed
+    expect(remap()).toBe(0); // idempotent — a re-run rewrites nothing
+    h.close();
+
+    // Reopen the same dir → the resolved map persisted in the `data` JSON, not just the column.
+    const re = open(dir);
+    const byId = Object.fromEntries(re.all().map((x) => [x.matchId, x]));
+    expect(byId.a.map).toBe('Nepal');
+    expect(byId.b.map).toBe("King's Row");
+  });
 });
 
 describe('HistoryStore (SQLite) — core interface', () => {
@@ -86,6 +115,91 @@ describe('HistoryStore (SQLite) — core interface', () => {
     const h = open(tmp());
     h.add(rich);
     expect(h.all()[0]).toEqual(rich);
+  });
+});
+
+describe('HistoryStore (SQLite) — pending (no-outcome) holding store', () => {
+  it('addPending inserts once and dedupes by matchId; hasPending/pendingCount track membership', () => {
+    const h = open(tmp());
+    expect(h.addPending(pm({ matchId: 'a', endedAt: 10 }))).toBe(true);
+    expect(h.addPending(pm({ matchId: 'a', endedAt: 99 }))).toBe(false); // same id → ignored
+    expect(h.hasPending('a')).toBe(true);
+    expect(h.hasPending('nope')).toBe(false);
+    expect(h.pendingCount()).toBe(1);
+    // The dedupe never overwrote the original row's data.
+    expect(h.allPending()[0].endedAt).toBe(10);
+  });
+
+  it('allPending returns held records ordered by endedAt, and never touches games/count', () => {
+    const h = open(tmp());
+    h.addPending(pm({ matchId: 'late', endedAt: 3_000 }));
+    h.addPending(pm({ matchId: 'early', endedAt: 1_000 }));
+    h.addPending(pm({ matchId: 'mid', endedAt: 2_000 }));
+    expect(h.allPending().map((r) => r.matchId)).toEqual(['early', 'mid', 'late']);
+    // Pending rows are a SEPARATE table — they never enter the analyzable history.
+    expect(h.count()).toBe(0);
+    expect(h.all()).toHaveLength(0);
+  });
+
+  it('takePending returns then removes the record; a second take is undefined', () => {
+    const h = open(tmp());
+    h.addPending(pm({ matchId: 'a', endedAt: 5, heroes: ['Ana'] }));
+    const taken = h.takePending('a');
+    expect(taken?.matchId).toBe('a');
+    expect(taken?.heroes).toEqual(['Ana']);
+    expect(h.hasPending('a')).toBe(false);
+    expect(h.pendingCount()).toBe(0);
+    expect(h.takePending('a')).toBeUndefined();
+    expect(h.takePending('never')).toBeUndefined();
+  });
+
+  it('removePending deletes a held match and returns a boolean; a removed id disappears from allPending/hasPending', () => {
+    const h = open(tmp());
+    h.addPending(pm({ matchId: 'a', endedAt: 10 }));
+    h.addPending(pm({ matchId: 'b', endedAt: 20 }));
+    // Removes the row without returning it (the dismiss path).
+    expect(h.removePending('a')).toBe(true);
+    expect(h.hasPending('a')).toBe(false);
+    expect(h.allPending().map((r) => r.matchId)).toEqual(['b']);
+    expect(h.pendingCount()).toBe(1);
+    // A second remove (or an unknown id) is a no-op → false.
+    expect(h.removePending('a')).toBe(false);
+    expect(h.removePending('never')).toBe(false);
+    // A dismissed match never leaks into the analyzable history.
+    expect(h.count()).toBe(0);
+  });
+
+  it('a removePending survives close + reopen — the removed row does not come back', () => {
+    const dir = tmp();
+    const first = open(dir);
+    first.addPending(pm({ matchId: 'gone', endedAt: 1 }));
+    first.addPending(pm({ matchId: 'stays', endedAt: 2 }));
+    expect(first.removePending('gone')).toBe(true);
+    first.close();
+    const reopened = open(dir);
+    expect(reopened.allPending().map((r) => r.matchId)).toEqual(['stays']);
+  });
+
+  it('losslessly round-trips a rich MatchRecord and survives close + reopen for un-taken rows', () => {
+    const dir = tmp();
+    const first = open(dir);
+    const rich = pm({
+      matchId: 'rich', endedAt: 1_700_000_000_000, outcome: undefined,
+      heroes: ['Ana', 'Kiriko'], roster: [{ battleTag: 'Me#1', heroName: 'Ana', isLocal: true }],
+      eliminations: 12, deaths: 4, durationMinutes: 11.5, finalScore: '2-2',
+    });
+    first.addPending(rich);
+    first.addPending(pm({ matchId: 'b', endedAt: 20 }));
+    first.close();
+
+    const reopened = open(dir);
+    expect(reopened.pendingCount()).toBe(2);
+    expect(reopened.allPending().find((r) => r.matchId === 'rich')).toEqual(rich);
+    // A taken row is gone after reopen; the untouched one persists.
+    reopened.takePending('b');
+    reopened.close();
+    const again = open(dir);
+    expect(again.allPending().map((r) => r.matchId)).toEqual(['rich']);
   });
 });
 
@@ -169,11 +283,15 @@ describe('HistoryStore (SQLite) — deleteByAccount (F3)', () => {
   });
 });
 
-describe('HistoryStore (SQLite) — reresolve (F1)', () => {
+describe('HistoryStore (SQLite) — Unknown-account recovery (F1) via reresolve', () => {
   const localRoster = (battleTag: string) => [
     { battleTag: 'Enemy#1', heroName: 'Reaper' },
     { battleTag, heroName: 'Ana', isLocal: true },
   ];
+  // The startup recovery pass: re-attribute an 'Unknown' row from its local
+  // roster BattleTag, expressed through the general reresolve() primitive.
+  const recover = (accounts: Record<string, string>) => (game: GameRecord) =>
+    game.account === 'Unknown' ? { account: recoverableAccount(game.roster, accounts) } : {};
 
   it('re-attributes Unknown rows whose local roster tag now maps to a configured account', () => {
     const h = open(tmp());
@@ -181,7 +299,7 @@ describe('HistoryStore (SQLite) — reresolve (F1)', () => {
       g({ matchId: 'a', account: 'Unknown', roster: localRoster('Karambo#21234') }),
       g({ matchId: 'b', account: 'Unknown', roster: localRoster('Karambo#21234') }),
     ]);
-    expect(h.reresolve({ 'Karambo#21234': 'Karambo' })).toBe(2);
+    expect(h.reresolve(recover({ 'Karambo#21234': 'Karambo' }))).toBe(2);
     expect(h.all().every((x) => x.account === 'Karambo')).toBe(true);
   });
 
@@ -193,18 +311,18 @@ describe('HistoryStore (SQLite) — reresolve (F1)', () => {
       g({ matchId: 'c', account: 'Unknown', roster: localRoster('Stranger#9') }), // no config mapping
     ]);
     const accounts = { 'Karambo#21234': 'Karambo' };
-    expect(h.reresolve(accounts)).toBe(1);
+    expect(h.reresolve(recover(accounts))).toBe(1);
     // b and c stay Unknown; a became Karambo.
     expect(h.all().find((x) => x.matchId === 'a')?.account).toBe('Karambo');
     expect(h.all().filter((x) => x.account === 'Unknown').map((x) => x.matchId).sort()).toEqual(['b', 'c']);
     // Idempotent: the recovered row is no longer Unknown, so a re-run changes nothing.
-    expect(h.reresolve(accounts)).toBe(0);
+    expect(h.reresolve(recover(accounts))).toBe(0);
   });
 
   it('only touches Unknown rows — never a configured account already attributed', () => {
     const h = open(tmp());
     h.add(g({ matchId: 'k', account: 'Karambo', roster: localRoster('Karambo#21234') }));
-    expect(h.reresolve({ 'Karambo#21234': 'Alt' })).toBe(0); // 'k' isn't Unknown, so it's untouched
+    expect(h.reresolve(recover({ 'Karambo#21234': 'Alt' }))).toBe(0); // 'k' isn't Unknown, so it's untouched
     expect(h.all()[0].account).toBe('Karambo');
   });
 });
