@@ -6,7 +6,7 @@
 import type { GameRecord, TargetGrade } from '../analytics';
 import type { Result } from '../model';
 import type { AuthoredTarget } from './types';
-import { evaluateMeasured } from './measured';
+import { DEFAULT_PARTIAL_MARGIN, evaluateMeasured } from './measured';
 
 /** One in-scope game for a target, ascending by timestamp. */
 export interface OrderedAttempt {
@@ -29,12 +29,12 @@ export interface OrderedAttempt {
  *    is present AND the game is inside the target's role/hero scope — so an off-hero
  *    or unmeasurable game never pollutes the series.
  */
-export function targetTimeline(games: GameRecord[], t: AuthoredTarget): OrderedAttempt[] {
+export function targetTimeline(games: GameRecord[], t: AuthoredTarget, margin: number = DEFAULT_PARTIAL_MARGIN): OrderedAttempt[] {
   const ordered = [...games].sort((a, b) => a.timestamp - b.timestamp);
   if (t.mode === 'measured') {
     const out: OrderedAttempt[] = [];
     for (const g of ordered) {
-      const res = evaluateMeasured(g, t);
+      const res = evaluateMeasured(g, t, margin);
       if (!res) continue;
       out.push({ timestamp: g.timestamp, result: g.result, grade: res.grade, value: res.value });
     }

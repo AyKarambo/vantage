@@ -135,21 +135,21 @@ describe('matchStatValue — role/hero scope (D)', () => {
   });
 });
 
-describe('evaluateMeasured — Hit / Partial / Missed bands (m = 10%)', () => {
+describe('evaluateMeasured — Hit / Partial / Missed bands (default m = 20%)', () => {
   it('≥ grades hit / partial / missed', () => {
     const t = target('Damage ≥ 9000');
     expect(evaluateMeasured(game({ durationMinutes: 10, perHero: [hero({ damage: 11240 })] }), t))
       .toEqual({ grade: 'hit', value: 11240 });
     expect(evaluateMeasured(game({ durationMinutes: 10, perHero: [hero({ damage: 8500 })] }), t)?.grade)
-      .toBe('partial'); // ≥ 8100
+      .toBe('partial'); // ≥ 7200 (9000 × 0.8)
     expect(evaluateMeasured(game({ durationMinutes: 10, perHero: [hero({ damage: 7000 })] }), t)?.grade)
-      .toBe('missed');
+      .toBe('missed'); // < 7200
   });
   it('≤ grades hit / partial / missed', () => {
     const t = target('Deaths ≤ 3');
     // 3 deaths / 10 min → 3.0 → hit
     expect(evaluateMeasured(game({ durationMinutes: 10, perHero: [hero({ deaths: 3 })] }), t)?.grade).toBe('hit');
-    // 4 deaths / 12.5 min → 3.2 → ≤ 3.3 → partial
+    // 4 deaths / 12.5 min → 3.2 → ≤ 3.6 (3 × 1.2) → partial
     expect(evaluateMeasured(game({ durationMinutes: 12.5, perHero: [hero({ deaths: 4 })] }), t)?.grade).toBe('partial');
     // 4 deaths / 10 min → 4.0 → missed
     expect(evaluateMeasured(game({ durationMinutes: 10, perHero: [hero({ deaths: 4 })] }), t)?.grade).toBe('missed');
@@ -166,9 +166,17 @@ describe('evaluateMeasured — Hit / Partial / Missed bands (m = 10%)', () => {
         hero({ hero: 'Tracer', role: 'damage', damage: 12000 }),
       ],
     });
-    // Unscoped 26000 ≥ 15000 → hit; scoped to Tracer (12000) → below 13500 → missed.
-    expect(evaluateMeasured(g, target('Damage ≥ 15000'))?.grade).toBe('hit');
-    expect(evaluateMeasured(g, target('Damage ≥ 15000', { heroScope: 'Tracer' }))?.grade).toBe('missed');
+    // Unscoped 26000 ≥ 20000 → hit; scoped to Tracer (12000) → below 16000 (20% band) → missed.
+    expect(evaluateMeasured(g, target('Damage ≥ 20000'))?.grade).toBe('hit');
+    expect(evaluateMeasured(g, target('Damage ≥ 20000', { heroScope: 'Tracer' }))?.grade).toBe('missed');
+  });
+
+  it('honours a caller-supplied margin, widening/tightening the partial band', () => {
+    const t = target('Damage ≥ 10000');
+    const g = game({ durationMinutes: 10, perHero: [hero({ damage: 8500 })] }); // 8500 per 10
+    expect(evaluateMeasured(g, t)?.grade).toBe('partial');       // default 20% → band [8000,10000)
+    expect(evaluateMeasured(g, t, 0.1)?.grade).toBe('missed');   // 10% → band [9000,10000)
+    expect(evaluateMeasured(g, t, 0.3)?.grade).toBe('partial');  // 30% → band [7000,10000)
   });
 });
 
@@ -246,6 +254,13 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
     const [s] = buildTargets(games, false, [t]);
     expect(s.hits).toBe(1); // derived hit wins over the stored 'missed'
     expect(s.attempts).toBe(1);
+  });
+
+  it('threads the partial margin into the spark (partial vs missed)', () => {
+    const t = target('Damage ≥ 10000', { createdAt: 0 });
+    const games = [game({ durationMinutes: 10, perHero: [hero({ damage: 8500 })] })]; // 8500 per 10
+    expect(buildTargets(games, false, [t])[0].spark.at(-1)).toBe(0.5);      // 20% → partial
+    expect(buildTargets(games, false, [t], 0.1)[0].spark.at(-1)).toBe(0);   // 10% → missed
   });
 
   it('scopes auto-grading to a single hero and round-trips the scope onto the summary', () => {

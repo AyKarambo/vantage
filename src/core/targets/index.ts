@@ -23,8 +23,9 @@ export { TARGET_TEMPLATES } from './templates';
 // Automatic grading of measured (⚡) targets from match stats
 export type { MeasuredOp, ParsedRule, MeasuredScope } from './measured';
 export {
+  DEFAULT_PARTIAL_MARGIN,
   parseMeasuredRule, formatMeasuredRule, matchStatValue, evaluateMeasured, foldMeasuredGradesForExport,
-  effectiveImprovementGrade,
+  effectiveImprovementGrade, activeMeasuredTargets, measuredGradesForMatch,
 } from './measured';
 
 // Wheel/stepper step sizes for the measured threshold field

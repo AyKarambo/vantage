@@ -29,10 +29,10 @@ describe('targetTimeline', () => {
       result: 'Win', gameType: 'Competitive', heroes: [hero], durationMinutes: 10,
       perHero: [{ hero, role: 'damage', eliminations: elim, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 }],
     });
-    const tl = targetTimeline([g(1, 'Tracer', 12), g(2, 'Ana', 5), g(3, 'Tracer', 8)], t);
+    const tl = targetTimeline([g(1, 'Tracer', 12), g(2, 'Ana', 5), g(3, 'Tracer', 6)], t);
     expect(tl.map((a) => a.timestamp)).toEqual([1, 3]); // the off-hero (Ana) game is excluded
     expect(tl[0].grade).toBe('hit'); // 12 elim/10 ≥ 10
     expect(tl[0].value).toBe(12);
-    expect(tl[1].grade).toBe('missed'); // 8 elim/10 < 10, but still in scope → it counts
+    expect(tl[1].grade).toBe('missed'); // 6 elim/10 < 8 (20% band) — still in scope → it counts
   });
 });
