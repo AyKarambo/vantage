@@ -18,7 +18,7 @@ import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
 import { createGepServicePoller } from './gepServicePoller';
-import { decideGepNotification, type ServiceStatus } from '../core/gepService';
+import { decideGepNotification, nextNotifyBaseline, type ServiceStatus } from '../core/gepService';
 import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -487,7 +487,9 @@ function main(): void {
       const note = decideGepNotification(prevService, nextService);
       if (note) tray.notify(note.title, note.body);
     }
-    prevService = nextService;
+    // Carry the last authoritative reading forward so a transient 'unknown' can't
+    // mask a real down/recovery transition (nor re-fire on re-enable).
+    prevService = nextNotifyBaseline(prevService, nextService);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);

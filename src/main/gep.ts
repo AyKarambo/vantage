@@ -122,7 +122,10 @@ export class GepService extends EventEmitter {
       }
       this.emit('log', `gep: Overwatch detected (${gameId}) — enabling`);
       e.enable();
-      this.status = { gameRunning: true, enabled: true };
+      // Spread, don't replace: a fresh detect clears any stale error but must
+      // preserve the package version + staged-update flag (else About and the
+      // restart-to-apply banner get wiped the moment a game launches).
+      this.status = { ...this.status, gameRunning: true, enabled: true, lastError: undefined };
       this.emit('status', this.getStatus());
       // undefined = request all available features for the game
       this.gep!.setRequiredFeatures(gameId, undefined).catch((err) =>
@@ -132,7 +135,8 @@ export class GepService extends EventEmitter {
 
     this.gep.on('game-exit', (_e: unknown, gameId: number) => {
       if (gameId !== this.overwatchGameId) return;
-      this.status = { gameRunning: false, enabled: false };
+      // Preserve the package version + staged-update flag across a game exit.
+      this.status = { ...this.status, gameRunning: false, enabled: false, lastError: undefined };
       this.emit('status', this.getStatus());
     });
 

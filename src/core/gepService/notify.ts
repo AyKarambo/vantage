@@ -49,3 +49,16 @@ export function decideGepNotification(
   // Any transition involving `none` (unknown) makes no claim.
   return null;
 }
+
+/**
+ * The status to carry forward as the notification baseline. Keeps the last
+ * AUTHORITATIVE reading (ok/degraded/down) across an `unknown` (a feed hiccup),
+ * so a real down→recovery transition is never masked by a transient failure:
+ * `down → unknown → ok` still diffs `down → ok` and fires "restored".
+ */
+export function nextNotifyBaseline(
+  prev: ServiceStatus | null | undefined,
+  next: ServiceStatus | null | undefined,
+): ServiceStatus | null {
+  return next && next.level !== 'unknown' ? next : (prev ?? null);
+}

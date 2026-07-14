@@ -4,4 +4,4 @@
  */
 export type { ServiceStatusLevel, ServiceStatus } from './types';
 export { parseServiceStatus } from './parse';
-export { decideGepNotification, type GepNotification } from './notify';
+export { decideGepNotification, nextNotifyBaseline, type GepNotification } from './notify';

@@ -14,6 +14,10 @@ const DEGRADED_MS = 90_000; // poll faster while degraded so recovery is caught 
 const BACKOFF_START_MS = 30_000;
 const BACKOFF_MAX_MS = 15 * 60_000;
 const INITIAL_DELAY_MS = 2_000; // let the app settle before the first poll
+// Consecutive failures before we surrender the last-known reading to 'unknown'. A
+// single transient hiccup must NOT erase an authoritative reading (which would
+// flicker the banner and mask a real down/recovery transition).
+const FAIL_THRESHOLD = 3;
 
 export interface GepServicePollerDeps {
   /** The status fetch edge (throws on transport failure). */
@@ -32,6 +36,7 @@ export function createGepServicePoller(deps: GepServicePollerDeps): GepServicePo
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
   let backoff = 0;
+  let failures = 0;
 
   const schedule = (ms: number): void => {
     if (stopped) return;
@@ -44,13 +49,16 @@ export function createGepServicePoller(deps: GepServicePollerDeps): GepServicePo
     try {
       const status = await deps.fetchStatus();
       backoff = 0;
+      failures = 0;
       deps.onStatus(status);
       // Healthy/unknown → relaxed cadence; degraded/down → fast so we notice recovery.
       schedule(status.level === 'degraded' || status.level === 'down' ? DEGRADED_MS : HEALTHY_MS);
     } catch (err) {
-      // Feed unreachable — make no outage claim; report 'unknown' and back off.
-      deps.onStatus({ level: 'unknown' });
-      deps.log('status', `gep status poll failed: ${String((err as { message?: string })?.message ?? err)}`);
+      failures += 1;
+      deps.log('status', `gep status poll failed (${failures}): ${String((err as { message?: string })?.message ?? err)}`);
+      // Keep the last-known reading across a transient hiccup; only surrender to
+      // 'unknown' (no outage claim) once failures are sustained.
+      if (failures >= FAIL_THRESHOLD) deps.onStatus({ level: 'unknown' });
       backoff = backoff ? Math.min(backoff * 2, BACKOFF_MAX_MS) : BACKOFF_START_MS;
       schedule(backoff);
     }

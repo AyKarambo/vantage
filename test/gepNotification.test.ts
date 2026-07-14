@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideGepNotification } from '../src/core/gepService';
+import { decideGepNotification, nextNotifyBaseline } from '../src/core/gepService';
 import type { ServiceStatus } from '../src/core/gepService';
 
 const s = (level: ServiceStatus['level'], message?: string): ServiceStatus =>
@@ -32,5 +32,31 @@ describe('decideGepNotification', () => {
     expect(decideGepNotification(s('down'), s('unknown'))).toBeNull(); // feed became unreachable
     expect(decideGepNotification(s('ok'), s('unknown'))).toBeNull();
     expect(decideGepNotification(undefined, s('ok'))).toBeNull();
+  });
+});
+
+describe('nextNotifyBaseline — carries the last authoritative reading across unknown', () => {
+  it('keeps the prior band across an unknown blip, advances on an authoritative reading', () => {
+    expect(nextNotifyBaseline(s('down'), s('unknown'))).toEqual(s('down'));
+    expect(nextNotifyBaseline(s('ok'), s('unknown'))).toEqual(s('ok'));
+    expect(nextNotifyBaseline(s('down'), s('ok'))).toEqual(s('ok'));
+    expect(nextNotifyBaseline(null, s('unknown'))).toBeNull();
+  });
+
+  it('down → unknown → ok still fires the recovery notification (transient failure never masks it)', () => {
+    let baseline: ServiceStatus | null = s('ok'); // feed was green (first poll established this)
+    // outage detected
+    let note = decideGepNotification(baseline, s('down'));
+    baseline = nextNotifyBaseline(baseline, s('down'));
+    expect(note?.title).toBe('Overwatch events are down');
+    // transient feed hiccup — no notification, baseline preserved
+    note = decideGepNotification(baseline, s('unknown'));
+    baseline = nextNotifyBaseline(baseline, s('unknown'));
+    expect(note).toBeNull();
+    expect(baseline).toEqual(s('down'));
+    // recovery — fires "restored" against the carried 'down'
+    note = decideGepNotification(baseline, s('ok'));
+    baseline = nextNotifyBaseline(baseline, s('ok'));
+    expect(note?.title).toBe('Overwatch events restored');
   });
 });
