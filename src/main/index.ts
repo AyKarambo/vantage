@@ -16,6 +16,8 @@ import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
 import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
+import { fetchServiceStatus } from './statusFeed';
+import { createGepServicePoller } from './gepServicePoller';
 import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -480,6 +482,15 @@ function main(): void {
       statusMonitor.setAttached(s.gameRunning && s.enabled);
     });
     gep.on('log', log.adapter('gep'));
+
+    // Poll Overwolf's public GEP service-status feed so an Overwatch-patch outage
+    // (and its recovery) is surfaced authoritatively — not guessed from local
+    // signals. Sends only the game id; makes no outage claim when unreachable.
+    createGepServicePoller({
+      fetchStatus: () => fetchServiceStatus(config.overwatchGameId),
+      onStatus: (s) => statusMonitor.setServiceStatus(s),
+      log: (scope, message, fields) => log.info(scope, message, fields),
+    }).start();
 
     // Testing only: capture the live GEP stream to userData/recordings/*.jsonl so
     // a real session can be replayed later (OW_SYNC_REPLAY) without the game.
