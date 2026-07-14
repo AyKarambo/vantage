@@ -23,6 +23,7 @@ import { isCompetitive } from '../../src/core/matchFilter';
 import { mergeAccountList, isConfiguredAccount } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
+import { playerMatchHistory } from '../../src/core/playerIndex';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -311,6 +312,8 @@ const mock: OwStatsApi = {
     const eff = effectiveMasterData();
     return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin);
   },
+  playerHistory: async (name: string) =>
+    playerMatchHistory(dataset(), name, makeMapMode(effectiveMasterData().maps)),
   exportNotion: async () => {
     if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
     // Simulate per-game progress so the sync card's live counter is testable.

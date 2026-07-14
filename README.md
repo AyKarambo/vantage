@@ -28,7 +28,11 @@ never shows stale data as "current."
   support ×2, per-hero tabs, competitive progress, a read-only **Grades card** with
   the match's target grades, performance rating and feel/leaver flags, and player
   history — each section degrades gracefully to whatever the game feed actually
-  reported for that match). Every match is **editable** from here:
+  reported for that match). **Click any player's name** — on the scoreboard or in
+  the "players you've met" list — to open their **shared-match history**: every
+  game you played with or against them, your result and their hero each time, with
+  a W/L split by teammate vs opponent (local, GEP-only, never exported). Every
+  match is **editable** from here:
   hand-logged matches fully, auto-tracked ones down to their manual layer (mental
   flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
   The editor mirrors the Log match card — the same shared controls, wording and field

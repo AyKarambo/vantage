@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
 import { activeMeasuredTargets } from '../../core/targets';
+import { playerMatchHistory } from '../../core/playerIndex';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
@@ -115,6 +116,12 @@ export function registerDashboardIpc(provider: DataProvider): void {
     // match-detail Grades card shows calculated grades identically.
     const activeMeasured = activeMeasuredTargets(provider.manualTargets());
     return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured, provider.getGrading().partialMargin);
+  });
+  // Shared-match history for one player — over the full (competitive-only) local
+  // history, unscoped by the filter bar (it's a cross-history drill-down).
+  handle(ch.playerHistory, (_e, name: string) => {
+    const master = provider.effectiveMasterData();
+    return playerMatchHistory(competitiveOnly(provider.games()), name, makeMapMode(master.maps));
   });
 
   // Notion sync screen.

@@ -89,11 +89,11 @@ function backRow(ctx: ViewContext): HTMLElement {
 function sections(d: MatchDetail, ctx: ViewContext): Node[] {
   return [
     header(d, ctx),
-    scoreboardSection(d),
+    scoreboardSection(d, ctx),
     perHeroSection(d.perHero, d.durationMinutes),
     competitiveSection(d.competitive, d.srDelta),
     gradesSection(d, ctx),
-    playerHistorySection(d),
+    playerHistorySection(d, ctx),
   ].filter((n): n is HTMLElement => n != null);
 }
 
@@ -165,7 +165,7 @@ function mentalFlags(d: MatchDetail): HTMLElement | null {
 
 // --- scoreboard (roster tier → full board; per-hero tier → your rows only) ---
 
-function scoreboardSection(d: MatchDetail): HTMLElement | null {
+function scoreboardSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
   if (!d.scoreboard?.length) return null;
   const localOnly = d.scoreboard.every((e) => e.isLocal);
   return card(
@@ -174,7 +174,7 @@ function scoreboardSection(d: MatchDetail): HTMLElement | null {
       sub: localOnly ? 'only your own line was recorded for this match' : 'as reported by the game feed',
       class: 'card--flush detail-scoreboard',
     },
-    scoreboard(d.scoreboard),
+    scoreboard(d.scoreboard, (name) => ctx.navigate('playerHistory', { playerName: name })),
   );
 }
 
@@ -639,22 +639,28 @@ function buildMatchEditor(
 
 // --- player history -------------------------------------------------------------
 
-function playerHistorySection(d: MatchDetail): HTMLElement {
+function playerHistorySection(d: MatchDetail, ctx: ViewContext): HTMLElement {
   const hasRoster = Boolean(d.scoreboard?.some((e) => !e.isLocal));
   const body = d.playerHistory.length
-    ? d.playerHistory.map(encounterRow)
+    ? d.playerHistory.map((p) => encounterRow(p, ctx))
     : [h('div', { class: 'hint' },
         hasRoster
           ? 'No players from this match in your tracked history yet.'
           : 'No roster was recorded for this match.',
       )];
-  return card({ title: 'Player history', sub: 'players from this match you have met before' }, ...body);
+  return card({ title: 'Player history', sub: 'players from this match you have met before — click a name for all your shared games' }, ...body);
 }
 
-function encounterRow(p: PlayerEncounter): HTMLElement {
+function encounterRow(p: PlayerEncounter, ctx: ViewContext): HTMLElement {
   const wl = p.results ? ` · ${p.results.wins}W ${p.results.losses}L together` : '';
   return h('div', { class: 'row' },
-    h('span', { class: 'row-main', style: { fontSize: '12.5px', fontWeight: '500' } }, p.name),
+    h('span', { class: 'row-main', style: { fontSize: '12.5px', fontWeight: '500' } },
+      h('button', {
+        class: 'inline-link inline-link--strong',
+        title: `See the matches you shared with ${p.name}`,
+        on: { click: () => ctx.navigate('playerHistory', { playerName: p.name }) },
+      }, p.name),
+    ),
     h('span', { class: 'u-muted', style: { fontSize: '11.5px' } },
       `${p.encounters} prior ${p.encounters === 1 ? 'match' : 'matches'}${wl}`),
     h('span', { class: 'u-dim mono', style: { fontSize: '11px', minWidth: '46px', textAlign: 'right' } },
