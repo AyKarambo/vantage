@@ -291,11 +291,18 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
  * entirely — same degrade-by-section pattern as the rest of the page.
  */
 function gradesSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
-  const grades = d.review?.grades ?? {};
+  const selfGrades = d.review?.grades ?? {};
+  const measured = d.measuredGrades ?? {};
   const rows = ctx.data.targets
     .filter((t) => t.isActive && !t.archivedAt)
     .flatMap((t) => {
-      const grade = grades[t.id];
+      // Mode-aware: measured (⚡) targets show their auto-calculated grade (skipped
+      // when the match can't measure them), self (◎) targets your stored grade.
+      if (t.mode === 'measured') {
+        const mg = measured[t.id];
+        return mg && mg !== 'no-stat' ? [gradeRow(t, mg.grade)] : [];
+      }
+      const grade = selfGrades[t.id];
       return grade ? [gradeRow(t, grade)] : [];
     });
   const perf = d.performance != null
@@ -309,7 +316,7 @@ function gradesSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
   const flags = mentalFlags(d);
   if (!rows.length && !perf && !flags) return null;
   return card(
-    { title: 'Grades', sub: 'your manual read on this match — edit it via ✎ Edit match' },
+    { title: 'Grades', sub: 'measured targets auto-graded from stats · self targets your manual read (✎ Edit match)' },
     h('div', { class: 'stack', style: { gap: '12px' } },
       rows.length ? h('div', { class: 'stack', style: { gap: '11px' } }, ...rows) : null,
       perf,

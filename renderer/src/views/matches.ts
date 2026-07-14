@@ -184,20 +184,32 @@ const GRADE_PILLS: Record<TargetGrade, { label: string; state: PillState }> = {
 };
 
 /**
- * One aggregate grade pill for a row from the match's **stored self-grades**
- * (`targetGrades`) — a match can be graded on several targets, so we collapse
- * them into a single grade via {@link aggregateGrade} (floor of the average,
- * rounding toward the worse grade) rather than a run of pills. These grades are
- * stored on the match, so they stay put regardless of later target changes; the
- * tooltip lists each target's own grade (name falling back to a placeholder for
- * a since-deleted target) so the summary stays explainable.
+ * One aggregate grade pill for a row, **mode-aware** per target: a measured (⚡)
+ * target shows its auto-calculated grade (`measuredGrades`), a self (◎) target
+ * shows the player's stored grade (`targetGrades`). A measured target the match
+ * can't measure (`'no-stat'`) is skipped — neutral, never counted as a miss.
+ * Several targets collapse into a single grade via {@link aggregateGrade} (floor
+ * of the average, toward the worse grade) rather than a run of pills; the tooltip
+ * lists each target's own grade (name falling back to a placeholder for a
+ * since-deleted target) so the summary stays explainable.
  */
 function gradePills(m: MatchRow, ctx: ViewContext): HTMLElement | null {
-  const entries = Object.entries(m.targetGrades ?? {});
+  const targetsById = new Map(ctx.data.targets.map((t) => [t.id, t]));
+  const ids = new Set([...Object.keys(m.measuredGrades ?? {}), ...Object.keys(m.targetGrades ?? {})]);
+  const entries: Array<[string, TargetGrade]> = [];
+  for (const id of ids) {
+    if (targetsById.get(id)?.mode === 'measured') {
+      const mg = m.measuredGrades?.[id];
+      if (mg && mg !== 'no-stat') entries.push([id, mg.grade]);
+    } else {
+      const sg = m.targetGrades?.[id];
+      if (sg) entries.push([id, sg]);
+    }
+  }
   if (!entries.length) return null;
   const summary = aggregateGrade(entries.map(([, grade]) => grade));
   if (!summary) return null;
-  const nameOf = (id: string): string => ctx.data.targets.find((t) => t.id === id)?.name ?? 'target';
+  const nameOf = (id: string): string => targetsById.get(id)?.name ?? 'target';
   const p = pill(GRADE_PILLS[summary].label, GRADE_PILLS[summary].state);
   const lines = entries.map(([id, grade]) => `${nameOf(id)}: ${GRADE_PILLS[grade].label}`);
   p.title = entries.length > 1
