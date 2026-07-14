@@ -250,6 +250,11 @@ const gepPayload = (): GepStatusPayload => ({
   lastEventAt: gepState === 'no-game' ? null : Date.now() - (gepState === 'stale' ? 90_000 : 4_000),
   eventsThisSession: gepState === 'no-game' ? 0 : 128,
   matchInProgress: gepState === 'live' || gepState === 'stale',
+  gepPackageVersion: '309.0.0',
+  // ?gep=down|degraded|staged previews the service-outage / restart-to-apply banner.
+  ...(gepParam === 'down' ? { serviceStatus: 'down', serviceMessage: 'Events are disabled' } : {}),
+  ...(gepParam === 'degraded' ? { serviceStatus: 'degraded' } : {}),
+  ...(gepParam === 'staged' ? { updateStaged: true } : {}),
 });
 if (gepParam === 'cycle') {
   let i = 1;
