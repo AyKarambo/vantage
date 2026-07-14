@@ -45,9 +45,10 @@ never shows stale data as "current."
   final score, performance rating, target grades and leaver/mental flags each to hidden,
   inline (folded into the row's meta line), or its own aligned column — the choice
   persists across sessions. The grades-oriented fields start hidden and render compactly
-  when enabled: the 0-100 self-rating as a small tinted stat, auto-graded measured
-  targets as Hit / Partial / Missed pills, and flags as Tilt / Toxic / Leaver / +Comms /
-  Abusive pills. The meta line only ever joins the fields you've set to inline that
+  when enabled: the 0-100 self-rating as a small tinted stat, **target grades** as a
+  Hit / Partial / Missed pill per active target (measured ⚡ targets auto-graded from
+  that match's stats, self ◎ targets your stored grade), and flags as Tilt / Toxic /
+  Leaver / +Comms / Abusive pills. The meta line only ever joins the fields you've set to inline that
   actually have a value for that row (no `—` placeholders or dangling `·`), and
   disappears entirely when nothing applies.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
@@ -108,7 +109,9 @@ never shows stale data as "current."
 - **Improvement Target** — build a target (self-rated ◎, or measured ⚡ which **auto-grades
   from your per-10-minute stats** — no manual read), or start from a **curated, coaching-grounded
   template** (positioning, ult economy, cooldown value, target selection, plus per-role stat
-  floors). Measured (⚡) targets can be **scoped to a specific role and/or hero** so a target
+  floors). A measured stat within a **configurable partial-credit margin** of its threshold
+  (default 20%, in Settings → General → Coaching) scores **Partial** rather than Missed.
+  Measured (⚡) targets can be **scoped to a specific role and/or hero** so a target
   only grades the games it actually applies to, and each target carries a small **goal-flag**
   icon for at-a-glance identification in lists. Measured thresholds take **scroll-to-adjust**
   (per-stat steps, hold Shift for bigger jumps). Rotate your focus with the **Active focus**
