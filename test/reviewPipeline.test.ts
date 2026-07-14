@@ -224,6 +224,39 @@ describe('computeDashboard — review inbox scoped by role/account, exempt from 
   });
 });
 
+describe('computeDashboard — measured grades on match rows + grading settings', () => {
+  const measured = (id: string, rule: string): AuthoredTarget =>
+    ({ id, name: id, mode: 'measured', rule, createdAt: 0, isActive: true });
+  const perHero = (damage: number): GameRecord['perHero'] =>
+    [{ hero: 'Tracer', role: 'damage', eliminations: 0, deaths: 0, assists: 0, damage, healing: 0, mitigation: 0 }];
+  const gradeOf = (m: { measuredGrades?: Record<string, { grade: TargetGrade; value: number } | 'no-stat'> }): TargetGrade | 'no-stat' | undefined => {
+    const mg = m.measuredGrades?.t;
+    return mg && mg !== 'no-stat' ? mg.grade : mg;
+  };
+
+  it('populates a row measuredGrades for active measured targets, and exposes the effective grading settings', () => {
+    const g = game({ result: 'Win', durationMinutes: 10, perHero: perHero(11240) }); // 11240 per 10
+    const d = computeDashboard([g], {}, { active: false, preference: 'off', hasRealHistory: true },
+      { targets: [measured('t', 'Damage ≥ 9000')] });
+    const row = d.matches.find((m) => m.matchId === g.matchId)!;
+    expect(row.measuredGrades?.t).toEqual({ grade: 'hit', value: 11240 });
+    expect(d.gradingSettings.partialMargin).toBe(0.2); // default when unset
+  });
+
+  it('threads the configured partial margin into row grades (partial vs missed)', () => {
+    const t = measured('t', 'Damage ≥ 10000');
+    const ctx = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const wide = computeDashboard([game({ result: 'Loss', durationMinutes: 10, perHero: perHero(8500) })], {}, ctx,
+      { targets: [t], grading: { partialMargin: 0.2 } });
+    const tight = computeDashboard([game({ result: 'Loss', durationMinutes: 10, perHero: perHero(8500) })], {}, ctx,
+      { targets: [t], grading: { partialMargin: 0.1 } });
+    expect(gradeOf(wide.matches[0])).toBe('partial'); // 8500 in 20% band [8000,10000)
+    expect(gradeOf(tight.matches[0])).toBe('missed'); // 8500 below 10% band [9000,10000)
+    expect(wide.gradingSettings.partialMargin).toBe(0.2);
+    expect(tight.gradingSettings.partialMargin).toBe(0.1);
+  });
+});
+
 describe('HistoryStore — review persistence', () => {
   let dir: string;
   const opened: HistoryStore[] = [];

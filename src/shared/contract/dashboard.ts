@@ -13,6 +13,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
 
@@ -223,6 +224,8 @@ export interface DashboardData {
   readinessSettings: ReadinessSettings;
   /** The effective "Current session" gap threshold, so the Settings editor renders synchronously. */
   sessionSettings: SessionSettings;
+  /** Effective measured-grade settings (partial-credit margin), so the Settings editor renders synchronously. */
+  gradingSettings: GradingSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */
   totalGamesAllTime: number;
   /** Yesterday's recap (unfiltered); absent when yesterday had no games. */

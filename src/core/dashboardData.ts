@@ -14,7 +14,8 @@ import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './master
 import { mentalSummary, rowFlags } from './mental';
 import { mentalCosts, tiltBySessionPosition, tiltTrend } from './mentalAnalytics';
 import { progression } from './progression';
-import { buildTargets, evaluateMeasured, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget, type TargetSummary } from './targets';
+import { buildTargets, activeMeasuredTargets, measuredGradesForMatch, type AuthoredTarget, type TargetSummary } from './targets';
+import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from './gradingSettings';
 import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
@@ -36,6 +37,8 @@ export interface ManualData {
   readiness?: ReadinessSettings;
   /** Effective "Current session" gap threshold; defaults when absent. */
   sessionSettings?: SessionSettings;
+  /** Effective measured-grade settings (partial-credit margin); defaults when absent. */
+  grading?: GradingSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
   rankAnchors?: RankAnchorMap;
 }
@@ -83,9 +86,11 @@ export function computeDashboard(
   // Active measured targets auto-grade every inbox row (shown read-only on Review);
   // the same active set drives the staleness cue, counted over unfiltered history.
   const authoredTargets = manual?.targets ?? [];
-  const activeMeasured = authoredTargets.filter(
-    (t) => t.mode === 'measured' && t.isActive && !t.archivedAt && t.id !== NOTION_IMPROVEMENT_TARGET_ID,
-  );
+  const activeMeasured = activeMeasuredTargets(authoredTargets);
+  // The user's partial-credit margin drives every measured-grade computation
+  // below (match rows, review inbox, target summaries/sparks) from one value.
+  const grading = manual?.grading ?? DEFAULT_GRADING_SETTINGS;
+  const margin = grading.partialMargin;
   // The "Current session" card is scoped by account (a real sitting doesn't
   // span two different tracked accounts) but NOT by role/date — a role switch
   // or an unrelated date-range filter must not fragment or hide an in-progress
@@ -137,7 +142,7 @@ export function computeDashboard(
     // it is about the target's lifetime, not the current filter).
     focusItems: linkFocusTargets(focusEntries(games), authoredTargets, all),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
-    matches: recentMatches(games, mapModeOf, activeMeasured),
+    matches: recentMatches(games, mapModeOf, activeMeasured, margin),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),
     tiltTrend: tiltTrend(games),
@@ -145,8 +150,8 @@ export function computeDashboard(
     // aggregate only the filtered games.
     tiltBySession: tiltBySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     performance: performanceStats(games),
-    targets: withStaleness(buildTargets(games, demo.active, manual?.targets), authoredTargets, all),
-    reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured)),
+    targets: withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all),
+    reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin)),
     pendingReviews: pending.length,
     pendingMatches,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
@@ -160,6 +165,7 @@ export function computeDashboard(
     readiness: safeReadiness(all, Date.now(), { targets: manual?.targets ?? [], rankAnchors: manual?.rankAnchors }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     sessionSettings,
+    gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
     ...(recapOf(all) ?? {}),
@@ -226,16 +232,16 @@ export function pendingReviewMatches(
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
 const ROW_CAP = 150;
 
-function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow[] {
+function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number): MatchRow[] {
   return [...games]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, ROW_CAP)
-    .map((g) => toMatchRow(g, mapModeOf, activeMeasured));
+    .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin));
 }
 
-function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = []): MatchRow {
+function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number): MatchRow {
   const flags = rowFlags(g);
-  const measuredGrades = measuredGradesFor(g, activeMeasured);
+  const measuredGrades = activeMeasured.length ? measuredGradesForMatch(g, activeMeasured, margin) : undefined;
   // The player's stored self-grades stay with the match (unlike the live-computed
   // measuredGrades), so the Matches-list "Target grades" field renders these.
   const storedGrades = g.review?.grades;
@@ -258,17 +264,6 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     ...(measuredGrades ? { measuredGrades } : {}),
     ...(targetGrades ? { targetGrades } : {}),
   };
-}
-
-/** Read-only auto-grades for the active measured targets on one match (Review display). */
-function measuredGradesFor(g: GameRecord, targets: AuthoredTarget[]): MatchRow['measuredGrades'] {
-  if (!targets.length) return undefined;
-  const out: NonNullable<MatchRow['measuredGrades']> = {};
-  for (const t of targets) {
-    const res = evaluateMeasured(g, t);
-    out[t.id] = res ? { grade: res.grade, value: res.value } : 'no-stat';
-  }
-  return out;
 }
 
 /**
