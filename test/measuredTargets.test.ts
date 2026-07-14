@@ -223,9 +223,18 @@ describe('effectiveImprovementGrade — export signature reflects measured grade
       ],
     });
     const global = effectiveImprovementGrade(g, [target('Damage ≥ 15000')], new Set(['t'])); // hit
-    const scoped = effectiveImprovementGrade(g, [target('Damage ≥ 15000', { heroScope: 'Tracer' })], new Set(['t'])); // missed
+    const scoped = effectiveImprovementGrade(g, [target('Damage ≥ 15000', { heroScope: 'Tracer' })], new Set(['t'])); // 12000 → partial (20% band)
     expect(global).not.toBe(scoped);
     expect(matchExportSignature(g, global)).not.toBe(matchExportSignature(g, scoped));
+  });
+
+  it('honors the partial margin so the exported grade matches the in-app one', () => {
+    const g = game({ durationMinutes: 10, perHero: [hero({ damage: 8500 })] }); // 8500 vs 10000
+    const t = target('Damage ≥ 10000');
+    const wide = effectiveImprovementGrade(g, [t], new Set(['t']), 0.2); // partial
+    const tight = effectiveImprovementGrade(g, [t], new Set(['t']), 0.1); // missed
+    expect(wide).not.toBe(tight);
+    expect(matchExportSignature(g, wide)).not.toBe(matchExportSignature(g, tight));
   });
 });
 

@@ -273,6 +273,9 @@ function main(): void {
     // Improvement Target aggregate — matching the in-app numbers.
     authoredTargets: () =>
       manual.targets().filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID),
+    // The live partial-credit margin, so a measured grade folded into the export
+    // matches the in-app one even after the user tunes the margin.
+    authoredPartialMargin: () => config.grading.partialMargin,
     // Seed a freshly auto-created Maps DB with ALL effective maps (active + inactive)
     // so historical matches on any map still relate to a page (spec AC 32).
     mapNames: allMapNames,

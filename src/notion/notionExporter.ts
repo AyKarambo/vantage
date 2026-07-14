@@ -3,7 +3,7 @@ import { emptyMatch, type MatchRecord, type Result } from '../core/model';
 import type { GameRecord, MatchMental } from '../core/analytics';
 import { leaverFlags, mergeLeaver } from '../core/leaver';
 import { commsTone } from '../core/comms';
-import { aggregateImprovementGrade, matchExportSignature, effectiveImprovementGrade, type AuthoredTarget } from '../core/targets';
+import { aggregateImprovementGrade, matchExportSignature, effectiveImprovementGrade, DEFAULT_PARTIAL_MARGIN, type AuthoredTarget } from '../core/targets';
 import { NotionWriter } from './notionWriter';
 import { queryAllPages, queryDataSourcePages } from './pageScan';
 import { groupByEffectiveMatchId, pickCanonicalRow, rowRefOf, type RowRef } from './dedup';
@@ -72,6 +72,12 @@ export class NotionExporter {
      * that don't thread targets keep today's self-rated-only behavior.
      */
     private readonly authoredTargets: () => readonly AuthoredTarget[] = () => [],
+    /**
+     * The user's partial-credit margin, so a measured target's exported grade
+     * matches the in-app one (measured.ts's single-evaluator invariant). Re-read
+     * per export; defaults to {@link DEFAULT_PARTIAL_MARGIN}.
+     */
+    private readonly authoredPartialMargin: () => number = () => DEFAULT_PARTIAL_MARGIN,
   ) {}
 
   /**
@@ -190,7 +196,7 @@ export class NotionExporter {
       // the returned buckets.
       if (backfilled.has(game.matchId)) continue;
       try {
-        const grade = effectiveImprovementGrade(game, this.authoredTargets(), this.authoredTargetIds());
+        const grade = effectiveImprovementGrade(game, this.authoredTargets(), this.authoredTargetIds(), this.authoredPartialMargin());
         const signature = matchExportSignature(game, grade);
         const pageId = this.outbox.pageIdFor(game.matchId, this.configuredDatabaseId);
 
@@ -295,7 +301,7 @@ export class NotionExporter {
    * duplicate bug — AC3), update or recreate + adopt the ledger baseline.
    */
   private async backfillLegacy(game: GameRecord): Promise<'updated' | 'recreated' | 'ok'> {
-    const grade = effectiveImprovementGrade(game, this.authoredTargets(), this.authoredTargetIds());
+    const grade = effectiveImprovementGrade(game, this.authoredTargets(), this.authoredTargetIds(), this.authoredPartialMargin());
     const signature = matchExportSignature(game, grade);
     const found = await this.lookupExistingRow(game.matchId);
 

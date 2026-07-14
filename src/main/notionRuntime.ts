@@ -14,7 +14,7 @@ import {
 import type { GameRecord } from '../core/analytics';
 import {
   matchExportSignature, effectiveImprovementGrade, countUnsyncedGames, countCompetitiveGames,
-  type AuthoredTarget,
+  DEFAULT_PARTIAL_MARGIN, type AuthoredTarget,
 } from '../core/targets';
 import type {
   CleanupDuplicatesResult, ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
@@ -64,6 +64,11 @@ export interface NotionRuntimeDeps {
    * Improvement Target grade. Re-read live per export; defaults to none.
    */
   authoredTargets?: () => readonly AuthoredTarget[];
+  /**
+   * The user's partial-credit margin, so measured (⚡) grades folded into the
+   * export match the in-app ones. Re-read live per export; defaults to 20%.
+   */
+  authoredPartialMargin?: () => number;
   /**
    * The effective map names (active + inactive) to seed a freshly auto-created
    * Maps database with, so historical matches on any map still relate to a page
@@ -179,9 +184,10 @@ export class NotionRuntime {
     if (!databaseId) return 0;
     const authoredTargets = this.deps.authoredTargets?.() ?? [];
     const authoredTargetIds = this.deps.authoredTargetIds?.() ?? new Set<string>();
+    const margin = this.deps.authoredPartialMargin?.() ?? DEFAULT_PARTIAL_MARGIN;
     return countUnsyncedGames(
       games,
-      (g) => matchExportSignature(g, effectiveImprovementGrade(g, authoredTargets, authoredTargetIds)),
+      (g) => matchExportSignature(g, effectiveImprovementGrade(g, authoredTargets, authoredTargetIds, margin)),
       (matchId) => ({
         pageId: this.deps.outbox.pageIdFor(matchId, databaseId),
         signature: this.deps.outbox.signatureFor(matchId, databaseId),
@@ -223,11 +229,12 @@ export class NotionRuntime {
       // unless their local content changes, in which case it updates in place.
       const authoredTargetIds = this.deps.authoredTargetIds?.() ?? new Set<string>();
       const authoredTargets = this.deps.authoredTargets?.() ?? [];
+      const margin = this.deps.authoredPartialMargin?.() ?? DEFAULT_PARTIAL_MARGIN;
       for (const g of result.games) {
         // Fold measured grades in exactly as the exporter does, so the ledger
         // baseline signature matches what the next export computes (no spurious
         // first-sync update).
-        const grade = effectiveImprovementGrade(g, authoredTargets, authoredTargetIds);
+        const grade = effectiveImprovementGrade(g, authoredTargets, authoredTargetIds, margin);
         this.deps.outbox.recordImported(g.matchId, {
           pageId: g.pageId,
           signature: matchExportSignature(g, grade),
@@ -449,6 +456,7 @@ export class NotionRuntime {
     // export() call so a target authored after rebuild/validate is still visible.
     const authoredTargetIds = () => this.deps.authoredTargetIds?.() ?? new Set<string>();
     const authoredTargets = () => this.deps.authoredTargets?.() ?? [];
+    const authoredPartialMargin = () => this.deps.authoredPartialMargin?.() ?? DEFAULT_PARTIAL_MARGIN;
     this.exporter = new NotionExporter(
       writer, maps, this.deps.outbox, shapeIssues, authoredTargetIds,
       cfg.notion.gametrackerDatabaseId
@@ -456,6 +464,7 @@ export class NotionRuntime {
         : undefined,
       cfg.notion.gametrackerDatabaseId || undefined,
       authoredTargets,
+      authoredPartialMargin,
     );
     return maps;
   }
