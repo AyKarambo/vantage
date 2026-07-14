@@ -133,22 +133,28 @@ export function matchStatValue(game: GameRecord, stat: string, scope?: MeasuredS
   return statOver(scoped, stat, minutes);
 }
 
-/** Partial-credit margin: within 10% of the threshold on the failing side. */
-const MARGIN = 0.1;
+/**
+ * Default partial-credit margin: a measured value within 20% of the threshold on
+ * the failing side still grades `partial` rather than `missed`. This is the
+ * fallback and the single default source; the user can override it globally via
+ * {@link ../gradingSettings GradingSettings.partialMargin}, threaded in as the
+ * `margin` argument on every function below.
+ */
+export const DEFAULT_PARTIAL_MARGIN = 0.2;
 
-function gradeFor(op: MeasuredOp, threshold: number, value: number): TargetGrade {
+function gradeFor(op: MeasuredOp, threshold: number, value: number, margin: number = DEFAULT_PARTIAL_MARGIN): TargetGrade {
   if (op === '≥') {
     if (value >= threshold) return 'hit';
-    return value >= threshold * (1 - MARGIN) ? 'partial' : 'missed';
+    return value >= threshold * (1 - margin) ? 'partial' : 'missed';
   }
   if (op === '≤') {
     if (value <= threshold) return 'hit';
-    return value <= threshold * (1 + MARGIN) ? 'partial' : 'missed';
+    return value <= threshold * (1 + margin) ? 'partial' : 'missed';
   }
   // '=' — a tolerance window; near-useless on per-10 floats but kept for completeness.
   const diff = Math.abs(value - threshold);
-  if (diff <= Math.abs(threshold) * MARGIN) return 'hit';
-  return diff <= Math.abs(threshold) * 2 * MARGIN ? 'partial' : 'missed';
+  if (diff <= Math.abs(threshold) * margin) return 'hit';
+  return diff <= Math.abs(threshold) * 2 * margin ? 'partial' : 'missed';
 }
 
 /**
@@ -159,12 +165,46 @@ function gradeFor(op: MeasuredOp, threshold: number, value: number): TargetGrade
 export function evaluateMeasured(
   game: GameRecord,
   target: Pick<AuthoredTarget, 'rule' | 'roleScope' | 'heroScope'>,
+  margin: number = DEFAULT_PARTIAL_MARGIN,
 ): { grade: TargetGrade; value: number } | null {
   const rule = parseMeasuredRule(target.rule);
   if (!rule) return null;
   const value = matchStatValue(game, rule.stat, { roleScope: target.roleScope, heroScope: target.heroScope });
   if (value === null) return null;
-  return { grade: gradeFor(rule.op, rule.value, value), value };
+  return { grade: gradeFor(rule.op, rule.value, value, margin), value };
+}
+
+/**
+ * The active, non-archived MEASURED targets that auto-grade a match — excludes
+ * the internal Notion bookkeeping id. The single shared filter behind the
+ * dashboard match rows and the match-detail Grades card, so they can't drift on
+ * which targets count.
+ */
+export function activeMeasuredTargets(authored: readonly AuthoredTarget[]): AuthoredTarget[] {
+  return authored.filter(
+    (t) => t.mode === 'measured' && t.isActive && !t.archivedAt && t.id !== NOTION_IMPROVEMENT_TARGET_ID,
+  );
+}
+
+/**
+ * Auto-grade every target in `targets` against one match, keyed by id: the
+ * derived grade + underlying per-10/ratio value, or the `'no-stat'` sentinel
+ * when the match can't measure it (a skip shown neutral — never a miss). Shared
+ * by the dashboard match rows and the match-detail Grades card so both compute
+ * identically. `margin` defaults to {@link DEFAULT_PARTIAL_MARGIN}; callers pass
+ * the user's configured value.
+ */
+export function measuredGradesForMatch(
+  game: GameRecord,
+  targets: readonly AuthoredTarget[],
+  margin: number = DEFAULT_PARTIAL_MARGIN,
+): Record<string, { grade: TargetGrade; value: number } | 'no-stat'> {
+  const out: Record<string, { grade: TargetGrade; value: number } | 'no-stat'> = {};
+  for (const t of targets) {
+    const res = evaluateMeasured(game, t, margin);
+    out[t.id] = res ? { grade: res.grade, value: res.value } : 'no-stat';
+  }
+  return out;
 }
 
 /**
@@ -179,11 +219,12 @@ export function foldMeasuredGradesForExport(
   base: Record<string, TargetGrade> | undefined,
   targets: readonly AuthoredTarget[],
   game: GameRecord,
+  margin: number = DEFAULT_PARTIAL_MARGIN,
 ): Record<string, TargetGrade> {
   const out: Record<string, TargetGrade> = { ...(base ?? {}) };
   for (const t of targets) {
     if (t.mode !== 'measured') continue;
-    const res = evaluateMeasured(game, t);
+    const res = evaluateMeasured(game, t, margin);
     if (res) out[t.id] = res.grade;
     else delete out[t.id];
   }
@@ -202,8 +243,9 @@ export function effectiveImprovementGrade(
   game: GameRecord,
   authored: readonly AuthoredTarget[],
   visibleTargetIds: ReadonlySet<string>,
+  margin: number = DEFAULT_PARTIAL_MARGIN,
 ): TargetGrade | undefined {
-  const grades = foldMeasuredGradesForExport(game.review?.grades, authored, game);
+  const grades = foldMeasuredGradesForExport(game.review?.grades, authored, game, margin);
   const review = game.review ? { ...game.review, grades } : { at: 0, grades, flags: {} };
   return aggregateImprovementGrade(review, { visibleTargetIds, bookkeepingId: NOTION_IMPROVEMENT_TARGET_ID });
 }

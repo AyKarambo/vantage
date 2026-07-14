@@ -5,6 +5,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
@@ -100,6 +101,10 @@ export interface DataProvider {
   getSessionSettings(): SessionSettings;
   /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
   setSessionSettings(input: SessionSettings): SessionSettings;
+  /** Current measured-grade settings (the partial-credit margin). */
+  getGrading(): GradingSettings;
+  /** Persist new measured-grade settings; returns the persisted (clamped) value. */
+  setGrading(input: GradingSettings): GradingSettings;
   /** Databases the Notion integration can see, for the picker. */
   listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
   /** Pages the Notion integration can see — candidate parents for auto-create. */

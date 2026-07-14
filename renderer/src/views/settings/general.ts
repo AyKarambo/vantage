@@ -4,6 +4,7 @@ import { breakReminderEditor } from '../../components/breakReminderEditor';
 import { readinessSettingsEditor } from '../../components/readinessSettingsEditor';
 import { stalenessEditor } from '../../components/stalenessEditor';
 import { sessionSettingsEditor } from '../../components/sessionSettingsEditor';
+import { gradingSettingsEditor } from '../../components/gradingSettingsEditor';
 import { getWinrateScheme, setWinrateScheme } from '../../theme';
 import { WINRATE_SCHEME_OPTIONS, type WinrateScheme } from '../../winrateScheme';
 import { prefs, DEFAULT_SUGGESTED_HEROES, clampSuggestedHeroCount } from '../../prefs';
@@ -49,11 +50,12 @@ export function generalTab(ctx: ViewContext): HTMLElement {
     accountsCard(),
     quickLogCard(),
     h('div', { class: 'grid-2' },
-      card({ title: 'Coaching', sub: 'break reminder + readiness + target rotation + current session' },
+      card({ title: 'Coaching', sub: 'break reminder + readiness + target rotation + current session + grading' },
         breakReminderEditor(ctx),
         readinessSettingsEditor(ctx),
         stalenessEditor(ctx),
         sessionSettingsEditor(ctx),
+        gradingSettingsEditor(ctx),
       ),
       appBehaviorCard(ctx),
     ),

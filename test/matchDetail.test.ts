@@ -3,6 +3,7 @@ import { matchDetail } from '../src/core/matchDetail';
 import { generateSampleGames } from '../src/core/sampleData';
 import { rankKey, type RankAnchorMap } from '../src/core/rank';
 import type { GameRecord } from '../src/core/analytics';
+import type { AuthoredTarget } from '../src/core/targets';
 
 /** The bare minimum a legacy history.json record can contain. */
 const minimal = (p: Partial<GameRecord> = {}): GameRecord => ({
@@ -67,6 +68,20 @@ describe('matchDetail degradation contract', () => {
     expect(d!.scoreboard).toBeUndefined();
     expect(d!.playerHistory).toEqual([]);
     expect(d!.performance).toBeUndefined();
+  });
+
+  it('carries calculated measured-target grades, honoring the partial margin', () => {
+    const measured = (rule: string): AuthoredTarget => ({ id: 't', name: 't', mode: 'measured', rule, createdAt: 0, isActive: true });
+    const g = full(); // 20 elim over 14 min → 14.3 per 10
+    const t = measured('Eliminations ≥ 16');
+    const wide = matchDetail([g], g.matchId, [g], {}, undefined, [t], 0.2);
+    const tight = matchDetail([g], g.matchId, [g], {}, undefined, [t], 0.1);
+    expect(wide?.measuredGrades?.t).toEqual({ grade: 'partial', value: 14.3 }); // 20% band: ≥ 12.8
+    expect((tight?.measuredGrades?.t as { grade: string }).grade).toBe('missed'); // 10% band: ≥ 14.4
+  });
+
+  it('omits measuredGrades when no active measured targets are supplied', () => {
+    expect(matchDetail([full()], 'full-1')!.measuredGrades).toBeUndefined();
   });
 
   it('surfaces performance when the game has one, omits it otherwise', () => {

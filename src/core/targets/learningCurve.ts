@@ -19,6 +19,7 @@ import type { GameRecord, TargetGrade } from '../analytics';
 import type { Result } from '../model';
 import type { AuthoredTarget, TargetMode } from './types';
 import { targetTimeline } from './timeline';
+import { DEFAULT_PARTIAL_MARGIN } from './measured';
 import { wilson } from './wilson';
 
 /** Trailing decided games backing each rolling-winrate point. */
@@ -111,9 +112,9 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
  * Compute a target's learning curve from the full game history. See the module
  * doc for the honesty guarantees; the algorithm mirrors the spec step-for-step.
  */
-export function targetLearningCurve(games: GameRecord[], t: AuthoredTarget): TargetLearningCurve {
+export function targetLearningCurve(games: GameRecord[], t: AuthoredTarget, margin: number = DEFAULT_PARTIAL_MARGIN): TargetLearningCurve {
   const since = t.activatedAt ?? t.createdAt;
-  const timeline = targetTimeline(games, t);
+  const timeline = targetTimeline(games, t, margin);
 
   // 1. Baseline — your form over the decided games BEFORE you flagged this. Never
   //    substituted with 0.5 or the global winrate: too little history → null.

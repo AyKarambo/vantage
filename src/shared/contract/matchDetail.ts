@@ -4,7 +4,7 @@
  * and the renderer bundle can all share it.
  */
 import type { Role, Result, HeroStat } from '../../core/model';
-import type { MatchMental, MatchReview } from '../../core/analytics';
+import type { MatchMental, MatchReview, TargetGrade } from '../../core/analytics';
 
 /**
  * One scoreboard row of the match detail page. Only end-of-match-screen data
@@ -107,6 +107,13 @@ export interface MatchDetail {
    * if it has been graded — lets the match-detail editor pre-fill and re-save.
    */
   review?: MatchReview;
+  /**
+   * Auto-graded measured (⚡) targets for this match — the calculated grade +
+   * per-10/ratio value, or `'no-stat'` when the match can't measure it. Only the
+   * currently-active measured targets; keyed by target id. Lets the Grades card
+   * show calculated grades (mode-aware) next to the stored self-ratings.
+   */
+  measuredGrades?: Record<string, { grade: TargetGrade; value: number } | 'no-stat'>;
   /** Grouped by `team` in the renderer; absent → local-row-only fallback. */
   scoreboard?: ScoreboardEntry[];
   /**

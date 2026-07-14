@@ -5,6 +5,7 @@ import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/b
 import { DEFAULT_STALENESS, type StalenessSettings } from '../../core/staleness';
 import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from '../../core/sessionSettings';
+import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 
 /**
@@ -73,6 +74,8 @@ export interface AppConfig {
   readiness: ReadinessSettings;
   /** The sidebar "Current session" card's gap threshold. */
   sessionSettings: SessionSettings;
+  /** Measured-target grading settings (the partial-credit margin). */
+  grading: GradingSettings;
   /** Editable-master-data source config (the Update action's endpoint). */
   masterData: MasterDataConfig;
   /**
@@ -103,6 +106,7 @@ const DEFAULTS: AppConfig = {
   staleness: { ...DEFAULT_STALENESS },
   readiness: { ...DEFAULT_READINESS },
   sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
+  grading: { ...DEFAULT_GRADING_SETTINGS },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: { closeToTray: true, demoPreference: 'unset', devMode: true },
 };
@@ -144,6 +148,7 @@ export function loadConfig(): AppConfig {
     staleness: { ...DEFAULTS.staleness, ...(bundled.staleness ?? {}), ...(local.staleness ?? {}) },
     readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
     sessionSettings: { ...DEFAULTS.sessionSettings, ...(bundled.sessionSettings ?? {}), ...(local.sessionSettings ?? {}) },
+    grading: { ...DEFAULTS.grading, ...(bundled.grading ?? {}), ...(local.grading ?? {}) },
     masterData: { ...DEFAULTS.masterData, ...(bundled.masterData ?? {}), ...(local.masterData ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };

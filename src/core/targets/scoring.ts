@@ -1,7 +1,7 @@
 import { winLoss, type GameRecord, type TargetGrade } from '../analytics';
 import { sampleTargets } from './sampleTargets';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
-import { evaluateMeasured } from './measured';
+import { DEFAULT_PARTIAL_MARGIN, evaluateMeasured } from './measured';
 import { targetLearningCurve } from './learningCurve';
 import type { AuthoredTarget, TargetSummary } from './types';
 
@@ -23,13 +23,13 @@ import type { AuthoredTarget, TargetSummary } from './types';
  * if it somehow ended up in `authored` — it is an internal id, not a
  * user-authored target.
  */
-export function buildTargets(games: GameRecord[], demo: boolean, authored?: AuthoredTarget[]): TargetSummary[] {
+export function buildTargets(games: GameRecord[], demo: boolean, authored?: AuthoredTarget[], margin: number = DEFAULT_PARTIAL_MARGIN): TargetSummary[] {
   const visible = authored?.filter((t) => t.id !== NOTION_IMPROVEMENT_TARGET_ID);
   if (visible && visible.length) {
     const base = winLoss(games).winrate || 0.5;
     return [...visible]
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map((t) => (t.mode === 'measured' ? measuredSummary(t, games, base) : authoredSummary(t, games, base)));
+      .map((t) => (t.mode === 'measured' ? measuredSummary(t, games, base, margin) : authoredSummary(t, games, base, margin)));
   }
   return demo ? sampleTargets(games) : [];
 }
@@ -40,7 +40,7 @@ export function buildTargets(games: GameRecord[], demo: boolean, authored?: Auth
  * counts as an attempt, not a hit). Win-splits fall back to the player's
  * baseline while a side has no games.
  */
-function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number): TargetSummary {
+function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number, margin: number = DEFAULT_PARTIAL_MARGIN): TargetSummary {
   const graded = games
     .filter((g) => g.review?.grades[t.id] !== undefined)
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -65,7 +65,7 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number): 
     isActive: t.isActive,
     archivedAt: t.archivedAt,
     // The Focus Trend learning curve — live targets only (archived stay light).
-    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t) }),
+    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t, margin) }),
   };
 }
 
@@ -76,11 +76,11 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number): 
  * can't be measured is skipped (not an attempt). Stored `review.grades` for a
  * measured target are ignored here so the two grading paths can't double-count.
  */
-function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number): TargetSummary {
+function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number, margin: number = DEFAULT_PARTIAL_MARGIN): TargetSummary {
   const scored = games
     .filter((g) => g.timestamp >= t.createdAt)
     .sort((a, b) => a.timestamp - b.timestamp)
-    .map((g) => ({ g, res: evaluateMeasured(g, t) }))
+    .map((g) => ({ g, res: evaluateMeasured(g, t, margin) }))
     .filter((x): x is { g: GameRecord; res: { grade: TargetGrade; value: number } } => x.res !== null);
   const grades = scored.map((x) => x.res.grade);
   const hits = grades.filter((g) => g === 'hit').length;
@@ -103,7 +103,8 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number): 
     isActive: t.isActive,
     archivedAt: t.archivedAt,
     // The Focus Trend learning curve — live targets only (archived stay light).
-    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t) }),
+    // Measured: its execution (hit-rate) overlay is margin-sensitive, so thread it.
+    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t, margin) }),
   };
 }
 

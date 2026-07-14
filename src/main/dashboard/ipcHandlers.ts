@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
+import { activeMeasuredTargets } from '../../core/targets';
 import { playerMatchHistory } from '../../core/playerIndex';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
@@ -9,6 +10,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { GradingSettings } from '../../core/gradingSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
@@ -80,6 +82,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
         staleness: provider.getStaleness(),
         readiness: provider.getReadiness(),
         sessionSettings: provider.getSessionSettings(),
+        grading: provider.getGrading(),
         rankAnchors: provider.rankAnchorMap(),
       },
       provider.effectiveMasterData(),
@@ -109,7 +112,10 @@ export function registerDashboardIpc(provider: DataProvider): void {
     const master = provider.effectiveMasterData();
     const mapModeOf = makeMapMode(master.maps);
     const filtered = applyFilters(games, filters ?? {}, master.seasons.map((s) => s.start));
-    return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf);
+    // Same active-measured set + partial margin the dashboard rows use, so the
+    // match-detail Grades card shows calculated grades identically.
+    const activeMeasured = activeMeasuredTargets(provider.manualTargets());
+    return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured, provider.getGrading().partialMargin);
   });
   // Shared-match history for one player — over the full (competitive-only) local
   // history, unscoped by the filter bar (it's a cross-history drill-down).
@@ -197,6 +203,10 @@ export function registerDashboardIpc(provider: DataProvider): void {
   // "Current session" gap threshold.
   handle(ch.getSessionSettings, () => provider.getSessionSettings());
   handle(ch.setSessionSettings, (_e, input: SessionSettings) => provider.setSessionSettings(input));
+
+  // Measured-grade settings (partial-credit margin).
+  handle(ch.getGrading, () => provider.getGrading());
+  handle(ch.setGrading, (_e, input: GradingSettings) => provider.setGrading(input));
 
   // Release debug log (viewer ring, session level, renderer error forwarding).
   handle(ch.getLogEntries, () => provider.getLogEntries());

@@ -29,6 +29,7 @@ export type {
 } from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
 export type { SessionSettings } from '../../core/sessionSettings';
+export type { GradingSettings } from '../../core/gradingSettings';
 
 // Dashboard payloads
 export type {
