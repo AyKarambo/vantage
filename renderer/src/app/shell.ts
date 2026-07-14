@@ -158,6 +158,7 @@ export class App {
     this.sessionBody,
   );
   private sidebarBuilt = false;
+  private readonly gepBanner = h('div', { class: 'gep-banner hidden' });
   private readonly filterHost = h('div', { class: 'filterbar-wrap hidden' });
   private readonly contentHost = h('main', { class: 'content' });
   private readonly statusLabel = h('span', null, 'Loading…');
@@ -197,8 +198,9 @@ export class App {
     this.bindGlobals();
     mountToastHost();
     initGepStatus();
-    subscribeGepStatus(() => this.renderGepIndicator());
+    subscribeGepStatus(() => { this.renderGepIndicator(); this.renderGepBanner(); });
     this.renderGepIndicator();
+    this.renderGepBanner();
     // The "Dev Mode" badge reflects a build-constant (unpackaged + dev creds in
     // the env at start), so fetch it once rather than subscribing to live status.
     void bridge.getAppInfo().then((info) => this.devBadge.classList.toggle('hidden', !info.devMode));
@@ -241,7 +243,7 @@ export class App {
       this.titlebar(),
       h('div', { class: 'body' },
         this.sidebarHost,
-        h('div', { class: 'content-col' }, this.filterHost, this.contentHost),
+        h('div', { class: 'content-col' }, this.gepBanner, this.filterHost, this.contentHost),
       ),
       h('footer', { class: 'statusbar' },
         h('button', {
@@ -534,6 +536,48 @@ export class App {
     const state = s && s.sensor === 'gep' ? s.state : 'no-game';
     this.gepDot.className = `status-dot is-${state}`;
     this.gepLabel.textContent = gepLabelText(s);
+  }
+
+  /**
+   * The app-wide GEP banner (top of content), mutated in place so it never tears
+   * down the active view. Shows a "restart to apply" prompt when a fixed GEP
+   * package is staged, otherwise an outage explanation while Overwolf's service is
+   * degraded/down. Hidden when the service is ok/unknown and nothing is staged —
+   * an outage is never asserted without an authoritative feed reading.
+   */
+  private renderGepBanner(): void {
+    const s = getGepStatus();
+    const outage = s?.serviceStatus === 'down' || s?.serviceStatus === 'degraded';
+    const staged = Boolean(s?.updateStaged);
+    if (!outage && !staged) {
+      this.gepBanner.className = 'gep-banner hidden';
+      render(this.gepBanner);
+      return;
+    }
+    if (staged) {
+      this.gepBanner.className = 'gep-banner is-update';
+      render(this.gepBanner,
+        h('span', { class: 'gep-banner-text' },
+          'A fix for Overwatch game events is ready. Restart Vantage to apply it.'),
+        h('button', {
+          class: 'gep-banner-action',
+          on: { click: () => void bridge.applyGepUpdate() },
+        }, 'Restart to apply'),
+      );
+      return;
+    }
+    this.gepBanner.className = 'gep-banner is-outage';
+    render(this.gepBanner,
+      h('span', { class: 'gep-banner-text' },
+        s?.serviceMessage
+          ? `Overwatch game events are down — Overwolf: ${s.serviceMessage}. Vantage resumes tracking automatically when it's fixed.`
+          : "Overwatch game events are down on Overwolf's side (not a Vantage bug). Vantage resumes tracking automatically once it's fixed."),
+      h('button', {
+        class: 'gep-banner-link',
+        title: 'Open Overwolf’s game-events status page',
+        on: { click: () => void bridge.openExternal('https://support.overwolf.com/support/solutions/9000115816') },
+      }, 'Overwolf status ↗'),
+    );
   }
 
   /** Click-for-details: live-updating popover with the feed's vitals. */

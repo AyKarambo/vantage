@@ -11,6 +11,7 @@ import {
 } from '../core/gepHealth';
 import { isMatchEndMessage, isMatchStartMessage } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
+import type { ServiceStatus } from '../core/gepService';
 import type { GepStatusPayload } from '../shared/contract';
 
 /** How often the staleness deadline is re-checked between events. */
@@ -30,6 +31,12 @@ export interface GepStatusMonitor {
   setAttached(attached: boolean): void;
   /** Surface the feed's last error string in the payload. */
   setLastError(err: string | undefined): void;
+  /** Overwolf's service (outage) status from the status feed; null = not yet polled. */
+  setServiceStatus(status: ServiceStatus | null): void;
+  /** The loaded GEP package version (from the package manager). */
+  setGepPackageVersion(version: string | undefined): void;
+  /** Whether a fixed GEP package is staged and awaiting a restart. */
+  setUpdateStaged(staged: boolean): void;
   /** Every normalized GEP message — classifies match boundaries itself. */
   message(msg: GepMessage): void;
   current(): GepStatusPayload;
@@ -42,7 +49,14 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
   let track: GepHealthTrack = INITIAL_GEP_TRACK;
   let attached = false;
   let lastError: string | undefined;
-  let published: GepHealthState | null = null;
+  let serviceStatus: ServiceStatus | null = null;
+  let gepPackageVersion: string | undefined;
+  let updateStaged = false;
+  // Composite dedup key: publish whenever ANY visible dimension changes, not just
+  // the connection state — service status, staged update and package version all
+  // ride the same payload, so a change in any of them must fan out.
+  let publishedKey: string | null = null;
+  let publishedState: GepHealthState | null = null;
 
   const payload = (): GepStatusPayload => ({
     state: gepHealth(track, now()),
@@ -52,18 +66,29 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
     eventsThisSession: track.eventsThisSession,
     matchInProgress: track.matchInProgress,
     ...(lastError ? { lastError } : {}),
+    ...(serviceStatus ? { serviceStatus: serviceStatus.level } : {}),
+    ...(serviceStatus?.message ? { serviceMessage: serviceStatus.message } : {}),
+    ...(gepPackageVersion ? { gepPackageVersion } : {}),
+    ...(updateStaged ? { updateStaged: true } : {}),
   });
 
+  const dedupKey = (p: GepStatusPayload): string =>
+    `${p.state}|${p.serviceStatus ?? '-'}|${p.serviceMessage ?? '-'}|${p.updateStaged ? 1 : 0}|${p.gepPackageVersion ?? '-'}`;
+
   const evaluate = (): void => {
-    const state = gepHealth(track, now());
-    if (state === published) return;
-    deps.log('status', `feed ${published ?? 'init'} → ${state}`, {
+    const p = payload();
+    const key = dedupKey(p);
+    if (key === publishedKey) return;
+    deps.log('status', `feed ${publishedState ?? 'init'} → ${p.state}`, {
       matchInProgress: track.matchInProgress,
       eventsThisSession: track.eventsThisSession,
+      ...(p.serviceStatus ? { service: p.serviceStatus } : {}),
+      ...(p.updateStaged ? { updateStaged: true } : {}),
       ...(track.lastEventAt ? { sinceLastEventMs: now() - track.lastEventAt } : {}),
     });
-    published = state;
-    deps.publish(payload());
+    publishedKey = key;
+    publishedState = p.state;
+    deps.publish(p);
   };
 
   return {
@@ -75,6 +100,18 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
     },
     setLastError(err) {
       lastError = err;
+    },
+    setServiceStatus(next) {
+      serviceStatus = next;
+      evaluate();
+    },
+    setGepPackageVersion(version) {
+      gepPackageVersion = version;
+      evaluate();
+    },
+    setUpdateStaged(next) {
+      updateStaged = next;
+      evaluate();
     },
     message(msg) {
       const kind = isMatchStartMessage(msg) ? 'match-start'

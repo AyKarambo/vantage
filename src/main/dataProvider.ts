@@ -110,6 +110,8 @@ export interface DataProviderDeps {
   appInfo(): AppInfo;
   /** Open an external URL — the composition root's `shell.openExternal`. */
   openExternal(url: string): Promise<void>;
+  /** Restart the app to apply a staged GEP package fix (`app.relaunch()` + exit). */
+  applyGepUpdate(): void;
   /** Data-folder location: current value, Settings folder-picker/migrate, and the
    *  first-run picker (owned by the composition root — it holds the mutable data
    *  dir and the live store handles the migration executor repoints). */
@@ -484,6 +486,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     getAppInfo: () => deps.appInfo(),
     // Scheme-guarded before it ever reaches the shell: a disallowed URL is a no-op.
     openExternal: async (url) => { await openIfAllowed(url, deps.openExternal); },
+    applyGepUpdate: () => deps.applyGepUpdate(),
     getDataLocation: () => deps.dataLocation.get(),
     chooseDataFolder: () => deps.dataLocation.choose(),
     setDataFolder: (input) => deps.dataLocation.set(input),

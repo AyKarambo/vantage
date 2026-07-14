@@ -197,6 +197,7 @@ let appSettings: AppUiSettings = {
   runAtLogin: false,
   demoPreference: 'on',
   devMode: true,
+  gepNotifications: true,
   ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
 };
 // ?demo=on|off|unset overrides the persisted choice — lets design QA preview the
@@ -249,6 +250,11 @@ const gepPayload = (): GepStatusPayload => ({
   lastEventAt: gepState === 'no-game' ? null : Date.now() - (gepState === 'stale' ? 90_000 : 4_000),
   eventsThisSession: gepState === 'no-game' ? 0 : 128,
   matchInProgress: gepState === 'live' || gepState === 'stale',
+  gepPackageVersion: '309.0.0',
+  // ?gep=down|degraded|staged previews the service-outage / restart-to-apply banner.
+  ...(gepParam === 'down' ? { serviceStatus: 'down', serviceMessage: 'Events are disabled' } : {}),
+  ...(gepParam === 'degraded' ? { serviceStatus: 'degraded' } : {}),
+  ...(gepParam === 'staged' ? { updateStaged: true } : {}),
 });
 if (gepParam === 'cycle') {
   let i = 1;
@@ -696,7 +702,9 @@ const mock: OwStatsApi = {
     osRelease: 'preview',
     packaged: false,
     devMode: false,
+    gepPackageVersion: 'preview',
   }),
+  applyGepUpdate: async () => { /* preview: restart is a no-op */ },
   openExternal: async (url: string) => {
     // No shell in the browser harness — echo the intent so links stay debuggable.
     console.info('[preview] openExternal', url);

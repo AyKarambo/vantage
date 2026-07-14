@@ -94,6 +94,17 @@ describe('loadConfig — dataFolder rename + logFilter removal', () => {
     expect(cfg.dataFolder).toBe('D:/sync/vantage-data');
   });
 
+  it('defaults GEP notifications on (no local override)', async () => {
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.gepNotifications).toBe(true);
+  });
+
+  it('round-trips a ui.gepNotifications=false local override', async () => {
+    fs.writeFileSync(userConfigFile(), JSON.stringify({ ui: { gepNotifications: false } }), 'utf8');
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.gepNotifications).toBe(false);
+  });
+
   it('no longer honors the OW_SYNC_FILTER env override', async () => {
     const prev = process.env.OW_SYNC_FILTER;
     process.env.OW_SYNC_FILTER = 'Everything';

@@ -146,6 +146,9 @@ export interface OwStatsApi {
   /** Open a maintainer-provided external URL (mailto:/https:) via the sanctioned
    *  main-process shell.openExternal — the renderer window blocks navigation. */
   openExternal(url: string): Promise<void>;
+  /** Restart the app to apply a staged GEP package fix. The renderer only calls
+   *  this from the explicit "restart to apply" banner action. */
+  applyGepUpdate(): Promise<void>;
   /** Where Vantage's data folder currently lives (Settings screen + first run). */
   getDataLocation(): Promise<DataLocation>;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder. */
@@ -285,6 +288,7 @@ export const IPC_CHANNELS = {
   setDevKey: 'settings:set-dev-key',
   getAppInfo: 'app:info',
   openExternal: 'app:open-external',
+  applyGepUpdate: 'app:apply-gep-update',
   getDataLocation: 'settings:get-data-location',
   chooseDataFolder: 'settings:choose-data-folder',
   setDataFolder: 'settings:set-data-folder',

@@ -133,6 +133,8 @@ export interface DataProvider {
   getAppInfo(): AppInfo;
   /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
   openExternal(url: string): Promise<void>;
+  /** Restart the app to apply a staged GEP package fix (user-initiated only). */
+  applyGepUpdate(): void;
   /** Where Vantage's data folder currently lives (DB + manual data). */
   getDataLocation(): DataLocation;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder; async (shows a dialog). */

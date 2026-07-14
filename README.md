@@ -468,6 +468,15 @@ surfaced instead of hidden). Click the indicator for details: last event time, e
 match state, attach time. In demo mode it always reads "No live feed". State transitions are
 written to the debug log.
 
+When an **Overwatch patch breaks Overwolf's game-event feed** (events stop until Overwolf ships a
+fixed GEP package), Vantage polls Overwolf's public status feed and shows an **app-wide banner**
+making clear it's an Overwolf-side outage — not a Vantage bug — and clears it the moment the feed
+recovers. It also fires an OS **notification** on the way down and back up (toggle in
+**Settings → App behavior → GEP alerts**; the banner always shows regardless). When Overwolf's fix
+lands as a staged package that needs a restart, the banner offers a **one-click "Restart to apply"**
+(Vantage never restarts on its own); when the fix applies live, it re-arms automatically. The loaded
+**GEP package version** is shown on the **About** screen so you can confirm a fix took.
+
 ## Debug log
 
 Every build — including releases — writes a structured log to `%APPDATA%/Vantage/logs/`

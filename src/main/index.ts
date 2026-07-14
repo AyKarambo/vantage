@@ -16,6 +16,9 @@ import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
 import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
+import { fetchServiceStatus } from './statusFeed';
+import { createGepServicePoller } from './gepServicePoller';
+import { decideGepNotification, nextNotifyBaseline, type ServiceStatus } from '../core/gepService';
 import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -341,6 +344,7 @@ function main(): void {
         runAtLogin: config.runAtLogin,
         demoPreference: config.ui.demoPreference,
         devMode: config.ui.devMode,
+        gepNotifications: config.ui.gepNotifications,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -363,11 +367,16 @@ function main(): void {
           saveLocalUiConfig({ devMode: patch.devMode });
           config = loadConfig();
         }
+        if (patch.gepNotifications !== undefined) {
+          saveLocalUiConfig({ gepNotifications: patch.gepNotifications });
+          config = loadConfig();
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
           demoPreference: config.ui.demoPreference,
           devMode: config.ui.devMode,
+          gepNotifications: config.ui.gepNotifications,
         };
       },
     },
@@ -384,6 +393,9 @@ function main(): void {
       // Truthful dev-mode read: unpackaged AND dev credentials in the env at
       // start (injected by scripts/ow-dev.mjs) — see core/devMode.
       devMode: computeDevMode({ packaged: app.isPackaged, env: process.env }),
+      // The loaded GEP package version (from the live status snapshot); '' until
+      // the package reports ready. Changes when Overwolf ships a fix.
+      gepPackageVersion: statusMonitor.current().gepPackageVersion ?? '',
     }),
     // Store the Overwolf dev key where the launcher reads it (~/.ow-cli/dev-key),
     // never in app config. Takes effect next launch (Dev Mode auth is start-time).
@@ -392,6 +404,10 @@ function main(): void {
       return { hasKey: hasDevKey() };
     },
     openExternal: (url) => shell.openExternal(url),
+    // Apply a staged GEP package fix by restarting the app — Overwolf installs
+    // downloaded packages on launch. Only ever called from the user's explicit
+    // "restart to apply" click (never automatic).
+    applyGepUpdate: () => { app.relaunch(); app.exit(0); },
     dataLocation: {
       get: () => ({ ...currentDataLocation(), ...(firstRunNeedsDataChoice ? { needsFirstRunChoice: true } : {}) }),
       choose: async (): Promise<DataLocationResult> => {
@@ -457,9 +473,23 @@ function main(): void {
     },
   });
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
+  let prevService: ServiceStatus | null = null;
   publishStatus = (p) => {
     dashboard.push(EVENT_CHANNELS.onGepStatus, p);
     tray.setHealth(p.state);
+    // Notify on a service down/recovery transition (banner always shows; only the
+    // toast is gated by the user's setting). prevService is tracked regardless, so
+    // re-enabling mid-outage doesn't fire on a stale diff.
+    const nextService: ServiceStatus | null = p.serviceStatus
+      ? { level: p.serviceStatus, ...(p.serviceMessage ? { message: p.serviceMessage } : {}) }
+      : null;
+    if (config.ui.gepNotifications) {
+      const note = decideGepNotification(prevService, nextService);
+      if (note) tray.notify(note.title, note.body);
+    }
+    // Carry the last authoritative reading forward so a transient 'unknown' can't
+    // mask a real down/recovery transition (nor re-fire on re-enable).
+    prevService = nextNotifyBaseline(prevService, nextService);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
@@ -478,8 +508,19 @@ function main(): void {
       tray.setState({ status: statusText(s, history.count(), config.ui.demoPreference === 'on') });
       statusMonitor.setLastError(s.lastError);
       statusMonitor.setAttached(s.gameRunning && s.enabled);
+      statusMonitor.setGepPackageVersion(s.gepVersion);
+      statusMonitor.setUpdateStaged(Boolean(s.updateStaged));
     });
     gep.on('log', log.adapter('gep'));
+
+    // Poll Overwolf's public GEP service-status feed so an Overwatch-patch outage
+    // (and its recovery) is surfaced authoritatively — not guessed from local
+    // signals. Sends only the game id; makes no outage claim when unreachable.
+    createGepServicePoller({
+      fetchStatus: () => fetchServiceStatus(config.overwatchGameId),
+      onStatus: (s) => statusMonitor.setServiceStatus(s),
+      log: (scope, message, fields) => log.info(scope, message, fields),
+    }).start();
 
     // Testing only: capture the live GEP stream to userData/recordings/*.jsonl so
     // a real session can be replayed later (OW_SYNC_REPLAY) without the game.
