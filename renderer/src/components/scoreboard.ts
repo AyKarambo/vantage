@@ -27,7 +27,12 @@ const STATS: StatColumn[] = [
   { key: 'mitigation', label: 'MIT', compact: true },
 ];
 
-export function scoreboard(entries: ScoreboardEntry[]): HTMLElement {
+/**
+ * @param onPlayer optional drill-down for a non-local player's name — when
+ *   supplied, each opponent/teammate name renders as a link that calls it with
+ *   the player's name (the tracked player's own row stays plain).
+ */
+export function scoreboard(entries: ScoreboardEntry[], onPlayer?: (name: string) => void): HTMLElement {
   // Perks are not in the feed today — the column only exists if data ever shows up.
   const hasPerks = entries.some((e) => e.perks?.length);
   const columns = `28px minmax(90px, 130px) minmax(0, 1fr)${hasPerks ? ' minmax(70px, 110px)' : ''} repeat(3, 42px) repeat(3, 58px)`;
@@ -43,7 +48,7 @@ export function scoreboard(entries: ScoreboardEntry[]): HTMLElement {
   teams.forEach((team, i) => {
     if (i > 0) blocks.push(h('div', { class: 'sb-vs' }, h('span', null, 'VS')));
     blocks.push(h('div', { class: 'sb-team-label' }, team.label));
-    blocks.push(...team.entries.map((e) => row(e, columns, hasPerks, best)));
+    blocks.push(...team.entries.map((e) => row(e, columns, hasPerks, best, onPlayer)));
   });
   if (teams.length === 1) {
     blocks.push(
@@ -83,17 +88,29 @@ function headerRow(columns: string, hasPerks: boolean): HTMLElement {
   );
 }
 
-function row(e: ScoreboardEntry, columns: string, hasPerks: boolean, best: Map<StatKey, number>): HTMLElement {
+function row(e: ScoreboardEntry, columns: string, hasPerks: boolean, best: Map<StatKey, number>, onPlayer?: (name: string) => void): HTMLElement {
   return h('div', {
     class: `sb-row${e.isLocal ? ' is-you' : ''}`,
     style: { gridTemplateColumns: columns },
   },
     h('span', { class: 'sb-role' }, roleIcon(e.role)),
     h('span', { class: 'sb-hero' }, e.hero ?? '—'),
-    h('span', { class: 'sb-name' }, e.name, e.isLocal ? h('span', { class: 'sb-you' }, 'you') : null),
+    h('span', { class: 'sb-name' }, nameNode(e, onPlayer), e.isLocal ? h('span', { class: 'sb-you' }, 'you') : null),
     hasPerks ? h('span', { class: 'sb-perks' }, e.perks?.join(', ') || '—') : null,
     ...STATS.map((s) => statCell(e[s.key], s, best.get(s.key))),
   );
+}
+
+/** The player name: a drill-down link for identifiable opponents/teammates,
+ *  plain text for the tracked player (yourself) or an unidentified slot. */
+function nameNode(e: ScoreboardEntry, onPlayer?: (name: string) => void): Node {
+  const clickable = onPlayer && !e.isLocal && e.name && e.name !== 'Unknown';
+  if (!clickable) return document.createTextNode(e.name);
+  return h('button', {
+    class: 'inline-link',
+    title: `See the matches you shared with ${e.name}`,
+    on: { click: (ev) => { ev.stopPropagation(); onPlayer!(e.name); } },
+  }, e.name);
 }
 
 function statCell(value: number | undefined, col: StatColumn, best: number | undefined): HTMLElement {

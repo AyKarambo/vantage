@@ -9,7 +9,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
-import type { MatchDetail } from './matchDetail';
+import type { MatchDetail, PlayerMatchHistory } from './matchDetail';
 import type {
   ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress,
   CleanupDuplicatesResult,
@@ -32,6 +32,8 @@ export interface OwStatsApi {
   heroDetail(hero: string, filters: DashboardFilters): Promise<HeroDetail>;
   /** Full drill-down for one match; null when the id is unknown. */
   matchDetail(matchId: string, filters: DashboardFilters): Promise<MatchDetail | null>;
+  /** Every stored match shared with a player (local index); null for an empty/unknown name. */
+  playerHistory(name: string): Promise<PlayerMatchHistory | null>;
   exportNotion(filters: DashboardFilters): Promise<ExportResult>;
   notionStatus(): Promise<NotionStatus>;
   setNotionToken(token: string): Promise<NotionStatus>;
@@ -226,6 +228,7 @@ export const IPC_CHANNELS = {
   getDashboard: 'dashboard:data',
   heroDetail: 'dashboard:hero-detail',
   matchDetail: 'dashboard:match-detail',
+  playerHistory: 'dashboard:player-history',
   exportNotion: 'dashboard:export-notion',
   notionStatus: 'notion:status',
   setNotionToken: 'notion:set-token',

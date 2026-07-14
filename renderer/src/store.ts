@@ -15,6 +15,7 @@ export type ViewId =
   | 'review'
   | 'matches'
   | 'matchDetail'
+  | 'playerHistory'
   | 'maps'
   | 'heroes'
   | 'focus'
@@ -39,6 +40,8 @@ export interface ViewParams {
   /** Targets: prefill the builder with this name (self-rated) on open — the
    *  Focus screen's per-map "＋ target" quick-create. */
   prefillName?: string;
+  /** playerHistory: the player whose shared-match history to show (a name/battleTag). */
+  playerName?: string;
 }
 
 /** Every `ViewParams` key, kept in sync by the compiler: adding a key here
@@ -50,6 +53,7 @@ const VIEW_PARAM_KEYS: Required<{ [K in keyof ViewParams]: true }> = {
   day: true,
   flag: true,
   prefillName: true,
+  playerName: true,
 };
 
 /** Structural equality over every `ViewParams` key — used by `setView`'s
@@ -116,7 +120,7 @@ class Store {
   setView(view: ViewId, params: ViewParams = {}): void {
     if (view === this.state.view && sameParams(params, this.state.params)) return;
     // Detail pages restore to their parent list on relaunch.
-    prefs.set('view', view === 'matchDetail' ? 'matches' : view);
+    prefs.set('view', view === 'matchDetail' || view === 'playerHistory' ? 'matches' : view);
     this.patch({ view, params });
   }
 

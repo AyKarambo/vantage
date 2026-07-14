@@ -43,7 +43,7 @@ export type {
 } from './masterData';
 
 // Match drill-down payloads
-export type { ScoreboardEntry, PlayerEncounter, MatchDetail } from './matchDetail';
+export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, PlayerMatchHistory, MatchDetail } from './matchDetail';
 
 // Notion export/import payloads
 export type {

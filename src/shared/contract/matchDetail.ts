@@ -41,6 +41,44 @@ export interface PlayerEncounter {
   results?: { wins: number; losses: number };
 }
 
+/** One stored match the tracked player shared with a specific other player. */
+export interface PlayerSharedMatch {
+  matchId: string;
+  timestamp: number;
+  map: string;
+  mapType: string;
+  /** The tracked player's result that match. */
+  result: Result;
+  /** true = they were on your team; false = enemy; absent = teams unreported. */
+  sameTeam?: boolean;
+  /** The hero they played (their roster `heroName`), when reported. */
+  hero?: string;
+  /** Which of your accounts played it. */
+  account: string;
+}
+
+/**
+ * Every stored match the tracked player shared with one other player, plus a W/L
+ * summary. Local, GEP-only, never exported (guardrail #5) — derived at query time
+ * from the rosters stored on match history, keyed by normalized name.
+ */
+export interface PlayerMatchHistory {
+  /** Best display name (prefers the #-tagged battleTag). */
+  name: string;
+  /** Number of shared matches. */
+  encounters: number;
+  /** ms epoch of the most recent shared match. */
+  lastSeen: number;
+  /** The tracked player's decided W/L across all shared matches. */
+  results: { wins: number; losses: number };
+  /** W/L split for matches where they were on your team (team relation known). */
+  sameTeam: { wins: number; losses: number };
+  /** W/L split for matches where they were on the enemy team (team relation known). */
+  enemyTeam: { wins: number; losses: number };
+  /** The shared matches, newest first. */
+  matches: PlayerSharedMatch[];
+}
+
 /** Full match drill-down payload. Optional sections degrade per data tier. */
 export interface MatchDetail {
   matchId: string;
