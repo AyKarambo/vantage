@@ -103,7 +103,8 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     isActive: t.isActive,
     archivedAt: t.archivedAt,
     // The Focus Trend learning curve — live targets only (archived stay light).
-    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t) }),
+    // Measured: its execution (hit-rate) overlay is margin-sensitive, so thread it.
+    ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t, margin) }),
   };
 }
 

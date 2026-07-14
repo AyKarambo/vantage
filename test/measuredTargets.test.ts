@@ -4,7 +4,7 @@ import type { Result } from '../src/core/model';
 import {
   buildTargets, parseMeasuredRule, matchStatValue, evaluateMeasured,
   foldMeasuredGradesForExport, effectiveImprovementGrade, matchExportSignature,
-  TARGET_TEMPLATES, type AuthoredTarget,
+  targetLearningCurve, TARGET_TEMPLATES, type AuthoredTarget,
 } from '../src/core/targets';
 
 let seq = 0;
@@ -263,6 +263,18 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
     const [s] = buildTargets(games, false, [t]);
     expect(s.hits).toBe(1); // derived hit wins over the stored 'missed'
     expect(s.attempts).toBe(1);
+  });
+
+  it('threads the partial margin into the Focus Trend points (measured grade labels)', () => {
+    const t = target('Damage ≥ 10000', { createdAt: 0, activatedAt: 0 });
+    const games = [
+      ...Array.from({ length: 5 }, (_, i) => game({ timestamp: 100 + i, durationMinutes: 10, perHero: [hero({ damage: 12000 })] })),
+      game({ timestamp: 200, durationMinutes: 10, perHero: [hero({ damage: 8500 })] }), // boundary: 8500 vs 10000
+    ];
+    const gradeAt200 = (margin: number): string | undefined =>
+      targetLearningCurve(games, t, margin).points.find((p) => p.timestamp === 200)?.grade;
+    expect(gradeAt200(0.2)).toBe('partial'); // 20% band → ≥ 8000
+    expect(gradeAt200(0.1)).toBe('missed');  // 10% band → ≥ 9000
   });
 
   it('threads the partial margin into the spark (partial vs missed)', () => {
