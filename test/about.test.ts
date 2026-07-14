@@ -12,6 +12,7 @@ const INFO: AppInfo = {
   platform: 'win32',
   osRelease: '10.0.26200',
   packaged: true,
+  gepPackageVersion: '309.0.0',
 };
 
 describe('buildAboutRows', () => {
@@ -19,10 +20,15 @@ describe('buildAboutRows', () => {
     const rows = buildAboutRows(INFO);
     expect(rows[0]).toEqual({ label: 'Version', value: '0.1.0' });
     expect(rows.map((r) => r.label)).toEqual([
-      'Version', 'Build', 'Electron', 'Chromium', 'Node', 'V8', 'Platform', 'OS',
+      'Version', 'Build', 'Electron', 'Chromium', 'Node', 'V8', 'GEP package', 'Platform', 'OS',
     ]);
     expect(rows.find((r) => r.label === 'Electron')?.value).toBe('39.6.1');
     expect(rows.find((r) => r.label === 'OS')?.value).toBe('10.0.26200');
+    expect(rows.find((r) => r.label === 'GEP package')?.value).toBe('309.0.0');
+  });
+
+  it('shows an em dash for the GEP package version before it loads', () => {
+    expect(buildAboutRows({ ...INFO, gepPackageVersion: '' }).find((r) => r.label === 'GEP package')?.value).toBe('—');
   });
 
   it('maps packaged → Installed and dev → Dev build', () => {

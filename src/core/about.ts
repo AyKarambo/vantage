@@ -23,6 +23,7 @@ export function buildAboutRows(info: AppInfo): AboutRow[] {
     { label: 'Chromium', value: info.chromium },
     { label: 'Node', value: info.node },
     { label: 'V8', value: info.v8 },
+    { label: 'GEP package', value: info.gepPackageVersion || '—' },
     { label: 'Platform', value: info.platform },
     { label: 'OS', value: info.osRelease },
   ];
