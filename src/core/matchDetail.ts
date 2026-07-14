@@ -10,6 +10,7 @@ import { resolveRole } from './resolvers/role';
 import { roleOfHero } from './heroes';
 import { playerHistory } from './playerIndex';
 import { mergeHeroStats } from './perHero';
+import { measuredGradesForMatch, type AuthoredTarget } from './targets';
 
 /**
  * Full drill-down payload for one match. Pure and I/O-free, mirroring the
@@ -21,6 +22,11 @@ import { mergeHeroStats } from './perHero';
  * the dashboard filters have moved on, and the player index spans everything.
  * `competitiveContext` is the filter-scoped set the progression estimate is
  * computed from (defaults to `all`).
+ *
+ * `activeMeasured` are the currently-active measured (⚡) targets; when passed,
+ * the payload carries their calculated grades for this match (`measuredGrades`)
+ * so the Grades card can show them mode-aware. `margin` is the user's
+ * partial-credit margin (defaults to the shared constant when omitted).
  */
 export function matchDetail(
   all: GameRecord[],
@@ -28,6 +34,8 @@ export function matchDetail(
   competitiveContext: GameRecord[] = all,
   anchors: RankAnchorMap = {},
   mapModeOf: MapModeResolver = makeMapMode(DEFAULT_MASTER_DATA.maps),
+  activeMeasured: AuthoredTarget[] = [],
+  margin?: number,
 ): MatchDetail | null {
   const game = all.find((g) => g.matchId === matchId);
   if (!game) return null;
@@ -50,6 +58,7 @@ export function matchDetail(
     perHero: mergeHeroStats(game.perHero ?? []),
     mental: game.mental,
     review: game.review,
+    measuredGrades: activeMeasured.length ? measuredGradesForMatch(game, activeMeasured, margin) : undefined,
     scoreboard: scoreboardOf(game),
     competitive: competitiveOf(game, competitiveContext, all, anchors),
     playerHistory: playerHistory(all, game),

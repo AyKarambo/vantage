@@ -14,7 +14,7 @@ import type {
   GradingSettings, RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
-import type { AuthoredTarget } from '../../src/core/targets';
+import { activeMeasuredTargets, type AuthoredTarget } from '../../src/core/targets';
 import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
@@ -309,7 +309,7 @@ const mock: OwStatsApi = {
   matchDetail: async (matchId: string, f: DashboardFilters) => {
     const games = dataset();
     const eff = effectiveMasterData();
-    return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps));
+    return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin);
   },
   exportNotion: async () => {
     if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };

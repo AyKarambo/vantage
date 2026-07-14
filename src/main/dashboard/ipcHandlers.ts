@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
+import { activeMeasuredTargets } from '../../core/targets';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
@@ -110,7 +111,10 @@ export function registerDashboardIpc(provider: DataProvider): void {
     const master = provider.effectiveMasterData();
     const mapModeOf = makeMapMode(master.maps);
     const filtered = applyFilters(games, filters ?? {}, master.seasons.map((s) => s.start));
-    return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf);
+    // Same active-measured set + partial margin the dashboard rows use, so the
+    // match-detail Grades card shows calculated grades identically.
+    const activeMeasured = activeMeasuredTargets(provider.manualTargets());
+    return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured, provider.getGrading().partialMargin);
   });
 
   // Notion sync screen.
