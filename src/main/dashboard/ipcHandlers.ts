@@ -8,6 +8,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { GradingSettings } from '../../core/gradingSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
@@ -79,6 +80,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
         staleness: provider.getStaleness(),
         readiness: provider.getReadiness(),
         sessionSettings: provider.getSessionSettings(),
+        grading: provider.getGrading(),
         rankAnchors: provider.rankAnchorMap(),
       },
       provider.effectiveMasterData(),
@@ -190,6 +192,10 @@ export function registerDashboardIpc(provider: DataProvider): void {
   // "Current session" gap threshold.
   handle(ch.getSessionSettings, () => provider.getSessionSettings());
   handle(ch.setSessionSettings, (_e, input: SessionSettings) => provider.setSessionSettings(input));
+
+  // Measured-grade settings (partial-credit margin).
+  handle(ch.getGrading, () => provider.getGrading());
+  handle(ch.setGrading, (_e, input: GradingSettings) => provider.setGrading(input));
 
   // Release debug log (viewer ring, session level, renderer error forwarding).
   handle(ch.getLogEntries, () => provider.getLogEntries());

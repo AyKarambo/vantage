@@ -8,6 +8,7 @@ import { normalizeBreakReminder, type BreakReminderSettings } from '../core/brea
 import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
 import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { normalizeSessionSettings, type SessionSettings } from '../core/sessionSettings';
+import { normalizeGradingSettings, type GradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, type LogLevel } from '../core/logging';
@@ -82,6 +83,8 @@ export interface DataProviderDeps {
   persistReadiness(s: ReadinessSettings): void;
   /** Persist a new session-gap threshold into the user's local config file. */
   persistSessionSettings(s: SessionSettings): void;
+  /** Persist the measured-grade settings (partial-credit margin) into the user's local config file. */
+  persistGrading(s: GradingSettings): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
   recordGame(g: GameRecord): boolean;
   /** Match-pipeline entry to complete a held pending match (takes it out of the pending store into history). */
@@ -442,6 +445,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       config.sessionSettings = normalizeSessionSettings(input);
       deps.persistSessionSettings(config.sessionSettings);
       return config.sessionSettings;
+    },
+    getGrading: () => deps.getConfig().grading,
+    setGrading: (input) => {
+      const config = deps.getConfig();
+      config.grading = normalizeGradingSettings(input);
+      deps.persistGrading(config.grading);
+      return config.grading;
     },
     getStaleness: () => deps.getConfig().staleness,
     setStaleness: (input) => {

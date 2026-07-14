@@ -8,6 +8,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { GradingSettings } from '../../core/gradingSettings';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail } from './matchDetail';
 import type {
@@ -106,6 +107,10 @@ export interface OwStatsApi {
   getSessionSettings(): Promise<SessionSettings>;
   /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
   setSessionSettings(input: SessionSettings): Promise<SessionSettings>;
+  /** The currently persisted measured-grade settings (partial-credit margin). */
+  getGrading(): Promise<GradingSettings>;
+  /** Persist new measured-grade settings; returns the persisted (clamped) value. */
+  setGrading(input: GradingSettings): Promise<GradingSettings>;
   /** Databases the Notion integration can see, for the picker. */
   listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
   /** Pages the Notion integration can see — candidate parents for auto-create. */
@@ -261,6 +266,8 @@ export const IPC_CHANNELS = {
   setReadiness: 'settings:set-readiness',
   getSessionSettings: 'settings:get-session',
   setSessionSettings: 'settings:set-session',
+  getGrading: 'settings:get-grading',
+  setGrading: 'settings:set-grading',
   listNotionDatabases: 'notion:list-databases',
   listNotionPages: 'notion:list-pages',
   selectNotionDatabase: 'notion:select-database',

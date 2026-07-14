@@ -11,7 +11,7 @@ import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
   DashboardFilters, DataLocationResult, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
-  RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
+  GradingSettings, RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import type { AuthoredTarget } from '../../src/core/targets';
@@ -35,6 +35,7 @@ import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/b
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
+import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -45,6 +46,7 @@ const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
 const STALENESS_KEY = 'vantagePreviewStaleness';
 const READINESS_KEY = 'vantagePreviewReadiness';
 const SESSION_SETTINGS_KEY = 'vantagePreviewSessionSettings';
+const GRADING_KEY = 'vantagePreviewGrading';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
 const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
@@ -146,6 +148,10 @@ const savedSessionSettings = loadMap<unknown>(SESSION_SETTINGS_KEY) as Partial<S
 let sessionSettings: SessionSettings = Object.keys(savedSessionSettings).length
   ? normalizeSessionSettings(savedSessionSettings)
   : { ...DEFAULT_SESSION_SETTINGS };
+const savedGrading = loadMap<unknown>(GRADING_KEY) as Partial<GradingSettings>;
+let grading: GradingSettings = Object.keys(savedGrading).length
+  ? normalizeGradingSettings(savedGrading)
+  : { ...DEFAULT_GRADING_SETTINGS };
 
 // Saved reviews are overlaid onto the dataset so the pure core exercises the
 // full pipeline (inbox, mental merge, target scoring) exactly as in the app.
@@ -297,7 +303,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, rankAnchors: anchorMap() }, effectiveMasterData()),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap() }, effectiveMasterData()),
   heroDetail: async (hero: string, f: DashboardFilters) =>
     heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
@@ -630,6 +636,12 @@ const mock: OwStatsApi = {
     sessionSettings = normalizeSessionSettings(input);
     save(SESSION_SETTINGS_KEY, sessionSettings);
     return sessionSettings;
+  },
+  getGrading: async () => grading,
+  setGrading: async (input: GradingSettings) => {
+    grading = normalizeGradingSettings(input);
+    save(GRADING_KEY, grading);
+    return grading;
   },
   getLogEntries: async () => [...previewLog],
   getLogLevel: async () => previewLogLevel,
