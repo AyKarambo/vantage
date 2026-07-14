@@ -175,7 +175,7 @@ export class App {
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
-  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; epoch: number } | null = null;
+  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; playerName?: string; epoch: number } | null = null;
   /** The snapshot the filter bar was last built for. Background refreshes patch
    *  `refreshing`/`status` without changing `data`, so re-rendering the bar then
    *  would tear down its live controls mid-click and swallow the click — the
@@ -364,12 +364,14 @@ export class App {
       day: state.params.day,
       flag: state.params.flag,
       prefillName: state.params.prefillName,
+      playerName: state.params.playerName,
       epoch: state.renderEpoch,
     };
     const last = this.lastRendered;
     if (last && last.data === key.data && last.view === key.view
       && last.matchId === key.matchId && last.highlight === key.highlight
       && last.day === key.day && last.flag === key.flag && last.prefillName === key.prefillName
+      && last.playerName === key.playerName
       && last.epoch === key.epoch) return;
     // Having passed the equality check with every non-`data` field equal means
     // only the snapshot changed — a background refresh. If the user is pressing
@@ -379,14 +381,14 @@ export class App {
     // (see bindGlobals). Route/epoch changes fall through and render at once.
     if (this.contentPressed && last && last.view === key.view && last.matchId === key.matchId
       && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
-      && last.prefillName === key.prefillName && last.epoch === key.epoch) {
+      && last.prefillName === key.prefillName && last.playerName === key.playerName && last.epoch === key.epoch) {
       this.pendingContentRender = true;
       return;
     }
     // Remember where the outgoing route was scrolled; restore it when a
     // navigation (not a data refresh on the same route) returns here.
-    if (last) this.scrollMemory.set(routeKey(last.view, last.matchId), this.contentHost.scrollTop);
-    const navigated = !last || last.view !== key.view || last.matchId !== key.matchId;
+    if (last) this.scrollMemory.set(routeKey(last.view, last.matchId, last.playerName), this.contentHost.scrollTop);
+    const navigated = !last || last.view !== key.view || last.matchId !== key.matchId || last.playerName !== key.playerName;
     // A same-route re-render (e.g. a master-data edit round-tripping through
     // store.refresh()) replaces the DOM. That resets scrollTop to 0 and, because
     // a brand-new `.view` is mounted, replays the `rise-in` entry animation —
@@ -398,7 +400,7 @@ export class App {
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
     if (navigated) {
-      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId)) ?? 0;
+      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId, key.playerName)) ?? 0;
     } else {
       const view = this.contentHost.firstElementChild as HTMLElement | null;
       if (view) view.style.animation = 'none';
@@ -701,8 +703,10 @@ export class App {
   }
 }
 
-function routeKey(view: ViewId, matchId?: string): string {
-  return matchId ? `${view}:${matchId}` : view;
+function routeKey(view: ViewId, matchId?: string, playerName?: string): string {
+  if (matchId) return `${view}:${matchId}`;
+  if (playerName) return `${view}:@${playerName}`;
+  return view;
 }
 
 /**
