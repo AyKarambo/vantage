@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { playerHistory } from '../src/core/playerIndex';
+import { playerHistory, playerMatchHistory } from '../src/core/playerIndex';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, RosterPlayer } from '../src/core/model';
 
@@ -79,5 +79,61 @@ describe('playerHistory', () => {
     const dup = game({ result: 'Win', roster: [me, other('Nova#11214'), other('nova')] });
     const history = playerHistory([dup, target], target);
     expect(history[0].encounters).toBe(1);
+  });
+});
+
+const meT = (team: number): RosterPlayer => ({ battleTag: 'Karambo#21234', heroName: 'Tracer', team, isLocal: true });
+const them = (battleTag: string, team: number, heroName = 'Ana'): RosterPlayer => ({ battleTag, heroName, team });
+
+describe('playerMatchHistory', () => {
+  it('lists every shared match newest-first with team relation, hero + a W/L split', () => {
+    const all = [
+      game({ result: 'Win', matchId: 'a', timestamp: 3000, map: 'Ilios', roster: [meT(0), them('Nova#11214', 0, 'Ana')] }),  // teammate, win
+      game({ result: 'Loss', matchId: 'b', timestamp: 5000, map: 'Nepal', roster: [meT(1), them('Nova#11214', 0, 'Kiriko')] }), // enemy, loss
+      game({ result: 'Win', matchId: 'c', timestamp: 1000, roster: [meT(0), them('Ghost#5', 1)] }), // different player
+    ];
+    const h = playerMatchHistory(all, 'Nova#11214')!;
+    expect(h.name).toBe('Nova#11214');
+    expect(h.encounters).toBe(2);
+    expect(h.lastSeen).toBe(5000);
+    expect(h.matches.map((m) => m.matchId)).toEqual(['b', 'a']); // newest first
+    expect(h.matches[0]).toMatchObject({ map: 'Nepal', result: 'Loss', sameTeam: false, hero: 'Kiriko' });
+    expect(h.matches[1]).toMatchObject({ map: 'Ilios', result: 'Win', sameTeam: true, hero: 'Ana' });
+    expect(h.results).toEqual({ wins: 1, losses: 1 });
+    expect(h.sameTeam).toEqual({ wins: 1, losses: 0 });
+    expect(h.enemyTeam).toEqual({ wins: 0, losses: 1 });
+  });
+
+  it('returns a single match when met once', () => {
+    const h = playerMatchHistory([game({ result: 'Win', roster: [meT(0), them('Solo#1', 0)] })], 'Solo#1')!;
+    expect(h.encounters).toBe(1);
+    expect(h.matches).toHaveLength(1);
+  });
+
+  it('normalizes names and prefers the #-tagged display', () => {
+    const all = [
+      game({ result: 'Win', roster: [meT(0), them('vex', 0)] }),
+      game({ result: 'Loss', roster: [meT(0), them('VEX#9999', 1)] }),
+    ];
+    const h = playerMatchHistory(all, 'vex')!;
+    expect(h.encounters).toBe(2);
+    expect(h.name).toBe('VEX#9999');
+  });
+
+  it('never targets the tracked (local) player, and returns null for an empty/unknown name', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), them('Nova#11214', 0)] })];
+    expect(playerMatchHistory(all, 'Karambo#21234')).toBeNull(); // local player excluded
+    expect(playerMatchHistory(all, '')).toBeNull();
+    expect(playerMatchHistory(all, 'Nobody#0')).toBeNull();
+  });
+
+  it('omits the team relation when the feed did not report teams', () => {
+    const meNoTeam: RosterPlayer = { battleTag: 'Karambo#21234', heroName: 'Tracer', isLocal: true };
+    const themNoTeam: RosterPlayer = { battleTag: 'Nova#11214', heroName: 'Ana' };
+    const h = playerMatchHistory([game({ result: 'Win', roster: [meNoTeam, themNoTeam] })], 'Nova#11214')!;
+    expect(h.matches[0].sameTeam).toBeUndefined();
+    expect(h.sameTeam).toEqual({ wins: 0, losses: 0 });
+    expect(h.enemyTeam).toEqual({ wins: 0, losses: 0 });
+    expect(h.results).toEqual({ wins: 1, losses: 0 }); // still counts your result
   });
 });
