@@ -17,6 +17,10 @@ export interface GepStatus {
   gameRunning: boolean;
   enabled: boolean;
   lastError?: string;
+  /** The loaded GEP package version (from the package manager), e.g. '309.0.0'. */
+  gepVersion?: string;
+  /** A fixed GEP package is downloaded and awaiting a restart to apply. */
+  updateStaged?: boolean;
 }
 
 /** A GEP info update / game event as delivered to the listeners. */
@@ -66,9 +70,45 @@ export class GepService extends EventEmitter {
     }
     packages.on('ready', (_e: unknown, packageName: string, version: string) => {
       if (packageName !== 'gep') return;
+      this.status = { ...this.status, gepVersion: version };
       this.emit('log', `gep package ready: ${version}`);
+      this.checkPendingUpdates();
       this.onGepReady();
     });
+    // A fixed GEP package that landed WHILE we were running: capture the new
+    // version and re-arm live (onGepReady re-arms setRequiredFeatures when a game
+    // is up). Best-effort — updates that need a restart come via the event below.
+    packages.on('updated', (_e: unknown, packageName: string, version: string) => {
+      if (packageName !== 'gep') return;
+      this.status = { ...this.status, gepVersion: version, updateStaged: false };
+      this.emit('log', `gep package updated at runtime: ${version} — re-arming`);
+      this.onGepReady();
+    });
+    // A fixed GEP package is downloaded but needs a restart to apply → the app
+    // surfaces a "restart to apply" prompt (never auto-restarts).
+    packages.on('package-update-pending', (_e: unknown, info: Array<{ name?: string; version?: string }>) => {
+      if (!Array.isArray(info) || !info.some((p) => p?.name === 'gep')) return;
+      this.status = { ...this.status, updateStaged: true };
+      this.emit('log', 'gep package update staged — restart to apply');
+      this.emit('status', this.getStatus());
+    });
+  }
+
+  /** Was a GEP package fix already staged at startup (needs a restart)? Defensive —
+   *  older package-manager builds may lack `hasPendingUpdates`. */
+  private checkPendingUpdates(): void {
+    try {
+      const fn = this.packages?.hasPendingUpdates;
+      if (typeof fn !== 'function') return;
+      const res = fn.call(this.packages) as { hasPendingUpdate?: boolean; details?: Array<{ name?: string }> };
+      const staged = Boolean(res?.hasPendingUpdate) && (res.details ?? []).some((p) => p?.name === 'gep');
+      if (staged) {
+        this.status = { ...this.status, updateStaged: true };
+        this.emit('log', 'gep package update already staged at startup — restart to apply');
+      }
+    } catch (err) {
+      this.emit('log', 'hasPendingUpdates check failed', String(err));
+    }
   }
 
   private onGepReady(): void {
@@ -116,6 +156,14 @@ export class GepService extends EventEmitter {
       this.emit('status', this.getStatus());
       this.emit('log', 'gep-error', gameId, error);
     });
+
+    // Re-arm when re-entering onGepReady after a runtime package update while a
+    // game is already up (first-ready has gameRunning=false, so this no-ops then).
+    if (this.status.gameRunning) {
+      this.gep.setRequiredFeatures(this.overwatchGameId, undefined).catch((err) =>
+        this.emit('log', 'setRequiredFeatures (re-arm) failed', String(err)),
+      );
+    }
 
     this.emit('status', this.getStatus());
     this.logSupportedGames();

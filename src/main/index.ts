@@ -386,6 +386,9 @@ function main(): void {
       // Truthful dev-mode read: unpackaged AND dev credentials in the env at
       // start (injected by scripts/ow-dev.mjs) — see core/devMode.
       devMode: computeDevMode({ packaged: app.isPackaged, env: process.env }),
+      // The loaded GEP package version (from the live status snapshot); '' until
+      // the package reports ready. Changes when Overwolf ships a fix.
+      gepPackageVersion: statusMonitor.current().gepPackageVersion ?? '',
     }),
     // Store the Overwolf dev key where the launcher reads it (~/.ow-cli/dev-key),
     // never in app config. Takes effect next launch (Dev Mode auth is start-time).
@@ -394,6 +397,10 @@ function main(): void {
       return { hasKey: hasDevKey() };
     },
     openExternal: (url) => shell.openExternal(url),
+    // Apply a staged GEP package fix by restarting the app — Overwolf installs
+    // downloaded packages on launch. Only ever called from the user's explicit
+    // "restart to apply" click (never automatic).
+    applyGepUpdate: () => { app.relaunch(); app.exit(0); },
     dataLocation: {
       get: () => ({ ...currentDataLocation(), ...(firstRunNeedsDataChoice ? { needsFirstRunChoice: true } : {}) }),
       choose: async (): Promise<DataLocationResult> => {
@@ -480,6 +487,8 @@ function main(): void {
       tray.setState({ status: statusText(s, history.count(), config.ui.demoPreference === 'on') });
       statusMonitor.setLastError(s.lastError);
       statusMonitor.setAttached(s.gameRunning && s.enabled);
+      statusMonitor.setGepPackageVersion(s.gepVersion);
+      statusMonitor.setUpdateStaged(Boolean(s.updateStaged));
     });
     gep.on('log', log.adapter('gep'));
 

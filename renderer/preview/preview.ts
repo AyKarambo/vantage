@@ -696,7 +696,9 @@ const mock: OwStatsApi = {
     osRelease: 'preview',
     packaged: false,
     devMode: false,
+    gepPackageVersion: 'preview',
   }),
+  applyGepUpdate: async () => { /* preview: restart is a no-op */ },
   openExternal: async (url: string) => {
     // No shell in the browser harness — echo the intent so links stay debuggable.
     console.info('[preview] openExternal', url);

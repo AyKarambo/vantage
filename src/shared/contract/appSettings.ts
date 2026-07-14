@@ -43,6 +43,8 @@ export interface AppInfo {
    * "Dev Mode" indicator; never true for a packaged build (see core/devMode).
    */
   devMode: boolean;
+  /** Loaded Overwolf GEP package version (e.g. '309.0.0'); '' until it reports ready. Changes when Overwolf ships a fix. */
+  gepPackageVersion: string;
 }
 
 /** Where Vantage's data folder (DB + manual data) currently lives (Settings screen). */

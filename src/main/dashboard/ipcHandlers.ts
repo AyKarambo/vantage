@@ -227,6 +227,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.setDevKey, (_e, key: string) => provider.setDevKey(key));
   handle(ch.getAppInfo, () => provider.getAppInfo());
   handle(ch.openExternal, (_e, url: string) => provider.openExternal(url));
+  handle(ch.applyGepUpdate, () => provider.applyGepUpdate());
 
   // Data-location (Settings "Data storage" card + first-run folder prompt).
   handle(ch.getDataLocation, () => provider.getDataLocation());
