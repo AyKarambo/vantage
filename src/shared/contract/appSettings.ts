@@ -18,6 +18,8 @@ export interface AppUiSettings {
    * only for unpackaged/dev runs; ignored by a packaged build.
    */
   devMode: boolean;
+  /** OS notifications when GEP events go down / come back (default on). */
+  gepNotifications: boolean;
 }
 
 export interface AppInfo {

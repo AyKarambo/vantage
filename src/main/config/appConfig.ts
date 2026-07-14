@@ -53,6 +53,8 @@ export interface UiConfig {
    * Inert for a packaged build (Dev Mode can't activate there).
    */
   devMode: boolean;
+  /** OS notifications on GEP service down/recovery (default true). */
+  gepNotifications: boolean;
   windowBounds?: WindowBounds;
 }
 
@@ -108,7 +110,7 @@ const DEFAULTS: AppConfig = {
   sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
   grading: { ...DEFAULT_GRADING_SETTINGS },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
-  ui: { closeToTray: true, demoPreference: 'unset', devMode: true },
+  ui: { closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true },
 };
 
 /** Per-user, machine-local files (survive app updates, never committed). */

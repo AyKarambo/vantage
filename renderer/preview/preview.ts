@@ -197,6 +197,7 @@ let appSettings: AppUiSettings = {
   runAtLogin: false,
   demoPreference: 'on',
   devMode: true,
+  gepNotifications: true,
   ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
 };
 // ?demo=on|off|unset overrides the persisted choice — lets design QA preview the

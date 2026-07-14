@@ -117,6 +117,12 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
             ? 'You have tracked games, so this has no visible effect — real data always wins. It applies again only if your history is empty.'
             : 'Preload a realistic sample season to explore the app. Turn it off to start from a clean slate.'),
       ),
+      h('div', null,
+        chip(s.gepNotifications ? 'GEP alerts: on' : 'GEP alerts: off', s.gepNotifications,
+          () => apply({ gepNotifications: !s.gepNotifications })),
+        h('div', { class: 'hint', style: { marginTop: '6px' } },
+          'Notify me when Overwatch game events go down (an Overwolf outage) and when they recover. The in-app banner shows either way.'),
+      ),
       devModeSection(s),
     );
   }

@@ -18,6 +18,7 @@ import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
 import { createGepServicePoller } from './gepServicePoller';
+import { decideGepNotification, type ServiceStatus } from '../core/gepService';
 import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -343,6 +344,7 @@ function main(): void {
         runAtLogin: config.runAtLogin,
         demoPreference: config.ui.demoPreference,
         devMode: config.ui.devMode,
+        gepNotifications: config.ui.gepNotifications,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -365,11 +367,16 @@ function main(): void {
           saveLocalUiConfig({ devMode: patch.devMode });
           config = loadConfig();
         }
+        if (patch.gepNotifications !== undefined) {
+          saveLocalUiConfig({ gepNotifications: patch.gepNotifications });
+          config = loadConfig();
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
           demoPreference: config.ui.demoPreference,
           devMode: config.ui.devMode,
+          gepNotifications: config.ui.gepNotifications,
         };
       },
     },
@@ -466,9 +473,21 @@ function main(): void {
     },
   });
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
+  let prevService: ServiceStatus | null = null;
   publishStatus = (p) => {
     dashboard.push(EVENT_CHANNELS.onGepStatus, p);
     tray.setHealth(p.state);
+    // Notify on a service down/recovery transition (banner always shows; only the
+    // toast is gated by the user's setting). prevService is tracked regardless, so
+    // re-enabling mid-outage doesn't fire on a stale diff.
+    const nextService: ServiceStatus | null = p.serviceStatus
+      ? { level: p.serviceStatus, ...(p.serviceMessage ? { message: p.serviceMessage } : {}) }
+      : null;
+    if (config.ui.gepNotifications) {
+      const note = decideGepNotification(prevService, nextService);
+      if (note) tray.notify(note.title, note.body);
+    }
+    prevService = nextService;
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
