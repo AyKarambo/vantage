@@ -23,6 +23,7 @@ import { rankParts } from '../../../src/core/rankDisplay';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
+import { playerHistory } from '../views/playerHistory';
 import { maps } from '../views/maps';
 import { heroes } from '../views/heroes';
 import { focus } from '../views/focus';
@@ -43,14 +44,15 @@ import { openOnboarding, shouldOnboard } from './onboarding';
 import { openFirstRunPrompt } from './firstRunPrompt';
 import { openDataLocationPrompt } from './dataLocationPrompt';
 
-// matchDetail is a parameterized view: registered here (routable) but not in
-// NAV — the sidebar keeps Matches highlighted while it is active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about };
+// matchDetail and playerHistory are parameterized views: registered here
+// (routable) but not in NAV — the sidebar keeps Matches highlighted while active.
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
- *  unaffected by it, so showing the bar would imply a control that does nothing. */
-const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about']);
+ *  unaffected by it, so showing the bar would imply a control that does nothing.
+ *  playerHistory is a cross-history drill-down over the full local index. */
+const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory']);
 
 interface NavItem {
   id: ViewId;
@@ -431,7 +433,7 @@ export class App {
     const gradedOverlap = d ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId)).length : 0;
     const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
     // Parameterized views highlight their parent list in the sidebar.
-    const activeNav: ViewId = state.view === 'matchDetail' ? 'matches' : state.view;
+    const activeNav: ViewId = state.view === 'matchDetail' || state.view === 'playerHistory' ? 'matches' : state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews);
 
