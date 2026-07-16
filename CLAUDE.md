@@ -37,6 +37,21 @@ debugging any Overwolf / Electron / GEP code (adapted from Overwolf's
   bridge that file into those env vars via `scripts/ow-dev.mjs`. Credentials never enter git
   (guardrail 2).
 
+## Code intelligence (Serena MCP)
+A project-scoped **[Serena](https://github.com/oraios/serena)** MCP server (LSP-backed, TypeScript)
+is wired in `.mcp.json`; its tools appear as `mcp__serena__*` once your client loads the project.
+Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run) — not installed by
+`npm install`.
+- **Prefer Serena for code navigation & symbol edits over blind `Read` / `Grep`.** It resolves real
+  symbols through the language server, so it's more accurate and cheaper than scanning files:
+  `get_symbols_overview` (map a file), `find_symbol` (definition + body), `find_referencing_symbols`
+  (blast radius before a change), and symbol-level edits `replace_symbol_body` / `insert_after_symbol`
+  / `insert_before_symbol` / `rename_symbol` / `safe_delete_symbol`, plus `get_diagnostics_for_file`.
+- **Not a hard rule.** Plain `Read` is fine for small/whole files, config, docs, and non-code — don't
+  spin up the language server when a direct read is simpler.
+- Serena ships its own manual: call `initial_instructions` before a larger coding task for its usage
+  guidance. If the server isn't connected, say so and fall back to `Read` / `Grep` — don't guess.
+
 ## Build & Test
 - `npm test` — run the vitest suite once (`test:watch` for watch mode).
 - `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`), no emit.
