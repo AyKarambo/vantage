@@ -89,8 +89,14 @@ export interface MatchDetail {
   mapType: string;
   result: Result;
   gameType: string;
-  /** 'manual' = hand-logged (fully editable); 'gep' = auto-tracked (facts locked). */
+  /** 'manual' = hand-logged; 'gep' = auto-tracked. Both are editable; a hand-edited
+   *  GEP match keeps `source:'gep'` and gains {@link factsEditedAt}. */
   source: 'manual' | 'gep';
+  /**
+   * Epoch ms of the last hand-correction to an auto-tracked match's game facts,
+   * if any — drives the subtle "edited" marker. Only ever set on `source:'gep'`.
+   */
+  factsEditedAt?: number;
   /** Logged skill-rating change for this competitive match, in %-points. */
   srDelta?: number;
   durationMinutes?: number;
