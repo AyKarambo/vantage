@@ -50,6 +50,7 @@ export function matchDetail(
     result: game.result,
     gameType: game.gameType,
     source: sourceOf(game),
+    factsEditedAt: game.factsEditedAt,
     srDelta: game.srDelta,
     durationMinutes: game.durationMinutes,
     performance: game.performance,

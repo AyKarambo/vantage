@@ -239,6 +239,72 @@ describe('editMatch — Set current rank (back-compute)', () => {
   });
 });
 
+describe('editMatch — auto-tracked (GEP) game facts', () => {
+  function editHarness(game: GameRecord) {
+    const patches: Array<Partial<GameRecord>> = [];
+    const deps = {
+      history: {
+        all: () => [game],
+        editManual: (_id: string, patch: Partial<GameRecord>) => { patches.push(patch); },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    return { provider: createDataProvider(deps), patches };
+  }
+  const gepGame = (extra: Partial<GameRecord> = {}): GameRecord => ({
+    matchId: 'gep-1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+    result: 'Loss', gameType: 'Competitive', source: 'gep', heroes: ['Tracer'], ...extra,
+  });
+
+  it('applies a corrected result on an auto-tracked match (previously locked)', () => {
+    const { provider, patches } = editHarness(gepGame());
+    provider.editMatch({ matchId: 'gep-1', result: 'Win' });
+    expect(patches[0].result).toBe('Win');
+  });
+
+  it('applies corrected map/role/heroes on an auto-tracked match', () => {
+    const { provider, patches } = editHarness(gepGame());
+    provider.editMatch({ matchId: 'gep-1', map: 'Nepal', role: 'support', heroes: ['Ana', 'Kiriko'] });
+    expect(patches[0]).toMatchObject({ map: 'Nepal', role: 'support', heroes: ['Ana', 'Kiriko'] });
+  });
+
+  it('stamps factsEditedAt when a game fact actually changes on an auto-tracked match', () => {
+    const { provider, patches } = editHarness(gepGame());
+    const before = Date.now();
+    provider.editMatch({ matchId: 'gep-1', result: 'Win' });
+    expect(typeof patches[0].factsEditedAt).toBe('number');
+    expect(patches[0].factsEditedAt!).toBeGreaterThanOrEqual(before);
+  });
+
+  it('does NOT stamp factsEditedAt when the edit leaves every game fact unchanged', () => {
+    const { provider, patches } = editHarness(gepGame());
+    // Same result/map/role/heroes as stored — only a manual-layer field moves.
+    provider.editMatch({
+      matchId: 'gep-1', result: 'Loss', map: 'Ilios', role: 'damage', heroes: ['Tracer'],
+      mental: { tilt: true },
+    });
+    expect(patches[0]).not.toHaveProperty('factsEditedAt');
+  });
+
+  it('treats a hero-list reorder (same members) as no fact change', () => {
+    const { provider, patches } = editHarness(gepGame({ heroes: ['Tracer', 'Genji'] }));
+    provider.editMatch({ matchId: 'gep-1', heroes: ['Genji', 'Tracer'] });
+    expect(patches[0].heroes).toEqual(['Genji', 'Tracer']);
+    expect(patches[0]).not.toHaveProperty('factsEditedAt');
+  });
+
+  it('never stamps factsEditedAt on a manual match, even when facts change', () => {
+    const manual: GameRecord = {
+      matchId: 'manual-1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+      result: 'Loss', gameType: 'Competitive', source: 'manual', heroes: ['Tracer'],
+    };
+    const { provider, patches } = editHarness(manual);
+    provider.editMatch({ matchId: 'manual-1', result: 'Win' });
+    expect(patches[0].result).toBe('Win');
+    expect(patches[0]).not.toHaveProperty('factsEditedAt');
+  });
+});
+
 describe('logMatch — performance', () => {
   it('stores a performance rating when given', () => {
     const { provider, recorded } = harness();

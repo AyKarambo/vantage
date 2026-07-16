@@ -71,10 +71,19 @@ export interface GameRecord {
   /**
    * Where the record came from. Absent on older records — inferred from the
    * matchId prefix by {@link ../source sourceOf} (manual ids start with
-   * `manual`). Auto-tracked (GEP) records lock their game-derived facts in the
-   * match editor.
+   * `manual`). Auto-tracked (GEP) records keep their `source` even when their
+   * facts are hand-corrected (see {@link factsEditedAt}).
    */
   source?: 'manual' | 'gep';
+  /**
+   * Epoch ms of the last hand-correction to an auto-tracked (GEP) match's game
+   * facts (result/map/role/heroes) in the match editor — the honest "this was
+   * edited" marker. Set only on `gep` records, and only when a fact actually
+   * changed; the original game-reported value is not preserved (no revert).
+   * Never set on hand-logged (`manual`) records, which are editable by nature.
+   * See {@link ../../main/dataProvider editMatch}.
+   */
+  factsEditedAt?: number;
   /**
    * Signed skill-rating change for this competitive match, in percentage points
    * of a division (e.g. +22, -19) — the exact number the game showed. Manual,

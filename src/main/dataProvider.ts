@@ -37,6 +37,18 @@ import type {
 import type { GameRecord } from '../core/analytics';
 
 /**
+ * Order-insensitive equality for two hero lists — a pure edit-change check used
+ * by {@link editMatch} to decide whether a save actually altered the hero facts
+ * (so re-ordering alone never trips the "facts edited" marker).
+ */
+function sameHeroes(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((h, i) => h === sb[i]);
+}
+
+/**
  * Builds the {@link DataProvider} the dashboard consumes: every renderer-facing
  * read/write, mapped onto injected stores and edges. No Electron imports (deps
  * are type-only slices) — the composition root in ./index supplies the real
@@ -204,18 +216,30 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (!game) return;
       const isManual = sourceOf(game) === 'manual';
       const patch: Parameters<HistoryStore['editManual']>[1] = {};
-      // Game-derived facts are editable only for hand-logged matches; auto-tracked
-      // (GEP) matches keep them locked.
-      if (isManual) {
-        if (input.result !== undefined) patch.result = input.result;
-        if (input.role !== undefined) patch.role = input.role;
-        if (input.map !== undefined) patch.map = input.map;
-        if (input.gameType !== undefined) patch.gameType = input.gameType;
-        // `heroes` (the multi-hero list) wins when provided; fall back to the
-        // legacy single-hero coercion. Both honour `[]`/'' as "clear the list".
-        if (input.heroes !== undefined) patch.heroes = input.heroes;
-        else if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
-      }
+      // Game facts are editable on EVERY match now — a result the feed got wrong
+      // (a leaver scored as a loss, a misread draw) can be hand-corrected on an
+      // auto-tracked match too. `heroes` (the multi-hero list) wins when provided;
+      // fall back to the legacy single-hero coercion. Both honour `[]`/'' as "clear".
+      const nextHeroes =
+        input.heroes !== undefined ? input.heroes
+        : input.hero !== undefined ? (input.hero ? [input.hero] : [])
+        : undefined;
+      if (input.result !== undefined) patch.result = input.result;
+      if (input.role !== undefined) patch.role = input.role;
+      if (input.map !== undefined) patch.map = input.map;
+      if (input.gameType !== undefined) patch.gameType = input.gameType;
+      if (nextHeroes !== undefined) patch.heroes = nextHeroes;
+      // Provenance honesty: when a hand-edit actually CHANGES a game fact on an
+      // auto-tracked match, stamp `factsEditedAt` so the UI can show a subtle
+      // "edited" marker (the record keeps source 'gep'). Never on manual matches
+      // (editable by nature), and not when the save leaves every fact untouched.
+      const factsChanged =
+        (input.result !== undefined && input.result !== game.result) ||
+        (input.role !== undefined && input.role !== game.role) ||
+        (input.map !== undefined && input.map !== game.map) ||
+        (input.gameType !== undefined && input.gameType !== game.gameType) ||
+        (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes ?? []));
+      if (!isManual && factsChanged) patch.factsEditedAt = Date.now();
       // The manual layer applies to any match. srDelta: number sets it, null
       // clears it (editManual deletes on null), undefined leaves it unchanged.
       if (input.mental !== undefined) patch.mental = input.mental;

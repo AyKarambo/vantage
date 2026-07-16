@@ -170,16 +170,17 @@ export class HistoryStore {
   }
 
   /**
-   * Patch a stored game's manual-layer fields in place (result/role/map/heroes/
-   * gameType for hand-logged matches; mental/srDelta/review for any). Only the
+   * Patch a stored game's editable fields in place (result/role/map/heroes/
+   * gameType, plus the manual layer mental/srDelta/review/performance). Only the
    * provided keys change; a `null` value deletes that key (e.g. clearing srDelta);
-   * false if the id is unknown. The caller is responsible for not passing
-   * game-derived facts for auto-tracked (GEP) records.
+   * false if the id is unknown. Game facts are editable on any match now — the
+   * {@link ../main/dataProvider editMatch} layer stamps `factsEditedAt` when it
+   * hand-corrects an auto-tracked (GEP) record; this store just persists the patch.
    */
   editManual(
     matchId: string,
     patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review'>> &
-      { srDelta?: number | null; performance?: number | null },
+      { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null },
   ): boolean {
     const game = this.getOne(matchId);
     if (!game) return false;

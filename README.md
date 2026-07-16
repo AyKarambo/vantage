@@ -32,9 +32,10 @@ never shows stale data as "current."
   the "players you've met" list — to open their **shared-match history**: every
   game you played with or against them, your result and their hero each time, with
   a W/L split by teammate vs opponent (local, GEP-only, never exported). Every
-  match is **editable** from here:
-  hand-logged matches fully, auto-tracked ones down to their manual layer (mental
-  flags, leaver-team, SR %, target grades) while the game-derived facts stay locked.
+  match is **editable** from here — both hand-logged and auto-tracked matches, down to
+  their game facts (result, map, role, heroes) and their manual layer (mental flags,
+  leaver-team, SR %, target grades). Correcting a game fact the feed got wrong on an
+  auto-tracked match keeps its ⚡ auto provenance and tags it **edited**.
   The editor mirrors the Log match card — the same shared controls, wording and field
   order: colour-coded **W/L/D** (the `W`/`L`/`D` keys work here too), the **locked map
   combobox** (type to search, recent maps first), the **most-played hero shortlist**
