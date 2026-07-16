@@ -442,14 +442,26 @@ const mock: OwStatsApi = {
     const game = dataset().find((g) => g.matchId === input.matchId);
     if (!game) return;
     const patch: Partial<GameRecord> = { ...previewEdits[input.matchId] };
-    if (sourceOf(game) === 'manual') {
-      if (input.result !== undefined) patch.result = input.result;
-      if (input.role !== undefined) patch.role = input.role;
-      if (input.map !== undefined) patch.map = input.map;
-      if (input.gameType !== undefined) patch.gameType = input.gameType;
-      if (input.heroes !== undefined) patch.heroes = input.heroes;
-      else if (input.hero !== undefined) patch.heroes = input.hero ? [input.hero] : [];
-    }
+    // Mirrors the real dataProvider: game facts are editable on every match, and
+    // a fact change on an auto-tracked (GEP) record stamps `factsEditedAt`.
+    const nextHeroes =
+      input.heroes !== undefined ? input.heroes
+      : input.hero !== undefined ? (input.hero ? [input.hero] : [])
+      : undefined;
+    if (input.result !== undefined) patch.result = input.result;
+    if (input.role !== undefined) patch.role = input.role;
+    if (input.map !== undefined) patch.map = input.map;
+    if (input.gameType !== undefined) patch.gameType = input.gameType;
+    if (nextHeroes !== undefined) patch.heroes = nextHeroes;
+    const sameHeroes = (a: string[], b: string[]): boolean =>
+      a.length === b.length && [...a].sort().every((h, i) => h === [...b].sort()[i]);
+    const factsChanged =
+      (input.result !== undefined && input.result !== game.result) ||
+      (input.role !== undefined && input.role !== game.role) ||
+      (input.map !== undefined && input.map !== game.map) ||
+      (input.gameType !== undefined && input.gameType !== game.gameType) ||
+      (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes));
+    if (sourceOf(game) !== 'manual' && factsChanged) patch.factsEditedAt = Date.now();
     if (input.mental !== undefined) patch.mental = input.mental;
     if (input.srDelta !== undefined) {
       if (input.srDelta === null) delete patch.srDelta;

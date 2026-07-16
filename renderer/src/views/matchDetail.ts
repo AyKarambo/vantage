@@ -47,6 +47,17 @@ function editorMapPool(ctx: ViewContext, current: string): MapPickerEntry[] {
 
 const RESULT_TEXT: Record<string, string> = { Win: 'Victory', Loss: 'Defeat', Draw: 'Draw' };
 
+/**
+ * Subtle marker for an auto-tracked match whose game facts were hand-corrected
+ * in the editor — the record keeps its ⚡ auto provenance. Presence of
+ * `factsEditedAt` (only ever set on GEP records) is the signal.
+ */
+function editedPill(): HTMLElement {
+  const p = pill('edited');
+  p.title = 'Game facts hand-corrected — this match was auto-tracked from the game feed.';
+  return p;
+}
+
 export function matchDetail(ctx: ViewContext): HTMLElement {
   const host = h('div', { class: 'view' });
   const matchId = ctx.params.matchId;
@@ -112,6 +123,7 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
     h('span', null, `${roleLabel(d.role)} · ${d.account}`),
     h('span', null, '·'),
     h('span', null, relTime(d.timestamp)),
+    d.factsEditedAt != null ? editedPill() : null,
   );
   return card({ class: 'detail-head' },
     h('div', { class: 'detail-head-main' },
@@ -121,9 +133,7 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
       h('div', { style: { marginTop: '10px' } },
         button('✎ Edit match', {
           variant: 'soft',
-          title: d.source === 'gep'
-            ? 'Edit the manual layer (flags, SR %, target grades) — game facts stay locked'
-            : 'Edit this match — result, map, flags, SR %, and target grades',
+          title: 'Edit this match — result, map, role, heroes, SR %, flags, and target grades',
           onClick: () => openMatchEditor(ctx, d),
         }),
       ),
@@ -355,11 +365,13 @@ function normalizeFlags(m: MatchMental): MatchMental {
 }
 
 /**
- * Modal to edit a match's full manual layer: for hand-logged matches the game
- * facts (result/role/map/hero/mode) are editable; for auto-tracked matches those
- * stay locked and only the manual layer (SR %, mental flags incl. leaver-team,
- * target grades) can change. Saves go through `editMatch`; `ctx.refresh()`
- * re-pulls the detail so every dependent view reflects the change.
+ * Modal to edit a match: the game facts (result/role/map/heroes) and the manual
+ * layer (SR %, mental flags incl. leaver-team, target grades) are all editable
+ * on every match — an auto-tracked (GEP) result the feed got wrong can be
+ * hand-corrected. Such a correction keeps the record's ⚡ auto provenance and
+ * gains an "edited" marker (main stamps `factsEditedAt`). Saves go through
+ * `editMatch`; `ctx.refresh()` re-pulls the detail so every dependent view
+ * reflects the change.
  */
 // Guards the async preload below: a rapid double-click on "Edit match" (or a
 // second click before the first IPC round-trip resolves) would otherwise fire
@@ -393,7 +405,6 @@ function buildMatchEditor(
   const active = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
-  const editable = d.source === 'manual';
   const isComp = classifyGameType(d.gameType) === 'competitive';
   const state = { result: d.result, role: d.role, map: d.map };
   // Full hero set (a hand-logged match can have several) — a role-filtered chip
@@ -460,7 +471,7 @@ function buildMatchEditor(
     const resolveMap = (): string | null => resolveMapName(state.map, maps);
     const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
     const updateSaveEnabled = (): void => {
-      saveBtn.disabled = editable && resolveMap() == null;
+      saveBtn.disabled = resolveMap() == null;
     };
 
     const resultRow = resultChooser({ value: state.result, keys: true, onChange: (v) => {
@@ -482,29 +493,29 @@ function buildMatchEditor(
     mapField.append(mapError);
 
     // Canonical field order shared with the log card: Result, Map, Role, Heroes.
-    const factsBlock = editable
-      ? h('div', { class: 'stack', style: { gap: '12px' } },
-          field('Result', resultRow),
-          mapField,
-          field('Role', segmented({
-            // Role filters the hero grid and keys the Set-current rank seed —
-            // repaint the heroes, and re-seed + repaint the picker if it's active.
-            options: ROLE_OPTS, value: state.role, fill: true,
-            onChange: (v) => {
-              state.role = v;
-              paintEditorHeroes();
-              if (isComp && srMode === 'set-current') {
-                seedAnchor();
-                paintSr();
-              }
-            },
-          })),
-          field(optionalLabel('Heroes', '— tap all you played'), heroEditHost),
-          // No Mode control — Vantage is competitive-only (spec D1); matches stay
-          // competitive, mirroring the quick-log's removed mode picker.
-        )
-      : h('div', { class: 'hint' },
-          `Auto-tracked from the game feed — result, map and heroes are locked. ${d.map} · ${roleLabel(d.role)}`);
+    // Every match is editable now — an auto-tracked result the feed got wrong can
+    // be hand-corrected (the record keeps its ⚡ auto provenance + gains an
+    // "edited" marker); nothing about the match is locked.
+    const factsBlock = h('div', { class: 'stack', style: { gap: '12px' } },
+      field('Result', resultRow),
+      mapField,
+      field('Role', segmented({
+        // Role filters the hero grid and keys the Set-current rank seed —
+        // repaint the heroes, and re-seed + repaint the picker if it's active.
+        options: ROLE_OPTS, value: state.role, fill: true,
+        onChange: (v) => {
+          state.role = v;
+          paintEditorHeroes();
+          if (isComp && srMode === 'set-current') {
+            seedAnchor();
+            paintSr();
+          }
+        },
+      })),
+      field(optionalLabel('Heroes', '— tap all you played'), heroEditHost),
+      // No Mode control — Vantage is competitive-only (spec D1); matches stay
+      // competitive, mirroring the quick-log's removed mode picker.
+    );
 
     // SR block from the shared srControls, with the log card's labels. Change
     // mode → the raw signed SR % (wheel-nudged); Set-current mode → the
@@ -544,21 +555,19 @@ function buildMatchEditor(
     const srBlock = isComp ? srHost : null;
 
     const save = (): void => {
-      if (editable) {
-        // Same guard as the log card: only a resolved, known map may save.
-        const resolved = resolveMap();
-        if (!resolved) {
-          mapError.textContent = state.map.trim()
-            ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
-            : 'Pick the map — start typing and choose from the list.';
-          mapError.classList.remove('hidden');
-          return;
-        }
-        state.map = resolved;
+      // Same guard as the log card: only a resolved, known map may save.
+      const resolved = resolveMap();
+      if (!resolved) {
+        mapError.textContent = state.map.trim()
+          ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
+          : 'Pick the map — start typing and choose from the list.';
+        mapError.classList.remove('hidden');
+        return;
       }
+      state.map = resolved;
       void bridge.editMatch({
         matchId: d.matchId,
-        ...(editable ? { result: state.result, role: state.role, map: state.map, heroes: [...heroes] } : {}),
+        result: state.result, role: state.role, map: state.map, heroes: [...heroes],
         mental: flags,
         // Competitive rank: Set-current sends the resulting rank (main derives the
         // srDelta); Change sends the raw % (number sets, null clears). Omitted for
@@ -598,7 +607,7 @@ function buildMatchEditor(
     const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', outline: 'none' } },
       h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
       h('div', { class: 'u-muted', style: { fontSize: '12px' } },
-        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}`),
+        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}${d.factsEditedAt != null ? ' · edited' : ''}`),
       // Two columns mirroring the log card: match facts + Skill rating on the
       // left, the manual self-report (Performance / Comms / Flags / Targets) on
       // the right. Collapses to one column on a narrow viewport (shared .log-grid).
@@ -628,10 +637,10 @@ function buildMatchEditor(
       ),
     );
 
-    // W/L/D drive the result chooser for editable matches — the same shared
-    // binding as the log card. openModal appends the panel after build returns,
-    // so defer the focus to the next frame once it's actually in the DOM.
-    if (editable) bindResultKeys(root, resultRow);
+    // W/L/D drive the result chooser (every match is editable now) — the same
+    // shared binding as the log card. openModal appends the panel after build
+    // returns, so defer the focus to the next frame once it's actually in the DOM.
+    bindResultKeys(root, resultRow);
     requestAnimationFrame(() => root.focus());
     return root;
   }, { panelClass: 'modal-card--wide' });
