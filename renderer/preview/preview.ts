@@ -460,7 +460,7 @@ const mock: OwStatsApi = {
       (input.role !== undefined && input.role !== game.role) ||
       (input.map !== undefined && input.map !== game.map) ||
       (input.gameType !== undefined && input.gameType !== game.gameType) ||
-      (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes));
+      (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes ?? []));
     if (sourceOf(game) !== 'manual' && factsChanged) patch.factsEditedAt = Date.now();
     if (input.mental !== undefined) patch.mental = input.mental;
     if (input.srDelta !== undefined) {

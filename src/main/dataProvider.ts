@@ -238,7 +238,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         (input.role !== undefined && input.role !== game.role) ||
         (input.map !== undefined && input.map !== game.map) ||
         (input.gameType !== undefined && input.gameType !== game.gameType) ||
-        (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes));
+        (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes ?? []));
       if (!isManual && factsChanged) patch.factsEditedAt = Date.now();
       // The manual layer applies to any match. srDelta: number sets it, null
       // clears it (editManual deletes on null), undefined leaves it unchanged.
