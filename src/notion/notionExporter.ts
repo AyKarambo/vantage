@@ -79,6 +79,22 @@ export class NotionExporter {
      * per export; defaults to {@link DEFAULT_PARTIAL_MARGIN}.
      */
     private readonly authoredPartialMargin: () => number = () => DEFAULT_PARTIAL_MARGIN,
+    /**
+     * Set when the database's shape could not be VERIFIED at all (the validate
+     * request never reached Notion), as opposed to being verified and found wrong.
+     * Short-circuits the export with this reason verbatim.
+     *
+     * Not the same failure as `shapeIssues`, and deliberately not folded into it:
+     * the writer's capabilities (`Played At`, `SR Delta`, the Map relation, the
+     * subjective columns) are only ever learned from a validate that SUCCEEDS.
+     * Exporting without them writes rows missing those fields — and the exporter
+     * then ledgers those rows, so every later sync skips them and Notion keeps the
+     * damaged data forever. Refusing to export is recoverable; a lossy write isn't.
+     *
+     * (Last in the list purely so the existing positional call sites keep their
+     * meaning — this is semantically `shapeIssues`' sibling.)
+     */
+    private readonly unavailableReason?: string,
   ) {}
 
   /**
@@ -144,6 +160,12 @@ export class NotionExporter {
     games: GameRecord[],
     onProgress?: (done: number, total: number) => void,
   ): Promise<ExportResult> {
+    // Couldn't verify the shape at all — refuse rather than write rows whose
+    // missing columns we'd never notice and could never re-fill (see the
+    // constructor doc for why this is not the same as a shape mismatch).
+    if (this.unavailableReason) {
+      return { ok: 0, failed: 0, skipped: 0, unavailable: true, error: this.unavailableReason };
+    }
     if (this.shapeIssues && this.shapeIssues.length) {
       return { ok: 0, failed: 0, skipped: 0, error: `Database is missing: ${this.shapeIssues.join(', ')}` };
     }

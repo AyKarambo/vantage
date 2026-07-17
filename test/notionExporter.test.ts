@@ -61,6 +61,36 @@ describe('NotionExporter validation short-circuit', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  // The data-loss guard: "we couldn't check the shape" is NOT "the shape is fine".
+  // The writer's capabilities (Played At, SR Delta, the Map relation, the subjective
+  // columns) are only known from a validate that succeeded, so exporting without one
+  // writes rows missing those fields — and the ledger below would then make every
+  // later sync skip them, leaving Notion permanently wrong. Refusing is recoverable.
+  it('refuses to export when the shape could not be verified, and writes nothing', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const writer = stubWriter();
+    const maps = stubMaps();
+
+    const exporter = new NotionExporter(
+      writer, maps, outbox, undefined, undefined, undefined, undefined, undefined, undefined,
+      "Couldn't verify your Notion database — check your internet connection.",
+    );
+    const result = await exporter.export([game('m1')]);
+
+    expect(result.unavailable).toBe(true);
+    expect(result.ok).toBe(0);
+    expect(result.error).toMatch(/internet connection/i);
+    expect(writer.createMatchPage).not.toHaveBeenCalled();
+    expect(writer.updateMatchPage).not.toHaveBeenCalled();
+    // Nothing ledgered either — the game must still be exportable once the shape
+    // can actually be verified, rather than silently marked as done.
+    expect(outbox.pageIdFor('m1')).toBeUndefined();
+    expect(outbox.signatureFor('m1')).toBeUndefined();
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('exports normally when no shape issues are cached', async () => {
     const dir = tmpDir();
     const outbox = new OutboxStore(dir);
