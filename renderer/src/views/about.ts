@@ -63,6 +63,9 @@ export function about(_ctx: ViewContext): HTMLElement {
   const saveLog = (): void => {
     void bridge.exportLogBundle().then((res) => {
       if ('path' in res) toast(`Debug log saved to ${res.path}`);
+      // Silence on a failed write would send someone who is already reporting a bug
+      // off to hunt for a file that was never written.
+      else if ('error' in res) toast(res.error);
       // { cancelled: true } — the user backed out of the save dialog; no toast.
     });
   };

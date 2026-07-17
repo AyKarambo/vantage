@@ -46,9 +46,15 @@ jobs:
       # this directory becomes world-readable.
       - name: Guard — only the legal pages may be published
         run: |
-          unexpected="$(find docs/legal -type f ! -name 'index.html' ! -name 'privacy.html' ! -name 'terms.html' -print)"
+          # Match on the PATH, not the basename: `-name` alone would let
+          # docs/legal/drafts/terms.html through while `-type f` happily recursed
+          # into it — and it would then be served at a public legal URL.
+          unexpected="$(find docs/legal -type f \
+            ! -path 'docs/legal/index.html' \
+            ! -path 'docs/legal/privacy.html' \
+            ! -path 'docs/legal/terms.html' -print)"
           if [ -n "$unexpected" ]; then
-            echo "::error::Unexpected file(s) in docs/legal — refusing to publish:"
+            echo "::error::Unexpected file(s) under docs/legal — refusing to publish:"
             echo "$unexpected"
             exit 1
           fi
