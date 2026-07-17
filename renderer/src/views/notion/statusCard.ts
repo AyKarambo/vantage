@@ -1,6 +1,7 @@
 /**
  * Notion connection status card — reads the current `NotionStatus` snapshot and
- * renders one of: loading, shape mismatch, connected, or not-connected (with reason).
+ * renders one of: loading, transport error (can't verify), shape mismatch,
+ * connected, or not-connected (with reason).
  */
 import { h } from '../../dom';
 import type { NotionStatus } from '../../../../src/shared/contract';
@@ -24,6 +25,25 @@ export function statusCard(s: NotionStatus | null): HTMLElement {
     return card({ variant: 'raised' }, h('div', { class: 'u-muted' }, 'Checking connection…'));
   }
   const dot = (color: string) => h('span', { class: 'status-dot', style: { background: color } });
+
+  // Takes precedence over both the shape-mismatch and connected states below:
+  // when the last shape-validation attempt failed with a classified network
+  // error, `shapeValid`/`shapeIssues` are deliberately left undefined (the
+  // verdict is genuinely unknown, not false) — so without this branch an
+  // offline user would fall through into a false "Connected to Notion".
+  // `transportError` already carries a friendly, actionable message (never a
+  // raw `String(err)`) from `main/notionRuntime.ts`.
+  if (s.transportError) {
+    return card({ variant: 'raised' },
+      h('div', { class: 'notion-status' },
+        dot('var(--dim)'),
+        h('div', { class: 'row-main' },
+          h('div', { class: 'row-name' }, 'Can’t verify database'),
+          h('div', { class: 'u-dim', style: { fontSize: '11.5px', marginTop: '2px' } }, s.transportError),
+        ),
+      ),
+    );
+  }
 
   if (s.connected && s.shapeValid === false) {
     return card({ variant: 'raised' },
