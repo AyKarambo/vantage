@@ -11,9 +11,15 @@
 #   2. preflight: clean tree (unless -AllowDirty), HEAD pushed to <remote>
 #   3. readiness: the Certum signing cert is present in Cert:\CurrentUser\My
 #      (i.e. SimplySign is unlocked) - abort BEFORE building if not
+#   3b. readiness: the Overwolf build credentials resolve (scripts/ow-build-env.mjs)
+#      - abort BEFORE building if not. TWO SIGNATURES ARE REQUIRED AT RUNTIME: ours
+#      (Certum, step 3) and Overwolf's package-integrity signature. Without the latter
+#      the gaming packages (GEP) refuse to load for end users - and app-builder-lib
+#      only WARNS and ships unsigned, so this would fail silently in the wild.
 #   4. compute the next version from tags + Conventional Commits (scripts/next-version.mjs)
 #   5. idempotency: abort if the tag/Release already exists
-#   6. build + sign (VANTAGE_REQUIRE_SIGNING=1 makes the sign hook throw if unsigned)
+#   6. build + sign (VANTAGE_REQUIRE_SIGNING=1 makes our sign hook throw if unsigned;
+#      OW_REQUIRE_SIGNING=1 makes app-builder-lib's Overwolf signer throw instead of warn)
 #   7. verify Authenticode (Valid, Certum issuer, "Open Source Developer" subject, timestamped)
 #   8. create the tag at HEAD and publish the GitHub Release with the signed installer
 #
@@ -73,6 +79,30 @@ if (-not $cert) {
 }
 Write-Host "Signing cert: $($cert.Subject)  [thumbprint $($cert.Thumbprint), expires $($cert.NotAfter.ToString('yyyy-MM-dd'))]"
 
+# 3b. readiness: Overwolf build credentials ------------------------------------
+# Never echo $owEnv - it carries the resolved secrets. Only .missing (names) is printable.
+$owJson = (node scripts/ow-build-env.mjs --json | Out-String)
+if ($LASTEXITCODE -ne 0) { throw "scripts/ow-build-env.mjs failed - cannot resolve the Overwolf build credentials." }
+$owEnv = $owJson | ConvertFrom-Json
+$owMissing = @($owEnv.missing)
+if ($owMissing.Count -gt 0) {
+    $names = $owMissing -join ', '
+    if (-not $DryRun) {
+        throw @"
+Missing Overwolf build credentials: $names.
+Without them app-builder-lib does NOT sign the package - it only warns - and GEP will
+refuse to load for everyone who installs this build. Refusing to publish.
+Set them in the environment, or put the build key in ~/.ow-cli/build-key and run ``ow config``
+for the API key. The build key comes from the Developer Console (Release management > App Keys).
+See docs/signing.md.
+"@
+    }
+    # -DryRun rehearses the Certum path locally; the Overwolf key is Console-gated, so a
+    # missing key must not make dry runs unusable. Be loud instead: this is exactly the
+    # gap that ships a silently unsigned build.
+    Write-Warning "Overwolf build credentials missing ($names) - this dry run does NOT exercise Overwolf package signing. A real publish would abort here."
+}
+
 # 4. compute version ----------------------------------------------------------
 $info = (node scripts/next-version.mjs --json | Out-String) | ConvertFrom-Json
 $version = $info.version
@@ -94,6 +124,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "npm version failed." }
 
     $env:VANTAGE_REQUIRE_SIGNING = '1' # sign hook throws instead of leaving files unsigned
+    if ($owMissing.Count -eq 0) {
+        # app-builder-lib's Overwolf signer reads these three from the environment; they
+        # reach it because npm run release is a child process and inherits this block.
+        $env:OW_CLI_EMAIL = $owEnv.email
+        $env:OW_CLI_API_KEY = $owEnv.apiKey
+        $env:OW_BUILD_KEY = $owEnv.buildKey
+        $env:OW_REQUIRE_SIGNING = '1' # throw instead of warn-and-ship-unsigned
+    }
     npm run release
     if ($LASTEXITCODE -ne 0) { throw "build/sign failed (see log above)." }
 
@@ -116,5 +154,8 @@ try {
 }
 finally {
     Remove-Item Env:\VANTAGE_REQUIRE_SIGNING -ErrorAction SilentlyContinue
+    foreach ($v in 'OW_CLI_EMAIL', 'OW_CLI_API_KEY', 'OW_BUILD_KEY', 'OW_REQUIRE_SIGNING') {
+        Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
+    }
     git checkout -- package.json package-lock.json 2>$null # keep main at its floor version
 }
