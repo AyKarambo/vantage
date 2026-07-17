@@ -20,6 +20,15 @@ export interface AppUiSettings {
   devMode: boolean;
   /** OS notifications when GEP events go down / come back (default on). */
   gepNotifications: boolean;
+  /**
+   * The app version the user was last shown a "What's new" highlight for.
+   * Absent (never set) means "we've never shown this user anything" — a fresh
+   * install, which gets the intro tour instead of release notes, not a
+   * fabricated baseline like `'0.0.0'`. Written by the "What's new" flow
+   * after it displays; read at startup to decide whether to show it again.
+   * Not a user preference — no Settings UI toggle for it.
+   */
+  lastSeenVersion?: string;
 }
 
 export interface AppInfo {

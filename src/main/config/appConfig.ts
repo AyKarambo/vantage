@@ -55,6 +55,17 @@ export interface UiConfig {
   devMode: boolean;
   /** OS notifications on GEP service down/recovery (default true). */
   gepNotifications: boolean;
+  /**
+   * The app version the user was last shown a "What's new" highlight for.
+   * Optional with **no entry in DEFAULTS** — absent means "never shown
+   * anything", which a fresh install must resolve to (see
+   * `src/core/whatsNew.ts`'s `shouldShowWhatsNew`). Giving this a default
+   * value here (e.g. `'0.0.0'`) would make every fresh install look like an
+   * upgrade and pop the changelog on first launch, so it rides the ui merge
+   * in {@link loadConfig} same as every other field but is deliberately left
+   * out of `DEFAULTS.ui`.
+   */
+  lastSeenVersion?: string;
   windowBounds?: WindowBounds;
 }
 

@@ -105,6 +105,43 @@ describe('loadConfig — dataFolder rename + logFilter removal', () => {
     expect(loadConfig().ui.gepNotifications).toBe(false);
   });
 
+  // "What's new" (T21) gates a blocking modal on lastSeenVersion being unset,
+  // so an absent value must mean "never shown anything" — never a fabricated
+  // baseline like '0.0.0', which would pop the changelog on every fresh install.
+  it('has no lastSeenVersion by default — a fresh install must not fabricate a baseline', async () => {
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.lastSeenVersion).toBeUndefined();
+  });
+
+  it('round-trips a ui.lastSeenVersion persisted into the local config', async () => {
+    fs.writeFileSync(userConfigFile(), JSON.stringify({ ui: { lastSeenVersion: '0.31.0' } }), 'utf8');
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.lastSeenVersion).toBe('0.31.0');
+  });
+
+  it('lets a local ui.lastSeenVersion win over a bundled appsettings.json value', async () => {
+    const bundledDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-appconfig-bundled-'));
+    try {
+      fs.writeFileSync(
+        path.join(bundledDir, 'appsettings.json'),
+        JSON.stringify({ ui: { lastSeenVersion: '0.10.0' } }),
+        'utf8',
+      );
+      fs.writeFileSync(userConfigFile(), JSON.stringify({ ui: { lastSeenVersion: '0.31.0' } }), 'utf8');
+      vi.resetModules();
+      vi.doMock('electron', () => ({
+        app: {
+          getPath: () => tmpDir,
+          getAppPath: () => bundledDir,
+        },
+      }));
+      const { loadConfig } = await import('../src/main/config/appConfig');
+      expect(loadConfig().ui.lastSeenVersion).toBe('0.31.0');
+    } finally {
+      fs.rmSync(bundledDir, { recursive: true, force: true });
+    }
+  });
+
   it('no longer honors the OW_SYNC_FILTER env override', async () => {
     const prev = process.env.OW_SYNC_FILTER;
     process.env.OW_SYNC_FILTER = 'Everything';
