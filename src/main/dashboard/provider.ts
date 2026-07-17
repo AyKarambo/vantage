@@ -10,7 +10,7 @@ import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
-  DataLocation, DataLocationResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogLevel,
+  DataLocation, DataLocationResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
@@ -121,6 +121,12 @@ export interface DataProvider {
   setLogLevel(level: LogLevel): LogLevel;
   /** Record an uncaught renderer error in the main-process log. */
   logRendererError(input: RendererErrorInput): void;
+  /**
+   * Export the log ring to a user-chosen file for "Report a bug" — third-party
+   * PII and registered secrets are stripped before it's written. Never
+   * uploads; the file only goes where the user's save dialog points.
+   */
+  exportLogBundle(): Promise<LogExportResult>;
   /** Current connection/data-flow status snapshot. */
   getGepStatus(): GepStatusPayload;
   /** App-behavior settings (Settings screen). */

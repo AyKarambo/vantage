@@ -66,7 +66,7 @@ export type { AccountKind } from '../../core/accountsManage';
 export type { ImportFileResult } from './importFile';
 
 // Logging payloads (release debug log + in-app viewer)
-export type { LogEntry, LogLevel, RendererErrorInput } from './logging';
+export type { LogEntry, LogLevel, RendererErrorInput, LogExportResult } from './logging';
 
 // Live connection/data-flow status
 export type { GepHealthState, GepStatusPayload } from './gepStatus';

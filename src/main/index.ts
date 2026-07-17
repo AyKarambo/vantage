@@ -270,6 +270,23 @@ function main(): void {
     return JSON.parse(fs.readFileSync(res.filePaths[0], 'utf8'));
   }
 
+  /**
+   * Native save dialog for "Report a bug" → export debug log: writes `contents`
+   * verbatim to wherever the user picks and nowhere else. Cancelling returns
+   * `undefined` and writes nothing — there is no automatic upload path
+   * (guardrail 5, local-first).
+   */
+  async function saveTextFile(defaultName: string, contents: string): Promise<string | undefined> {
+    const res = await dialog.showSaveDialog({
+      title: 'Save debug log',
+      defaultPath: path.join(app.getPath('documents'), defaultName),
+      filters: [{ name: 'Text log', extensions: ['txt'] }],
+    });
+    if (res.canceled || !res.filePath) return undefined;
+    await fs.promises.writeFile(res.filePath, contents, 'utf8');
+    return res.filePath;
+  }
+
   let pushSyncProgress: (done: number, total: number) => void = () => {};
   // Filled in once the dashboard window exists (mirrors pushEntry/pushSyncProgress).
   let pushGameLogged: (payload: GameLoggedPayload) => void = () => {};
@@ -361,6 +378,9 @@ function main(): void {
     // Demo season draws only from the active competitive pool (spec AC 24).
     sampleGames: () => generateSampleGames(180, 42, activeMapNames()),
     logger: log,
+    // Same source fed to the logger's own redaction — a registered Notion
+    // token is stripped from an exported log bundle too.
+    getSecrets: () => [getNotionToken() ?? ''].filter(Boolean),
     gepStatus: () => statusMonitor.current(),
     appSettings: {
       get: () => ({
@@ -432,6 +452,7 @@ function main(): void {
       return { hasKey: hasDevKey() };
     },
     openExternal: (url) => shell.openExternal(url),
+    saveTextFile,
     // Apply a staged GEP package fix by restarting the app — Overwolf installs
     // downloaded packages on launch. Only ever called from the user's explicit
     // "restart to apply" click (never automatic).

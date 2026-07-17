@@ -215,6 +215,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.logRendererError, (_e, input: RendererErrorInput) => {
     provider.logRendererError(input);
   });
+  handle(ch.exportLogBundle, () => provider.exportLogBundle());
 
   // Live connection/data-flow status (snapshot; changes arrive via push).
   handle(ch.getGepStatus, () => provider.getGepStatus());

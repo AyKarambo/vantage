@@ -22,7 +22,7 @@ import type {
 import type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
 import type { ImportFileResult } from './importFile';
 import type { Role, Result } from '../../core/model';
-import type { LogEntry, LogLevel, RendererErrorInput } from './logging';
+import type { LogEntry, LogLevel, LogExportResult, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
 import type { MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate } from './masterData';
@@ -129,6 +129,13 @@ export interface OwStatsApi {
   setLogLevel(level: LogLevel): Promise<LogLevel>;
   /** Forward an uncaught renderer error into the main-process log. */
   logRendererError(input: RendererErrorInput): Promise<void>;
+  /**
+   * Export the in-app log ring to a user-chosen file for "Report a bug" —
+   * third-party PII (BattleTags, roster names, Windows usernames) and any
+   * registered secret are stripped before it's written. Never uploads
+   * anything; the file only ever goes where the user's save dialog points.
+   */
+  exportLogBundle(): Promise<LogExportResult>;
   /** Current connection/data-flow status snapshot (see also onGepStatus). */
   getGepStatus(): Promise<GepStatusPayload>;
   /** App-behavior settings (Settings screen). */
@@ -282,6 +289,7 @@ export const IPC_CHANNELS = {
   getLogLevel: 'log:get-level',
   setLogLevel: 'log:set-level',
   logRendererError: 'log:renderer-error',
+  exportLogBundle: 'log:export-bundle',
   getGepStatus: 'status:gep',
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',

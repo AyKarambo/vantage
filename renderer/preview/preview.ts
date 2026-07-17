@@ -678,6 +678,12 @@ const mock: OwStatsApi = {
     previewLog.push(e);
     for (const cb of logListeners) cb(e);
   },
+  exportLogBundle: async () => {
+    // No filesystem or save dialog in the browser harness — echo the intent
+    // and report a cancel, same shape a real dismissed dialog would return.
+    console.info('[preview] exportLogBundle (no filesystem in the browser preview)');
+    return { cancelled: true };
+  },
   onLogEntry: (cb: (e: LogEntry) => void) => {
     logListeners.add(cb);
     return () => logListeners.delete(cb);

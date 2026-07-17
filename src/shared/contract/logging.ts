@@ -12,3 +12,6 @@ export interface RendererErrorInput {
   /** Where it happened (file:line or 'unhandledrejection'). */
   source?: string;
 }
+
+/** Outcome of `exportLogBundle`: the path the user saved to, or their cancel. */
+export type LogExportResult = { path: string } | { cancelled: true };
