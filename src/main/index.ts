@@ -571,20 +571,8 @@ function main(): void {
     // Poll Overwolf's public GEP service-status feed so an Overwatch-patch outage
     // (and its recovery) is surfaced authoritatively — not guessed from local
     // signals. Sends only the game id; makes no outage claim when unreachable.
-    //
-    // Read the feed for the environment we're actually running against: in Dev
-    // Mode owepm loads the gaming packages from `dev`, so `prod` describes an
-    // environment this process isn't in. For Overwatch the two genuinely disagree
-    // — prod is an unpublished placeholder, dev is green — and reading prod while
-    // in Dev Mode announced an outage to developers whose GEP was working.
-    // Resolved per fetch rather than captured once: it's a pure read, and it can
-    // then never drift from what `AppInfo.devMode` reports on the About screen.
     createGepServicePoller({
-      fetchStatus: () =>
-        fetchServiceStatus(
-          config.overwatchGameId,
-          computeDevMode({ packaged: app.isPackaged, env: process.env }) ? 'dev' : 'prod',
-        ),
+      fetchStatus: () => fetchServiceStatus(config.overwatchGameId),
       onStatus: (s) => statusMonitor.setServiceStatus(s),
       log: (scope, message, fields) => log.info(scope, message, fields),
     }).start();
