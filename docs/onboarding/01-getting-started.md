@@ -77,11 +77,13 @@ One-time setup:
    [docs/overwolf-submission.md §1](../overwolf-submission.md).
 2. Generate an API key: Console → **Profile → API Keys → "Revoke and get new API key"**.
    Copy it now — the console only shows it once.
-3. `ow config` (the `@overwolf/ow-cli` devDependency ships the `ow` binary) — enter your
-   Console login email + that API key. This writes a `[default]` profile to
-   `~/.ow-cli/credentials`. (Heads-up: the Dev Mode docs call this file `~/.ow/credentials`,
-   but the pinned `@overwolf/ow-cli` 0.1.x actually writes `~/.ow-cli/credentials` — the
-   launcher below checks both, so either is fine.)
+3. `npx -y -p @overwolf/ow-cli ow config` — enter your Console login email + that API key.
+   This writes a `[default]` profile to `~/.ow-cli/credentials`. (`@overwolf/ow-cli` is
+   **not** a project dependency — it drags in vulnerable transitive packages and the app
+   never runs it — so fetch it on demand with `npx`; nothing gets installed into the repo.
+   Heads-up: the Dev Mode docs call this file `~/.ow/credentials`, but `@overwolf/ow-cli`
+   0.1.x actually writes `~/.ow-cli/credentials` — the launcher below checks both, so either
+   is fine. Prefer not to run it at all? Skip to the env-var route below.)
 
 **Have a *dev key* instead of an API key?** Temporary/approved developers without Console
 API-key access get a **dev key** from Overwolf. It authenticates differently (Bearer, via
