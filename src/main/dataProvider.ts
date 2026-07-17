@@ -527,8 +527,16 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         '(best-effort, not a guarantee) — please still review before attaching this to a public report.',
       ].join('\n');
       const contents = [header, '', ...redacted.map(formatLogLine)].join('\n') + '\n';
-      const savedPath = await deps.saveTextFile(`vantage-log-${info.version}.txt`, contents);
-      return savedPath ? { path: savedPath } : { cancelled: true };
+      try {
+        const savedPath = await deps.saveTextFile(`vantage-log-${info.version}.txt`, contents);
+        return savedPath ? { path: savedPath } : { cancelled: true };
+      } catch (err) {
+        // A rejected write (read-only target, disk full, file open elsewhere) must not
+        // surface as silence: the user is mid bug-report and about to go looking for
+        // a file that was never written.
+        const detail = (err as { message?: string })?.message;
+        return { error: detail ? `Couldn't save the debug log — ${detail}` : "Couldn't save the debug log." };
+      }
     },
     getGepStatus: () => deps.gepStatus(),
     getAppSettings: () => deps.appSettings.get(),

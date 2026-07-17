@@ -200,7 +200,18 @@ ow-native's; keeping it documented below only in case DevRel says otherwise for 
      required icon) + taskbar/installer icon.
    - `assets/tray.png` (32×32) → the tray icon.
 3. **Bump the version** in `package.json` (`version`) — required for every new upload.
-4. **Build + sign the app files:**
+4. **Stamp the changelog — before the build, not after.** `npm run build` compiles
+   `CHANGELOG.md` into the renderer bundle (that's how the in-app "What's new" screen works
+   offline), so the heading has to say the real version *by the time step 5 builds*. Renaming
+   it afterwards ships a build whose notes are still labelled `Unreleased`, and the highlight
+   silently shows nothing to the very users who just updated.
+   - [ ] `npm run release:check` — prints the version `publish:release` will cut (computed
+     from the commits by `scripts/next-version.mjs`; this is why the number can't be written
+     into the file in advance).
+   - [ ] Rename `CHANGELOG.md`'s **Unreleased** heading to that version + today's date, per
+     that file's own "Maintaining this file" preamble, and commit it. Step 9 pastes these same
+     notes into the console.
+5. **Build + sign the app files:**
    ```bash
    npm run publish:release   # build, sign (Certum/SimplySign), verify, tag, gh release create
    ```
@@ -219,10 +230,10 @@ ow-native's; keeping it documented below only in case DevRel says otherwise for 
      doesn't exist yet — it's issued only after the app is registered in the Developer
      Console, so this is still a step ahead of us, not something configured today. Full
      detail: [docs/signing.md](signing.md).
-5. ~~Pack the OPK~~ — **OPK packaging (`npm run pack:opk` / `ow-cli opk *`) is for
+6. ~~Pack the OPK~~ — **OPK packaging (`npm run pack:opk` / `ow-cli opk *`) is for
    ow-native apps, not ow-electron.** Left in the repo only in case DevRel says
    otherwise for this app; do not treat it as a required step.
-6. **Upload + submit** — upload the signed `release/Vantage-Setup-<ver>.exe` in the
+7. **Upload + submit** — upload the signed `release/Vantage-Setup-<ver>.exe` in the
    [Developer Console](https://console.overwolf.com); complete the store listing (§4–§5);
    submit to **DevRel QA**. None of this has happened yet — no build has been uploaded.
    - [ ] **VirusTotal scan** — before uploading, check the exe at
@@ -235,20 +246,18 @@ ow-native's; keeping it documented below only in case DevRel says otherwise for 
      via the custom installer or a public tester link instead. Store downloads
      auto-subscribe users to the **Production** channel.
      ([Release management](https://dev.overwolf.com/ow-electron/developers-console/releases-management/release-management))
-7. **QA cycle** — address feedback and re-upload (bump version each time) until it passes.
+8. **QA cycle** — address feedback and re-upload (bump version each time) until it passes.
    Overwolf still recommends submitting major versions for review even once mandatory
    review no longer applies to later ones.
-8. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
+9. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
    - [ ] **Phased rollout** — only the latest version's rollout percentage is adjustable;
      halt it at any percentage and resume later. Users already on a halted version are
      **not** rolled back when you resume or change it.
-   - [ ] **Release notes** — rename `CHANGELOG.md`'s **Unreleased** heading to the released
-     version (per that file's own "Maintaining this file" preamble — the version itself
-     comes from `scripts/next-version.mjs` via `publish-release.ps1`, which restores
-     `package.json`'s floor version afterwards), then paste those same notes into the
-     console's **public release notes** (CommonMark; takes about 5 minutes to propagate
-     after saving). The same notes feed the app's in-app "What's new" screen. Internal
-     notes (team + Overwolf only) are separate, for review context.
+   - [ ] **Release notes** — paste the notes you stamped in step 4 into the console's
+     **public release notes** (CommonMark; takes about 5 minutes to propagate after saving).
+     They're already in the shipped build's in-app "What's new" screen — this publishes the
+     same text to the store page. Internal notes (team + Overwolf only) are separate, for
+     review context.
 
 **Code signing (required BEFORE Overwolf will review — the submission form gates on it).** The exe
 must carry a **trusted-CA** signature (self-signed is rejected) — and per Overwolf's

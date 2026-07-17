@@ -13,5 +13,13 @@ export interface RendererErrorInput {
   source?: string;
 }
 
-/** Outcome of `exportLogBundle`: the path the user saved to, or their cancel. */
-export type LogExportResult = { path: string } | { cancelled: true };
+/**
+ * Outcome of `exportLogBundle`: the path the user saved to, their cancel, or a
+ * failure to write.
+ *
+ * The `error` case is not decoration. The user is told the log was saved so they
+ * can attach it to a bug report — if the write actually failed (read-only target,
+ * disk full, file open elsewhere) and nothing said so, they'd go hunting for a
+ * file that was never written, while in the middle of reporting a bug.
+ */
+export type LogExportResult = { path: string } | { cancelled: true } | { error: string };
