@@ -44,6 +44,9 @@ import { openPalette } from './palette';
 import { openOnboarding, shouldOnboard } from './onboarding';
 import { openFirstRunPrompt } from './firstRunPrompt';
 import { openDataLocationPrompt } from './dataLocationPrompt';
+import { openWhatsNewPrompt } from './whatsNewPrompt';
+import { changelogSince, shouldShowWhatsNew } from '../../../src/core/whatsNew';
+import { CHANGELOG } from '../generated/changelog';
 
 // matchDetail and playerHistory are parameterized views: registered here
 // (routable) but not in NAV — the sidebar keeps Matches highlighted while active.
@@ -320,14 +323,21 @@ export class App {
   /**
    * Once, after the first real snapshot: ask where to keep data (only on a
    * fresh install — `needsFirstRunChoice`), then the demo question (if never
-   * asked), then the tour. The data-location step runs first because it must
-   * complete before meaningful data is written (spec C1/C4).
+   * asked), then the tour, then (only if the tour didn't just run) "What's
+   * new". The data-location step runs first because it must complete before
+   * meaningful data is written (spec C1/C4).
    */
   private maybeFirstRun(state: AppState): void {
     if (this.firstRunHandled || !state.data) return;
     this.firstRunHandled = true;
     const openTour = (): void => {
-      if (shouldOnboard()) openOnboarding(store.get().data?.isSample ?? false);
+      if (shouldOnboard()) {
+        openOnboarding(store.get().data?.isSample ?? false);
+        // Never show "What's new" on the same launch as the intro tour — a
+        // brand-new (or still-touring) user doesn't need release notes on top.
+      } else {
+        this.maybeWhatsNew();
+      }
     };
     const openDemoPrompt = (): void => {
       if (state.data!.demoPreference === 'unset') openFirstRunPrompt(openTour);
@@ -336,6 +346,38 @@ export class App {
     void bridge.getDataLocation().then((loc) => {
       if (loc.needsFirstRunChoice) openDataLocationPrompt(openDemoPrompt);
       else openDemoPrompt();
+    });
+  }
+
+  /**
+   * "What's new" — the two rules that decide this live in `src/core/whatsNew.ts`:
+   * a fresh install (`lastSeenVersion` unset) shows nothing, but this is the one
+   * place that fact is recorded, so the *next* update has something to compare
+   * against — skip recording and the feature never fires for this user, ever.
+   * An upgrade shows the modal and records `version` on dismissal (any dismissal
+   * counts — see {@link openWhatsNewPrompt}). Everything else (same version,
+   * older version, unparseable version) shows nothing and records nothing.
+   */
+  private maybeWhatsNew(): void {
+    void Promise.all([bridge.getAppSettings(), bridge.getAppInfo()]).then(([settings, info]) => {
+      const { lastSeenVersion } = settings;
+      const { version } = info;
+      if (lastSeenVersion === undefined) {
+        // Fresh install: nothing to show, but record silently so an upgrade
+        // from here on has a baseline to compare against.
+        void bridge.setAppSettings({ lastSeenVersion: version });
+        return;
+      }
+      if (!shouldShowWhatsNew(lastSeenVersion, version)) return;
+      const entries = changelogSince(CHANGELOG, lastSeenVersion);
+      if (entries.length === 0) {
+        // A showable version with no usable notes (e.g. only an unstamped
+        // "Unreleased" heading) — record it so it isn't retried forever, but
+        // don't pop an empty modal.
+        void bridge.setAppSettings({ lastSeenVersion: version });
+        return;
+      }
+      openWhatsNewPrompt(entries, () => void bridge.setAppSettings({ lastSeenVersion: version }));
     });
   }
 

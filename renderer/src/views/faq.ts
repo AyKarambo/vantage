@@ -8,8 +8,10 @@
  */
 import { h } from '../dom';
 import { bridge } from '../bridge';
-import { button, card } from '../components/primitives';
+import { button, card, emptyState } from '../components/primitives';
 import { openOnboarding } from '../app/onboarding';
+import { changelogHistory, type ChangelogEntry } from '../../../src/core/whatsNew';
+import { CHANGELOG } from '../generated/changelog';
 import { viewHead, type ViewContext } from './view';
 
 const SUPPORT_EMAIL = 'timo.seikel@gmail.com';
@@ -100,6 +102,7 @@ export function faq(ctx: ViewContext): HTMLElement {
       button('Replay the intro tour', { variant: 'soft', onClick: () => openOnboarding(ctx.data.isSample) }),
     ),
     ...FAQ.map((section) => topicCard(section, ctx)),
+    changelogCard(),
     card({ title: 'Still stuck?' },
       h('div', { class: 'stack', style: { gap: '10px', marginTop: '4px' } },
         h('div', { class: 'u-muted', style: { fontSize: '12.5px' } }, `Email ${SUPPORT_EMAIL} and we’ll help you out.`),
@@ -122,6 +125,33 @@ function faqItem(entry: FaqEntry, ctx: ViewContext): HTMLElement {
     h('div', { style: { fontSize: '13px', fontWeight: '600' } }, entry.q),
     h('div', { class: 'u-muted', style: { fontSize: '12.5px', marginTop: '3px', lineHeight: '1.5' } }, entry.a),
     entry.link ? h('div', { style: { marginTop: '5px' } }, jumpLink(entry.link.label, () => entry.link!.go(ctx))) : null,
+  );
+}
+
+/** The browsable "What's new" history — every stamped release, newest first,
+ *  compiled into the bundle at build time (see `renderer/src/generated/changelog.ts`)
+ *  so it reads offline, same as the rest of this screen. This is the always-available
+ *  half of AC-8; the highlight modal (`app/whatsNewPrompt.ts`) is the one-time half. */
+function changelogCard(): HTMLElement {
+  const history = changelogHistory(CHANGELOG);
+  return card({ title: 'What’s new', sub: 'release history, newest first' },
+    history.length
+      ? h('div', { class: 'stack', style: { gap: '14px', marginTop: '4px' } },
+          ...history.map(changelogEntryItem),
+        )
+      : emptyState('No release history yet.'),
+  );
+}
+
+function changelogEntryItem(entry: ChangelogEntry): HTMLElement {
+  return h('div', null,
+    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
+      h('span', { style: { fontSize: '13px', fontWeight: '600' } }, `v${entry.version}`),
+      entry.date ? h('span', { class: 'u-dim', style: { fontSize: '11.5px' } }, entry.date) : null,
+    ),
+    h('ul', { style: { margin: '6px 0 0', paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' } },
+      ...entry.notes.map((note) => h('li', { class: 'u-muted', style: { fontSize: '12.5px', lineHeight: '1.5' } }, note)),
+    ),
   );
 }
 
