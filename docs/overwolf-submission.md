@@ -208,14 +208,47 @@ ow-native's; keeping it documented below only in case DevRel says otherwise for 
    `assets/` (minus `assets/store/`), `appsettings.json` and `package.json`. The signed
    NSIS `.exe` (`release/Vantage-Setup-<ver>.exe`) is the **submission artifact for
    ow-electron apps** — upload it directly, no packing step needed.
+   - [ ] **Confirm the UID** — this is the confirmation moment for §1's identity check: the
+     signer resolves `signResult.uid` during this build and embeds it into the exe as a PE
+     resource (logged as `embedding Overwolf app uid in PE resource`). Read it out of this
+     build's log rather than re-deriving it by hand; see §1 for what it must match.
+   - [ ] **Overwolf build key present** — a release now also needs `OW_BUILD_KEY` plus the
+     `ow-cli` credentials (`OW_CLI_EMAIL`/`OW_CLI_API_KEY`); `publish-release.ps1` aborts
+     *before building* if they can't be resolved. Without them the build ships **unsigned**
+     for Overwolf's own package-integrity signature and GEP won't load for users. `OW_BUILD_KEY`
+     doesn't exist yet — it's issued only after the app is registered in the Developer
+     Console, so this is still a step ahead of us, not something configured today. Full
+     detail: [docs/signing.md](signing.md).
 5. ~~Pack the OPK~~ — **OPK packaging (`npm run pack:opk` / `ow-cli opk *`) is for
    ow-native apps, not ow-electron.** Left in the repo only in case DevRel says
    otherwise for this app; do not treat it as a required step.
 6. **Upload + submit** — upload the signed `release/Vantage-Setup-<ver>.exe` in the
    [Developer Console](https://console.overwolf.com); complete the store listing (§4–§5);
-   submit to **DevRel QA**.
+   submit to **DevRel QA**. None of this has happened yet — no build has been uploaded.
+   - [ ] **VirusTotal scan** — before uploading, check the exe at
+     [virustotal.com](https://virustotal.com). Per Overwolf's testing guide: *"Before
+     sending any [build] for approval, check that it is virus free... apps with
+     VirusTotal warnings will not be tested."* Hard gate; full test matrix in §7.
+   - The **first successful `.exe` upload triggers a mandatory version review** — pressing
+     Submit sends it to the Overwolf team. **Test channels are exempt** from mandatory
+     review, but testing builds **can't be downloaded from the store** — distribute them
+     via the custom installer or a public tester link instead. Store downloads
+     auto-subscribe users to the **Production** channel.
+     ([Release management](https://dev.overwolf.com/ow-electron/developers-console/releases-management/release-management))
 7. **QA cycle** — address feedback and re-upload (bump version each time) until it passes.
+   Overwolf still recommends submitting major versions for review even once mandatory
+   review no longer applies to later ones.
 8. **Go live** — after approval, pick the release channel (Production vs. Testing) and roll out.
+   - [ ] **Phased rollout** — only the latest version's rollout percentage is adjustable;
+     halt it at any percentage and resume later. Users already on a halted version are
+     **not** rolled back when you resume or change it.
+   - [ ] **Release notes** — rename `CHANGELOG.md`'s **Unreleased** heading to the released
+     version (per that file's own "Maintaining this file" preamble — the version itself
+     comes from `scripts/next-version.mjs` via `publish-release.ps1`, which restores
+     `package.json`'s floor version afterwards), then paste those same notes into the
+     console's **public release notes** (CommonMark; takes about 5 minutes to propagate
+     after saving). The same notes feed the app's in-app "What's new" screen. Internal
+     notes (team + Overwolf only) are separate, for review context.
 
 **Code signing (required BEFORE Overwolf will review — the submission form gates on it).** The exe
 must carry a **trusted-CA** signature (self-signed is rejected) — and per Overwolf's
@@ -269,6 +302,41 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
   stat incl. the mental composite); authored targets are saved and shown in the library.
 - ⏳ **Code signing / installer** — cert obtained (Certum, signed locally — see §6); still to switch
   to the Overwolf Installer for the CMP/ToS flow and Developer Console testing channels.
+- ⚠ **Installer silent-install (winget) — untested against the new license page.** The NSIS
+  installer now shows a license/consent page (`build.nsis.license`, added alongside the
+  Terms of Use + Privacy Policy acceptance flow — see `CHANGELOG.md`'s Unreleased entry)
+  before install completes. `docs/winget.md`'s submission gate requires
+  `Vantage-Setup-<ver>.exe /S` to finish with **zero dialogs**; a license page is exactly
+  the kind of prompt that can break that. **Not yet re-verified** since the license page
+  was added — retest the silent install before opening or updating any `winget-pkgs` PR.
+
+**Pre-submission test matrix.** Overwolf's
+[How to test your app](https://dev.overwolf.com/ow-electron/guides/test-your-app/how-to-test-your-app)
+checklist, adapted for Vantage. None of this has run yet — no build has been submitted:
+
+- [ ] **Resolution/DPI matrix** — app stays within the screen borders at each of:
+  - [ ] 1366×720 @ 100 DPI
+  - [ ] 1366×768 @ 100 DPI
+  - [ ] 1920×1080 @ 125 DPI
+  - [ ] 2560×1440 @ 100 DPI
+  - [ ] 3840×2160 @ 150 DPI
+- [ ] **Launch time** — the desktop window appears within 10 seconds (a loader is fine).
+- [ ] **Clean exit + relaunch** — all windows/processes close on exit, and the app still
+  works correctly after relaunch.
+- [ ] **Offline launch** — the app launches normally with no network connection, and shows
+  a "check your internet connection"-class message anywhere it needs the network. This is
+  exactly what AC-5 of this feature fixed (see `CHANGELOG.md`'s Unreleased entry) — the
+  offline launch used to fire a false "Maps load failed" OS toast; retest to confirm the fix
+  holds in the packaged build, not just `npm start`.
+- [ ] **Memory/CPU** — watch memory rise and fall rather than stay elevated (no leaks), and
+  watch for CPU/memory/network spikes.
+- [ ] **Game-scoped launch** — the app launches only for the game(s) it supports
+  (Overwatch), not for others.
+- [ ] **VirusTotal** — scan the signed exe at [virustotal.com](https://virustotal.com)
+  before uploading; see §6 step 6 — a flagged build **will not be tested** by Overwolf.
+
+**Not applicable to Vantage:** Overwolf's overlay and hotkey test items — this app has no
+in-game overlay and no hotkeys, so they're left off rather than padded in as N/A rows.
 
 ---
 
