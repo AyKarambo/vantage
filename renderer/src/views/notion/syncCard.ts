@@ -12,16 +12,6 @@ import { toast } from '../../components/toast';
 import { openModal } from '../../components/overlay';
 import { button, card } from '../../components/primitives';
 
-/**
- * Phrase a main-side error string as an actionable, blame-free message.
- * `ImportResult.error`/`CleanupDuplicatesResult.error` still carry a raw
- * `String(err)` over IPC (main process is out of scope here) — classify the
- * stringified text itself. `ExportResult.error` is already friendly (T11) and
- * must be rendered as-is instead — see `syncResult`'s caller below.
- */
-function friendlyFor(rawError: string, action: string): string {
-  return friendlyNetworkMessage(classifyNetworkError({ message: rawError }), action);
-}
 
 export function syncCard(s: NotionStatus | null): HTMLElement {
   const out = h('div', { style: { marginTop: '12px', minHeight: '18px' } });
@@ -43,13 +33,20 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
       });
       try {
         const res = await bridge.exportNotion({});
+        // `error` no longer implies the export never ran — it now also carries the
+        // first per-game failure. Rendering it INSTEAD of the counts would hide the
+        // games that did sync, which is the opposite of what capturing a reason was
+        // for. Show both: what happened, and then why part of it didn't.
         render(
           out,
           res.unavailable
-            ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
-            : res.error
-              ? h('span', { class: 'is-loss' }, res.error)
-              : syncResult(res),
+            ? h('span', { class: 'is-loss' }, res.error ?? 'Connect Notion first.')
+            : h('div', null,
+                syncResult(res),
+                res.error
+                  ? h('div', { class: 'is-loss', style: { fontSize: '11.5px', marginTop: '6px' } }, res.error)
+                  : null,
+              ),
         );
       } catch (err) {
         render(out, h('span', { class: 'is-loss' }, friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion')));
@@ -86,7 +83,7 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
           res.unavailable
             ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
             : res.error
-              ? h('span', { class: 'is-loss' }, friendlyFor(res.error, 'import from Notion'))
+              ? h('span', { class: 'is-loss' }, res.error)
               : importResult(res),
         );
         // Also confirm via a toast: store.refresh() below rebuilds this whole
@@ -218,7 +215,7 @@ function confirmCleanupDuplicates(cleanupBtn: HTMLButtonElement, cleanupOut: HTM
                 res.unavailable
                   ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
                   : res.error
-                    ? h('span', { class: 'is-loss' }, friendlyFor(res.error, 'clean up duplicate Notion rows'))
+                    ? h('span', { class: 'is-loss' }, res.error)
                     : null,
               );
               if (!res.unavailable && !res.error) {
