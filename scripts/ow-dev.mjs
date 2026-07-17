@@ -27,18 +27,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-
-// @overwolf/ow-cli 0.1.x writes to ~/.ow-cli/credentials; the dev-mode docs name
-// ~/.ow/credentials. Check both, in that order, so this survives a CLI path change.
-const CREDENTIAL_FILES = [
-  path.join(homedir(), '.ow-cli', 'credentials'),
-  path.join(homedir(), '.ow', 'credentials'),
-];
-// Standalone dev-key token files (just the token, nothing else).
-const DEV_KEY_FILES = [
-  path.join(homedir(), '.ow-cli', 'dev-key'),
-  path.join(homedir(), '.ow', 'dev-key'),
-];
+import { resolveOwCredentials } from './lib/owCredentials.mjs';
 
 /**
  * The app's persisted Dev Mode toggle (config.local.json → ui.devMode), set from
@@ -57,82 +46,14 @@ function devModeEnabled() {
   }
 }
 
-/** Parse the ow-cli INI-ish credentials file into { profile: { key: value } }. */
-function parseCredentials(text) {
-  const profiles = {};
-  let current = '';
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const header = line.match(/^\[(?<name>\w+)\]$/);
-    if (header) {
-      current = header.groups.name;
-      profiles[current] = {};
-      continue;
-    }
-    const eq = line.indexOf('=');
-    if (eq > 0 && current) profiles[current][line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
-  }
-  return profiles;
-}
-
-/** A dev key on disk: a `devKey=` line in a credentials file, or a dev-key token file. */
-function devKeyFromFile(profile) {
-  for (const file of CREDENTIAL_FILES) {
-    if (!existsSync(file)) continue;
-    try {
-      const token = parseCredentials(readFileSync(file, 'utf8'))[profile]?.devKey;
-      if (token) return { token, file: `${file} [${profile}] devKey` };
-    } catch (err) {
-      console.warn(`[ow-dev] could not read ${file}: ${err.message}`);
-    }
-  }
-  for (const file of DEV_KEY_FILES) {
-    if (!existsSync(file)) continue;
-    try {
-      const token = readFileSync(file, 'utf8').trim();
-      if (token) return { token, file };
-    } catch (err) {
-      console.warn(`[ow-dev] could not read ${file}: ${err.message}`);
-    }
-  }
-  return null;
-}
-
-/** First credentials file that yields `profile` with email+apiKey, or null. */
-function apiKeyFromFile(profile) {
-  for (const file of CREDENTIAL_FILES) {
-    if (!existsSync(file)) continue;
-    try {
-      const creds = parseCredentials(readFileSync(file, 'utf8'))[profile];
-      if (creds?.email && creds?.apiKey) return { ...creds, file };
-    } catch (err) {
-      console.warn(`[ow-dev] could not read ${file}: ${err.message}`);
-    }
-  }
-  return null;
-}
-
 /** Put dev credentials into the env ow-electron reads. Returns a status string or null. */
 function ensureDevCredentials() {
-  if (process.env.OW_DEV_KEY) return 'env: OW_DEV_KEY (dev key, bearer)';
-  if (process.env.OW_CLI_EMAIL && process.env.OW_CLI_API_KEY) return 'env: OW_CLI_EMAIL + OW_CLI_API_KEY (api key)';
-
-  const profile = process.env.OW_PROFILE || 'default';
-
-  const dev = devKeyFromFile(profile);
-  if (dev) {
-    process.env.OW_DEV_KEY = dev.token;
-    return `file: ${dev.file} (dev key, bearer)`;
-  }
-
-  const api = apiKeyFromFile(profile);
-  if (api) {
-    process.env.OW_CLI_EMAIL ??= api.email;
-    process.env.OW_CLI_API_KEY ??= api.apiKey;
-    return `file: ${api.file} [${profile}] (api key: ${api.email})`;
-  }
-  return null;
+  const result = resolveOwCredentials({ env: process.env });
+  if (!result) return null;
+  if (result.devKey) process.env.OW_DEV_KEY ??= result.devKey;
+  if (result.email) process.env.OW_CLI_EMAIL ??= result.email;
+  if (result.apiKey) process.env.OW_CLI_API_KEY ??= result.apiKey;
+  return result.source;
 }
 
 const enabled = devModeEnabled();
