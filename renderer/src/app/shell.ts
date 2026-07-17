@@ -629,6 +629,7 @@ export class App {
         { label: 'Log match', hint: 'record a game manually', run: () => openLogMatch(ctx) },
         { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
         { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
+        { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
       ],
     });
   }
