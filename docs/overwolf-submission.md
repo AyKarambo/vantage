@@ -18,8 +18,9 @@ list of steps only you (the account owner) can do.
 > **Store artifact — corrected:** the **OPK is for ow-native apps only.** For **ow-electron**
 > apps (what Vantage is), the submission artifact is the **signed `.exe`** (the NSIS installer
 > built by `npm run release` / `npm run publish:release`), uploaded to the Developer Console
-> directly — not an OPK. `npm run pack:opk` / `ow-cli opk *` below is dead weight for this app;
-> left in place until confirmed with DevRel, but do not block submission on it.
+> directly — not an OPK. The old `pack:opk` script and its `@overwolf/ow-cli` dependency have
+> been removed accordingly; if DevRel ever asks for an OPK, `npx -y -p @overwolf/ow-cli ow opk
+> pack release/win-unpacked -o out.opk` produces one on demand.
 
 ---
 
@@ -190,8 +191,8 @@ provided so you can swap (full set: 01-overview, 02-review, 03-matches, 04-maps,
 Overwolf's [Release Your App](https://dev.overwolf.com/ow-native/getting-started/release-your-app)
 flow, mapped to this ow-electron app. **No hand-written `manifest.json`** (that's ow-native) —
 and for ow-electron apps the submission artifact is the **signed `.exe`** itself (the NSIS
-installer), uploaded directly to the Developer Console. (The OPK path in this section is
-ow-native's; keeping it documented below only in case DevRel says otherwise for this app.)
+installer), uploaded directly to the Developer Console. (OPK packaging is ow-native's and
+does not apply here — see the store-artifact note at the top of this doc.)
 
 1. **Self-test.** `npm test` (55 unit tests), `npm run typecheck`, then `npm start` and
    click through every screen. For live GEP, run elevated with Overwatch open (whitelisted).
@@ -230,9 +231,9 @@ ow-native's; keeping it documented below only in case DevRel says otherwise for 
      doesn't exist yet — it's issued only after the app is registered in the Developer
      Console, so this is still a step ahead of us, not something configured today. Full
      detail: [docs/signing.md](signing.md).
-6. ~~Pack the OPK~~ — **OPK packaging (`npm run pack:opk` / `ow-cli opk *`) is for
-   ow-native apps, not ow-electron.** Left in the repo only in case DevRel says
-   otherwise for this app; do not treat it as a required step.
+6. ~~Pack the OPK~~ — **not applicable.** OPK packaging is ow-native's; ow-electron submits
+   the signed `.exe` (step 4). The `pack:opk` script has been removed; if DevRel ever asks
+   for an OPK, generate one on demand (see the store-artifact note at the top of this doc).
 7. **Upload + submit** — upload the signed `release/Vantage-Setup-<ver>.exe` in the
    [Developer Console](https://console.overwolf.com); complete the store listing (§4–§5);
    submit to **DevRel QA**. None of this has happened yet — no build has been uploaded.
