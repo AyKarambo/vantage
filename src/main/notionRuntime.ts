@@ -32,6 +32,22 @@ import type {
  */
 const NOTION_API_VERSION = '2026-03-11';
 
+/**
+ * Turn a caught Notion/network error into a friendly, actionable message.
+ *
+ * Classifying HERE, not in the renderer, is the point: the Notion SDK's
+ * `APIResponseError` carries the verdict on `status` (401) and `code`
+ * (`unauthorized`), and `String(err)` throws both away — it renders as
+ * "APIResponseError: API token is invalid." Handing that string across the bridge
+ * left the renderer classifying prose, so every auth/not-found/server failure
+ * collapsed to `unknown` and was reported as a possible connection problem. A bad
+ * token is not a bad connection, and telling someone to check their internet when
+ * their token expired sends them to fix the wrong thing.
+ */
+function friendlyFor(err: unknown, action: string): string {
+  return friendlyNetworkMessage(classifyNetworkError(err), action);
+}
+
 export interface NotionRuntimeDeps {
   outbox: OutboxStore;
   /** Live app config — re-read through this on every use, never cached. */
@@ -223,7 +239,15 @@ export class NotionRuntime {
   async export(games: GameRecord[]): Promise<ExportResult> {
     if (!this.exporter) return { ok: 0, failed: 0, unavailable: true };
     const result = await this.exporter.export(games, this.deps.onSyncProgress);
-    if (!result.error) {
+    // `error` used to mean "the export never ran" and so could gate this; it now
+    // also carries the first per-game failure, which would leave the timestamp
+    // frozen for anyone whose sync is merely partial. Gate on what actually
+    // happened instead: a short-circuit returns all-zero counts, a real sync
+    // doesn't. Failures alone don't count — claiming "last synced: just now"
+    // after twelve rows failed is exactly the kind of lie this timestamp exists
+    // to avoid.
+    const syncedSomething = result.ok > 0 || (result.updated ?? 0) > 0 || (result.skipped ?? 0) > 0;
+    if (syncedSomething) {
       saveLocalNotionConfig({ lastSyncedAt: Date.now() });
       this.deps.reloadConfig();
     }
@@ -268,7 +292,7 @@ export class NotionRuntime {
       }
       return result;
     } catch (err) {
-      return { games: [], failed: 0, duplicates: 0, error: String(err) };
+      return { games: [], failed: 0, duplicates: 0, error: friendlyFor(err, 'import from Notion') };
     }
   }
 
@@ -348,7 +372,7 @@ export class NotionRuntime {
       }
       return { archived, kept, failed };
     } catch (err) {
-      return { archived: 0, kept: 0, failed: 0, error: String(err) };
+      return { archived: 0, kept: 0, failed: 0, error: friendlyFor(err, 'clean up duplicate Notion rows') };
     }
   }
 
@@ -369,7 +393,7 @@ export class NotionRuntime {
     try {
       return { databases: await this.admin.listDatabases() };
     } catch (err) {
-      return { databases: [], error: String(err) };
+      return { databases: [], error: friendlyFor(err, 'load your Notion databases') };
     }
   }
 
@@ -378,7 +402,7 @@ export class NotionRuntime {
     try {
       return { pages: await this.admin.listParentPages() };
     } catch (err) {
-      return { pages: [], error: String(err) };
+      return { pages: [], error: friendlyFor(err, 'load your Notion pages') };
     }
   }
 
@@ -478,15 +502,26 @@ export class NotionRuntime {
       this.gametrackerSourceId = undefined;
       this.schemaProvision = undefined;
     }
-    // A transport failure leaves `shapeCheck` unset entirely (verdict
-    // unknown) — treat that the same as "valid" for the exporter's
-    // short-circuit: it must not refuse to sync just because the last shape
-    // check couldn't complete, only when a shape mismatch was actually found.
-    this.buildExporter(this.shapeCheck && !this.shapeCheck.valid ? this.shapeCheck.issues : undefined);
+    // Three states, not two. A verified-bad shape blocks with its issues; a
+    // verified-good shape exports; a shape we could NOT verify (transport
+    // failure — `shapeCheck` left unset above) must also block, but for a
+    // different reason and with a different message.
+    //
+    // Blocking the unverified case is the whole point: the catch above cleared
+    // hasPlayedAt / hasSrDelta / writableColumns / mapsRelationDbId along with
+    // the verdict, because those are only ever learned from a validate that
+    // SUCCEEDS. Exporting anyway would write rows with no Played At, no SR
+    // Delta, no Map and no subjective columns — and then ledger them, so every
+    // later sync skips them and Notion keeps the damaged rows forever. Refusing
+    // to sync until we can verify is recoverable; a lossy write is not.
+    this.buildExporter(
+      this.shapeCheck && !this.shapeCheck.valid ? this.shapeCheck.issues : undefined,
+      this.shapeCheck ? undefined : this.transportError,
+    );
   }
 
   /** (Re)wire writer + maps + exporter against the live client and config. */
-  private buildExporter(shapeIssues?: string[]): MapsCache | undefined {
+  private buildExporter(shapeIssues?: string[], unavailableReason?: string): MapsCache | undefined {
     if (!this.client) return undefined;
     const cfg = this.deps.config();
     const writer = new NotionWriter(
@@ -511,6 +546,7 @@ export class NotionRuntime {
       cfg.notion.gametrackerDatabaseId || undefined,
       authoredTargets,
       authoredPartialMargin,
+      unavailableReason,
     );
     return maps;
   }

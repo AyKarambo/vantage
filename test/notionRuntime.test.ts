@@ -636,8 +636,23 @@ describe('NotionRuntime.cleanupDuplicates', () => {
     expect(result.archived).toBe(0);
     expect(result.kept).toBe(0);
     expect(result.failed).toBe(0);
-    expect(result.error).toContain('network down');
+    // The reason is classified and phrased for a human now, not `String(err)`. An
+    // unrecognised shape like this one degrades to the generic message rather than
+    // leaking raw error text into the UI.
+    expect(result.error).toContain('clean up duplicate Notion rows');
+    expect(result.error).not.toContain('Error: network down');
     expect(clientMocks.pagesUpdate).not.toHaveBeenCalled();
+  });
+
+  it('names the connection when the scan fails offline, instead of showing raw error text', async () => {
+    // What Electron's net.fetch actually rejects with when the machine is offline.
+    clientMocks.dataSourcesQuery.mockRejectedValue(new Error('net::ERR_INTERNET_DISCONNECTED'));
+
+    const runtime = await connectedRuntime();
+    const result = await runtime.cleanupDuplicates();
+
+    expect(result.error).toContain('internet connection');
+    expect(result.error).not.toContain('net::ERR');
   });
 
   it('a ledger repoint failure mid-loop neither aborts the remaining groups nor discards the archive counts', async () => {
@@ -756,6 +771,52 @@ describe('NotionRuntime.validateConfigured — transport failures never fabricat
     // buildExporter must still run cleanly against the unset shapeCheck (no
     // crash reading `.valid` off `undefined`) — connected proves it did.
     expect(status.connected).toBe(true);
+  });
+
+  // The data-loss guard. An unverified shape must BLOCK the export, not merely
+  // avoid claiming a mismatch: the same catch clears hasPlayedAt / hasSrDelta /
+  // writableColumns / the Map relation, because those are only ever learned from a
+  // validate that SUCCEEDS. Exporting anyway writes rows without those fields and
+  // then ledgers them, so every later sync skips them and Notion keeps the damaged
+  // rows forever. Refusing is recoverable; a lossy write is not.
+  //
+  // NotionExporter is mocked in this file, so what's provable here is that the
+  // runtime hands it the block reason. That it then refuses is asserted against
+  // the real class in test/notionExporter.test.ts.
+  it('hands the exporter a block reason while the shape is unverified', async () => {
+    validateMock.mockRejectedValue(new TypeError('fetch failed'));
+
+    const runtime = new NotionRuntime(baseDeps());
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+
+    const lastCall = exporterCtor.mock.calls[exporterCtor.mock.calls.length - 1];
+    const unavailableReason = lastCall[9];
+    expect(unavailableReason).toMatch(/internet connection/i);
+    // And NOT via a fabricated shape mismatch — shapeIssues (arg 3) stays unset.
+    expect(lastCall[3]).toBeUndefined();
+  });
+
+  it('hands the exporter no block reason once a validate succeeds — the block is about being unverified, not about having once been offline', async () => {
+    validateMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    const runtime = new NotionRuntime(baseDeps());
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+    expect(exporterCtor.mock.calls[exporterCtor.mock.calls.length - 1][9]).toBeDefined();
+
+    validateMock.mockResolvedValue({
+      ok: true, missing: [], mismatched: [], title: 'Gametracker',
+      hasPlayedAt: false, hasSrDelta: false,
+      subjectiveColumns: [], subjectiveColumnDiagnostics: [],
+      mapRelationDbId: undefined, dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
+    });
+    runtime.rebuild();
+    await settle();
+
+    expect(exporterCtor.mock.calls[exporterCtor.mock.calls.length - 1][9]).toBeUndefined();
   });
 
   it('a non-transport (unclassifiable) validate() failure keeps today\'s behavior: shapeValid:false with the raw issue, no transportError', async () => {
