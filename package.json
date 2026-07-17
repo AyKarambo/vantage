@@ -16,7 +16,7 @@
     "watch:renderer": "node scripts/build-renderer.mjs --watch",
     "build:preview": "node scripts/build-preview.mjs",
     "preview": "node scripts/build-preview.mjs && node scripts/preview-server.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json",
+    "typecheck": "node scripts/build-changelog.mjs && tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json",
     "make-icon": "node scripts/make-tray-icon.mjs",
     "assets:store": "node scripts/make-store-assets.mjs",
     "assets:screens": "npm run build:preview && ow-electron scripts/capture-screenshots.cjs",

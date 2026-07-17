@@ -12,9 +12,15 @@
 import { build, context } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { generateChangelogModule } from './build-changelog.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const watch = process.argv.includes('--watch');
+
+// Compile CHANGELOG.md into the module graph before bundling: the renderer's CSP
+// (`default-src 'none'`, no `connect-src`) forbids fetching anything at runtime, so
+// "What's new" can only work if its content is inlined here.
+generateChangelogModule();
 
 /** @type {import('esbuild').BuildOptions} */
 const rendererOptions = {

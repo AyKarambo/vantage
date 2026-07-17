@@ -13,6 +13,10 @@ build/*
 renderer/preview/preview.js
 renderer/preview/preview.js.map
 
+# generated from CHANGELOG.md by scripts/build-changelog.mjs (run by typecheck + every
+# build, so it can't drift — and so it never needs reviewing in a diff)
+renderer/src/generated/
+
 # deps
 node_modules/
 
