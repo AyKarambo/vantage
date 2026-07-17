@@ -80,7 +80,8 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Vantage"
+      "shortcutName": "Vantage",
+      "license": "license.txt"
     }
   },
   "dependencies": {

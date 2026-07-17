@@ -1,0 +1,73 @@
+Vantage - Terms of Use and Privacy Policy
+Effective 2 July 2026
+
+By installing Vantage you agree to its Terms of Use and Privacy Policy. The full
+documents are published here and govern your use of the app:
+
+    Terms of Use:     https://aykarambo.github.io/vantage/terms.html
+    Privacy Policy:   https://aykarambo.github.io/vantage/privacy.html
+
+The summary below is provided for convenience only; where it differs from the
+published documents, those documents apply.
+
+
+WHAT VANTAGE IS
+
+Vantage is a free Windows desktop app that turns your own Overwatch match history
+into a personal stats dashboard. It is an independent project: it is not
+affiliated with, endorsed by, or sponsored by Blizzard Entertainment, Overwatch,
+or Overwolf. All game names, marks, and assets belong to their respective owners.
+
+The application's source is released under the MIT License. It is free for
+personal use. You may not resell it or misrepresent its origin.
+
+
+YOUR DATA STAYS ON YOUR PC
+
+Vantage reads match information only through Overwolf's official Game Events
+Provider - the sanctioned events feed. That covers only information for your own
+account that you can already see in your own game: map, game mode, role, hero,
+match result, duration, and your own end-of-match scoreboard.
+
+Vantage does not read game memory, does not inject into the game, and does not
+access hidden or other-player information.
+
+Your match history, your manual notes, and your settings are stored locally on
+your computer only. The developer operates no server and does not receive your
+gameplay data. Uninstalling the app, or deleting its user-data folder, removes it.
+
+There is no account system: no name, email, or password is collected. The app
+shows no advertising. Your data is never sold or rented.
+
+
+THE TWO THINGS THAT DO LEAVE YOUR PC
+
+1. Notion export - OFF unless you turn it on. If you connect a Notion
+   integration, Vantage sends your tracked games to a Notion database that you
+   own, using a token you provide. The token is stored encrypted at rest on your
+   PC. Notion is an independent service governed by its own privacy policy. You
+   can disconnect at any time, which deletes the token.
+
+2. Platform analytics - Vantage runs on Overwolf's ow-electron platform, and
+   Overwolf collects anonymous app-usage analytics by default to measure
+   installs, retention, and performance. This processing is carried out by
+   Overwolf under Overwolf's privacy policy. It does not include your match data.
+
+
+ACCEPTABLE USE
+
+You agree to use Vantage in compliance with the Overwatch and Blizzard end-user
+license agreements and terms of service, and with Overwolf's terms. You are
+responsible for how you use the insights the app provides.
+
+
+NO WARRANTY
+
+The app is provided "as is", without warranty of any kind. Statistics are derived
+from the available game events and may be incomplete or inaccurate. Uninterrupted
+or error-free operation is not guaranteed. To the maximum extent permitted by
+law, we are not liable for any indirect, incidental, or consequential damages
+arising from your use of, or inability to use, the app.
+
+
+Questions: timo.seikel@gmail.com
