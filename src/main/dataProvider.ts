@@ -11,7 +11,9 @@ import { normalizeSessionSettings, type SessionSettings } from '../core/sessionS
 import { normalizeGradingSettings, type GradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
-import { LOG_LEVELS, type LogLevel } from '../core/logging';
+import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
+import { redactForExport } from '../core/logRedaction';
+import { formatDiagnostics } from '../core/about';
 import { currentRank, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
@@ -32,7 +34,7 @@ import type { RankAnchorStore } from '../store/rankAnchors';
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
-  GepStatusPayload, ImportFileResult, MatchEditInput, PendingMatch, RankSummary,
+  GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -109,6 +111,11 @@ export interface DataProviderDeps {
   sampleGames(): GameRecord[];
   /** The release log: viewer ring, session level, renderer error sink. */
   logger: Pick<Logger, 'entries' | 'getLevel' | 'setLevel' | 'error'>;
+  /**
+   * Live secrets (e.g. the Notion token) to strip from an exported log bundle
+   * — the same source the composition root feeds the logger's own redaction.
+   */
+  getSecrets(): string[];
   /** Live connection/data-flow status snapshot (from the GEP status monitor). */
   gepStatus(): GepStatusPayload;
   /** App-behavior settings: current values + apply/persist (owned by the composition root). */
@@ -122,6 +129,13 @@ export interface DataProviderDeps {
   appInfo(): AppInfo;
   /** Open an external URL — the composition root's `shell.openExternal`. */
   openExternal(url: string): Promise<void>;
+  /**
+   * Show a native save dialog defaulting to `defaultName` and write `contents`
+   * to wherever the user picks; resolves `undefined` when they cancel (nothing
+   * is written). Injected so this stays Electron/fs-free, and so it never
+   * writes anywhere but the user's own chosen path (guardrail 5).
+   */
+  saveTextFile(defaultName: string, contents: string): Promise<string | undefined>;
   /** Restart the app to apply a staged GEP package fix (`app.relaunch()` + exit). */
   applyGepUpdate(): void;
   /** Data-folder location: current value, Settings folder-picker/migrate, and the
@@ -502,6 +516,19 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         ...(input.source ? { source: input.source } : {}),
         ...(input.stack ? { stack: input.stack } : {}),
       });
+    },
+    exportLogBundle: async (): Promise<LogExportResult> => {
+      const info = deps.appInfo();
+      const redacted = redactForExport(deps.logger.entries(), deps.getSecrets());
+      const header = [
+        formatDiagnostics(info),
+        '',
+        'BattleTags, player names, and Windows usernames were removed before export',
+        '(best-effort, not a guarantee) — please still review before attaching this to a public report.',
+      ].join('\n');
+      const contents = [header, '', ...redacted.map(formatLogLine)].join('\n') + '\n';
+      const savedPath = await deps.saveTextFile(`vantage-log-${info.version}.txt`, contents);
+      return savedPath ? { path: savedPath } : { cancelled: true };
     },
     getGepStatus: () => deps.gepStatus(),
     getAppSettings: () => deps.appSettings.get(),
