@@ -6,6 +6,32 @@ describe('classifyNetworkError', () => {
     expect(classifyNetworkError(new TypeError('fetch failed'))).toBe('offline');
   });
 
+  // Electron's net.fetch rejects with the RAW ClientRequest error, not an undici
+  // TypeError('fetch failed') wrapper — so these plain `net::ERR_*` messages are what
+  // masterDataUpdate.ts and statusFeed.ts actually hand us when the machine is offline.
+  // Missing them meant the app's only non-Notion outbound path said "something went
+  // wrong" instead of "check your connection".
+  it('classifies Chromium net::ERR_* messages from Electron net.fetch', () => {
+    expect(classifyNetworkError(new Error('net::ERR_NAME_NOT_RESOLVED'))).toBe('offline');
+    expect(classifyNetworkError(new Error('net::ERR_INTERNET_DISCONNECTED'))).toBe('offline');
+    expect(classifyNetworkError(new Error('net::ERR_CONNECTION_REFUSED'))).toBe('offline');
+    expect(classifyNetworkError(new Error('net::ERR_NETWORK_CHANGED'))).toBe('offline');
+    expect(classifyNetworkError(new Error('net::ERR_PROXY_CONNECTION_FAILED'))).toBe('offline');
+    expect(classifyNetworkError(new Error('net::ERR_NAME_RESOLUTION_FAILED'))).toBe('offline');
+  });
+
+  it('classifies Chromium timeout errors as timeout, not offline', () => {
+    expect(classifyNetworkError(new Error('net::ERR_TIMED_OUT'))).toBe('timeout');
+    expect(classifyNetworkError(new Error('net::ERR_CONNECTION_TIMED_OUT'))).toBe('timeout');
+  });
+
+  it('does not treat an unrelated net::ERR_* as a connection problem', () => {
+    // A certificate or protocol failure is real and reachable — but it is not "you're
+    // offline", and telling the user to check their connection would send them hunting
+    // for a problem that isn't there.
+    expect(classifyNetworkError(new Error('net::ERR_CERT_DATE_INVALID'))).toBe('unknown');
+  });
+
   it('classifies Node errno shapes', () => {
     expect(classifyNetworkError({ code: 'ENOTFOUND' })).toBe('offline');
     expect(classifyNetworkError({ code: 'ECONNREFUSED' })).toBe('offline');

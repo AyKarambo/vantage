@@ -40,6 +40,19 @@ const HTTP_STATUS_IN_MESSAGE = /\bHTTP (\d{3})\b/;
 /** Matches the `Timed out after <ms>ms fetching ...` shape those same modules throw on abort. */
 const TIMED_OUT_IN_MESSAGE = /\btimed out\b/i;
 
+/**
+ * Chromium's own network errors. Electron's `net.fetch` — which is what
+ * `main/masterDataUpdate.ts` and `main/statusFeed.ts` use — rejects with the RAW
+ * ClientRequest error, i.e. an `Error` whose message is `net::ERR_...`. It does NOT
+ * wrap it in undici's `TypeError('fetch failed', { cause })`; that shape belongs to
+ * Node's global fetch, which this app doesn't use for these calls. Without these two
+ * patterns the app's only non-Notion outbound path classified a plain offline failure
+ * as `unknown` — the exact case this module exists for.
+ */
+const CHROMIUM_TIMEOUT = /net::ERR_(?:TIMED_OUT|CONNECTION_TIMED_OUT)\b/i;
+const CHROMIUM_OFFLINE =
+  /net::ERR_(?:NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|INTERNET_DISCONNECTED|NETWORK_CHANGED|CONNECTION_REFUSED|CONNECTION_RESET|CONNECTION_ABORTED|CONNECTION_CLOSED|CONNECTION_FAILED|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED)\b/i;
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
@@ -92,6 +105,7 @@ export function classifyNetworkError(err: unknown): NetErrorKind {
     name === 'RequestTimeoutError' ||
     code === 'ETIMEDOUT' ||
     code === 'notionhq_client_request_timeout' ||
+    CHROMIUM_TIMEOUT.test(message) ||
     TIMED_OUT_IN_MESSAGE.test(message)
   ) {
     return 'timeout';
@@ -101,7 +115,12 @@ export function classifyNetworkError(err: unknown): NetErrorKind {
   // undici/Electron's `TypeError: fetch failed` (with the real errno one level
   // down in `cause`, already unwrapped above by `fieldOrCause`), and a raw
   // `getaddrinfo …` message some platforms surface instead of a `code`.
-  if (OFFLINE_ERRNO_CODES.has(code) || /fetch failed/i.test(message) || /getaddrinfo/i.test(message)) {
+  if (
+    OFFLINE_ERRNO_CODES.has(code) ||
+    CHROMIUM_OFFLINE.test(message) ||
+    /fetch failed/i.test(message) ||
+    /getaddrinfo/i.test(message)
+  ) {
     return 'offline';
   }
 
