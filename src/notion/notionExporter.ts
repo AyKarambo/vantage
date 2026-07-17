@@ -5,6 +5,7 @@ import { leaverFlags, mergeLeaver } from '../core/leaver';
 import { commsTone } from '../core/comms';
 import { aggregateImprovementGrade, matchExportSignature, effectiveImprovementGrade, DEFAULT_PARTIAL_MARGIN, type AuthoredTarget } from '../core/targets';
 import { NotionWriter } from './notionWriter';
+import { classifyNetworkError, friendlyNetworkMessage } from '../core/netError';
 import { queryAllPages, queryDataSourcePages } from './pageScan';
 import { groupByEffectiveMatchId, pickCanonicalRow, rowRefOf, type RowRef } from './dedup';
 import { MapsCache } from './mapsCache';
@@ -156,6 +157,12 @@ export class NotionExporter {
     let skipped = 0;
     let updated = 0;
     let recreated = 0;
+    // The FIRST per-game failure's classified, friendly reason (never
+    // `String(err)`) — a total outage must not report "0 synced, 12 failed"
+    // with no explanation. Captured once (not once per failure): the loop
+    // keeps counting every subsequent failure, it just doesn't keep
+    // overwriting the reason with the same (or a noisier) one.
+    let firstError: string | undefined;
     // "Done" must include every outcome bucket, not just ok/failed/skipped —
     // otherwise progress stalls on an update-heavy sync (every row lands in
     // `updated`, so done never advances even though work is completing).
@@ -184,8 +191,9 @@ export class NotionExporter {
         if (outcome === 'updated') updated++;
         else if (outcome === 'recreated') recreated++;
         else ok++;
-      } catch {
+      } catch (err) {
         failed++;
+        if (firstError === undefined) firstError = friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion');
       }
       tick();
     }
@@ -229,12 +237,13 @@ export class NotionExporter {
           if (outcome === 'recreated') recreated++;
           else updated++;
         }
-      } catch {
+      } catch (err) {
         failed++;
+        if (firstError === undefined) firstError = friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion');
       }
       tick();
     }
-    return { ok, failed, skipped, updated, recreated };
+    return { ok, failed, skipped, updated, recreated, error: firstError };
   }
 
   /** Create a new page and build its `ResolvedMatch` (shared by create + recreate). */

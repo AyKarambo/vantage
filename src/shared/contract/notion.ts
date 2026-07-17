@@ -14,7 +14,15 @@ export interface ExportResult {
   /** Pages recreated because the previously-linked Notion page was gone (deleted/archived). */
   recreated?: number;
   unavailable?: boolean;
-  /** Set when the export short-circuited, e.g. a database shape mismatch. */
+  /**
+   * A friendly, actionable failure reason — never a raw `String(err)`. Set
+   * either when the whole export short-circuited before running (e.g. a
+   * cached database shape mismatch), or, when one or more per-game exports
+   * failed, the FIRST such failure's classified reason (`core/netError.ts`)
+   * so a total outage (e.g. offline) isn't reported as silent zeros with no
+   * explanation. `ok`/`failed`/etc. above still reflect the real counts
+   * either way — this only explains why, once.
+   */
   error?: string;
 }
 
@@ -152,6 +160,17 @@ export interface NotionStatus {
   shapeValid?: boolean;
   /** Missing/mismatched property names, when `shapeValid` is false. */
   shapeIssues?: string[];
+  /**
+   * Set when the last attempt to validate the configured database's shape
+   * failed with a classified network/API error (offline, timed out, access
+   * denied, not found, or the service being down — see `core/netError.ts`)
+   * rather than an actual schema problem. A friendly, actionable message
+   * (never a raw `String(err)`). When this is set, `shapeValid`/`shapeIssues`
+   * are left undefined — the shape verdict is genuinely unknown, since the
+   * request never got a real answer, and must not be reported as a
+   * fabricated "Missing: <raw error>" shape mismatch.
+   */
+  transportError?: string;
   /** When the last successful sync finished (epoch ms). */
   lastSyncedAt?: number;
   /** How many local matches came from a Notion import (deletable for a clean re-import). */

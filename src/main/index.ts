@@ -30,6 +30,7 @@ import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
+import type { NetErrorKind } from '../core/netError';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
@@ -49,6 +50,29 @@ import { GepRecorder, readRecording, replayRecording } from './recorder';
  * lock, constructs every concrete service, feeds the factories (match pipeline,
  * data provider), picks the sensor, and starts the dev simulate/replay paths.
  */
+
+/**
+ * Network/API failure kinds (`core/netError.ts`) that must NOT ambush the user
+ * with a native OS toast: these mean the transport never got a real answer
+ * (offline, timed out, or the remote service itself being down) — not an app
+ * fault, and in particular not something someone who simply launched offline
+ * should see fired at them ~2s after opening the app (the reported bug,
+ * AC-5). `auth`/`notFound`/an unclassified kind still toast: those are real,
+ * actionable outcomes (a denied/missing configuration, or something this
+ * runtime couldn't classify) worth surfacing immediately, not a transport
+ * hiccup that resolves itself once the connection comes back.
+ */
+const SILENT_NET_ERROR_KINDS: ReadonlySet<NetErrorKind> = new Set(['offline', 'timeout', 'server']);
+
+/**
+ * Whether an `onError` failure of this classified kind should surface as a
+ * native OS toast (policy decision kept here, at the composition root — see
+ * the module doc above). Exported so the rule itself is unit-testable
+ * without booting Electron.
+ */
+export function shouldToastNetError(kind: NetErrorKind | undefined): boolean {
+  return !kind || !SILENT_NET_ERROR_KINDS.has(kind);
+}
 
 // Single instance: a second launch just focuses the existing one.
 if (!app.requestSingleInstanceLock()) {
@@ -258,9 +282,13 @@ function main(): void {
     historyGames: () => history.all(),
     importedMatches: () => history.importedCount('notion'),
     onTokenState: (tokenSet) => tray.setState({ tokenSet }),
-    onError: (title, body) => {
+    onError: (title, body, kind) => {
       log.error('notion', `${title}: ${body}`);
-      tray.notifyError(title, body);
+      // A transport failure (offline/timed out/remote down) is not an app
+      // fault — toasting it would ambush someone who simply launched offline
+      // (the reported AC-5 bug). Every other case, including an unclassified
+      // error, still toasts, exactly as before this fix.
+      if (shouldToastNetError(kind)) tray.notifyError(title, body);
     },
     onSyncProgress: (done, total) => pushSyncProgress(done, total),
     // Read live on every export: the user's own authored targets, active AND
