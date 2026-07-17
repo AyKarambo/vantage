@@ -1099,3 +1099,74 @@ describe('gameToMatchRecord — carried scalar fields', () => {
     expect(rec.finalScore).toBe('2-1');
   });
 });
+
+describe('NotionExporter — captures the first per-game failure reason (no silent "0 synced, N failed")', () => {
+  it('classifies an offline failure and exposes a friendly, non-String(err) reason while still counting every failure', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+    const client = { pages: { create } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set());
+    const maps = stubMaps();
+
+    const games = [game('g1'), game('g2'), game('g3')];
+    const exporter = new NotionExporter(writer, maps, outbox);
+    const result = await exporter.export(games);
+
+    // The loop keeps going — every game is still counted as failed, not
+    // silently abandoned after the first error.
+    expect(result.failed).toBe(3);
+    expect(result.ok).toBe(0);
+    // The reason rides the existing `error` channel (same one the pre-loop
+    // shape-mismatch short-circuit uses), classified and friendly.
+    expect(result.error).not.toContain('TypeError');
+    expect(result.error).not.toContain('fetch failed');
+    expect(result.error).toMatch(/internet connection/i);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps the FIRST failure\'s reason even when a later failure is a different kind', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed')) // g1: offline
+      .mockRejectedValueOnce(Object.assign(new Error('denied'), { status: 401, code: 'unauthorized' })); // g2: auth
+    const client = { pages: { create } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set());
+    const maps = stubMaps();
+
+    const games = [game('g1'), game('g2')];
+    const exporter = new NotionExporter(writer, maps, outbox);
+    const result = await exporter.export(games);
+
+    expect(result.failed).toBe(2);
+    // Still the first (offline) reason, not overwritten by the second (auth) one.
+    expect(result.error).toMatch(/internet connection/i);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a successful export alongside a failed one still reports the failure reason without hiding the successes', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'page-ok' })
+      .mockRejectedValueOnce(new TypeError('fetch failed'));
+    const client = { pages: { create } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set());
+    const maps = stubMaps();
+
+    const games = [game('g-ok'), game('g-fail')];
+    const exporter = new NotionExporter(writer, maps, outbox);
+    const result = await exporter.export(games);
+
+    expect(result.ok).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.error).toMatch(/internet connection/i);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

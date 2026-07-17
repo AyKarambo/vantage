@@ -16,6 +16,7 @@ import {
   matchExportSignature, effectiveImprovementGrade, countUnsyncedGames, countCompetitiveGames,
   DEFAULT_PARTIAL_MARGIN, type AuthoredTarget,
 } from '../core/targets';
+import { classifyNetworkError, friendlyNetworkMessage, type NetErrorKind } from '../core/netError';
 import type {
   CleanupDuplicatesResult, ExportResult, NotionDatabaseSummary, NotionPageSummary, NotionStatus,
   SchemaProvisionStatus, SubjectiveColumnDiag,
@@ -48,7 +49,16 @@ export interface NotionRuntimeDeps {
   importedMatches: () => number;
   /** Mirror the token presence into the tray. */
   onTokenState: (tokenSet: boolean) => void;
-  onError: (title: string, body: string) => void;
+  /**
+   * Log (and, at the composition root's discretion, toast) a Notion-related
+   * failure. `kind` is set whenever the failure classifies as a network/API
+   * error (`core/netError.ts`) — the composition root uses it to decide
+   * whether a transport hiccup deserves a native OS toast at all (see the
+   * wiring + comment in `main/index.ts`); `body` is already a friendly
+   * message in that case, never a raw `String(err)`. `kind` is omitted for
+   * failures this runtime doesn't classify.
+   */
+  onError: (title: string, body: string, kind?: NetErrorKind) => void;
   /** Live per-game export progress (pushed to the sync card). */
   onSyncProgress?: (done: number, total: number) => void;
   /**
@@ -91,6 +101,13 @@ export class NotionRuntime {
   // Cached async validation of the configured database's shape; undefined =
   // not yet checked (or nothing to check).
   private shapeCheck?: { title?: string; valid: boolean; issues: string[] };
+  // Set instead of `shapeCheck` when the last validate attempt failed with a
+  // classified network/API error (offline, timeout, auth, notFound, server):
+  // that never proves the database's shape is wrong, so the shape verdict is
+  // left unknown (shapeCheck stays undefined) rather than fabricating a fake
+  // mismatch out of a transport failure. Undefined = no transport failure on
+  // the last attempt (which may itself mean "not yet checked").
+  private transportError?: string;
   // Whether the configured database has the optional `Played At` date column, so
   // the writer may set it. Off until validation confirms it — writing a column
   // the database lacks would fail every export row.
@@ -126,6 +143,7 @@ export class NotionRuntime {
   rebuild(): void {
     const token = getNotionToken();
     this.shapeCheck = undefined;
+    this.transportError = undefined;
     this.hasPlayedAt = false;
     this.hasSrDelta = false;
     this.writableColumns = new Set();
@@ -143,7 +161,13 @@ export class NotionRuntime {
     this.admin = new NotionAdmin(this.client, this.deps.mapNames?.());
     const maps = this.buildExporter();
     this.deps.onTokenState(true);
-    maps?.load().catch((err) => this.deps.onError('Maps load failed', String(err)));
+    maps?.load().catch((err) => {
+      const kind = classifyNetworkError(err);
+      // Body is always the friendly, classified message (never `String(err)`);
+      // `kind` rides along so the composition root can decide whether this
+      // deserves a native toast at all — see `main/index.ts`'s wiring.
+      this.deps.onError('Maps load failed', friendlyNetworkMessage(kind, 'load the maps list from Notion'), kind);
+    });
     void this.validateConfigured();
   }
 
@@ -164,6 +188,7 @@ export class NotionRuntime {
       databaseTitle: this.shapeCheck?.title,
       shapeValid: this.shapeCheck?.valid,
       shapeIssues: this.shapeCheck?.issues,
+      transportError: this.transportError,
       lastSyncedAt: notion.lastSyncedAt,
       importedMatches: this.deps.importedMatches(),
       subjectiveColumns: this.subjectiveDiagnostics,
@@ -418,6 +443,7 @@ export class NotionRuntime {
         this.schemaProvision = undefined;
       }
       this.shapeCheck = { title: result.title, valid: result.ok, issues: [...result.missing, ...result.mismatched] };
+      this.transportError = undefined;
       this.hasPlayedAt = result.hasPlayedAt;
       this.hasSrDelta = result.hasSrDelta;
       this.writableColumns = new Set(result.subjectiveColumns);
@@ -426,7 +452,23 @@ export class NotionRuntime {
       this.mapsRelationDbId = result.mapRelationDbId;
       this.gametrackerSourceId = result.dataSourceId;
     } catch (err) {
-      this.shapeCheck = { valid: false, issues: [String(err)] };
+      const kind = classifyNetworkError(err);
+      if (kind === 'unknown') {
+        // Not a recognized network/API failure shape — keep today's behavior:
+        // an unclassifiable failure is treated as a genuine validation problem
+        // worth surfacing as a shape issue.
+        this.shapeCheck = { valid: false, issues: [String(err)] };
+        this.transportError = undefined;
+      } else {
+        // A classified network/API failure (offline, timeout, auth, notFound,
+        // server) never proves the database's shape is wrong — it proves the
+        // request never got a real answer. Leave the shape verdict UNKNOWN
+        // (shapeCheck stays undefined) instead of asserting a "Missing:
+        // TypeError: fetch failed"-style mismatch that was never established,
+        // and surface a friendly, actionable message via `transportError`.
+        this.shapeCheck = undefined;
+        this.transportError = friendlyNetworkMessage(kind, 'verify your Notion database');
+      }
       this.hasPlayedAt = false;
       this.hasSrDelta = false;
       this.writableColumns = new Set();
@@ -436,7 +478,11 @@ export class NotionRuntime {
       this.gametrackerSourceId = undefined;
       this.schemaProvision = undefined;
     }
-    this.buildExporter(this.shapeCheck.valid ? undefined : this.shapeCheck.issues);
+    // A transport failure leaves `shapeCheck` unset entirely (verdict
+    // unknown) — treat that the same as "valid" for the exporter's
+    // short-circuit: it must not refuse to sync just because the last shape
+    // check couldn't complete, only when a shape mismatch was actually found.
+    this.buildExporter(this.shapeCheck && !this.shapeCheck.valid ? this.shapeCheck.issues : undefined);
   }
 
   /** (Re)wire writer + maps + exporter against the live client and config. */

@@ -33,10 +33,14 @@ vi.mock('../src/notion/notionAdmin', () => ({
   }),
 }));
 
-// MapsCache.load() is called fire-and-forget from rebuild(); stub it inert.
+// MapsCache.load() is called fire-and-forget from rebuild(); stub it inert by
+// default. Shared so individual tests can make it reject (e.g. offline) —
+// `vi.mock` factories are hoisted/fixed, so the mock's method must delegate
+// to a mutable fn reference instead of a fresh one per test.
+const mapsLoadMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../src/notion/mapsCache', () => ({
   MapsCache: vi.fn().mockImplementation(function (this: any) {
-    this.load = vi.fn().mockResolvedValue(undefined);
+    this.load = (...args: unknown[]) => mapsLoadMock(...args);
     this.resolve = vi.fn().mockResolvedValue({ matched: false });
   }),
 }));
@@ -149,6 +153,7 @@ beforeEach(() => {
   tokenState.token = undefined;
   validateMock.mockReset();
   ensureColumnsMock.mockReset().mockResolvedValue([]);
+  mapsLoadMock.mockReset().mockResolvedValue(undefined);
   exporterCtor.mockReset();
   clientMocks.pagesUpdate.mockReset().mockResolvedValue(undefined);
   clientMocks.dataSourcesQuery.mockReset().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
@@ -691,5 +696,102 @@ describe('NotionRuntime — cleanup never runs during import/export (AC10)', () 
     for (const call of clientMocks.pagesUpdate.mock.calls) {
       expect(call[0]).not.toHaveProperty('in_trash');
     }
+  });
+});
+
+/** Flush the classify → onError / catch chain kicked off by rebuild() without awaiting it. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('NotionRuntime — offline maps.load() failure (AC-5: no toast-ambush on launch)', () => {
+  it('classifies an offline maps.load() rejection and calls onError with kind "offline" and a friendly, non-String(err) body', async () => {
+    mapsLoadMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    const onError = vi.fn();
+    validateMock.mockResolvedValue({
+      ok: true, missing: [], mismatched: [], title: 'Gametracker',
+      hasPlayedAt: false, hasSrDelta: false,
+      subjectiveColumns: [], subjectiveColumnDiagnostics: [],
+      mapRelationDbId: undefined, dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
+    });
+
+    const runtime = new NotionRuntime(baseDeps({ onError }));
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [title, body, kind] = onError.mock.calls[0];
+    expect(title).toBe('Maps load failed');
+    expect(kind).toBe('offline');
+    // Never the raw error — a friendly, actionable message instead.
+    expect(body).not.toContain('TypeError');
+    expect(body).not.toContain('fetch failed');
+    expect(body).toMatch(/internet connection/i);
+    // This 'offline' kind is exactly one of the kinds the composition root's
+    // policy (`shouldToastNetError` in `main/index.ts`) suppresses the native
+    // toast for — see that module's own test for the direct assertion of the
+    // rule itself; this proves NotionRuntime hands it the right kind to act on.
+    expect(['offline', 'timeout', 'server']).toContain(kind);
+  });
+});
+
+describe('NotionRuntime.validateConfigured — transport failures never fabricate a shape mismatch', () => {
+  it('a transport-classified validate() failure sets transportError and leaves shapeValid/shapeIssues unset', async () => {
+    validateMock.mockRejectedValue(new TypeError('fetch failed'));
+
+    const runtime = new NotionRuntime(baseDeps());
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+
+    const status = runtime.status();
+    expect(status.transportError).toBeDefined();
+    expect(status.transportError).not.toContain('TypeError');
+    expect(status.transportError).not.toContain('fetch failed');
+    expect(status.transportError).toMatch(/internet connection/i);
+    // No fabricated "Missing: TypeError: fetch failed" mismatch — the shape
+    // verdict is genuinely unknown, not asserted false.
+    expect(status.shapeValid).toBeUndefined();
+    expect(status.shapeIssues).toBeUndefined();
+    // buildExporter must still run cleanly against the unset shapeCheck (no
+    // crash reading `.valid` off `undefined`) — connected proves it did.
+    expect(status.connected).toBe(true);
+  });
+
+  it('a non-transport (unclassifiable) validate() failure keeps today\'s behavior: shapeValid:false with the raw issue, no transportError', async () => {
+    validateMock.mockRejectedValue(new Error('unexpected schema explosion'));
+
+    const runtime = new NotionRuntime(baseDeps());
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+
+    const status = runtime.status();
+    expect(status.transportError).toBeUndefined();
+    expect(status.shapeValid).toBe(false);
+    expect(status.shapeIssues).toEqual(['Error: unexpected schema explosion']);
+  });
+
+  it('a successful validate() after a prior transport failure clears the stale transportError', async () => {
+    validateMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    const runtime = new NotionRuntime(baseDeps());
+    tokenState.token = 'secret-token';
+    runtime.rebuild();
+    await settle();
+    expect(runtime.status().transportError).toBeDefined();
+
+    validateMock.mockResolvedValue({
+      ok: true, missing: [], mismatched: [], title: 'Gametracker',
+      hasPlayedAt: false, hasSrDelta: false,
+      subjectiveColumns: [], subjectiveColumnDiagnostics: [],
+      mapRelationDbId: undefined, dataSourceId: 'src-1',
+      provisionPlan: { toCreate: {}, blocked: [] },
+    });
+    runtime.rebuild();
+    await settle();
+
+    const status = runtime.status();
+    expect(status.transportError).toBeUndefined();
+    expect(status.shapeValid).toBe(true);
   });
 });
