@@ -164,6 +164,66 @@ describe('resolveBuildEnv', () => {
     expect(result.missing).toEqual(['OW_CLI_EMAIL', 'OW_CLI_API_KEY']);
   });
 
+  // Regression: a dev key must not SUPPRESS the API key, only fail to satisfy it.
+  // Dev Mode's resolver returns the dev key first and stops, which is right for
+  // Dev Mode and wrong here — routing through it aborted every release on any
+  // machine that had ever followed the onboarding docs' dev-key instructions.
+  it('resolves email/apiKey from the credentials file even when a devKey sits in the same profile', () => {
+    const credFile = writeCredentials('[default]\nemail=me@example.com\napiKey=real-api-key\ndevKey=my-dev-key\n');
+    const keyFile = writeBuildKeyFile('file-build-key');
+    const result = resolveBuildEnv({
+      env: {},
+      credentialFiles: [credFile],
+      buildKeyFiles: [keyFile],
+    });
+    expect(result).toEqual({
+      missing: [],
+      email: 'me@example.com',
+      apiKey: 'real-api-key',
+      buildKey: 'file-build-key',
+    });
+  });
+
+  it('resolves email/apiKey from the credentials file even when OW_DEV_KEY is set in the environment', () => {
+    const credFile = writeCredentials('[default]\nemail=me@example.com\napiKey=real-api-key\n');
+    const keyFile = writeBuildKeyFile('file-build-key');
+    const result = resolveBuildEnv({
+      env: { OW_DEV_KEY: 'a-dev-key-from-the-shell' },
+      credentialFiles: [credFile],
+      buildKeyFiles: [keyFile],
+    });
+    expect(result.missing).toEqual([]);
+    expect(result.email).toBe('me@example.com');
+    expect(result.apiKey).toBe('real-api-key');
+  });
+
+  it('resolves email/apiKey from the credentials file even when a standalone dev-key file exists', () => {
+    const credFile = writeCredentials('[default]\nemail=me@example.com\napiKey=real-api-key\n');
+    const devKeyFile = path.join(dir, 'dev-key');
+    fs.writeFileSync(devKeyFile, 'a-leftover-dev-key');
+    const keyFile = writeBuildKeyFile('file-build-key');
+    const result = resolveBuildEnv({
+      env: {},
+      credentialFiles: [credFile],
+      devKeyFiles: [devKeyFile],
+      buildKeyFiles: [keyFile],
+    });
+    expect(result.missing).toEqual([]);
+    expect(result.email).toBe('me@example.com');
+  });
+
+  it('falls back to the file when only half the env pair is set, rather than mixing sources', () => {
+    const credFile = writeCredentials('[default]\nemail=file@example.com\napiKey=file-api-key\n');
+    const keyFile = writeBuildKeyFile('file-build-key');
+    const result = resolveBuildEnv({
+      env: { OW_CLI_EMAIL: 'env@example.com' },
+      credentialFiles: [credFile],
+      buildKeyFiles: [keyFile],
+    });
+    expect(result.email).toBe('file@example.com');
+    expect(result.apiKey).toBe('file-api-key');
+  });
+
   it('treats a missing/empty/whitespace-only build-key file as absent, without throwing', () => {
     const missing = path.join(dir, 'missing-buildkey');
     const empty = writeBuildKeyFile('');
