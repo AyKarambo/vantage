@@ -73,7 +73,7 @@ if (!enabled) {
   } else {
     console.warn('[ow-dev] No Dev Mode credentials found.');
     console.warn('[ow-dev]   Dev key:  set OW_DEV_KEY, or put the token in ~/.ow-cli/dev-key');
-    console.warn('[ow-dev]   API key:  run `ow config`, or set OW_CLI_EMAIL + OW_CLI_API_KEY');
+    console.warn('[ow-dev]   API key:  run `npx -y -p @overwolf/ow-cli ow config`, or set OW_CLI_EMAIL + OW_CLI_API_KEY');
     console.warn('[ow-dev]   Without one, ow-electron skips the gaming packages and GEP will not attach.');
   }
 }

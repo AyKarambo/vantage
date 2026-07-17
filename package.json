@@ -88,7 +88,6 @@
     "@notionhq/client": "^5.22.0"
   },
   "devDependencies": {
-    "@overwolf/ow-cli": "^0.1.6",
     "@overwolf/ow-electron": "39.8.10-beta.12",
     "@overwolf/ow-electron-builder": "26.9.0",
     "@overwolf/ow-electron-packages-types": "^1.1.4",
@@ -101,7 +100,6 @@
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.1": true,
-    "@overwolf/ow-electron@39.8.10-beta.12": true,
-    "@overwolf/ow-cli@0.1.6": true
+    "@overwolf/ow-electron@39.8.10-beta.12": true
   }
 }
