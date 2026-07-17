@@ -19,11 +19,21 @@ Two independent reasons:
    Without both, the gaming packages (GEP, Overlay, Recorder) will not load at
    runtime."* Take that literally: **ours** (Certum, this whole doc) and **Overwolf's
    own package-integrity signature** (below) are both required at runtime — either one
-   missing still leaves GEP refusing to load. We're now on `ow-electron@39.8.10` /
-   `ow-electron-builder@26.9.0` (bumped up from the earlier 39.6.1 pin), which is also
-   what makes Overwolf's half of this actually work — see below. Vantage without GEP is
-   not Vantage. (Local dev has a Dev Mode carve-out; the requirement is for
-   *distributed* builds.)
+   missing still leaves GEP refusing to load. Vantage without GEP is not Vantage.
+   (Local dev has a Dev Mode carve-out; the requirement is for *distributed* builds.)
+
+   **The two packages are pinned independently, on purpose.** The **builder** is on
+   stable `@overwolf/ow-electron-builder@26.9.0`, because that is what pulls
+   `@overwolf/app-builder-lib@26.9.0` — the only version carrying the signer that reads
+   `OW_BUILD_KEY` (see below). The **runtime** stays on the beta
+   `@overwolf/ow-electron@39.8.10-beta.12`, because **Dev Mode still has no stable
+   release**: on stable, GEP loads, reports Overwatch supported and even fires
+   `game-detected` — and then delivers zero events. Tested in the field; the README has
+   said so all along, and bumping the runtime on the reasoning that npm now serves
+   39.8.10 as `latest` was wrong. `latest` is not the same claim as "Dev Mode is in it".
+   Nothing couples the two: the builder neither depends on nor version-checks the
+   runtime, so stable-builder + beta-runtime is a supported combination. Revisit the
+   runtime pin only with a live GEP test, not a version number.
 2. **Overwolf gates store review on it.** The submission form asks "Is your app
    signed?" and requires a trusted-CA signature (self-signed is rejected).
 
