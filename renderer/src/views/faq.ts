@@ -78,10 +78,11 @@ const FAQ: FaqTopic[] = [
     entries: [
       {
         q: 'How do I report a bug?',
-        a: `Email ${SUPPORT_EMAIL} with what happened — a rough timeline or screenshot helps. It’s worth ` +
-          'checking the Logs screen first for anything relevant around that time; the debug log never leaves ' +
-          'your device unless you choose to share it.',
-        link: { label: 'Open the Logs screen →', go: (ctx) => ctx.navigate('logs') },
+        a: 'On the About screen, “Report a bug” opens a prefilled GitHub issue with your version and build ' +
+          `info attached — or email ${SUPPORT_EMAIL} directly if you’d rather not use GitHub. “Save debug ` +
+          'log…” there exports a copy with BattleTags and other identifying details stripped, but that’s ' +
+          'best-effort — look it over yourself before attaching it to a public issue.',
+        link: { label: 'Open About →', go: (ctx) => ctx.navigate('about') },
       },
     ],
   },
