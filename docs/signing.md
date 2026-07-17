@@ -11,14 +11,19 @@ obtained.
 
 Two independent reasons:
 
-1. **ow-electron requires it for the gaming packages to load.** Overwolf's
+1. **ow-electron requires it for the gaming packages to load — and that means *two*
+   signatures, not one.** Overwolf's
    [App Signing guide](https://dev.overwolf.com/ow-electron/guides/dev-tools/app-signing/):
    *"Code-signing your exe with your own certificate is now required (previously
    optional)"* and *"Overwolf signs the gaming package integrity and you sign the exe.
    Without both, the gaming packages (GEP, Overlay, Recorder) will not load at
-   runtime."* This landed around ow-electron ~39.8.x; we're pinned to 39.6.1, so it
-   bites on the next ow-electron upgrade — and Vantage without GEP is not Vantage.
-   (Local dev has a Dev Mode carve-out; the requirement is for *distributed* builds.)
+   runtime."* Take that literally: **ours** (Certum, this whole doc) and **Overwolf's
+   own package-integrity signature** (below) are both required at runtime — either one
+   missing still leaves GEP refusing to load. We're now on `ow-electron@39.8.10` /
+   `ow-electron-builder@26.9.0` (bumped up from the earlier 39.6.1 pin), which is also
+   what makes Overwolf's half of this actually work — see below. Vantage without GEP is
+   not Vantage. (Local dev has a Dev Mode carve-out; the requirement is for
+   *distributed* builds.)
 2. **Overwolf gates store review on it.** The submission form asks "Is your app
    signed?" and requires a trusted-CA signature (self-signed is rejected).
 
@@ -28,6 +33,24 @@ And the user-facing reason: unsigned installers show SmartScreen's harshest
 **All three files must be signed** — the app exe (`Vantage.exe`), the uninstaller, and
 the installer — for GEP to load. Signing therefore happens *during* the build (the sign
 hook runs once per file), not as a post-hoc pass over the outer installer.
+
+**Overwolf's half: the package-integrity signature.** Ours (Certum) only covers the
+exe/uninstaller/installer above — it says nothing about the gaming-package integrity
+signature the App Signing guide also requires. That second signature is stamped by
+`ow-electron-builder`'s own signer (`@overwolf/app-builder-lib@26.9.0`'s
+`out/codeSign/owBuildCertificateSigner.js`), which reads exactly three env vars —
+`OW_CLI_EMAIL`, `OW_CLI_API_KEY`, `OW_BUILD_KEY` — and POSTs to Overwolf's backend
+(`https://console-be.overwolf.com`, overridable via `OW_CLI_API_URL`) with an
+`Authorization: Key <email>:<apiKey>` header. **The trap is the failure mode:** if
+those vars are missing, the signer does not fail the build — it logs a warning and
+ships the build **unsigned**. Nothing looks wrong locally; the breakage only shows up
+later, for end users, as GEP silently refusing to attach. Set `OW_REQUIRE_SIGNING=1`
+(or `build.overwolf.requireSigning` in `package.json`) to turn that warning into a
+throw — the same fail-closed shape `VANTAGE_REQUIRE_SIGNING` uses for the Certum side
+(see [How the repo is wired](#how-the-repo-is-wired)). It's also toolchain-dependent:
+the betas previously pinned here resolved `@overwolf/app-builder-lib@26.8.5`, which
+doesn't ship the signer module at all — `OW_BUILD_KEY` was inert until the 26.9.0 bump
+above.
 
 ## Why signing runs locally (the hard constraint)
 
@@ -74,6 +97,13 @@ in CI. Everything else favoured Certum; see history.)
    (Only if that build of signtool can't drive the SimplySign card: install the Windows
    SDK *"Signing Tools for Desktop Apps"* component and set `SIGNTOOL_PATH` to its
    `signtool.exe` — the hook honours that first.)
+7. **Get an Overwolf build key (`OW_BUILD_KEY`)** — a separate credential from
+   everything above, for Overwolf's own package-integrity signature (see
+   [Why signing is mandatory](#why-signing-is-mandatory-not-cosmetic)). It lives in the
+   Developer Console under **Release management → App Keys**, and it's
+   **Console-gated**: it doesn't exist until the app is registered/approved, so this
+   step is a prerequisite still ahead of us, not something already configured. Once
+   issued, see [How the repo is wired](#how-the-repo-is-wired) for where it's read from.
 
 ## Releasing
 
@@ -110,10 +140,22 @@ anyway*).
   (avoids a wasteful sha1+sha256 dual pass); `publisherName: "Open Source Developer Timo
   Seikel"` — **must match the cert CN** (electron-builder writes it into the NSIS
   publisher metadata and electron-updater compares it during update verification).
+- [scripts/ow-build-env.mjs](../scripts/ow-build-env.mjs) — resolves the three env vars
+  Overwolf's package-integrity signer needs: email/apiKey via
+  [scripts/lib/owCredentials.mjs](../scripts/lib/owCredentials.mjs) (env, else the `ow
+  config` credentials file), and `OW_BUILD_KEY` from the env var or a standalone
+  `~/.ow-cli/build-key` token file. `--json` emits the resolved values for
+  `publish-release.ps1` to consume; every other invocation names only the *missing*
+  variables, never a value.
 - [scripts/next-version.mjs](../scripts/next-version.mjs) — pure-Node version computation
   (Conventional Commits) shared by the local release and the CI check.
 - [scripts/publish-release.ps1](../scripts/publish-release.ps1) — the local release
-  orchestrator described above.
+  orchestrator described above. Its readiness check calls `ow-build-env.mjs` and
+  **aborts before building** if `OW_CLI_EMAIL`, `OW_CLI_API_KEY` or `OW_BUILD_KEY` can't
+  be resolved; `-DryRun` only warns instead (the build key is Console-gated, so a strict
+  dry run would be unusable before the app is approved). When it does build, it sets
+  all three plus `OW_REQUIRE_SIGNING=1` for the `npm run release` child process, and
+  removes them again in a `finally` block.
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — quality gates only (typecheck
   + tests) on push to `main` and PRs. `permissions: contents: read`, no secrets, no
   signing, no publish path — it is structurally impossible for CI to publish a release.
@@ -152,10 +194,15 @@ software with this cert risks revocation.
   re-enrolling a new phone; the desktop signing session never needs the raw seed.
 - No signing credentials go in GitHub Actions secrets or git — the key stays in Certum's
   cloud, the OTP stays on your phone.
+- The **`OW_BUILD_KEY`** (Overwolf's package-integrity credential, distinct from the
+  Certum cert) follows the same rule — it never enters git either. Every tool that
+  resolves it (`ow-build-env.mjs`, `publish-release.ps1`) prints only the *names* of
+  missing variables, never a value.
 - Optional mechanical backstop: [scripts/check-secrets.mjs](../scripts/check-secrets.mjs)
   + [.githooks/pre-commit](../.githooks/pre-commit) scan staged additions for secret-shaped
-  content (`otpauth://`, private-key blocks, `.pfx`/`.p12` files, Notion tokens). Enable
-  once per clone: `git config core.hooksPath .githooks`.
+  content (`otpauth://`, private-key blocks, `.pfx`/`.p12` files, Notion tokens, a
+  hardcoded `OW_BUILD_KEY=`/`OW_CLI_API_KEY=` literal). Enable once per clone:
+  `git config core.hooksPath .githooks`.
 
 ## SmartScreen expectations (be honest with yourself)
 
