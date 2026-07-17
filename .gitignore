@@ -1,8 +1,13 @@
 # build output
 dist/
-build/
 out/
 release/
+
+# `build/` is NOT output — it's ow-electron-builder's `buildResources` directory, i.e.
+# installer *inputs* (the NSIS license page). Ignore anything that lands there by
+# accident, but keep the files the installer is built from.
+build/*
+!build/license.txt
 
 # renderer bundles (esbuild output; renderer/dist is covered by dist/ above)
 renderer/preview/preview.js
