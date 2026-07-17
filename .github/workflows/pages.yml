@@ -1,0 +1,69 @@
+# Publish the legal pages (Privacy Policy + Terms of Use) to GitHub Pages.
+#
+# WHY THIS EXISTS: Overwolf requires the Terms of Use and Privacy Policy to live at a
+# public, stable URL that loads without a login — both for the store listing and for the
+# installer's acceptance flow. `docs/legal/*.html` are self-contained (inline CSS, no
+# assets, relative links), so they can be served as-is.
+#
+# WHY ONLY `docs/legal`: `docs/` also holds maintainer-only material — the Overwolf
+# submission dossier (`overwolf-submission.md`, with store copy and QA answers) and the
+# review screenshots. Those must not be published. The upload is therefore scoped to
+# `docs/legal` alone, and the guard step below fails the build if anything else ever
+# slips into the artifact. (`scripts/sync-wiki.mjs` carves out the same material for the
+# same reason — see docs/wiki-sync.md.)
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/legal/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a half-finished deployment: the legal URLs must not 404 while Overwolf
+# (or a user following the installer's link) is reading them.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail closed: publish exactly the three legal pages and nothing else. A new file in
+      # docs/legal/ is a deliberate decision, so it should break the build until reviewed —
+      # this directory becomes world-readable.
+      - name: Guard — only the legal pages may be published
+        run: |
+          unexpected="$(find docs/legal -type f ! -name 'index.html' ! -name 'privacy.html' ! -name 'terms.html' -print)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::Unexpected file(s) in docs/legal — refusing to publish:"
+            echo "$unexpected"
+            exit 1
+          fi
+          for f in index.html privacy.html terms.html; do
+            test -f "docs/legal/$f" || { echo "::error::docs/legal/$f is missing"; exit 1; }
+          done
+          echo "docs/legal contains exactly the three expected pages."
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/legal # artifact root = the legal pages, so no other docs/ content ships
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
