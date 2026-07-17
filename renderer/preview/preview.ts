@@ -198,6 +198,9 @@ let appSettings: AppUiSettings = {
   demoPreference: 'on',
   devMode: true,
   gepNotifications: true,
+  // Matches the mocked AppInfo.version below ('preview') so the "What's new"
+  // highlight (T21) reads as already-seen instead of popping on every reload.
+  lastSeenVersion: 'preview',
   ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
 };
 // ?demo=on|off|unset overrides the persisted choice — lets design QA preview the

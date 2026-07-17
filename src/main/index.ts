@@ -393,6 +393,7 @@ function main(): void {
         demoPreference: config.ui.demoPreference,
         devMode: config.ui.devMode,
         gepNotifications: config.ui.gepNotifications,
+        lastSeenVersion: config.ui.lastSeenVersion,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -419,12 +420,17 @@ function main(): void {
           saveLocalUiConfig({ gepNotifications: patch.gepNotifications });
           config = loadConfig();
         }
+        if (patch.lastSeenVersion !== undefined) {
+          saveLocalUiConfig({ lastSeenVersion: patch.lastSeenVersion });
+          config = loadConfig();
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
           demoPreference: config.ui.demoPreference,
           devMode: config.ui.devMode,
           gepNotifications: config.ui.gepNotifications,
+          lastSeenVersion: config.ui.lastSeenVersion,
         };
       },
     },
