@@ -469,8 +469,14 @@ Vantage installs with `winget install AyKarambo.Vantage`. Generate the manifest 
 ## Support
 
 Questions or feedback: <timo.seikel@gmail.com> (also reachable from the tray's **Help & Support**
-item). The [Privacy Policy](docs/legal/privacy.html) and [Terms of Use](docs/legal/terms.html) live
-under `docs/legal/` and are published as the app's public legal URLs.
+item).
+
+The [Privacy Policy](https://aykarambo.github.io/vantage/privacy.html) and
+[Terms of Use](https://aykarambo.github.io/vantage/terms.html) are published to GitHub Pages by
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) on every push to `main` that touches
+them. Overwolf requires both at a public, login-free URL, and the installer's acceptance page links
+them there. Their source lives under [`docs/legal/`](docs/legal) — and only that folder is
+published; the rest of `docs/` is maintainer material.
 
 ## Live connection status
 
