@@ -33,6 +33,21 @@ interface RawGepData {
 }
 
 /**
+ * Overwatch's documented feature set
+ * (dev.overwolf.com/ow-electron/live-game-data-gep/supported-games/overwatch).
+ *
+ * Requested EXPLICITLY since 2026-07-17, with a fallback to `undefined` ("all").
+ * Until then the app only ever sent `undefined` and only ever logged the
+ * REJECTION of `setRequiredFeatures` — a subscription that resolved uselessly,
+ * or never settled at all, was indistinguishable from a healthy one. During the
+ * 2026-07-17 event outage that blind spot cost hours: game-detected fired,
+ * enable() succeeded, and nothing in the log could say whether the feature
+ * subscription was alive. The explicit list is the form every GEP doc page
+ * shows; arming is now logged on every outcome.
+ */
+const OVERWATCH_FEATURES = ['gep_internal', 'game_info', 'match_info', 'kill', 'death', 'assist', 'roster'];
+
+/**
  * Wraps the Overwolf GEP package: waits for it to be ready, enables Overwatch
  * when detected, requests all features, and re-emits normalized {@link GepMessage}s.
  *
@@ -127,10 +142,8 @@ export class GepService extends EventEmitter {
       // restart-to-apply banner get wiped the moment a game launches).
       this.status = { ...this.status, gameRunning: true, enabled: true, lastError: undefined };
       this.emit('status', this.getStatus());
-      // undefined = request all available features for the game
-      this.gep!.setRequiredFeatures(gameId, undefined).catch((err) =>
-        this.emit('log', 'setRequiredFeatures failed', String(err)),
-      );
+      this.armFeatures(gameId, 'game-detected');
+      this.probeInfo(gameId);
     });
 
     this.gep.on('game-exit', (_e: unknown, gameId: number) => {
@@ -164,9 +177,7 @@ export class GepService extends EventEmitter {
     // Re-arm when re-entering onGepReady after a runtime package update while a
     // game is already up (first-ready has gameRunning=false, so this no-ops then).
     if (this.status.gameRunning) {
-      this.gep.setRequiredFeatures(this.overwatchGameId, undefined).catch((err) =>
-        this.emit('log', 'setRequiredFeatures (re-arm) failed', String(err)),
-      );
+      this.armFeatures(this.overwatchGameId, 're-arm after package update');
     }
 
     this.emit('status', this.getStatus());
@@ -198,6 +209,57 @@ export class GepService extends EventEmitter {
         );
       })
       .catch((err) => this.emit('log', 'gep: getSupportedGames failed/hung —', String(err)));
+  }
+
+  /**
+   * Subscribe to Overwatch's features, loudly. Every outcome is logged — the
+   * 2026-07-17 outage showed that anything less leaves "subscription dead"
+   * looking identical to "all is well". Falls back to `undefined` ("all
+   * features") if the explicit list is rejected, so a package predating one of
+   * the names never loses events over it.
+   */
+  private armFeatures(gameId: number, context: string): void {
+    const gep = this.gep;
+    if (!gep) return;
+    const pending = setTimeout(() => {
+      this.emit('log', `gep: setRequiredFeatures still unsettled after 10s (${context}) — subscription state unknown`);
+    }, 10_000);
+    gep
+      .setRequiredFeatures(gameId, OVERWATCH_FEATURES)
+      .then(() => this.emit('log', `gep: armed ${OVERWATCH_FEATURES.length} features (${context}): ${OVERWATCH_FEATURES.join(', ')}`))
+      .catch((err) => {
+        this.emit('log', `gep: explicit feature list rejected (${context}) — retrying with "all"`, String(err));
+        return gep
+          .setRequiredFeatures(gameId, undefined)
+          .then(() => this.emit('log', `gep: armed all features (${context})`))
+          .catch((err2) => {
+            const msg = 'GEP rejected the feature subscription — no events can arrive.';
+            this.status = { ...this.status, lastError: msg };
+            this.emit('status', this.getStatus());
+            this.emit('log', 'setRequiredFeatures failed', String(err2));
+          });
+      })
+      .finally(() => clearTimeout(pending));
+  }
+
+  /**
+   * One-shot diagnostic 5s after arming: what does the package's own state say?
+   * A populated snapshot with zero pushed events, an empty snapshot, and a
+   * rejection each point at a different layer — exactly the distinction the
+   * 2026-07-17 outage had no way to make.
+   */
+  private probeInfo(gameId: number): void {
+    setTimeout(() => {
+      const gep = this.gep;
+      if (!gep || !this.status.gameRunning) return;
+      gep
+        .getInfo(gameId)
+        .then((info) => {
+          const keys = info && typeof info === 'object' ? Object.keys(info as object) : [];
+          this.emit('log', `gep: getInfo probe — ${keys.length} top-level keys${keys.length ? ` (${keys.slice(0, 8).join(', ')})` : ''}`);
+        })
+        .catch((err) => this.emit('log', 'gep: getInfo probe failed', String(err)));
+    }, 5_000);
   }
 
   private dispatch(kind: 'info' | 'event', data: RawGepData): void {
