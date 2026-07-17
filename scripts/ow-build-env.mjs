@@ -25,7 +25,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveOwCredentials } from './lib/owCredentials.mjs';
+import { apiKeyFromFile } from './lib/owCredentials.mjs';
 
 // Standalone build-key token files (just the token, nothing else) — same
 // two-location pattern as owCredentials.mjs's DEV_KEY_FILES.
@@ -63,23 +63,37 @@ export function resolveBuildKey(opts = {}) {
  * Resolve all three credentials ow-electron-builder's signer needs and report
  * which are missing by env-var name (never a value), so callers can fail fast
  * without ever logging a secret.
- * @param {{env?: NodeJS.ProcessEnv, profile?: string, credentialFiles?: string[], devKeyFiles?: string[], buildKeyFiles?: string[]}} [opts]
+ *
+ * Deliberately does NOT go through `resolveOwCredentials`: that function answers
+ * Dev Mode's question ("which single credential should ow-electron authenticate
+ * with?"), where a dev key legitimately wins and short-circuits the rest. The
+ * builder's question is different — it needs the email+apiKey PAIR, and a dev key
+ * is simply irrelevant to it. Routing through the dev-mode chain made any dev key
+ * on the machine (env or `~/.ow-cli/dev-key`, which this repo's own onboarding
+ * docs tell you to create) suppress an `ow config` API key sitting in the very
+ * same file, aborting the release with "run `ow config`" — advice the user had
+ * already followed. `apiKeyFromFile` is the primitive that answers this question;
+ * call it directly.
+ * @param {{env?: NodeJS.ProcessEnv, profile?: string, credentialFiles?: string[], buildKeyFiles?: string[]}} [opts]
  * @returns {{email?: string, apiKey?: string, buildKey?: string, missing: string[]}}
  */
 export function resolveBuildEnv(opts = {}) {
   const env = opts.env || process.env;
+  const profile = opts.profile || env.OW_PROFILE || 'default';
 
-  // A dev key is NOT a build credential: only an {email, apiKey} resolution
-  // satisfies OW_CLI_EMAIL/OW_CLI_API_KEY here, so a devKey-only result from
-  // resolveOwCredentials leaves both of those missing.
-  const creds = resolveOwCredentials({
-    env,
-    profile: opts.profile,
-    credentialFiles: opts.credentialFiles,
-    devKeyFiles: opts.devKeyFiles,
-  });
-  const email = creds?.email;
-  const apiKey = creds?.apiKey;
+  // Env wins only as a complete pair, mirroring how ow-dev.mjs treats these two;
+  // a half-set environment falls back to the file rather than resolving to a
+  // mismatched email/key from two different sources.
+  let email;
+  let apiKey;
+  if (env.OW_CLI_EMAIL && env.OW_CLI_API_KEY) {
+    email = env.OW_CLI_EMAIL;
+    apiKey = env.OW_CLI_API_KEY;
+  } else {
+    const fromFile = apiKeyFromFile(profile, opts.credentialFiles);
+    email = fromFile?.email;
+    apiKey = fromFile?.apiKey;
+  }
   const buildKey = resolveBuildKey({ env, buildKeyFiles: opts.buildKeyFiles });
 
   const missing = [];
