@@ -6,8 +6,19 @@
  */
 import { h, render } from '../../dom';
 import type { NotionDatabaseSummary, NotionPageSummary, NotionStatus } from '../../../../src/shared/contract';
+import { classifyNetworkError, friendlyNetworkMessage } from '../../../../src/core/netError';
 import { bridge } from '../../bridge';
 import { button, card } from '../../components/primitives';
+
+/**
+ * Phrase a main-side error string as an actionable, blame-free message.
+ * `listNotionDatabases`/`listNotionPages` still return a raw `String(err)`
+ * over IPC (main process is out of scope here) — classify the stringified
+ * text itself rather than re-surfacing it verbatim.
+ */
+function friendlyFor(rawError: string, action: string): string {
+  return friendlyNetworkMessage(classifyNetworkError({ message: rawError }), action);
+}
 
 /**
  * The database picker: hidden until a token is saved. Offers two paths —
@@ -51,7 +62,7 @@ function renderDatabaseList(
   refresh: () => Promise<void>,
 ): HTMLElement {
   if (error) {
-    return h('div', { class: 'hint is-loss' }, error);
+    return h('div', { class: 'hint is-loss' }, friendlyFor(error, 'load your Notion databases'));
   }
   if (!databases.length) {
     return h('div', { class: 'hint' }, shareGuidance());
@@ -101,7 +112,7 @@ function renderPageList(
   refresh: () => Promise<void>,
 ): HTMLElement {
   if (error) {
-    return h('div', { class: 'hint is-loss' }, error);
+    return h('div', { class: 'hint is-loss' }, friendlyFor(error, 'load your Notion pages'));
   }
   if (!pages.length) {
     return h('div', { class: 'hint' }, shareGuidance());
@@ -123,7 +134,7 @@ function pageRow(page: NotionPageSummary, refresh: () => Promise<void>): HTMLEle
         await refresh();
       } catch (err) {
         createBtn.disabled = false;
-        render(status, h('span', { class: 'is-loss' }, `Could not create database — ${String(err)}`));
+        render(status, h('span', { class: 'is-loss' }, friendlyNetworkMessage(classifyNetworkError(err), 'create the database')));
       }
     },
   });

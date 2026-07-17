@@ -4,12 +4,24 @@
  */
 import { h, render } from '../../dom';
 import type { CleanupDuplicatesResult, ExportResult, ImportResult, NotionStatus } from '../../../../src/shared/contract';
+import { classifyNetworkError, friendlyNetworkMessage } from '../../../../src/core/netError';
 import { relTime } from '../../format';
 import { bridge } from '../../bridge';
 import { store } from '../../store';
 import { toast } from '../../components/toast';
 import { openModal } from '../../components/overlay';
 import { button, card } from '../../components/primitives';
+
+/**
+ * Phrase a main-side error string as an actionable, blame-free message.
+ * `ImportResult.error`/`CleanupDuplicatesResult.error` still carry a raw
+ * `String(err)` over IPC (main process is out of scope here) — classify the
+ * stringified text itself. `ExportResult.error` is already friendly (T11) and
+ * must be rendered as-is instead — see `syncResult`'s caller below.
+ */
+function friendlyFor(rawError: string, action: string): string {
+  return friendlyNetworkMessage(classifyNetworkError({ message: rawError }), action);
+}
 
 export function syncCard(s: NotionStatus | null): HTMLElement {
   const out = h('div', { style: { marginTop: '12px', minHeight: '18px' } });
@@ -40,7 +52,7 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
               : syncResult(res),
         );
       } catch (err) {
-        render(out, h('span', { class: 'is-loss' }, `Sync failed — ${String(err)}`));
+        render(out, h('span', { class: 'is-loss' }, friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion')));
       }
       unsub();
       btn.disabled = false;
@@ -74,7 +86,7 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
           res.unavailable
             ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
             : res.error
-              ? h('span', { class: 'is-loss' }, res.error)
+              ? h('span', { class: 'is-loss' }, friendlyFor(res.error, 'import from Notion'))
               : importResult(res),
         );
         // Also confirm via a toast: store.refresh() below rebuilds this whole
@@ -100,7 +112,7 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
         // reads live.
         if (res.imported || res.merged || res.accountsAdded) void store.refresh();
       } catch (err) {
-        render(importOut, h('span', { class: 'is-loss' }, `Import failed — ${String(err)}`));
+        render(importOut, h('span', { class: 'is-loss' }, friendlyNetworkMessage(classifyNetworkError(err), 'import from Notion')));
       }
       importBtn.disabled = false;
     },
@@ -171,7 +183,7 @@ function confirmDeleteImported(count: number): void {
               toast(`Deleted ${res.deleted} imported match${res.deleted === 1 ? '' : 'es'}`);
               void store.refresh(); // updates dashboards + the Notion status (count → 0)
             } catch (err) {
-              toast(`Delete failed — ${String(err)}`);
+              toast(friendlyNetworkMessage(classifyNetworkError(err), 'delete the imported matches'));
             }
           },
         }),
@@ -206,7 +218,7 @@ function confirmCleanupDuplicates(cleanupBtn: HTMLButtonElement, cleanupOut: HTM
                 res.unavailable
                   ? h('span', { class: 'is-loss' }, 'Connect Notion first.')
                   : res.error
-                    ? h('span', { class: 'is-loss' }, res.error)
+                    ? h('span', { class: 'is-loss' }, friendlyFor(res.error, 'clean up duplicate Notion rows'))
                     : null,
               );
               if (!res.unavailable && !res.error) {
@@ -214,8 +226,9 @@ function confirmCleanupDuplicates(cleanupBtn: HTMLButtonElement, cleanupOut: HTM
                 void store.refresh();
               }
             } catch (err) {
-              render(cleanupOut, h('span', { class: 'is-loss' }, `Cleanup failed — ${String(err)}`));
-              toast(`Cleanup failed — ${String(err)}`);
+              const msg = friendlyNetworkMessage(classifyNetworkError(err), 'clean up duplicate Notion rows');
+              render(cleanupOut, h('span', { class: 'is-loss' }, msg));
+              toast(msg);
             }
             cleanupBtn.disabled = false;
           },

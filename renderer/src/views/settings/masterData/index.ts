@@ -1,5 +1,6 @@
 import { h, render } from '../../../dom';
 import type { MasterData } from '../../../../../src/shared/contract';
+import { classifyNetworkError, friendlyNetworkMessage } from '../../../../../src/core/netError';
 import { bridge } from '../../../bridge';
 import { button, card } from '../../../components/primitives';
 import { toast } from '../../../components/toast';
@@ -46,7 +47,7 @@ export function masterDataTab(ctx: ViewContext): HTMLElement {
       if (empty) toast('Master data is already up to date.');
       else openUpdatePreview(preview, apply);
     } catch (err) {
-      toast(`Update failed — ${String(err)}`);
+      toast(friendlyNetworkMessage(classifyNetworkError(err), 'update the hero and map list'));
     } finally {
       updateBtn.disabled = false;
       updateBtn.textContent = 'Update from online source';
