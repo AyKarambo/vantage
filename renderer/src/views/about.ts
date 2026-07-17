@@ -108,6 +108,7 @@ function supportCard(emailSupport: () => void): HTMLElement {
       h('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '2px' } },
         aboutLink('Data storage location →', () => store.setView('settings')),
         aboutLink('Open the debug log →', () => store.setView('logs')),
+        aboutLink('FAQ →', () => store.setView('faq')),
       ),
     ),
   );

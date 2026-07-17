@@ -36,6 +36,7 @@ import { review } from '../views/review';
 import { logViewer, pauseFollow } from '../views/logViewer';
 import { settings } from '../views/settings';
 import { about } from '../views/about';
+import { faq } from '../views/faq';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { openLogMatch } from './log-match';
@@ -46,13 +47,14 @@ import { openDataLocationPrompt } from './dataLocationPrompt';
 
 // matchDetail and playerHistory are parameterized views: registered here
 // (routable) but not in NAV — the sidebar keeps Matches highlighted while active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about };
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
  *  unaffected by it, so showing the bar would imply a control that does nothing.
- *  playerHistory is a cross-history drill-down over the full local index. */
-const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory']);
+ *  playerHistory is a cross-history drill-down over the full local index. faq
+ *  is static help copy, unaffected by any filter. */
+const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq']);
 
 interface NavItem {
   id: ViewId;
@@ -119,6 +121,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { id: 'settings', label: 'Settings', icon: '⚙' },
       { id: 'about', label: 'About', icon: 'ⓘ' },
+      { id: 'faq', label: 'FAQ', icon: '?' },
     ],
   },
 ];
@@ -255,8 +258,8 @@ export class App {
         h('button', {
           class: 'statusbar-link',
           style: { marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer', font: 'inherit', fontSize: '11.5px' },
-          title: 'Replay the intro tour',
-          on: { click: () => openOnboarding(store.get().data?.isSample ?? false) },
+          title: 'Help & FAQ — the intro tour is still one click away from there',
+          on: { click: () => store.setView('faq') },
         }, 'Help'),
       ),
     );
@@ -625,7 +628,7 @@ export class App {
       actions: [
         { label: 'Log match', hint: 'record a game manually', run: () => openLogMatch(ctx) },
         { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
-        { label: 'Replay the intro tour', run: () => openOnboarding(store.get().data?.isSample ?? false) },
+        { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
       ],
     });
   }
