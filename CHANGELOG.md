@@ -17,6 +17,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Added
+
+- **An FAQ**, reachable from **Help** in the status bar — what live tracking needs, why a match
+  you joined late looks incomplete, where your data lives, how Notion sync works, and how to
+  report a bug. It also keeps this changelog, so you can read back through it any time.
+- **Report a bug from inside the app** (About). It opens a prefilled report with your build
+  details filled in, and can save your debug log to a file you choose. The saved log has
+  BattleTags and other identifying details stripped — that's best-effort, not a guarantee, so
+  give it a look before attaching it to a public issue.
+- **What's new after an update** — a short summary of what changed, shown once.
+
 ### Fixed
 
 - **Being offline no longer looks like something is broken.** Starting Vantage without a
