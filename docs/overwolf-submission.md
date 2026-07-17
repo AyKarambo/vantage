@@ -25,8 +25,16 @@ list of steps only you (the account owner) can do.
 
 ## 1. App identity — must match your whitelisted registration
 
-Overwolf derives the app's unique id from **`name` + `author`** in `package.json`.
-This must be identical to the app you were whitelisted as, or GEP/console won't bind.
+The app's unique id (UID) comes from Overwolf's backend, not from hand-deriving
+`name` + `author` yourself. The same signer that stamps the package-integrity
+signature (see [docs/signing.md](signing.md)) **returns the UID**: `signApp()`
+resolves `signResult.uid`, the builder assigns it to `appInfo.overwolfUid`, and embeds
+it into the exe as a PE resource — logged as `embedding Overwolf app uid in PE
+resource`. (Overwolf's own docs describe the derivation elsewhere as `productName`
+(falling back to `name`) + `author.name`, which for this app would differ from the
+plain `name`+`author` this section used to assume — one more reason not to guess it by
+hand.) Whatever the signer returns must match the app you were whitelisted as, or
+GEP/console won't bind.
 
 | Field | Value | Source |
 |---|---|---|
@@ -38,9 +46,11 @@ This must be identical to the app you were whitelisted as, or GEP/console won't 
 | Overwolf packages | `["gep"]` | package.json `overwolf.packages` |
 | Target game | **Overwatch — game id `10844`** | appsettings.json |
 
-**➡ Action:** open the Developer Console and confirm the registered app name/author
-match the two values above. If the console shows anything different, change
-`package.json` `name`/`author` to match it exactly and rebuild — the UID must line up.
+**➡ Action:** don't compare these values against the console by hand — **read the UID
+the signer returns in the build log** (a `npm run publish:release` run, or any build
+with the Overwolf signer credentials present) and confirm that's the app you were
+whitelisted as. If it doesn't match, that's your signal `name`/`author` diverged from
+the registered app — fix `package.json` and rebuild.
 
 **Verifying this pre-approval:** you don't need to wait for full store approval to check
 GEP actually binds — [ow-electron Dev Mode](https://dev.overwolf.com/ow-electron/guides/dev-tools/dev-mode)
