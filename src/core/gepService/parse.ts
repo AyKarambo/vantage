@@ -52,6 +52,19 @@ export function parseServiceStatus(raw: unknown): ServiceStatus {
     return message ? { level: 'down', message } : { level: 'down' };
   }
 
+  // An UNPUBLISHED entry is not an authoritative reading and must not be read as
+  // one. Overwatch is live proof: `10844_prod.json` returns `published: false` with
+  // a blanket `state: 3` across all 25 keys, while `10844_dev.json` returns
+  // `published: true, state: 1` — green. The prod entry is a placeholder Overwolf
+  // hasn't published, not an outage, and reading it literally made the app announce
+  // a GEP outage that was not happening. That false claim is precisely what the
+  // `unknown` level exists to prevent (see ./types.ts).
+  //
+  // Only an explicit `false` suppresses: a payload that omits `published` entirely
+  // is still trusted, so this can't silently mute a real outage on a game whose
+  // feed lacks the field.
+  if (raw.published === false) return { level: 'unknown' };
+
   if (typeof raw.state !== 'number') return { level: 'unknown' };
 
   let level = mapState(raw.state);

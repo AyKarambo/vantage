@@ -14,6 +14,33 @@ describe('parseServiceStatus — Overwolf status feed', () => {
     expect(parseServiceStatus({ state: 1, disabled_electron: true })).toEqual({ level: 'down' });
   });
 
+  // Regression from a real false alarm. 10844_prod.json (Overwatch) serves
+  // `published: false` with a blanket state 3 on all 25 keys, while 10844_dev.json
+  // serves `published: true, state: 1`. The prod entry is an unpublished
+  // placeholder, not an outage — reading it literally made the app announce a GEP
+  // outage that was not happening.
+  it('makes no claim from an unpublished entry, however red it looks', () => {
+    expect(parseServiceStatus({ state: 3, published: false })).toEqual({ level: 'unknown' });
+    // Red feature keys and a message don't rescue it — none of it is authoritative.
+    expect(parseServiceStatus({
+      state: 3,
+      published: false,
+      maintenance_msg: 'placeholder',
+      features: [{ name: 'match_info', keys: [{ name: 'map', state: 3 }] }],
+    })).toEqual({ level: 'unknown' });
+  });
+
+  it('still trusts a published entry, and one that omits the field', () => {
+    // Valorant's real shape: published AND genuinely red.
+    expect(parseServiceStatus({ state: 3, published: true })).toEqual({ level: 'down' });
+    // A feed without the field at all must not be silently muted.
+    expect(parseServiceStatus({ state: 3 })).toEqual({ level: 'down' });
+  });
+
+  it('keeps an explicit disable authoritative even on an unpublished entry', () => {
+    expect(parseServiceStatus({ state: 3, published: false, disabled: true })).toEqual({ level: 'down' });
+  });
+
   it('carries maintenance_msg when not ok, omits it when ok', () => {
     expect(parseServiceStatus({ state: 3, maintenance_msg: 'Events are disabled' }))
       .toEqual({ level: 'down', message: 'Events are disabled' });
