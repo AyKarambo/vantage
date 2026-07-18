@@ -10,7 +10,7 @@ import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
-  DataLocation, DataLocationResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
+  DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
@@ -129,6 +129,8 @@ export interface DataProvider {
   exportLogBundle(): Promise<LogExportResult>;
   /** Current connection/data-flow status snapshot. */
   getGepStatus(): GepStatusPayload;
+  /** Dev-mode auth status snapshot. */
+  getDevModeAuthStatus(): DevModeAuthStatusPayload;
   /** App-behavior settings (Settings screen). */
   getAppSettings(): AppUiSettings;
   /** Apply + persist app-behavior settings; returns the applied values. */
