@@ -14,7 +14,7 @@ import type { DevModeAuthOutcome, DevModeAuthStatusPayload } from '../shared/con
 export interface DevModeAuthMonitorDeps {
   /** Whether a dev-mode launch was attempted this run (from core/devMode.ts's computeDevModeAttempted). */
   attempted: boolean;
-  log(scope: string, message: string, fields?: unknown): void;
+  log(scope: string, message: string, fields?: Record<string, string | number | boolean>): void;
   publish(payload: DevModeAuthStatusPayload): void;
 }
 

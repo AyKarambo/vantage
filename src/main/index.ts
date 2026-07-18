@@ -24,7 +24,8 @@ import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
-import { computeDevMode } from '../core/devMode';
+import { computeDevModeAttempted, hasDevCredentials, decideDevModeAuthStrategy } from '../core/devMode';
+import { createDevModeAuthMonitor } from './devModeAuthMonitor';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
@@ -38,7 +39,7 @@ import { createDataProvider } from './dataProvider';
 import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload, type DevModeAuthStatusPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -353,6 +354,19 @@ function main(): void {
     publish: (p) => publishStatus(p),
   });
 
+  // Dev-mode auth: a one-shot, runtime-verified confirmation that ow-electron
+  // actually authenticated with the injected dev credentials — not just that
+  // they were present in the env (see core/devMode.ts's doc comments). Resolves
+  // at most once per process run; wiring for *how* it resolves lives further
+  // down, independent of `config.sensor` (see the comment there for why).
+  let publishDevModeAuth: (p: DevModeAuthStatusPayload) => void = () => {};
+  const devModeAttempted = computeDevModeAttempted({ packaged: app.isPackaged, env: process.env });
+  const devModeAuthMonitor = createDevModeAuthMonitor({
+    attempted: devModeAttempted,
+    log: (scope, message, fields) => log.info(scope, message, fields),
+    publish: (p) => publishDevModeAuth(p),
+  });
+
   const dataProvider = createDataProvider({
     history,
     manual,
@@ -444,9 +458,10 @@ function main(): void {
       platform: process.platform,
       osRelease: os.release(),
       packaged: app.isPackaged,
-      // Truthful dev-mode read: unpackaged AND dev credentials in the env at
-      // start (injected by scripts/ow-dev.mjs) — see core/devMode.
-      devMode: computeDevMode({ packaged: app.isPackaged, env: process.env }),
+      // Truthful dev-mode read: true only once ow-electron has actually
+      // CONFIRMED the injected dev credentials authenticated (not merely that
+      // they were present at launch) — see core/devMode.ts + devModeAuthMonitor.ts.
+      devMode: devModeAuthMonitor.current().outcome === 'confirmed',
       // The loaded GEP package version (from the live status snapshot); '' until
       // the package reports ready. Changes when Overwolf ships a fix.
       gepPackageVersion: statusMonitor.current().gepPackageVersion ?? '',
@@ -528,6 +543,7 @@ function main(): void {
     },
   });
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
+  publishDevModeAuth = (p) => dashboard.push(EVENT_CHANNELS.onDevModeAuthStatus, p);
   let prevService: ServiceStatus | null = null;
   publishStatus = (p) => {
     dashboard.push(EVENT_CHANNELS.onGepStatus, p);
@@ -590,6 +606,42 @@ function main(): void {
     cw.on('match', (record) => pipeline.addMatch(record));
     cw.on('log', log.adapter('cw'));
     cw.start();
+  }
+
+  // Dev-mode auth verification — deliberately OUTSIDE the `config.sensor`
+  // branch above: whether ow-electron authenticated with the injected dev
+  // credentials is an Overwolf-level fact, not a Vantage-pipeline concern, so
+  // it must not be gated behind the 'gep' sensor choice (a counterwatch/
+  // dev-simulate run still deserves a truthful "did dev-mode auth work"
+  // answer — or an honest "never attempted" when it wasn't relevant this run).
+  {
+    const packages = (app as any).overwolf?.packages; // eslint-disable-line @typescript-eslint/no-explicit-any -- matches GepService's own (electronApp as any).overwolf?.packages cast; overwolf.packages has no stable type-safe accessor at this layer.
+    const strategy = decideDevModeAuthStrategy({
+      attempted: devModeAttempted,
+      hasCredentials: hasDevCredentials(process.env),
+      packagesAvailable: Boolean(packages),
+    });
+    switch (strategy) {
+      case 'not-attempted':
+        break;
+      case 'immediate-fail-no-credentials':
+        devModeAuthMonitor.resolve('failed', 'no dev credentials were found — nothing to authenticate with');
+        break;
+      case 'immediate-fail-no-packages':
+        devModeAuthMonitor.resolve('failed', 'overwolf.packages is unavailable — cannot confirm Dev Mode authentication');
+        break;
+      case 'listen':
+        packages.on('ready', (_e: unknown, packageName: string) => {
+          if (packageName !== 'gep') return;
+          devModeAuthMonitor.resolve('confirmed', 'gep package reported ready');
+        });
+        packages.on('failed-to-initialize', (_e: unknown, packageName: string) => {
+          if (packageName !== 'gep') return;
+          devModeAuthMonitor.resolve('failed', 'ow-electron reported failed-to-initialize for the gep package');
+        });
+        devModeAuthMonitor.armTimeout(15_000);
+        break;
+    }
   }
 
   tray.init({
