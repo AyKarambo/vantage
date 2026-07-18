@@ -24,12 +24,18 @@
 #   8. create the tag at HEAD and publish the GitHub Release with the signed installer
 #
 # Usage:
-#   npm run publish:release                 # build, sign, verify, tag, publish
-#   npm run publish:release -- -DryRun      # build+sign+verify, then stop (no tag/Release)
-#   npm run publish:release -- -AllowDirty  # allow an unclean working tree
+#   npm run publish:release                        # build, sign, verify, tag, publish
+#   npm run publish:release -- -DryRun              # build+sign+verify, then stop (no tag/Release)
+#   npm run publish:release -- -AllowDirty          # allow an unclean working tree
+#   npm run publish:release -- -AllowUnsignedOverwolf
+#       # publish anyway when OW_BUILD_KEY etc. can't be resolved (e.g. pre-approval,
+#       # the key is Console-gated and doesn't exist yet). Certum signing still runs and
+#       # is still required. GEP will not load for installers of this release - the
+#       # published notes say so.
 param(
     [switch]$DryRun,
     [switch]$AllowDirty,
+    [switch]$AllowUnsignedOverwolf,
     [string]$Remote = 'origin'
 )
 
@@ -85,22 +91,28 @@ $owJson = (node scripts/ow-build-env.mjs --json | Out-String)
 if ($LASTEXITCODE -ne 0) { throw "scripts/ow-build-env.mjs failed - cannot resolve the Overwolf build credentials." }
 $owEnv = $owJson | ConvertFrom-Json
 $owMissing = @($owEnv.missing)
-if ($owMissing.Count -gt 0) {
+$owSigned = $owMissing.Count -eq 0
+if (-not $owSigned) {
     $names = $owMissing -join ', '
-    if (-not $DryRun) {
+    if (-not $DryRun -and -not $AllowUnsignedOverwolf) {
         throw @"
 Missing Overwolf build credentials: $names.
 Without them app-builder-lib does NOT sign the package - it only warns - and GEP will
 refuse to load for everyone who installs this build. Refusing to publish.
 Set them in the environment, or put the build key in ~/.ow-cli/build-key and run ``ow config``
 for the API key. The build key comes from the Developer Console (Release management > App Keys).
-See docs/signing.md.
+See docs/signing.md. Pass -AllowUnsignedOverwolf to publish anyway with GEP disabled - e.g.
+before the app is Overwolf-approved, when OW_BUILD_KEY does not exist yet.
 "@
     }
-    # -DryRun rehearses the Certum path locally; the Overwolf key is Console-gated, so a
-    # missing key must not make dry runs unusable. Be loud instead: this is exactly the
-    # gap that ships a silently unsigned build.
-    Write-Warning "Overwolf build credentials missing ($names) - this dry run does NOT exercise Overwolf package signing. A real publish would abort here."
+    # -DryRun rehearses the Certum path locally; -AllowUnsignedOverwolf is the deliberate
+    # pre-approval escape hatch. Either way: be loud, since this is exactly the gap that
+    # ships a silently unsigned build.
+    if ($DryRun) {
+        Write-Warning "Overwolf build credentials missing ($names) - this dry run does NOT exercise Overwolf package signing. A real publish would abort here unless -AllowUnsignedOverwolf is passed."
+    } else {
+        Write-Warning "Overwolf build credentials missing ($names) - publishing WITHOUT Overwolf package signing. GEP will not load for installers of this release."
+    }
 }
 
 # 4. compute version ----------------------------------------------------------
@@ -148,9 +160,14 @@ try {
     $blockmap = "$installer.blockmap"
     if (Test-Path -LiteralPath $blockmap) { $assets += (Resolve-Path $blockmap).Path }
 
-    & $gh release create $tag @assets --title "Vantage $version" --generate-notes --target $head
+    $ghArgs = @($tag) + $assets + @('--title', "Vantage $version", '--generate-notes', '--target', $head)
+    if (-not $owSigned) {
+        $ghArgs += @('--notes', "**Live match tracking (GEP) is disabled in this build.** Vantage is not yet Overwolf-approved, so this release ships without Overwolf's package-integrity signature and GEP will not load. Manual match entry and everything else works normally.`n`n")
+    }
+    & $gh release create @ghArgs
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed." }
-    Write-Host "`nPublished $tag with a signed installer." -ForegroundColor Green
+    $suffix = if (-not $owSigned) { ' (GEP disabled - not yet Overwolf-approved)' } else { '' }
+    Write-Host "`nPublished $tag with a signed installer.$suffix" -ForegroundColor Green
 }
 finally {
     Remove-Item Env:\VANTAGE_REQUIRE_SIGNING -ErrorAction SilentlyContinue

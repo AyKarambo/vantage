@@ -122,6 +122,12 @@ in CI. Everything else favoured Certum; see history.)
 # 2. From the repo root, with HEAD pushed to origin/main:
 npm run publish:release              # build, sign, verify, tag vX.Y.Z, publish the Release
 npm run publish:release -- -DryRun   # build + sign + verify only, no tag/Release
+npm run publish:release -- -AllowUnsignedOverwolf
+    # publish anyway when OW_BUILD_KEY etc. can't be resolved - e.g. before the app is
+    # Overwolf-approved, when the Console-gated build key does not exist yet. Certum
+    # signing still runs and is still required; only Overwolf's package-integrity
+    # signature is skipped. GEP will not load for installers of this release - the
+    # published notes say so explicitly.
 ```
 
 `publish-release.ps1` computes the next version from tags + Conventional Commits, builds
@@ -162,10 +168,13 @@ anyway*).
 - [scripts/publish-release.ps1](../scripts/publish-release.ps1) — the local release
   orchestrator described above. Its readiness check calls `ow-build-env.mjs` and
   **aborts before building** if `OW_CLI_EMAIL`, `OW_CLI_API_KEY` or `OW_BUILD_KEY` can't
-  be resolved; `-DryRun` only warns instead (the build key is Console-gated, so a strict
-  dry run would be unusable before the app is approved). When it does build, it sets
-  all three plus `OW_REQUIRE_SIGNING=1` for the `npm run release` child process, and
-  removes them again in a `finally` block.
+  be resolved; `-DryRun` and `-AllowUnsignedOverwolf` only warn instead (the build key
+  is Console-gated, so the strict default would make both dry runs and real releases
+  unusable before the app is approved). When it does build with all three resolved, it
+  sets them plus `OW_REQUIRE_SIGNING=1` for the `npm run release` child process, and
+  removes them again in a `finally` block. A real publish made with
+  `-AllowUnsignedOverwolf` gets a banner prepended to its release notes stating GEP is
+  disabled in that build.
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — quality gates only (typecheck
   + tests) on push to `main` and PRs. `permissions: contents: read`, no secrets, no
   signing, no publish path — it is structurally impossible for CI to publish a release.
