@@ -21,12 +21,17 @@
 //   4. an API key on disk — email+apiKey in the [default] (or $OW_PROFILE) profile
 //      of the credentials file                → OW_CLI_EMAIL + OW_CLI_API_KEY
 //
+// `--force` forces `enabled=true` for this launch regardless of the Settings
+// toggle (ui.devMode) — credentials still resolve through the same chain above.
+// `npm run start:dev` wires this in.
+//
 // `node scripts/ow-dev.mjs --check` reports which source resolved and exits without
 // launching — handy for confirming dev-mode auth is wired before starting the app.
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { resolveOwCredentials } from './lib/owCredentials.mjs';
 
 /**
@@ -56,47 +61,83 @@ function ensureDevCredentials() {
   return result.source;
 }
 
-const enabled = devModeEnabled();
-let source = null;
-if (!enabled) {
-  // Turned off in Settings (ui.devMode:false): launch WITHOUT dev credentials so
-  // owepm skips the gaming packages. Strip any inherited creds too, so an env var
-  // set in this shell can't override the app's off switch.
-  delete process.env.OW_DEV_KEY;
-  delete process.env.OW_CLI_EMAIL;
-  delete process.env.OW_CLI_API_KEY;
-  console.log('[ow-dev] Dev Mode is OFF (ui.devMode:false in Settings) — launching without dev credentials; GEP will not attach.');
-} else {
-  source = ensureDevCredentials();
-  if (source) {
-    console.log(`[ow-dev] Dev Mode credentials from ${source}`);
+/**
+ * Whether this launch should run in Dev Mode: the Settings toggle, OR a
+ * `--force` flag on the command line (`npm run start:dev`) that overrides it.
+ * Pure — no `process.argv`/config reads — so it's trivially unit-testable; the
+ * `main()` call site below does the actual reading.
+ * @param {{argv: string[], settingsEnabled: boolean}} input
+ * @returns {{enabled: boolean, forced: boolean}}
+ */
+export function resolveDevModeIntent({ argv, settingsEnabled }) {
+  const forced = argv.includes('--force');
+  return { enabled: forced || settingsEnabled, forced };
+}
+
+function main() {
+  // Hoisted above devModeEnabled()'s call so `--force` can gate the
+  // enabled/disabled branch below — it needs `enabled` to already factor in force.
+  const forceArgs = process.argv.slice(2);
+  const { enabled, forced } = resolveDevModeIntent({ argv: forceArgs, settingsEnabled: devModeEnabled() });
+  let source = null;
+  if (!enabled) {
+    // Turned off in Settings (ui.devMode:false): launch WITHOUT dev credentials so
+    // owepm skips the gaming packages. Strip any inherited creds too, so an env var
+    // set in this shell can't override the app's off switch.
+    delete process.env.OW_DEV_KEY;
+    delete process.env.OW_CLI_EMAIL;
+    delete process.env.OW_CLI_API_KEY;
+    console.log('[ow-dev] Dev Mode is OFF (ui.devMode:false in Settings) — launching without dev credentials; GEP will not attach.');
   } else {
-    console.warn('[ow-dev] No Dev Mode credentials found.');
-    console.warn('[ow-dev]   Dev key:  set OW_DEV_KEY, or put the token in ~/.ow-cli/dev-key');
-    console.warn('[ow-dev]   API key:  run `npx -y -p @overwolf/ow-cli ow config`, or set OW_CLI_EMAIL + OW_CLI_API_KEY');
-    console.warn('[ow-dev]   Without one, ow-electron skips the gaming packages and GEP will not attach.');
+    if (forced) console.log('[ow-dev] Dev Mode forced via --force (Settings toggle ignored).');
+    source = ensureDevCredentials();
+    if (source) {
+      console.log(`[ow-dev] Dev Mode credentials from ${source}`);
+    } else {
+      console.warn('[ow-dev] No Dev Mode credentials found.');
+      console.warn('[ow-dev]   Dev key:  set OW_DEV_KEY, or put the token in ~/.ow-cli/dev-key');
+      console.warn('[ow-dev]   API key:  run `npx -y -p @overwolf/ow-cli ow config`, or set OW_CLI_EMAIL + OW_CLI_API_KEY');
+      console.warn('[ow-dev]   Without one, ow-electron skips the gaming packages and GEP will not attach.');
+    }
   }
+
+  const args = forceArgs;
+
+  // `--check`: report status and exit without launching. Exit 1 only when Dev Mode
+  // is enabled but no credentials resolved (a real misconfiguration); an
+  // intentional OFF state exits 0.
+  if (args.includes('--check')) {
+    process.exit(enabled && !source ? 1 : 0);
+  }
+
+  // Resolve the ow-electron bin explicitly so this works both via npm (which puts
+  // node_modules/.bin on PATH) and when run standalone.
+  const binName = process.platform === 'win32' ? 'ow-electron.cmd' : 'ow-electron';
+  const localBin = path.join(process.cwd(), 'node_modules', '.bin', binName);
+  const owElectron = existsSync(localBin) ? localBin : 'ow-electron';
+
+  // `--force` is this launcher's own flag — strip it before forwarding, so it
+  // never leaks into ow-electron's own argv.
+  const forwardedArgs = args.filter((arg) => arg !== '--force');
+  const forwarded = forwardedArgs.length ? forwardedArgs : ['.'];
+
+  // Reflects the final `enabled` value for this launch (Settings toggle, or
+  // forced) regardless of which branch above ran — computeDevModeAttempted()
+  // reads this to know a dev-mode launch was intended, even if credentials
+  // didn't resolve.
+  process.env.OW_DEV_MODE_ATTEMPT = enabled ? '1' : '0';
+
+  const child = spawn(owElectron, forwarded, { stdio: 'inherit', shell: true, env: process.env });
+  child.on('close', (code) => process.exit(code ?? 0));
+  child.on('error', (err) => {
+    console.error(`[ow-dev] failed to launch ow-electron: ${err.message}`);
+    process.exit(1);
+  });
 }
 
-const args = process.argv.slice(2);
-
-// `--check`: report status and exit without launching. Exit 1 only when Dev Mode
-// is enabled but no credentials resolved (a real misconfiguration); an
-// intentional OFF state exits 0.
-if (args.includes('--check')) {
-  process.exit(enabled && !source ? 1 : 0);
+// Run the launcher only when invoked directly (not when imported by the test) —
+// otherwise `import { resolveDevModeIntent } from './ow-dev.mjs'` would spawn a
+// real ow-electron process as a side effect of every test run.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
 }
-
-// Resolve the ow-electron bin explicitly so this works both via npm (which puts
-// node_modules/.bin on PATH) and when run standalone.
-const binName = process.platform === 'win32' ? 'ow-electron.cmd' : 'ow-electron';
-const localBin = path.join(process.cwd(), 'node_modules', '.bin', binName);
-const owElectron = existsSync(localBin) ? localBin : 'ow-electron';
-
-const forwarded = args.length ? args : ['.'];
-const child = spawn(owElectron, forwarded, { stdio: 'inherit', shell: true, env: process.env });
-child.on('close', (code) => process.exit(code ?? 0));
-child.on('error', (err) => {
-  console.error(`[ow-dev] failed to launch ow-electron: ${err.message}`);
-  process.exit(1);
-});

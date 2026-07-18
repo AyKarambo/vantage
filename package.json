@@ -22,6 +22,7 @@
     "assets:screens": "npm run build:preview && ow-electron scripts/capture-screenshots.cjs",
     "assets:app-screens": "npm run build && ow-electron scripts/capture-app-screenshots.cjs",
     "start": "npm run make-icon && npm run build && node scripts/ow-dev.mjs .",
+    "start:dev": "npm run make-icon && npm run build && node scripts/ow-dev.mjs --force .",
     "dev": "npm run make-icon && npm run build && node scripts/ow-dev.mjs .",
     "dev:check": "node scripts/ow-dev.mjs --check",
     "test": "vitest run",
