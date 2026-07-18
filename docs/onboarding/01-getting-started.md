@@ -21,6 +21,7 @@ npm run typecheck        # tsc, no emit — checks main AND renderer tsconfigs
 npm run build            # tsc (main → dist/) + esbuild (renderer → renderer/dist/dashboard.js)
 npm run watch:renderer   # rebuild the renderer bundle on change
 npm start                # build + launch the app via ow-electron
+npm run start:dev        # build + launch, but always forces Dev Mode on
 npm run preview          # full UI in a plain browser at http://localhost:5178
 ```
 
@@ -102,6 +103,12 @@ shell and they take precedence. Run `npm run dev:check` to confirm credentials r
 launching. (If you only ran `ow config` and GEP still won't attach, that env-vs-file gap was
 almost certainly the cause.)
 
+**Forcing Dev Mode on (npm run start:dev).** Normally the app respects the Settings toggle
+for Dev Mode on/off. If you want to force Dev Mode on for just this launch — say, you've
+turned it off in Settings but want to verify your credentials anyway, or you always want
+dev-mode confidence without visiting Settings — use `npm run start:dev` instead of `npm start`.
+The same authentication flow runs; it just bypasses the persisted toggle for that one session.
+
 Once that's done, launch normally (`npm start`) with Overwatch running. Watch the status
 bar's live-feed indicator (No game → Connected-waiting → Receiving data) and the Logs
 screen (Debug detail on) for `gep package ready` / `game-detected`. If GEP attaches but
@@ -110,7 +117,12 @@ a Dev Mode problem — `src/main/gep.ts`'s `logSupportedGames()` diagnostic call
 explicitly in the log.
 
 **Troubleshooting — GEP never loads (`invalid verification` / no `gep package ready`).**
-ow-electron's own package-manager log is the source of truth:
+
+The status bar now shows a **Dev mode** badge when authentication succeeds, or a red **Dev mode failed**
+badge (hover for the failure reason) when it doesn't. A failed authentication also prints a clear
+line to the terminal you launched from — check there first before diving into logs.
+
+If the badge stays hidden or shows failed, ow-electron's own package-manager log is the next stop:
 `%APPDATA%/ow-electron/<app-uid>/logs/owpm.log` (also echoed to the `npm start` terminal).
 `[SECURITY] Dev credentials rejected (401)` → `closing package manager: 'invalid
 verification'` means the credentials *reached* Overwolf and were **rejected** — the local

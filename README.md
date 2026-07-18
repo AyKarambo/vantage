@@ -414,6 +414,7 @@ npm run typecheck  # tsc for the main process and the renderer
 npm run build      # tsc (main) + esbuild (renderer bundle)
 npm run watch:renderer   # rebuild the renderer bundle on change
 npm start          # runs with the demo dataset
+npm run start:dev  # always forces Dev Mode on, ignoring the Settings toggle
 ```
 
 Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pipeline;
@@ -517,7 +518,12 @@ store approval:
   as it would for an approved app. See
   [docs/onboarding/01-getting-started.md](docs/onboarding/01-getting-started.md) for setup.
   Requires the beta `@overwolf/ow-electron`/`@overwolf/ow-electron-builder` versions this
-  repo is pinned to (Dev Mode has no stable release yet).
+  repo is pinned to (Dev Mode has no stable release yet). Alternatively, use `npm run start:dev`
+  to force Dev Mode on for just this launch, bypassing the in-app Settings toggle — useful
+  for smoke-testing your dev credentials without changing Settings. A successful authentication
+  shows a green **Dev mode** badge in the status bar; a failed one shows red **Dev mode failed**
+  (with the failure reason in the tooltip) plus a clear error line in the same terminal you
+  launched from.
 - **Record/replay** — `OW_SYNC_RECORD=1` captures a real GEP session to
   `userData/recordings/*.jsonl`; replay it with `OW_SYNC_REPLAY=<file>` to exercise match
   start/stop and the history update without the game running at all. These are dev-only
