@@ -24,6 +24,7 @@ import type { ImportFileResult } from './importFile';
 import type { Role, Result } from '../../core/model';
 import type { LogEntry, LogLevel, LogExportResult, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
+import type { DevModeAuthStatusPayload } from './devModeAuth';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
 import type { MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate } from './masterData';
 
@@ -138,6 +139,8 @@ export interface OwStatsApi {
   exportLogBundle(): Promise<LogExportResult>;
   /** Current connection/data-flow status snapshot (see also onGepStatus). */
   getGepStatus(): Promise<GepStatusPayload>;
+  /** Current dev-mode authentication status snapshot (see also onDevModeAuthStatus). */
+  getDevModeAuthStatus(): Promise<DevModeAuthStatusPayload>;
   /** App-behavior settings (Settings screen). */
   getAppSettings(): Promise<AppUiSettings>;
   /** Persist app-behavior settings; returns the applied values. */
@@ -205,6 +208,8 @@ export interface OwStatsApi {
   onLogEntry(cb: (e: LogEntry) => void): () => void;
   /** Subscribe to connection/data-flow state changes; returns an unsubscribe function. */
   onGepStatus(cb: (s: GepStatusPayload) => void): () => void;
+  /** Subscribe to dev-mode authentication status changes; returns an unsubscribe function. */
+  onDevModeAuthStatus(cb: (s: DevModeAuthStatusPayload) => void): () => void;
   /** Subscribe to live sync progress (fires per exported game); returns an unsubscribe function. */
   onSyncProgress(cb: (p: SyncProgress) => void): () => void;
   /** Subscribe to newly recorded competitive matches (live or hand-logged) — drives the
@@ -228,6 +233,7 @@ export interface OwStatsApi {
 export const EVENT_CHANNELS = {
   onLogEntry: 'push:log-entry',
   onGepStatus: 'push:gep-status',
+  onDevModeAuthStatus: 'push:dev-mode-auth',
   onSyncProgress: 'push:sync-progress',
   onGameLogged: 'push:game-logged',
   onPendingChanged: 'push:pending-changed',
@@ -291,6 +297,7 @@ export const IPC_CHANNELS = {
   logRendererError: 'log:renderer-error',
   exportLogBundle: 'log:export-bundle',
   getGepStatus: 'status:gep',
+  getDevModeAuthStatus: 'status:dev-mode-auth',
   getAppSettings: 'settings:get-app',
   setAppSettings: 'settings:set-app',
   setDevKey: 'settings:set-dev-key',

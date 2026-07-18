@@ -9,7 +9,7 @@
  */
 import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
-  DashboardFilters, DataLocationResult, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
+  DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
   GradingSettings, RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
@@ -269,6 +269,11 @@ if (gepParam === 'cycle') {
 
 const syncListeners = new Set<(p: SyncProgress) => void>();
 const gameLoggedListeners = new Set<(p: GameLoggedPayload) => void>();
+const devModeAuthListeners = new Set<(s: DevModeAuthStatusPayload) => void>();
+const devModeAuthPayload = (): DevModeAuthStatusPayload => ({
+  attempted: false,
+  outcome: 'pending',
+});
 
 // Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
 let previewImportedMatches = 0;
@@ -695,6 +700,11 @@ const mock: OwStatsApi = {
   onGepStatus: (cb: (s: GepStatusPayload) => void) => {
     gepListeners.add(cb);
     return () => gepListeners.delete(cb);
+  },
+  getDevModeAuthStatus: async () => devModeAuthPayload(),
+  onDevModeAuthStatus: (cb: (s: DevModeAuthStatusPayload) => void) => {
+    devModeAuthListeners.add(cb);
+    return () => devModeAuthListeners.delete(cb);
   },
   onSyncProgress: (cb: (p: SyncProgress) => void) => {
     syncListeners.add(cb);
