@@ -73,7 +73,10 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
 
   function devModeSection(s: AppUiSettings): HTMLElement {
     const packaged = info?.packaged ?? false;
-    const show = unlocked || (info?.devMode ?? false);
+    // Reveal on any attempt this run, not just a confirmed one — a *failed*
+    // dev-mode auth (the exact case this section's toggle is most useful for)
+    // must not stay hidden behind the easter egg.
+    const show = unlocked || (info?.devModeAttempted ?? false);
     return h('div', { class: show ? 'stack' : 'hidden', style: { gap: '10px', marginTop: '4px' } },
       h('div', { style: { fontSize: '11.5px', fontWeight: '600', color: 'var(--text-1)' } }, 'Dev Mode'),
       h('div', null,

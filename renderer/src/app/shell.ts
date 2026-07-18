@@ -12,6 +12,7 @@ import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
+import { classifyDevModeBadge } from '../../../src/core/devMode';
 import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
 import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
@@ -590,16 +591,18 @@ export class App {
    */
   private renderDevBadge(): void {
     const s = getDevModeAuthStatus();
-    if (!s || !s.attempted || s.outcome !== 'failed') {
-      const authenticated = Boolean(s?.attempted && s.outcome === 'confirmed');
-      this.devBadge.className = `badge badge--dev${authenticated ? '' : ' hidden'}`;
+    // No pull has resolved yet: same as an unattempted run for display purposes
+    // (classifyDevModeBadge maps this to 'hidden' either way).
+    const state = classifyDevModeBadge({ attempted: s?.attempted ?? false, outcome: s?.outcome ?? 'pending' });
+    if (state !== 'failed') {
+      this.devBadge.className = `badge badge--dev${state === 'authenticated' ? '' : ' hidden'}`;
       this.devBadge.textContent = 'Dev mode';
       this.devBadge.title = 'Running in ow-electron Dev Mode — live GEP data via your Overwolf dev key';
       return;
     }
     this.devBadge.className = 'badge badge--dev-failed';
     this.devBadge.textContent = 'Dev mode failed';
-    this.devBadge.title = s.detail
+    this.devBadge.title = s?.detail
       ? `Dev Mode authentication failed: ${s.detail}`
       : 'Dev Mode authentication failed — GEP will not attach. Check the terminal/log for details.';
   }

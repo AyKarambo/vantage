@@ -762,6 +762,9 @@ const mock: OwStatsApi = {
     osRelease: 'preview',
     packaged: false,
     devMode: false,
+    // Tied to the same ?devmode=... simulated state as the badge (T9), so the
+    // Settings "Dev Mode" section's reveal-on-attempt can be previewed too.
+    devModeAttempted: devModeAuthState !== 'off',
     gepPackageVersion: 'preview',
   }),
   applyGepUpdate: async () => { /* preview: restart is a no-op */ },
