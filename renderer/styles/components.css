@@ -230,6 +230,11 @@
   border: 1px solid rgba(188, 169, 118, 0.55);
   color: var(--mid-text);
 }
+.badge--dev-failed {
+  background: var(--loss-soft);
+  border: 1px solid var(--loss);
+  color: var(--loss-text);
+}
 
 /* Segmented control --------------------------------------------------------- */
 .segmented {
