@@ -34,7 +34,7 @@ import type { RankAnchorStore } from '../store/rankAnchors';
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
-  GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
+  DevModeAuthStatusPayload, GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -118,6 +118,8 @@ export interface DataProviderDeps {
   getSecrets(): string[];
   /** Live connection/data-flow status snapshot (from the GEP status monitor). */
   gepStatus(): GepStatusPayload;
+  /** Dev-mode auth status snapshot (from the dev-mode auth monitor). */
+  devModeAuthStatus(): DevModeAuthStatusPayload;
   /** App-behavior settings: current values + apply/persist (owned by the composition root). */
   appSettings: {
     get(): AppUiSettings;
@@ -539,6 +541,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       }
     },
     getGepStatus: () => deps.gepStatus(),
+    getDevModeAuthStatus: () => deps.devModeAuthStatus(),
     getAppSettings: () => deps.appSettings.get(),
     setAppSettings: (patch) => deps.appSettings.apply(patch),
     setDevKey: (key) => deps.setDevKey(key),

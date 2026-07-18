@@ -219,6 +219,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
 
   // Live connection/data-flow status (snapshot; changes arrive via push).
   handle(ch.getGepStatus, () => provider.getGepStatus());
+  handle(ch.getDevModeAuthStatus, () => provider.getDevModeAuthStatus());
 
   // App-behavior settings + metadata (Settings screen).
   handle(ch.getAppSettings, () => provider.getAppSettings());

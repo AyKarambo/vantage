@@ -396,6 +396,7 @@ function main(): void {
     // token is stripped from an exported log bundle too.
     getSecrets: () => [getNotionToken() ?? ''].filter(Boolean),
     gepStatus: () => statusMonitor.current(),
+    devModeAuthStatus: () => devModeAuthMonitor.current(),
     appSettings: {
       get: () => ({
         closeToTray: config.ui.closeToTray,
