@@ -1,13 +1,14 @@
 /**
- * Whether the app is running in ow-electron Dev Mode: an *unpackaged* build whose
- * process was launched with Overwolf dev credentials in the environment — a dev
- * key over Bearer (`OW_DEV_KEY`), or an email + API-key pair over Key
- * (`OW_CLI_EMAIL` + `OW_CLI_API_KEY`). owepm reads these at process start
- * (injected by `scripts/ow-dev.mjs`), so this is a truthful, synchronous read of
- * "dev credentials present AND unpackaged". It is never true for a
- * packaged/installed build, where Dev Mode cannot activate at all.
+ * The dev-mode auth decision layer: whether a dev-mode launch was attempted,
+ * whether it can/did succeed, and what the sidebar badge should show for it.
+ * ow-electron's Dev Mode authenticates an *unpackaged* build using Overwolf
+ * dev credentials in the environment — a dev key over Bearer (`OW_DEV_KEY`),
+ * or an email + API-key pair over Key (`OW_CLI_EMAIL` + `OW_CLI_API_KEY`).
+ * owepm reads these at process start (injected by `scripts/ow-dev.mjs`); it is
+ * never true for a packaged/installed build, where Dev Mode cannot activate.
  *
- * Pure (guardrail 3): takes the packaged flag and an env slice — no Electron, no IO.
+ * Pure (guardrail 3): every function here takes explicit input — no Electron,
+ * no IO, no ambient env/timer reads.
  */
 export interface DevModeInput {
   /** `app.isPackaged` — true for an installed/packaged build. */
@@ -23,9 +24,9 @@ export interface DevModeInput {
 /**
  * Whether owepm's credential env vars resolve to a usable dev-mode credential:
  * a dev key over Bearer (`OW_DEV_KEY`), or an email + API-key pair over Key
- * (`OW_CLI_EMAIL` + `OW_CLI_API_KEY`). Extracted out of `computeDevMode` so the
- * "are credentials present" question can be asked on its own — e.g. to decide
- * whether a dev-mode auth attempt can possibly succeed before waiting on it.
+ * (`OW_CLI_EMAIL` + `OW_CLI_API_KEY`) — presence only, not proof of successful
+ * authentication. Used to decide whether a dev-mode auth attempt can possibly
+ * succeed before waiting on it (see `decideDevModeAuthStrategy`).
  */
 export function hasDevCredentials(env: DevModeInput['env']): boolean {
   const hasDevKey = Boolean(env.OW_DEV_KEY);
@@ -33,21 +34,18 @@ export function hasDevCredentials(env: DevModeInput['env']): boolean {
   return hasDevKey || hasApiKey;
 }
 
-export function computeDevMode({ packaged, env }: DevModeInput): boolean {
-  if (packaged) return false;
-  return hasDevCredentials(env);
-}
-
 /**
  * Whether a dev-mode launch was *attempted* this run — a different question
- * from `computeDevMode`'s "are credentials present". `OW_DEV_MODE_ATTEMPT` is
- * stamped by `scripts/ow-dev.mjs` to reflect the launcher's `enabled` flag
+ * from `hasDevCredentials`'s "are credentials present". `OW_DEV_MODE_ATTEMPT`
+ * is stamped by `scripts/ow-dev.mjs` to reflect the launcher's `enabled` flag
  * (Settings toggle on, or forced via `--force`), regardless of whether
  * credentials actually resolved. A toggle-on-but-no-credentials-found launch
  * still counts as "attempted": it's what lets the badge later show an
  * explicit failure instead of silently staying hidden, which is the
  * distinction `decideDevModeAuthStrategy` and `classifyDevModeBadge` need.
- * Like `computeDevMode`, it is never true for a packaged/installed build.
+ * Synchronous and stable for the whole process life (unlike the auth
+ * *outcome*, which resolves later) — safe to read once, e.g. into `AppInfo`.
+ * Never true for a packaged/installed build.
  */
 export function computeDevModeAttempted(input: {
   packaged: boolean;

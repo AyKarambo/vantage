@@ -463,6 +463,9 @@ function main(): void {
       // CONFIRMED the injected dev credentials authenticated (not merely that
       // they were present at launch) — see core/devMode.ts + devModeAuthMonitor.ts.
       devMode: devModeAuthMonitor.current().outcome === 'confirmed',
+      // Synchronous launch-time fact — see AppInfo.devModeAttempted's doc comment
+      // for why Settings needs this rather than the (async, resolves-later) devMode.
+      devModeAttempted,
       // The loaded GEP package version (from the live status snapshot); '' until
       // the package reports ready. Changes when Overwolf ships a fix.
       gepPackageVersion: statusMonitor.current().gepPackageVersion ?? '',

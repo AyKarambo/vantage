@@ -49,11 +49,26 @@ export interface AppInfo {
   /** True for an installed/packaged build, false in dev and the browser preview. */
   packaged: boolean;
   /**
-   * True when the app is actually running in ow-electron Dev Mode — unpackaged
-   * AND launched with Overwolf dev credentials in the environment. Drives the
-   * "Dev Mode" indicator; never true for a packaged build (see core/devMode).
+   * True only once ow-electron has actually CONFIRMED the injected dev
+   * credentials authenticated — not merely that a dev-mode launch was
+   * attempted. Drives the sidebar's green "Dev mode" state; never true for a
+   * packaged build (see core/devMode.ts + devModeAuthMonitor.ts). This
+   * resolves asynchronously after launch, so a one-shot fetch of it can
+   * legitimately read `false` even on a run that later succeeds — anything
+   * needing to react to that resolution should subscribe to the live
+   * `onDevModeAuthStatus` channel instead of polling this snapshot.
    */
   devMode: boolean;
+  /**
+   * Whether a dev-mode launch was *attempted* this run (Settings toggle on,
+   * or forced via `--force`) — independent of whether it actually resolved
+   * successfully. Unlike `devMode` this is a synchronous, launch-time fact
+   * (see core/devMode.ts's `computeDevModeAttempted`), so a one-shot fetch of
+   * it is always accurate, never stale. Settings uses this (not `devMode`) to
+   * decide whether to auto-reveal the Dev Mode section, since a *failed*
+   * attempt is exactly when you'd want easy access to the toggle.
+   */
+  devModeAttempted: boolean;
   /** Loaded Overwolf GEP package version (e.g. '309.0.0'); '' until it reports ready. Changes when Overwolf ships a fix. */
   gepPackageVersion: string;
 }
