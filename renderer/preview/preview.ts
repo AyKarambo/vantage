@@ -267,13 +267,42 @@ if (gepParam === 'cycle') {
   }, 5000);
 }
 
+// Simulated dev-mode auth status: pick a state with ?devmode=off|pending|ok|failed,
+// or ?devmode=cycle to rotate through all four (default: off — hidden badge, matches
+// a packaged build / Settings toggle off, which is the common case).
+const devModeAuthListeners = new Set<(s: DevModeAuthStatusPayload) => void>();
+type DevModeAuthPreviewState = 'off' | 'pending' | 'ok' | 'failed';
+const DEV_MODE_AUTH_STATES: DevModeAuthPreviewState[] = ['off', 'pending', 'ok', 'failed'];
+const devModeAuthParam = new URLSearchParams(location.search).get('devmode') ?? 'off';
+let devModeAuthState: DevModeAuthPreviewState = (DEV_MODE_AUTH_STATES as string[]).includes(devModeAuthParam)
+  ? (devModeAuthParam as DevModeAuthPreviewState)
+  : 'off';
+const devModeAuthPayload = (): DevModeAuthStatusPayload => {
+  switch (devModeAuthState) {
+    case 'off':
+      return { attempted: false, outcome: 'pending' };
+    case 'pending':
+      return { attempted: true, outcome: 'pending' };
+    case 'ok':
+      return { attempted: true, outcome: 'confirmed' };
+    case 'failed':
+      return {
+        attempted: true,
+        outcome: 'failed',
+        detail: 'ow-electron reported failed-to-initialize for the gep package',
+      };
+  }
+};
+if (devModeAuthParam === 'cycle') {
+  let j = 1;
+  setInterval(() => {
+    devModeAuthState = DEV_MODE_AUTH_STATES[j++ % DEV_MODE_AUTH_STATES.length];
+    for (const cb of devModeAuthListeners) cb(devModeAuthPayload());
+  }, 5000);
+}
+
 const syncListeners = new Set<(p: SyncProgress) => void>();
 const gameLoggedListeners = new Set<(p: GameLoggedPayload) => void>();
-const devModeAuthListeners = new Set<(s: DevModeAuthStatusPayload) => void>();
-const devModeAuthPayload = (): DevModeAuthStatusPayload => ({
-  attempted: false,
-  outcome: 'pending',
-});
 
 // Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
 let previewImportedMatches = 0;
