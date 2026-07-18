@@ -70,6 +70,7 @@ export type { LogEntry, LogLevel, RendererErrorInput, LogExportResult } from './
 
 // Live connection/data-flow status
 export type { GepHealthState, GepStatusPayload } from './gepStatus';
+export type { DevModeAuthOutcome, DevModeAuthStatusPayload } from './devModeAuth';
 
 // App-behavior settings + metadata (Settings screen)
 export type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
