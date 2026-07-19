@@ -36,6 +36,7 @@ import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
 import { createDataProvider } from './dataProvider';
+import { createMcpBridge } from './mcp';
 import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import type { LogEntry } from '../core/logging';
@@ -288,6 +289,10 @@ function main(): void {
     return res.filePath;
   }
 
+  // Filled in once the data provider exists (mirrors pushEntry/publishStatus):
+  // the Settings apply-closure below is constructed as part of the provider's
+  // own dependencies, so it can't reference the bridge directly.
+  let setMcpEnabled: (enabled: boolean) => void = () => {};
   let pushSyncProgress: (done: number, total: number) => void = () => {};
   // Filled in once the dashboard window exists (mirrors pushEntry/pushSyncProgress).
   let pushGameLogged: (payload: GameLoggedPayload) => void = () => {};
@@ -440,9 +445,13 @@ function main(): void {
           saveLocalUiConfig({ lastSeenVersion: patch.lastSeenVersion });
           config = loadConfig();
         }
+        // The MCP endpoint starts/stops live: unlike Dev Mode (a launcher
+        // concern resolved at start-up) this is a running-process resource, so
+        // switching it off must actually close the pipe now, not next launch.
         if (patch.mcpEnabled !== undefined) {
           saveLocalUiConfig({ mcpEnabled: patch.mcpEnabled });
           config = loadConfig();
+          setMcpEnabled(config.ui.mcpEnabled);
         }
         return {
           closeToTray: config.ui.closeToTray,
@@ -514,6 +523,20 @@ function main(): void {
       },
     },
   });
+
+  // The MCP endpoint for an LLM coach (#174). Shares the SAME dataProvider the
+  // renderer's IPC uses, so there is one writer and one source of truth. Opt-in
+  // and default off — see UiConfig.mcpEnabled for why that's a security
+  // property rather than a preference.
+  const mcpBridge = createMcpBridge({
+    provider: dataProvider,
+    log: (message, fields) => log.info('mcp', message, fields),
+  });
+  setMcpEnabled = (enabled) => void mcpBridge.setEnabled(enabled);
+  setMcpEnabled(config.ui.mcpEnabled);
+  // Close the pipe on the way out rather than relying on process teardown, so a
+  // restart never races a still-bound stale endpoint.
+  app.on('will-quit', () => void mcpBridge.stop());
 
   const handlers: TrayHandlers = {
     onOpenDashboard: () => dashboard.open(),
