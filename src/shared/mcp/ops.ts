@@ -51,11 +51,11 @@ export interface McpOpMap {
   setTargetArchived: { args: { id: string; archived: boolean }; result: null };
   resolvePending: { args: { matchId: string; result: Result }; result: null };
 
-  // ---- destructive writes (confirmation-gated) ----
-  deleteTarget: { args: { id: string }; result: null };
-  dismissPending: { args: { matchId: string }; result: null };
-  deactivateAllTargets: { args: Record<string, never>; result: null };
-  clearReview: { args: { matchId: string }; result: null };
+  // ---- destructive writes (confirmation-gated: `confirm` must be exactly true) ----
+  deleteTarget: { args: { id: string; confirm: boolean }; result: null };
+  dismissPending: { args: { matchId: string; confirm: boolean }; result: null };
+  deactivateAllTargets: { args: { confirm: boolean }; result: null };
+  clearReview: { args: { matchId: string; confirm: boolean }; result: null };
 }
 
 export type McpOp = keyof McpOpMap;

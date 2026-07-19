@@ -1,6 +1,9 @@
 import type { DataProvider } from '../dashboard/provider';
 import { dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead } from '../dashboard/reads';
-import { isWriteOp, type McpOp, type McpOpMap, type McpErrorCode, type ReadEnvelope } from '../../shared/mcp/ops';
+import {
+  isWriteOp, isDestructiveOp,
+  type McpOp, type McpOpMap, type McpErrorCode, type ReadEnvelope,
+} from '../../shared/mcp/ops';
 import type { DashboardFilters, ManualMatchInput, MatchEditInput, ReviewInput, AuthoredTargetInput, TargetEditInput } from '../../shared/contract';
 import type { Result, Role } from '../../core/model';
 
@@ -228,6 +231,18 @@ export function createDispatcher(provider: DataProvider): Dispatcher {
       throw new McpOpError(
         'demo-mode',
         'Vantage is showing demo data, so writes are disabled. Turn demo data off in Settings to record real matches.',
+      );
+    }
+    // Destructive ops need `confirm: true` spelled out. This is the enforcement
+    // the app controls; the client's own approval prompt (driven by the tool's
+    // destructiveHint annotation) is what actually puts the USER in the loop.
+    // The flag alone is not consent — a model can set it — but it does stop a
+    // destructive op from being reached incidentally, and it makes the
+    // intent explicit and auditable at the boundary.
+    if (isDestructiveOp(op) && asObject(args, 'arguments').confirm !== true) {
+      throw new McpOpError(
+        'needs-confirmation',
+        `\`${op}\` permanently changes stored data and needs explicit confirmation: re-issue it with confirm: true once the user has agreed.`,
       );
     }
     return handlers[op](args);
