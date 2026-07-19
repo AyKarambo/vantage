@@ -21,6 +21,13 @@ export interface AppUiSettings {
   /** OS notifications when GEP events go down / come back (default on). */
   gepNotifications: boolean;
   /**
+   * Whether the local MCP endpoint listens, letting an MCP client (an LLM
+   * coach) read your stats and write the manual layer. Default **off** — it is
+   * reachable by any process running as this user, so enabling it is a
+   * deliberate act. Takes effect immediately (no restart).
+   */
+  mcpEnabled: boolean;
+  /**
    * The app version the user was last shown a "What's new" highlight for.
    * Absent (never set) means "we've never shown this user anything" — a fresh
    * install, which gets the intro tour instead of release notes, not a
