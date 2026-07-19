@@ -44,12 +44,28 @@ export const SEASON_STARTS: readonly number[] = [
   '2026-06-16', // 2026 arc S3 Into the Tiger's Den
 ].map((d) => Date.parse(d));
 
+/**
+ * The starts list to actually work from: an EMPTY list falls back to the
+ * built-in table.
+ *
+ * Empty is reachable in production — the Master Data editor lets you remove
+ * every season and `mergeSeasonStarts` has no floor — so this is a real state,
+ * not a theoretical one. Normalising once, here, is what makes the whole module
+ * total: guarding only the first/last reads (as this file previously did) left
+ * the *walks* iterating the raw empty array, which both returned wrong answers
+ * and, in `windowFor`, indexed out of bounds and threw.
+ */
+function usableStarts(starts: readonly number[]): readonly number[] {
+  return starts.length ? starts : SEASON_STARTS;
+}
+
 /** First/last of an ascending starts list (defensive against an empty list). */
 function firstOf(starts: readonly number[]): number {
-  return starts.length ? starts[0] : SEASON_STARTS[0];
+  return usableStarts(starts)[0];
 }
 function lastOf(starts: readonly number[]): number {
-  return starts.length ? starts[starts.length - 1] : SEASON_STARTS[SEASON_STARTS.length - 1];
+  const list = usableStarts(starts);
+  return list[list.length - 1];
 }
 
 /**
@@ -60,14 +76,18 @@ function lastOf(starts: readonly number[]): number {
  * Total — never throws; always `<= now`.
  */
 export function seasonStart(now: number, starts: readonly number[] = SEASON_STARTS): number {
-  const first = firstOf(starts);
-  const last = lastOf(starts);
+  const list = usableStarts(starts);
+  const first = firstOf(list);
+  const last = lastOf(list);
   if (now < first) {
     const stepsBack = Math.ceil((first - now) / SEASON_CADENCE_MS);
     return first - stepsBack * SEASON_CADENCE_MS;
   }
   let start = first;
-  for (const s of starts) {
+  // Must walk the NORMALISED list: iterating the caller's raw (possibly empty)
+  // array here skipped the loop entirely and returned the first season as the
+  // "containing" one, which is wrong rather than merely unhelpful.
+  for (const s of list) {
     if (s <= now) start = s;
     else break;
   }
@@ -87,11 +107,14 @@ export function currentSeason(
   now: number,
   starts: readonly number[] = SEASON_STARTS,
 ): { start: number; end: number } {
-  const first = firstOf(starts);
-  const last = lastOf(starts);
-  const start = seasonStart(now, starts);
+  const list = usableStarts(starts);
+  const first = firstOf(list);
+  const last = lastOf(list);
+  const start = seasonStart(now, list);
   if (start < first || start >= last) return { start, end: start + SEASON_CADENCE_MS };
-  const next = starts.find((s) => s > start) as number;
+  // Normalised list again: `.find` over the caller's raw empty array would
+  // yield `end: undefined` and poison every downstream window comparison.
+  const next = list.find((s) => s > start) as number;
   return { start, end: next };
 }
 
@@ -138,8 +161,16 @@ function numberedLabel(year: number, seasonOfYear: number): string {
  * {@link seasonsForData} use to derive `year`/`seasonOfYear` consistently.
  */
 function seasonStartsThrough(now: number, starts: readonly number[] = SEASON_STARTS): number[] {
-  const list = [...starts];
-  const containing = seasonStart(now, starts);
+  // Same defense as firstOf/lastOf, which this walk previously lacked: an
+  // explicitly EMPTY list is reachable in production — the master-data editor
+  // lets you remove every season, and `mergeSeasonStarts` has no floor — and it
+  // produced an empty walk that `windowFor` then indexed out of bounds, so
+  // `new Date(undefined).toISOString()` threw and took the whole dashboard down
+  // on every load. Falling back to the built-in table keeps the season filter
+  // usable instead, honouring `currentSeasonWindow`'s documented "never throws".
+  const base = starts.length ? starts : SEASON_STARTS;
+  const list = [...base];
+  const containing = seasonStart(now, base);
   while (list[list.length - 1] < containing) {
     list.push(list[list.length - 1] + SEASON_CADENCE_MS);
   }
