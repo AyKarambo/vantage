@@ -409,6 +409,7 @@ function main(): void {
         devMode: config.ui.devMode,
         gepNotifications: config.ui.gepNotifications,
         lastSeenVersion: config.ui.lastSeenVersion,
+        mcpEnabled: config.ui.mcpEnabled,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -439,6 +440,10 @@ function main(): void {
           saveLocalUiConfig({ lastSeenVersion: patch.lastSeenVersion });
           config = loadConfig();
         }
+        if (patch.mcpEnabled !== undefined) {
+          saveLocalUiConfig({ mcpEnabled: patch.mcpEnabled });
+          config = loadConfig();
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
@@ -446,6 +451,7 @@ function main(): void {
           devMode: config.ui.devMode,
           gepNotifications: config.ui.gepNotifications,
           lastSeenVersion: config.ui.lastSeenVersion,
+          mcpEnabled: config.ui.mcpEnabled,
         };
       },
     },

@@ -56,6 +56,15 @@ export interface UiConfig {
   /** OS notifications on GEP service down/recovery (default true). */
   gepNotifications: boolean;
   /**
+   * Whether the local MCP endpoint listens (spec #174). Default **false**: it
+   * exposes match history and the manual-write surface to any process running
+   * as this user (a Windows named pipe carries no per-process ACL), so it stays
+   * off until the user turns it on in Settings — local-first, explicit action
+   * (guardrail 5). Off also means no pipe is created at all, not merely that
+   * calls are rejected.
+   */
+  mcpEnabled: boolean;
+  /**
    * The app version the user was last shown a "What's new" highlight for.
    * Optional with **no entry in DEFAULTS** — absent means "never shown
    * anything", which a fresh install must resolve to (see
@@ -121,7 +130,10 @@ const DEFAULTS: AppConfig = {
   sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
   grading: { ...DEFAULT_GRADING_SETTINGS },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
-  ui: { closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true },
+  ui: {
+    closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true,
+    mcpEnabled: false,
+  },
 };
 
 /** Per-user, machine-local files (survive app updates, never committed). */

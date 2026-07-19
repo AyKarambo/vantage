@@ -198,6 +198,9 @@ let appSettings: AppUiSettings = {
   demoPreference: 'on',
   devMode: true,
   gepNotifications: true,
+  // Off, like the real default: the preview harness has no main process to
+  // host the pipe, so the toggle is only ever cosmetic here.
+  mcpEnabled: false,
   // Matches the mocked AppInfo.version below ('preview') so the "What's new"
   // highlight (T21) reads as already-seen instead of popping on every reload.
   lastSeenVersion: 'preview',
