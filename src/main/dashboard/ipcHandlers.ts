@@ -1,11 +1,4 @@
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
-import { heroDetail, type GameRecord } from '../../core/analytics';
-import { matchDetail } from '../../core/matchDetail';
-import { activeMeasuredTargets } from '../../core/targets';
-import { playerMatchHistory } from '../../core/playerIndex';
-import { computeDashboard, applyFilters } from '../../core/dashboardData';
-import { makeMapMode } from '../../core/masterData';
-import { isCompetitive } from '../../core/matchFilter';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
@@ -19,17 +12,9 @@ import type {
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
-
-/**
- * Vantage is competitive-only (spec D1): scope a games list down to
- * competitive rows. `computeDashboard` already does this internally for the
- * main dashboard payload; every *other* feed that reads `provider.games()`
- * directly (export, hero drilldown, match detail) must apply the same gate
- * so a non-competitive row already in the DB never surfaces there either.
- */
-function competitiveOnly(games: GameRecord[]): GameRecord[] {
-  return games.filter((g) => isCompetitive(g.gameType));
-}
+import {
+  dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead, filteredCompetitiveGames,
+} from './reads';
 
 /**
  * IPC registration for the dashboard: each typed contract channel maps onto a
@@ -71,58 +56,21 @@ function on(
 /** Wire every dashboard data channel to the provider. Call once per process. */
 export function registerDashboardIpc(provider: DataProvider): void {
   const ch = IPC_CHANNELS;
-  handle(ch.getDashboard, (_e, filters: DashboardFilters) =>
-    computeDashboard(
-      provider.games(),
-      filters ?? {},
-      provider.demoContext(),
-      {
-        targets: provider.manualTargets(),
-        breakReminder: provider.getBreakReminder(),
-        staleness: provider.getStaleness(),
-        readiness: provider.getReadiness(),
-        sessionSettings: provider.getSessionSettings(),
-        grading: provider.getGrading(),
-        rankAnchors: provider.rankAnchorMap(),
-      },
-      provider.effectiveMasterData(),
-      // Held "needs result" matches ride on the same payload the Review screen
-      // reads — sourced from the SEPARATE pending store, never from history.
-      provider.pendingMatches(),
-    ),
-  );
-  // Every filter-scoped read must resolve a `{ season: id }` filter against the
-  // SAME effective season starts computeDashboard uses (so a user-added,
-  // off-cadence season resolves to its window instead of silently falling back
-  // to the 30-day default). `seasonStarts()` pulls them from the effective
-  // master data, exactly as the dashboard payload does.
-  const seasonStarts = (): number[] => provider.effectiveMasterData().seasons.map((s) => s.start);
+  // Every read below delegates to `reads.ts` — the competitive-only gate and
+  // season-window resolution live there so this layer stays mechanical glue
+  // and no second consumer can re-derive them differently.
+  handle(ch.getDashboard, (_e, filters: DashboardFilters) => dashboardRead(provider, filters));
   handle(ch.exportNotion, async (_e, filters: DashboardFilters) => {
     if (!provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
-    return provider.exportToNotion(applyFilters(competitiveOnly(provider.games()), filters ?? {}, seasonStarts()));
+    return provider.exportToNotion(filteredCompetitiveGames(provider, filters));
   });
   handle(ch.heroDetail, (_e, hero: string, filters: DashboardFilters) =>
-    heroDetail(applyFilters(competitiveOnly(provider.games()), filters ?? {}, seasonStarts()), hero),
+    heroDetailRead(provider, hero, filters),
   );
-  // Looked up in the full (competitive-only) history (a row must open even
-  // after filters move on); the competitive-estimate CONTEXT is scoped to
-  // the current filter set, on top of the same competitive-only gate.
-  handle(ch.matchDetail, (_e, matchId: string, filters: DashboardFilters) => {
-    const games = competitiveOnly(provider.games());
-    const master = provider.effectiveMasterData();
-    const mapModeOf = makeMapMode(master.maps);
-    const filtered = applyFilters(games, filters ?? {}, master.seasons.map((s) => s.start));
-    // Same active-measured set + partial margin the dashboard rows use, so the
-    // match-detail Grades card shows calculated grades identically.
-    const activeMeasured = activeMeasuredTargets(provider.manualTargets());
-    return matchDetail(games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured, provider.getGrading().partialMargin);
-  });
-  // Shared-match history for one player — over the full (competitive-only) local
-  // history, unscoped by the filter bar (it's a cross-history drill-down).
-  handle(ch.playerHistory, (_e, name: string) => {
-    const master = provider.effectiveMasterData();
-    return playerMatchHistory(competitiveOnly(provider.games()), name, makeMapMode(master.maps));
-  });
+  handle(ch.matchDetail, (_e, matchId: string, filters: DashboardFilters) =>
+    matchDetailRead(provider, matchId, filters),
+  );
+  handle(ch.playerHistory, (_e, name: string) => playerHistoryRead(provider, name));
 
   // Notion sync screen.
   handle(ch.notionStatus, () => provider.notionStatus());
