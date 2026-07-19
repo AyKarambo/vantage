@@ -27,11 +27,14 @@ export function pipePath(name: string = PIPE_NAME): string {
 /** Id used when a request could not be attributed to one (unparseable, or no numeric id). */
 const UNATTRIBUTED = -1;
 
+/** Structured log values, matching what the app's logger accepts. */
+export type McpLogFields = Record<string, string | number | boolean>;
+
 export interface PipeServerDeps {
   dispatch: Dispatcher;
   /** Address to bind; defaults to {@link pipePath}. Injectable so tests get an isolated pipe. */
   path?: string;
-  log?: (message: string, fields?: Record<string, unknown>) => void;
+  log?: (message: string, fields?: McpLogFields) => void;
 }
 
 export interface PipeServer {
