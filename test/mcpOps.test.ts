@@ -201,17 +201,17 @@ describe('destructive writes reach the right provider call', () => {
       pending: [pending('p-1')],
       targets: [target('t-1')],
     });
-    dispatch('deleteTarget', { id: 't-1' });
-    dispatch('dismissPending', { matchId: 'p-1' });
-    dispatch('deactivateAllTargets', {});
-    dispatch('clearReview', { matchId: 'known' });
+    dispatch('deleteTarget', { id: 't-1', confirm: true });
+    dispatch('dismissPending', { matchId: 'p-1', confirm: true });
+    dispatch('deactivateAllTargets', { confirm: true });
+    dispatch('clearReview', { matchId: 'known', confirm: true });
     expect(log.calls).toEqual([
       'deleteTarget:t-1', 'dismissPendingMatch:p-1', 'deactivateAllTargets', 'clearReview',
     ]);
   });
 
-  it('still enforces not-found', () => {
+  it('still enforces not-found once confirmed', () => {
     const s = setup({ targets: [target('t-1')] });
-    expectRefusal(() => s.dispatch('deleteTarget', { id: 'ghost' }), 'not-found', s.log);
+    expectRefusal(() => s.dispatch('deleteTarget', { id: 'ghost', confirm: true }), 'not-found', s.log);
   });
 });
