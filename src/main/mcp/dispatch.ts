@@ -1,6 +1,6 @@
 import type { DataProvider } from '../dashboard/provider';
 import { dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead } from '../dashboard/reads';
-import type { McpOp, McpOpMap, McpErrorCode, ReadEnvelope } from '../../shared/mcp/ops';
+import { isWriteOp, type McpOp, type McpOpMap, type McpErrorCode, type ReadEnvelope } from '../../shared/mcp/ops';
 import type { DashboardFilters, ManualMatchInput, MatchEditInput, ReviewInput, AuthoredTargetInput, TargetEditInput } from '../../shared/contract';
 import type { Result, Role } from '../../core/model';
 
@@ -218,5 +218,18 @@ export function createDispatcher(provider: DataProvider): Dispatcher {
     },
   };
 
-  return (op, args) => handlers[op](args);
+  return (op, args) => {
+    // Demo mode serves GENERATED sample matches. Reads are allowed (they carry
+    // `demo: true` so the caller knows what it's looking at), but a write would
+    // mix real authored data into a fabricated season — or, worse, retire the
+    // demo season mid-write and land somewhere unpredictable. Refused outright,
+    // before any provider call (AC 11).
+    if (isWriteOp(op) && provider.demoContext().active) {
+      throw new McpOpError(
+        'demo-mode',
+        'Vantage is showing demo data, so writes are disabled. Turn demo data off in Settings to record real matches.',
+      );
+    }
+    return handlers[op](args);
+  };
 }
