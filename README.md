@@ -279,6 +279,12 @@ and the window **denies in-page navigation and popups**. The main process **vali
 sender** of every IPC message (dropping anything not from the app's own renderer) — so the
 renderer stays a contained surface. External links open only through the main process.
 
+The optional **MCP endpoint** doesn't change any of that. It only surfaces data Vantage has
+already stored and only writes the manual layer you could type in by hand — it never becomes
+a second source of game data. It is off by default, listens on a local named pipe rather than
+a network port, and Vantage sends nothing outward through it; see
+*[AI coaching over MCP](#optional-ai-coaching-over-mcp)* for what enabling it exposes.
+
 ## Status
 
 - The app, dashboard, analytics, and per-hero GEP plumbing are **built and working**.
@@ -331,6 +337,52 @@ the IPC bridge with the sample season and renders the full app in a plain browse
 npm run preview        # bundles the harness and serves it at http://localhost:5178
 ```
 
+### Optional: AI coaching over MCP
+
+Vantage can expose your stats to an **MCP** client — Claude Desktop or Claude Code — so an
+AI coach can read your real match history and record matches, reviews and targets for you.
+
+It is **off by default**. Turn on **MCP endpoint** in *Settings → App behavior*, then point
+your client at the bridge:
+
+```jsonc
+// Claude Desktop: claude_desktop_config.json
+{
+  "mcpServers": {
+    "vantage": {
+      "command": "node",
+      "args": ["X:/source/vantage/dist/mcp/stdio.js"]
+    }
+  }
+}
+```
+
+In an installed build the bundle ships at `<install dir>/resources/mcp/stdio.js`. In a dev
+checkout, `npm run build` produces `dist/mcp/stdio.js` (and `npm run mcp` runs it directly,
+which is only useful for a smoke test — the client normally spawns it).
+
+**How it works.** The bridge is a small separate process that holds no data of its own. It
+forwards each call over a **local named pipe** to the running Vantage app, which answers it
+through the same code the UI uses. So there is one writer and one source of truth, and:
+
+- **Vantage must be running.** Every tool returns a clear "could not reach Vantage" when the
+  app is closed or the endpoint is switched off.
+- **Nothing listens on a network port.** A named pipe can't be reached from another machine,
+  and Vantage itself sends nothing anywhere — only your MCP client sees the data.
+- **Writes are limited to the manual layer**: what you could type into the app by hand. It
+  never invents game facts; live match data still comes only from Overwolf's GEP feed.
+- **Demo data is refused for writes** and every read is flagged, so a coach can't mistake the
+  sample season for your real history.
+
+**Two things worth knowing before you enable it.** The pipe is reachable by *any* program
+running as your Windows user — there is no per-process permission on it — which is why it's
+opt-in and why it's worth turning off when you're not using it. And destructive tools
+(deleting a target, dismissing a held match, clearing a review, deactivating all targets)
+are marked `destructive` so your MCP client asks you before running them; they also require
+an explicit `confirm`. **That `confirm` flag is not consent on its own** — a model can set it
+itself. The thing that actually puts you in the loop is your client's own approval prompt, so
+don't disable those prompts for this server.
+
 ### Optional: Notion sync
 
 The **Notion sync** screen connects a Notion database and pushes your tracked games to
@@ -352,7 +404,10 @@ database id is still supported as a fallback.)
 ```
 Overwatch ─▶ GEP ─▶ aggregator ─▶ GameRecord ─▶ HistoryStore ───┐
                                                                 ├─▶ core/dashboardData ─▶ IPC ─▶ renderer
-                                                                └─▶ Notion export (optional)
+                                                                ├─▶ Notion export (optional)
+                                                                └─▶ MCP endpoint (optional, off by default)
+                                                                        ▲ named pipe
+                                                                        └── dist/mcp/stdio.js ◀─ stdio ─ AI coach
 ```
 
 **Main process (`src/`)** — pure, Electron-free domain logic under `core/`, with the
@@ -389,6 +444,18 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   token state, database selection, cached shape validation, export short-circuiting.
 - `notion/notionAdmin.ts` — the Notion database picker/auto-create admin operations
   (list databases/pages, create a shaped Gametracker + Maps pair, validate a shape).
+- `main/dashboard/reads.ts` — the filter-scoped read compositions (competitive-only gate,
+  season-window resolution) shared by the IPC handlers **and** the MCP endpoint, so a
+  second consumer can't re-derive them differently.
+- `main/mcp/` — the optional MCP endpoint: an op table over the *same* DataProvider plus a
+  named-pipe server that only listens while the `mcpEnabled` setting is on. It is the
+  allowlist that keeps out-of-scope operations (Notion, tokens, settings, data folder,
+  account deletion) unreachable.
+- `shared/mcp/` — the op contract and NDJSON framing shared by the app and the bridge.
+  Node-only plumbing: deliberately **not** part of the renderer-facing `shared/contract`.
+- `src/mcp/` — the bridge process an MCP client spawns, bundled by esbuild to a single
+  self-contained `dist/mcp/stdio.js`. The MCP SDK and zod are devDependencies bundled into
+  that one file, so the app itself gains **no** new runtime dependency.
 
 **Renderer (`renderer/`)** — authored as TypeScript modules and bundled to one
 CSP-friendly script by **esbuild**. Composition-first, framework-free:
@@ -410,8 +477,9 @@ setup, architecture, a folder-by-folder tour, and recipes for common changes.
 
 ```bash
 npm test           # vitest — analytics, aggregator, resolvers, store, and the Vantage models
-npm run typecheck  # tsc for the main process and the renderer
-npm run build      # tsc (main) + esbuild (renderer bundle)
+npm run typecheck  # tsc for the main process, the renderer, and the MCP bridge
+npm run build      # tsc (main) + esbuild (renderer bundle + MCP bridge)
+npm run build:mcp  # just the MCP bridge → dist/mcp/stdio.js
 npm run watch:renderer   # rebuild the renderer bundle on change
 npm start          # runs with the demo dataset
 npm run start:dev  # always forces Dev Mode on, ignoring the Settings toggle
