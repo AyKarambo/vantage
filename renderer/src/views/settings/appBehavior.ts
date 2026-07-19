@@ -126,6 +126,17 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           'Notify me when Overwatch game events go down (an Overwolf outage) and when they recover. The in-app banner shows either way.'),
       ),
+      h('div', null,
+        chip(s.mcpEnabled ? 'MCP endpoint: on' : 'MCP endpoint: off', s.mcpEnabled,
+          () => apply({ mcpEnabled: !s.mcpEnabled })),
+        // Say plainly what turning this on exposes. It is off by default
+        // because the pipe is reachable by any program running as this user,
+        // and someone enabling it deserves to know that before they do.
+        h('div', { class: 'hint', style: { marginTop: '6px' } },
+          s.mcpEnabled
+            ? 'On — an AI coach connected to Vantage can read your match history and record matches, reviews and targets. Any program running as you can reach it while it is on. Turn it off when you are not using it.'
+            : 'Off. Lets an AI assistant (Claude Desktop or Claude Code) read your stats and log matches for you, over a local-only connection. Nothing is sent anywhere by Vantage itself. Takes effect immediately.'),
+      ),
       devModeSection(s),
     );
   }
