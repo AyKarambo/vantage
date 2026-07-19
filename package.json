@@ -11,12 +11,14 @@
     ]
   },
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && npm run build:renderer",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && npm run build:renderer && npm run build:mcp",
     "build:renderer": "node scripts/build-renderer.mjs",
+    "build:mcp": "node scripts/build-mcp.mjs",
     "watch:renderer": "node scripts/build-renderer.mjs --watch",
+    "mcp": "node dist/mcp/stdio.js",
     "build:preview": "node scripts/build-preview.mjs",
     "preview": "node scripts/build-preview.mjs && node scripts/preview-server.mjs",
-    "typecheck": "node scripts/build-changelog.mjs && tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json",
+    "typecheck": "node scripts/build-changelog.mjs && tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json && tsc -p tsconfig.mcp.json",
     "make-icon": "node scripts/make-tray-icon.mjs",
     "assets:store": "node scripts/make-store-assets.mjs",
     "assets:screens": "npm run build:preview && ow-electron scripts/capture-screenshots.cjs",
@@ -53,6 +55,13 @@
       "!assets/store/**",
       "appsettings.json",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "comment": "The MCP bridge is spawned by an external MCP client with a plain `node`, which cannot read inside an asar — so it ships unpacked at resources/mcp/stdio.js. It is a self-contained esbuild bundle and needs no node_modules beside it.",
+        "from": "dist/mcp/stdio.js",
+        "to": "mcp/stdio.js"
+      }
     ],
     "win": {
       "target": [
