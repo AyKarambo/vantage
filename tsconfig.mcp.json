@@ -1,0 +1,14 @@
+{
+  // Typecheck-only project for the MCP bridge (`src/mcp`), which is bundled by
+  // esbuild rather than emitted by tsc. It needs `Bundler` module resolution to
+  // read the "exports" map of @modelcontextprotocol/sdk — the main project
+  // deliberately stays on classic `Node` resolution (see tsconfig.json).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  },
+  "include": ["src/mcp", "src/shared"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -25,5 +25,10 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "test"]
+  // `src/mcp` is the MCP bridge: a separate, esbuild-bundled entrypoint that
+  // imports @modelcontextprotocol/sdk. That package publishes its subpaths via
+  // an "exports" map, which classic `moduleResolution: "Node"` above cannot
+  // read — so the bridge is typechecked by tsconfig.mcp.json (bundler
+  // resolution) and built by scripts/build-mcp.mjs, never by this project.
+  "exclude": ["node_modules", "dist", "test", "src/mcp"]
 }
