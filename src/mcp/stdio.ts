@@ -1,6 +1,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createPipeClient } from './pipeClient';
 import { buildServer, type ToolRegistrar } from './server';
+import { registerReadTools } from './readTools';
 
 /**
  * The bridge entrypoint — the command an MCP client is configured to spawn.
@@ -9,8 +10,8 @@ import { buildServer, type ToolRegistrar } from './server';
  * file is only process wiring.
  */
 
-/** Every tool this server exposes. Read tools land in T11, writes in T12. */
-const REGISTRARS: readonly ToolRegistrar[] = [];
+/** Every tool this server exposes. Write tools land in T12. */
+const REGISTRARS: readonly ToolRegistrar[] = [registerReadTools];
 
 export async function main(): Promise<void> {
   const server = buildServer(createPipeClient(), REGISTRARS);
