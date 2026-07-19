@@ -26,6 +26,9 @@ export const INSTRUCTIONS =
   + 'explicitly agreed to that specific action.';
 
 export interface ToolContent {
+  /** The SDK's CallToolResult carries an open index signature; mirror it so
+   *  these results are structurally assignable to it. */
+  [key: string]: unknown;
   content: { type: 'text'; text: string }[];
   isError?: true;
 }
