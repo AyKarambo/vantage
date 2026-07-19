@@ -1,4 +1,5 @@
 import * as net from 'node:net';
+import { pipePath } from '../../shared/mcp/pipe';
 import { NdjsonBuffer, encodeLine } from '../../shared/mcp/ndjson';
 import { isMcpOp, mcpError, type McpRequest, type McpResponse } from '../../shared/mcp/ops';
 import { McpOpError, type Dispatcher } from './dispatch';
@@ -16,13 +17,7 @@ import { McpOpError, type Dispatcher } from './dispatch';
  * answered with a refusal — there is nothing to connect to at all.
  */
 
-/** Versioned so a future wire-format change can coexist with an old bridge. */
-export const PIPE_NAME = 'vantage.mcp.v1';
-
-/** Platform-correct address for a pipe name (POSIX path used by tests/dev on non-Windows). */
-export function pipePath(name: string = PIPE_NAME): string {
-  return process.platform === 'win32' ? `\\\\.\\pipe\\${name}` : `/tmp/${name}.sock`;
-}
+export { PIPE_NAME, pipePath } from '../../shared/mcp/pipe';
 
 /** Id used when a request could not be attributed to one (unparseable, or no numeric id). */
 const UNATTRIBUTED = -1;
