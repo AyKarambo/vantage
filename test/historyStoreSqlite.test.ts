@@ -283,6 +283,73 @@ describe('HistoryStore (SQLite) — deleteByAccount (F3)', () => {
   });
 });
 
+describe('HistoryStore (SQLite) — deleteMatch', () => {
+  it('removes exactly the one row, returns it, and is a no-op on a second call', () => {
+    const dir = tmp();
+    const h = open(dir);
+    h.addMany([g({ matchId: 'a' }), g({ matchId: 'b' }), g({ matchId: 'c' })]);
+    expect(h.deleteMatch('b')?.matchId).toBe('b');
+    expect(h.all().map((x) => x.matchId)).toEqual(['a', 'c']);
+    // Idempotent — the id is already gone, so nothing comes back.
+    expect(h.deleteMatch('b')).toBeUndefined();
+    expect(h.all().map((x) => x.matchId)).toEqual(['a', 'c']);
+  });
+
+  it('returns undefined for an id that was never stored, without touching history', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'a' }));
+    expect(h.deleteMatch('never-existed')).toBeUndefined();
+    expect(h.count()).toBe(1);
+  });
+
+  it('takes the whole record with it — the delete survives a close + reopen', () => {
+    const dir = tmp();
+    const h = open(dir);
+    h.addMany([
+      g({ matchId: 'keep' }),
+      g({ matchId: 'bogus', map: 'Unknown', review: { at: 1, grades: {}, flags: { tilt: true } }, srDelta: -25 }),
+    ]);
+    expect(h.deleteMatch('bogus')).toBeDefined();
+    h.close();
+    const re = open(dir);
+    expect(re.all().map((x) => x.matchId)).toEqual(['keep']);
+    expect(re.has('bogus')).toBe(false);
+  });
+
+  it('hands back a record complete enough to restore the game exactly', () => {
+    const dir = tmp();
+    const h = open(dir);
+    const original = g({
+      matchId: 'bogus', map: 'Unknown', result: 'Loss', srDelta: -25, source: 'gep',
+      heroes: ['Tracer'], review: { at: 7, grades: { t1: 'hit' }, flags: { tilt: true } },
+    });
+    h.add(original);
+
+    const removed = h.deleteMatch('bogus');
+    expect(removed).toEqual(original);
+    expect(h.count()).toBe(0);
+
+    // Feeding it straight back reconstructs the row byte-for-byte — this is
+    // what makes the delete's Undo a real restore rather than a re-log.
+    expect(h.add(removed!)).toBe(true);
+    h.close();
+    expect(open(dir).all()).toEqual([original]);
+  });
+
+  it('leaves the separate pending holding store alone', () => {
+    const h = open(tmp());
+    // Same id in both tables — possible when a replay re-holds an already
+    // recorded match. Deleting the history row must not silently drop the
+    // pending one (the provider decides that, not the store).
+    h.add(g({ matchId: 'dup' }));
+    h.addPending(pm({ matchId: 'dup' }));
+    expect(h.deleteMatch('dup')).toBeDefined();
+    expect(h.count()).toBe(0);
+    expect(h.hasPending('dup')).toBe(true);
+    expect(h.pendingCount()).toBe(1);
+  });
+});
+
 describe('HistoryStore (SQLite) — Unknown-account recovery (F1) via reresolve', () => {
   const localRoster = (battleTag: string) => [
     { battleTag: 'Enemy#1', heroName: 'Reaper' },

@@ -60,8 +60,8 @@ function sameHeroes(a: string[], b: string[]): boolean {
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes, account
-   *  management (relabel/delete), and the pending-store read. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'removeImported' | 'importedCount' | 'allPending'>;
+   *  management (relabel/delete), per-match delete, and the pending-store read. */
+  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -161,6 +161,12 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
   // reflects every account mutation immediately.
   const accountList = (): AccountSummary[] =>
     mergeAccountList(deps.getConfig().accounts, deps.history.all().map((g) => g.account));
+  // Undo buffer for deleted matches, keyed by matchId. In memory only and never
+  // persisted: the Undo exists for the lifetime of a toast, not as a recycle
+  // bin, and a delete the user walked away from should stay done. Bounded so a
+  // long session of cleanup can't accumulate records without limit.
+  const deletedUndo = new Map<string, GameRecord>();
+  const UNDO_BUFFER = 20;
   return {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
@@ -307,6 +313,56 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         };
       }
       deps.history.editManual(input.matchId, patch);
+    },
+    deleteMatch: (matchId) => {
+      // Gated behind a renderer confirm: drop the history row outright — the
+      // user's verdict that a tracked game was never real. The whole record
+      // goes with it (review, grades, mental, roster, srDelta all live on that
+      // row), and every derived stat recomputes on the next read since nothing
+      // in core/ memoizes. Reversible only via undoDeleteMatch below, and only
+      // while the record is still in the in-memory buffer.
+      const removed = deps.history.deleteMatch(matchId);
+      if (!removed) return { deleted: false };
+      // Hold the removed record so Undo can put it back byte-identically —
+      // same id, same provenance, same review — rather than re-logging an
+      // impostor. Oldest entry falls off once the buffer is full.
+      deletedUndo.set(matchId, removed);
+      if (deletedUndo.size > UNDO_BUFFER) {
+        const oldest = deletedUndo.keys().next().value;
+        if (oldest !== undefined) deletedUndo.delete(oldest);
+      }
+      // Cascade like the other local-delete paths: the Notion export ledger
+      // entry must go too, or a matchId that ever comes back is skipped on a
+      // stale signature (see notionRuntime.clearExports). This only clears the
+      // LOCAL ledger — the page in the user's Notion workspace is left alone,
+      // since the only outbound path is an explicit export (guardrail 5).
+      deps.notion.clearExports([matchId]);
+      // Defensive: an id can end up in both tables (a replay or re-import can
+      // re-hold a match that's already recorded), and a stray pending row would
+      // resurrect the match in Review. Goes through the pipeline's dismiss so
+      // the `pending-changed` push still fires.
+      deps.dismissPending(matchId);
+      // Rank anchors are deliberately NOT touched: an anchor is keyed
+      // (account, role) and carries no matchId — "I was rank X at time T" stays
+      // true. Rank self-corrects because reconstruct sums srDelta over the
+      // remaining games.
+      return { deleted: true };
+    },
+    undoDeleteMatch: (matchId) => {
+      const record = deletedUndo.get(matchId);
+      if (!record) return { restored: false };
+      deletedUndo.delete(matchId);
+      // `add` is INSERT … ON CONFLICT DO NOTHING, so an id that came back by
+      // another route (a re-import, a replay) wins over the buffered copy
+      // instead of being clobbered by it. Either way the match is present
+      // again, which is what the user asked for — so this still reports true.
+      deps.history.add(record);
+      // The Notion ledger entry cleared on delete is deliberately NOT rebuilt.
+      // It only recorded which page this match had already been exported to,
+      // and the exporter never blind-creates for an unledgered match — it
+      // re-adopts the existing row through its index — so a re-export finds the
+      // same page rather than duplicating it.
+      return { restored: true };
     },
     listAccounts: () => accountList(),
     saveAccount: (input) => {

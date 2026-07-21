@@ -2,15 +2,16 @@
 import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
 import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
-import { relTime, signed } from '../format';
+import { relTime, roleLabel, signed } from '../format';
 import { roleIcon } from '../components/roleIcon';
-import { button, card, chip, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
+import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
 import { wrHsl } from '../theme';
 import { openPopover } from '../components/popover';
 import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 import { prefs, MATCH_COLUMNS_DEFAULT, type MatchColumnKey, type MatchColumnsPref, type MatchFieldMode } from '../prefs';
 import { store } from '../store';
+import { deleteMatch } from '../matchActions';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
 const FLAG_LABELS: Record<MatchFlagKey, string> = {
@@ -305,19 +306,72 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
       pill(m.mapType, 'accent'),
     ),
     h('div', { class: 'mono u-muted', style: { fontSize: '11px', width: '46px', textAlign: 'right' } }, relTime(m.timestamp)),
+    rowMenuButton(m, ctx),
   );
+}
+
+/**
+ * The per-row overflow (⋯) — today just Delete.
+ *
+ * Always visible rather than revealed on `.match-row:hover`, and a popover
+ * rather than an inline confirm: this row is itself a click target that
+ * navigates, so a control that appears under the cursor mid-scroll, or that a
+ * double-click could arm and commit in one gesture, would put an irreversible
+ * delete one stray gesture away. Going through the popover means nothing
+ * destructive is reachable without a deliberate, aimed click.
+ */
+function rowMenuButton(m: MatchRow, ctx: ViewContext): HTMLElement {
+  const btn = h('button', {
+    class: 'match-row-menu',
+    title: 'More actions',
+    'aria-label': `More actions for your ${m.map} ${m.result.toLowerCase()}`,
+  }, '⋯');
+  btn.addEventListener('click', (e) => {
+    // Never let opening the menu also navigate into the match.
+    e.stopPropagation();
+    openRowMenu(btn, m, ctx);
+  });
+  return btn;
+}
+
+function openRowMenu(anchor: HTMLElement, m: MatchRow, ctx: ViewContext): void {
+  openPopover(anchor, (close) =>
+    h('div', { class: 'stack', style: { gap: '10px', minWidth: '250px' } },
+      // Name the match being acted on. A bare "Delete?" on a dense list tells
+      // the user nothing about which game they are about to lose.
+      h('div', { class: 'gep-popover-title' }, `${m.map} · ${m.result}`),
+      h('div', { class: 'hint' },
+        `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
+      button('Open match', {
+        variant: 'ghost',
+        class: 'btn--block',
+        onClick: () => { close(); ctx.navigate('matchDetail', { matchId: m.matchId }); },
+      }),
+      confirmButton({
+        label: 'Delete match',
+        confirmLabel: "Delete permanently — can't be undone",
+        variant: 'ghost',
+        class: 'btn--block',
+        title: 'Remove this match from your history',
+        confirmTitle: `Permanently deletes your ${m.map} ${m.result.toLowerCase()} from ${relTime(m.timestamp)} ago`,
+        onConfirm: (reset) => {
+          close();
+          void deleteMatch(m, reset);
+        },
+      }),
+    ));
 }
 
 /**
  * `.match-row`'s grid template for `columnCount` active 'column' fields: fixed
  * result-badge + main-content tracks, one `auto` track per column cell (each
  * cell's own width comes from its `.match-col--<key>` class so same-key cells
- * still line up across rows), then the two fixed always-visible trailing
- * tracks (map-type pill, relative time) — unchanged from before this fix.
+ * still line up across rows), then the three fixed always-visible trailing
+ * tracks (map-type pill, relative time, the ⋯ row menu).
  */
 function matchRowGridTemplate(columnCount: number): string {
   const columnTracks = Array(columnCount).fill('auto').join(' ');
-  return ['44px', '1fr', columnTracks, '84px', '46px'].filter(Boolean).join(' ');
+  return ['44px', '1fr', columnTracks, '84px', '46px', '24px'].filter(Boolean).join(' ');
 }
 
 /** Interleave ` · ` only between present segments — never leading/trailing/doubled. */

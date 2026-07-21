@@ -137,6 +137,20 @@
   display: flex;
   width: 100%;
 }
+/* Destructive weight — the armed half of a confirmButton, and any control whose
+   click can't be taken back. Solid fill so it reads differently from every
+   reversible action on the screen. */
+.btn--danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+.btn--danger:hover {
+  background: var(--danger);
+  border-color: transparent;
+  filter: brightness(1.08);
+}
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
