@@ -12,8 +12,8 @@ export { card, emptyState } from './card';
 export type { CardOpts } from './card';
 
 // Interactive controls
-export { button, segmented, select } from './controls';
-export type { BtnOpts, SegOption, SelectOption } from './controls';
+export { button, confirmButton, segmented, select } from './controls';
+export type { BtnOpts, ConfirmBtnOpts, SegOption, SelectOption } from './controls';
 
 // Small coloured labels
 export { pill, RESULT_STATE, RESULT_LETTER, resultPill, badge, chip } from './labels';

@@ -35,7 +35,12 @@ never shows stale data as "current."
   match is **editable** from here — both hand-logged and auto-tracked matches, down to
   their game facts (result, map, role, heroes) and their manual layer (mental flags,
   leaver-team, SR %, target grades). Correcting a game fact the feed got wrong on an
-  auto-tracked match keeps its ⚡ auto provenance and tags it **edited**.
+  auto-tracked match keeps its ⚡ auto provenance and tags it **edited**. When the feed
+  invents a game outright — a phantom match, a custom misread as tracked play — the row's
+  **⋯ menu** deletes it: a two-click confirm that names the match, then it's gone from
+  history and every stat recomputes without it. The confirmation offers **Undo**, which
+  restores the real record (same id, same ⚡ provenance, same grades) rather than re-logging
+  a copy; that window closes when the message does, and doesn't survive a restart.
   The editor mirrors the Log match card — the same shared controls, wording and field
   order: colour-coded **W/L/D** (the `W`/`L`/`D` keys work here too), the **locked map
   combobox** (type to search, recent maps first), the **most-played hero shortlist**
@@ -110,7 +115,10 @@ never shows stale data as "current."
 - **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
   how each tracked game felt, and rate your own **performance** on a 0-100 slider; **measured
   (⚡) targets are auto-graded from that match's stats and shown read-only**. An
-  always-visible inbox of ungraded games, independent of the global filters.
+  always-visible inbox of ungraded games, independent of the global filters. A game that
+  never should have been tracked can be **deleted** straight from its grading card instead
+  of graded — distinct from the "Not a real match" dismiss above it, which drops a *held*
+  match that never entered history.
 - **Improvement Target** — build a target (self-rated ◎, or measured ⚡ which **auto-grades
   from your per-10-minute stats** — no manual read), or start from a **curated, coaching-grounded
   template** (positioning, ult economy, cooldown value, target selection, plus per-role stat

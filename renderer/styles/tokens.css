@@ -85,6 +85,15 @@
   --mid-text: #dac99a;
   --track: rgba(255, 255, 255, 0.06);
 
+  /* Destructive actions. Scheme-independent ON PURPOSE: the win/loss family
+     above is re-tinted per winrate scheme (--loss goes orange under
+     `colorblind`), so a delete button borrowing --loss-* would change colour
+     with a preference that has nothing to do with danger. */
+  --danger: #d4565f;
+  --danger-text: #e8949b;
+  --danger-soft: rgba(212, 86, 95, 0.16);
+  --danger-border: rgba(212, 86, 95, 0.55);
+
   /* Radius --------------------------------------------------------------- */
   --r-sm: 6px;
   --r-md: 9px;

@@ -19,6 +19,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **Delete a match.** When the game feed invents a game that never happened — a phantom match,
+  an `Unknown` map, a custom read as tracked play — you can now remove it instead of living
+  with it skewing your winrate, streaks and priority maps. It's on the **⋯ menu** of any row
+  in Matches, and on the grading card in Review so a bogus game can be deleted rather than
+  graded. Both take two clicks and tell you which match you're about to lose, and the
+  confirmation that follows offers **Undo** — which puts the real match back, grades and all,
+  not a retyped copy. The undo lasts as long as the message is on screen; once it's gone, or
+  once you restart Vantage, the delete is permanent.
+
 - **An FAQ**, reachable from **Help** in the status bar — what live tracking needs, why a match
   you joined late looks incomplete, where your data lives, how Notion sync works, and how to
   report a bug. It also keeps this changelog, so you can read back through it any time.

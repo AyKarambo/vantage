@@ -13,7 +13,7 @@ import type { MatchMental, MatchRow, PendingMatch, Result, TargetGrade, TargetSu
 import { parseMeasuredRule } from '../../../src/core/targets';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
-import { badge, button, card, emptyState, resultPill } from '../components/primitives';
+import { badge, button, card, confirmButton, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
 import { srDeltaInput, suggestedSrDelta } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
@@ -22,6 +22,7 @@ import { store } from '../store';
 import { bridge } from '../bridge';
 import { registerShortcut } from '../shortcuts';
 import { gradedThisSession } from '../reviews';
+import { deleteMatch } from '../matchActions';
 import { viewHead, type ViewContext } from './view';
 
 /**
@@ -279,6 +280,24 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),
       h('span', { class: 'u-dim', style: { fontSize: '10.5px', marginLeft: 'auto' } }, 'keys: H / P / M grade · S saves'),
+      // Deliberately NOT labelled "Not a real match" — the pending rows above
+      // carry that label for a match that never entered history, and this one
+      // destroys a recorded game. Same words on one screen for two very
+      // different blast radii would teach the wrong reflex.
+      confirmButton({
+        label: 'Delete match',
+        confirmLabel: 'Delete permanently?',
+        variant: 'ghost',
+        title: 'Delete this match from your history',
+        confirmTitle: `Permanently deletes your ${m.map} ${m.result.toLowerCase()} — this can't be undone`,
+        onConfirm: (reset) => {
+          // Only drop the keyboard hook if it still points at THIS card. It is
+          // module-level and last-writer-wins, so a second expanded card would
+          // otherwise lose H/P/M/S when this one is deleted.
+          if (kbHook?.el === el) kbHook = null;
+          void deleteMatch(m, reset);
+        },
+      }),
     ),
   );
 

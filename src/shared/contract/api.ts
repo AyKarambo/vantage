@@ -44,6 +44,22 @@ export interface OwStatsApi {
   logMatch(input: ManualMatchInput): Promise<{ matchId: string }>;
   /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */
   editMatch(input: MatchEditInput): Promise<void>;
+  /**
+   * IRREVERSIBLY delete one recorded match from history — the user's verdict that
+   * a tracked game wasn't real (a phantom GEP match, a misread custom). Hard
+   * delete with no undo: the row carries the review, grades, mental flags and
+   * roster, and all of it goes. The renderer must gate this behind a confirm.
+   * `deleted: false` means the id was already gone. Clears the match's local
+   * Notion export ledger entry but never touches the user's Notion workspace.
+   */
+  deleteMatch(matchId: string): Promise<{ deleted: boolean }>;
+  /**
+   * Restore the most recently deleted match — the Undo behind the delete toast.
+   * The main process keeps the removed record in memory (never on disk), so an
+   * undo is only offered for this session and only until the buffer rolls over.
+   * `restored: false` once it's genuinely gone.
+   */
+  undoDeleteMatch(matchId: string): Promise<{ restored: boolean }>;
   /** The tracked accounts (battleTag → label), for the picker and settings. */
   listAccounts(): Promise<AccountSummary[]>;
   /** Create or edit an account; returns the updated list. */
@@ -256,6 +272,8 @@ export const IPC_CHANNELS = {
   clearNotionToken: 'notion:clear-token',
   logMatch: 'manual:log-match',
   editMatch: 'manual:edit-match',
+  deleteMatch: 'manual:delete-match',
+  undoDeleteMatch: 'manual:undo-delete-match',
   listAccounts: 'accounts:list',
   saveAccount: 'accounts:save',
   deleteAccount: 'accounts:delete',

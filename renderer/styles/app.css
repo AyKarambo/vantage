@@ -508,7 +508,7 @@
  */
 .match-row {
   display: grid;
-  grid-template-columns: 44px 1fr 84px 46px;
+  grid-template-columns: 44px 1fr 84px 46px 24px;
   align-items: center;
   gap: 14px;
   padding: 10px 12px;
@@ -519,6 +519,30 @@
 .match-row:hover {
   background: var(--surface-2);
   border-color: var(--border);
+}
+/* Per-row overflow (⋯). Always rendered so it can't materialise under a
+   stationary cursor mid-scroll, but dim until the row or the button itself is
+   hovered, so it never competes with the row's own content. */
+.match-row-menu {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted-2);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.35;
+  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.match-row:hover .match-row-menu {
+  opacity: 0.75;
+}
+.match-row-menu:hover,
+.match-row-menu:focus-visible {
+  opacity: 1;
+  background: var(--surface-3);
+  color: var(--text-2);
 }
 .match-result {
   width: 38px;

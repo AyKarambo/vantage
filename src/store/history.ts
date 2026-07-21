@@ -127,6 +127,7 @@ export class HistoryStore {
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
   private deleteByAccountStmt!: StatementSync;
+  private deleteMatchStmt!: StatementSync;
   private addPendingStmt!: StatementSync;
   private allPendingStmt!: StatementSync;
   private hasPendingStmt!: StatementSync;
@@ -202,6 +203,30 @@ export class HistoryStore {
    */
   deleteByAccount(account: string): number {
     return Number(this.deleteByAccountStmt.run(account).changes);
+  }
+
+  /**
+   * Delete ONE recorded game by match id — the user's "this was never a real
+   * match" verdict on a row that already entered history (as opposed to
+   * {@link removePending}, which drops a held match that never did). Everything
+   * about the game — review, grades, mental flags, roster, srDelta — lives in
+   * that single row, so this removes all of it.
+   *
+   * SELECT-then-DELETE in one transaction (mirrors {@link takePending}) so the
+   * removed record comes back to the caller. Because the `data` JSON blob is
+   * the source of truth, feeding that record straight back to {@link add}
+   * restores the game exactly as it was — same id, same provenance — which is
+   * what makes the Undo on a delete honest rather than a re-log. Undefined if
+   * the id was unknown.
+   */
+  deleteMatch(matchId: string): GameRecord | undefined {
+    let removed: GameRecord | undefined;
+    this.tx(() => {
+      removed = this.getOne(matchId);
+      if (!removed) return;
+      this.deleteMatchStmt.run(matchId);
+    });
+    return removed;
   }
 
   /** Rewrite the account label on every matching game (one transaction). Returns the count changed. */
@@ -505,6 +530,7 @@ export class HistoryStore {
       `DELETE FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
     );
     this.deleteByAccountStmt = this.db.prepare('DELETE FROM games WHERE account = ?');
+    this.deleteMatchStmt = this.db.prepare('DELETE FROM games WHERE matchId = ?');
     // Pending (no-outcome) holding store — see PENDING_SCHEMA_SQL.
     this.addPendingStmt = this.db.prepare(
       `INSERT INTO pending_matches (matchId, endedAt, data) VALUES (?, ?, ?) ON CONFLICT(matchId) DO NOTHING`,

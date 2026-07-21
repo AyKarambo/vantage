@@ -90,6 +90,8 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.editMatch, (_e, input: MatchEditInput) => {
     provider.editMatch(input);
   });
+  handle(ch.deleteMatch, (_e, matchId: string) => provider.deleteMatch(matchId));
+  handle(ch.undoDeleteMatch, (_e, matchId: string) => provider.undoDeleteMatch(matchId));
 
   // Accounts + rank (per account × role).
   handle(ch.listAccounts, () => provider.listAccounts());

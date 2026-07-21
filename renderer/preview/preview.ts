@@ -54,6 +54,7 @@ const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
 const ACCOUNTS_KEY = 'vantagePreviewAccounts';
 const ANCHORS_KEY = 'vantagePreviewAnchors';
 const EDITS_KEY = 'vantagePreviewEdits';
+const DELETED_KEY = 'vantagePreviewDeleted';
 const MASTER_DATA_KEY = 'vantagePreviewMasterData';
 
 /** Preview-side master-data overrides, persisted to localStorage like other writes. */
@@ -102,6 +103,13 @@ const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
 const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
 // Manual-layer edits from the Matches drill-down, overlaid onto any match.
 const previewEdits: Record<string, Partial<GameRecord>> = loadMap<Partial<GameRecord>>(EDITS_KEY);
+// Hard-deleted matches. The app drops the row from SQLite outright; the preview
+// can't delete from the generated season, so it tombstones the id and filters it
+// out of `dataset()` — same observable behaviour, and it survives a reload.
+const previewDeleted: Record<string, true> = loadMap<true>(DELETED_KEY);
+// Mirrors the main process's in-memory undo buffer — deliberately not persisted,
+// so a reload ends the undo window here exactly as a restart does in the app.
+const deletedUndo = new Map<string, GameRecord>();
 // Accounts (battleTag → label). Seeded from the sample season's accounts.
 type AnchorRecord = RankAnchor & { account: string; role: Role };
 const seededAccounts = (): Record<string, string> => {
@@ -160,7 +168,7 @@ let grading: GradingSettings = Object.keys(savedGrading).length
 // season shows only while opted in with no real games — so ?demo=off/unset
 // previews the honest empty states end-to-end.
 const dataset = (): GameRecord[] =>
-  (logged.length ? logged : appSettings.demoPreference === 'on' ? season : []).map((g) => {
+  (logged.length ? logged : appSettings.demoPreference === 'on' ? season : []).filter((g) => !previewDeleted[g.matchId]).map((g) => {
     let out = g;
     if (previewEdits[g.matchId]) out = { ...out, ...previewEdits[g.matchId] };
     if (previewReviews[g.matchId]) out = { ...out, review: previewReviews[g.matchId] };
@@ -517,6 +525,39 @@ const mock: OwStatsApi = {
       previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
       save(REVIEWS_KEY, previewReviews);
     }
+  },
+  deleteMatch: async (matchId: string) => {
+    if (!dataset().some((g) => g.matchId === matchId)) return { deleted: false };
+    previewDeleted[matchId] = true;
+    save(DELETED_KEY, previewDeleted);
+    // The real store keeps everything on the one row, so a delete takes the
+    // manual layer with it — mirror that here rather than leaving orphans that
+    // would reattach if the id ever came back.
+    delete previewEdits[matchId];
+    delete previewReviews[matchId];
+    save(EDITS_KEY, previewEdits);
+    save(REVIEWS_KEY, previewReviews);
+    const i = logged.findIndex((g) => g.matchId === matchId);
+    if (i >= 0) {
+      deletedUndo.set(matchId, logged[i]);
+      logged.splice(i, 1);
+      save(LOGGED_KEY, logged);
+    }
+    return { deleted: true };
+  },
+  undoDeleteMatch: async (matchId: string) => {
+    if (!previewDeleted[matchId]) return { restored: false };
+    delete previewDeleted[matchId];
+    save(DELETED_KEY, previewDeleted);
+    // A hand-logged game was spliced out of `logged`; the generated season is
+    // untouched on disk, so clearing the tombstone is enough to bring it back.
+    const record = deletedUndo.get(matchId);
+    if (record) {
+      deletedUndo.delete(matchId);
+      logged.push(record);
+      save(LOGGED_KEY, logged);
+    }
+    return { restored: true };
   },
   listAccounts: async () => accountList(),
   saveAccount: async (input: AccountInput) => {

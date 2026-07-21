@@ -43,6 +43,10 @@ export interface DataProvider {
   logMatch(input: ManualMatchInput): { matchId: string };
   /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */
   editMatch(input: MatchEditInput): void;
+  /** Delete one recorded match; `deleted: false` if the id is unknown. Undoable via {@link undoDeleteMatch}. */
+  deleteMatch(matchId: string): { deleted: boolean };
+  /** Restore a just-deleted match from the in-memory undo buffer; `restored: false` once it's gone. */
+  undoDeleteMatch(matchId: string): { restored: boolean };
   /** The tracked accounts (battleTag → label). */
   listAccounts(): AccountSummary[];
   /** Create or edit an account; returns the updated list. */
