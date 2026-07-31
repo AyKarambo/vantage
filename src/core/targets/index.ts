@@ -53,3 +53,6 @@ export {
   ROLL_WINDOW, ROLL_MIN, BASELINE_WINDOW, MIN_BASELINE, MIN_RENDER, MIN_VERDICT, DIP_EPS,
   type LearningPhase, type LearningCurvePoint, type TargetLearningCurve,
 } from './learningCurve';
+
+// The ONE-line plain-language status sentence for a target row (no stats jargon).
+export { targetStatusSentence } from './status';
