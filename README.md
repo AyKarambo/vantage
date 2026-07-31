@@ -365,9 +365,12 @@ your client at the bridge:
 }
 ```
 
-In an installed build the bundle ships at `<install dir>/resources/mcp/stdio.js`. In a dev
-checkout, `npm run build` produces `dist/mcp/stdio.js` (and `npm run mcp` runs it directly,
-which is only useful for a smoke test — the client normally spawns it).
+In an installed build the bundle ships **unpacked**, at `<install dir>/resources/mcp/stdio.js`
+— the client spawns it with a plain `node`, which cannot read inside an asar, so it goes in as
+an ordinary resource (`build.extraResources`) rather than app content. Being a self-contained
+esbuild bundle, it needs no `node_modules` beside it. In a dev checkout, `npm run build`
+produces `dist/mcp/stdio.js` (and `npm run mcp` runs it directly, which is only useful for a
+smoke test — the client normally spawns it).
 
 **How it works.** The bridge is a small separate process that holds no data of its own. It
 forwards each call over a **local named pipe** to the running Vantage app, which answers it

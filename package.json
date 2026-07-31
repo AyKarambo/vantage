@@ -58,7 +58,6 @@
     ],
     "extraResources": [
       {
-        "comment": "The MCP bridge is spawned by an external MCP client with a plain `node`, which cannot read inside an asar — so it ships unpacked at resources/mcp/stdio.js. It is a self-contained esbuild bundle and needs no node_modules beside it.",
         "from": "dist/mcp/stdio.js",
         "to": "mcp/stdio.js"
       }
