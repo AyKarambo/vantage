@@ -15,6 +15,22 @@ entries short, plain, and about impact.
 Releases before 0.32.0 predate this file. Their notes are auto-generated per PR on the
 [Releases page](https://github.com/AyKarambo/vantage/releases).
 
+## Unreleased
+
+### Changed
+
+- **Targets list and detail page.** The Targets list now shows each target in plain language —
+  name, grading mode, hit-rate, and a one-sentence status (e.g., "Paying off — you win more when
+  you hit it") — alongside an **Active** toggle, removing stats jargon from the overview. Click
+  any row to open a dedicated **detail page** with the full breakdown: the rule, win-when-hit and
+  win-when-missed rates, the **Focus Trend** panel (before/after winrate with a rolling chart
+  and table toggle), and actions to **Edit** (pre-filling the builder), **Archive**, or
+  **Delete**. Edit returns to the Targets list with the builder pre-filled.
+- **Target library.** The builder's flat "Start from a template" chips are now a curated
+  **Target library** card featuring ~18 entries grouped under **Mechanics · Macro · Strategy ·
+  Training** — a decision-timing split — each with a visible coaching blurb and role tag. Pick
+  one to prefill the builder.
+
 ## 0.34.0 — 31 July 2026
 
 ### Added
