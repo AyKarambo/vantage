@@ -4,7 +4,7 @@ import type { Result } from '../src/core/model';
 import {
   buildTargets, parseMeasuredRule, matchStatValue, evaluateMeasured,
   foldMeasuredGradesForExport, effectiveImprovementGrade, matchExportSignature,
-  targetLearningCurve, TARGET_TEMPLATES, type AuthoredTarget,
+  targetLearningCurve, TARGET_LIBRARY, type AuthoredTarget,
 } from '../src/core/targets';
 
 let seq = 0;
@@ -40,8 +40,8 @@ describe('parseMeasuredRule', () => {
   it('returns null for a non-measured rule', () => {
     expect(parseMeasuredRule('You grade it')).toBeNull();
   });
-  it('round-trips every measured template', () => {
-    for (const t of TARGET_TEMPLATES.filter((x) => x.mode === 'measured')) {
+  it('round-trips every measured library entry', () => {
+    for (const t of TARGET_LIBRARY.filter((x) => x.mode === 'measured')) {
       expect(parseMeasuredRule(t.rule)).not.toBeNull();
     }
   });

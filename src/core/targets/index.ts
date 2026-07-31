@@ -16,9 +16,10 @@ export type { TargetMode, AuthoredTarget, TargetSummary } from './types';
 export { sampleTargets } from './sampleTargets';
 export { buildTargets } from './scoring';
 
-// Curated starter templates for the builder's "Start from a template" chips
-export type { TargetTemplate } from './templates';
-export { TARGET_TEMPLATES } from './templates';
+// Curated target library behind the Targets page's "Target library" card
+// (TARGET_TEMPLATES is a transitional alias kept for the builder's chip row).
+export type { TargetTemplate, TargetCategory, LibraryRole, TargetLibraryEntry } from './templates';
+export { TARGET_CATEGORIES, TARGET_LIBRARY, TARGET_TEMPLATES } from './templates';
 
 // Automatic grading of measured (⚡) targets from match stats
 export type { MeasuredOp, ParsedRule, MeasuredScope } from './measured';
