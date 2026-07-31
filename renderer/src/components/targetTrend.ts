@@ -1,22 +1,17 @@
 /**
- * Focus Trend surfaces for a target — the collapsed-row phase chip, the opt-in
- * disclosure toggle, and the expanded panel. The panel reframes a post-flag dip
- * as the expected cost of practising something new (a learning J-curve), judged
- * by the rebound rather than the first few games. See ../charts/plots/learningCurveChart
- * for the chart and ../../src/core/targets/learningCurve for the numbers.
- *
- * The disclosure is a persistent local toggle: clicking it mutates its own DOM in
- * place and NEVER notifies the store, so a background store-notify re-render can't
- * tear the button out from under the click (the mid-press swallow, PR #36). The
- * open/closed choice is remembered per target id so it also survives a full
- * library re-render (a refresh that rebuilds the row re-opens it).
+ * Focus Trend surfaces for a target — the phase chip and the full trend panel,
+ * both rendered on the target detail page (the list rows keep only a plain
+ * status sentence). The panel reframes a post-flag dip as the expected cost of
+ * practising something new (a learning J-curve), judged by the rebound rather
+ * than the first few games. See ../charts/plots/learningCurveChart for the
+ * chart and ../../src/core/targets/learningCurve for the numbers.
  */
 import { h } from '../dom';
-import type { LearningPhase, TargetLearningCurve, TargetSummary } from '../../../src/shared/contract';
+import type { LearningPhase, TargetLearningCurve } from '../../../src/shared/contract';
 import { MIN_VERDICT } from '../../../src/core/targets';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
-import { button, statBox } from './primitives';
+import { statBox } from './primitives';
 import { chartCard } from './chartCard';
 import { learningCurveChart, learningCurveRows, LEARNING_CURVE_COLUMNS } from '../charts/plots';
 import { openFocusTrendGuide } from '../app/focusTrendGuide';
@@ -50,49 +45,6 @@ export function phaseChip(curve: TargetLearningCurve): HTMLElement {
     style: { color: meta.color, border: `1px solid ${meta.color}`, background: 'transparent', whiteSpace: 'nowrap' },
     title: REFRAME,
   }, meta.label(curve));
-}
-
-/** Module-level per-target open state, so a full library re-render re-opens the
- *  panels the user had expanded (the toggle itself never notifies the store). */
-const expandedTrends = new Set<string>();
-
-/**
- * The opt-in disclosure for a live target. Returns the ghost toggle to drop into
- * the row actions plus the panel to append below the row, already wired to a
- * local in-place toggle. Returns null for targets with no learning model
- * (archived/empty) — they get no trend surface.
- */
-export function focusTrendDisclosure(t: TargetSummary): { toggle: HTMLButtonElement; panel: HTMLElement } | null {
-  const curve = t.learning;
-  if (!curve) return null;
-
-  let open = expandedTrends.has(t.id);
-  const panel = targetTrend(curve);
-  panel.style.display = open ? '' : 'none';
-
-  const chev = h('span', {
-    style: { display: 'inline-block', transition: 'transform 120ms var(--ease, ease)', fontSize: '10px' },
-  }, '▸');
-  const label = h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px' } }, chev, 'Focus trend');
-
-  const apply = (): void => {
-    panel.style.display = open ? '' : 'none';
-    chev.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
-    toggle.setAttribute('aria-expanded', String(open));
-  };
-  const toggle = button(label, {
-    variant: 'ghost',
-    title: 'Show the winrate trend since you flagged this',
-    // Local-only: mutate our own nodes, never touch the store → no re-render can
-    // land between this click's down and up and swallow it.
-    onClick: () => {
-      open = !open;
-      if (open) expandedTrends.add(t.id); else expandedTrends.delete(t.id);
-      apply();
-    },
-  });
-  apply();
-  return { toggle, panel };
 }
 
 /** The expanded Focus Trend panel: before/after tiles, the reframe, the chart
