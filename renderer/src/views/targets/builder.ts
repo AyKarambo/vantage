@@ -148,11 +148,20 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     }
   };
 
+  // Deferred a tick: edit/prefill also run during view construction (the detail
+  // page's editTargetId hop, Focus quick-create), where the host isn't mounted
+  // yet — scrollIntoView on a detached node is a no-op — and the shell restores
+  // the route's remembered scroll right after mounting, which would override an
+  // immediate scroll anyway. Same idiom as the Maps highlight reveal.
+  const reveal = (): void => {
+    setTimeout(() => host.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
+
   const edit = (t: TargetSummary): void => {
     state.editingId = t.id;
     loadRule(t);
     draw();
-    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    reveal();
   };
 
   const prefill = (t: { name: string; mode: TargetMode; rule: string }): void => {
@@ -160,7 +169,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     state.editingId = null;
     loadRule(t);
     draw();
-    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    reveal();
   };
 
   draw();
