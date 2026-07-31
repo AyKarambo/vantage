@@ -1,10 +1,12 @@
 /**
  * Improvement Target builder — the flexible creation/edit surface. Doubles as
- * the edit surface (a library row's Edit re-opens it pre-filled via `BuilderHandle.edit`).
+ * the edit surface (a library row's Edit re-opens it pre-filled via `BuilderHandle.edit`),
+ * and as the prefill target for the Target library card and Focus's quick-create
+ * (`BuilderHandle.prefill`).
  */
 import { h, render } from '../../dom';
 import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
-import { TARGET_TEMPLATES, stepFor, parseMeasuredRule, MEASURED_STATS } from '../../../../src/core/targets';
+import { stepFor, parseMeasuredRule, MEASURED_STATS } from '../../../../src/core/targets';
 import { roleOfHero } from '../../../../src/core/heroes';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
@@ -58,12 +60,6 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
   };
   const host = h('div');
 
-  // Templates help you start; once you have your own set (≥3 live authored
-  // targets) they collapse behind a "Show templates" toggle. Sample/demo rows
-  // aren't "your set", so they don't count.
-  const liveAuthored = ctx.data.isSample ? 0 : ctx.data.targets.filter((t) => !t.archivedAt).length;
-  let templatesOpen = liveAuthored < 3;
-
   const save = (): void => {
     const name = state.name.trim() || 'Untitled target';
     const rule = state.mode === 'self' ? 'You grade it' : `${state.stat} ${state.op} ${state.value}`;
@@ -108,7 +104,6 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
         title: state.editingId ? 'Edit target' : 'Define a target',
         sub: state.editingId ? 'stats keep accruing across edits' : 'Make it yours',
       },
-      templatesRegion(),
       h('div', { class: 'field-label' }, 'Name your focus'),
       h('input', {
         class: 'target-name-input',
@@ -166,35 +161,6 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     loadRule(t);
     draw();
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  // The "Start from a template" section: expanded until the player has their own
-  // set, then collapsed behind a toggle (local state only, no store round-trip).
-  const templatesRegion = (): HTMLElement => {
-    if (!templatesOpen) {
-      return h('div', { style: { marginBottom: '16px' } },
-        h('button', {
-          class: 'chip',
-          title: 'Browse the starter templates again',
-          on: { click: () => { templatesOpen = true; draw(); } },
-        }, 'Show templates'));
-    }
-    return h('div', { style: { marginBottom: '16px' } },
-      h('div', { class: 'field-label' }, 'Start from a template'),
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '7px' } },
-        ...TARGET_TEMPLATES.map((t) =>
-          h('button', { class: 'chip', title: t.blurb, on: { click: () => prefill(t) } }, t.name),
-        ),
-        // A hide affordance only makes sense once there's a set to fall back on.
-        liveAuthored >= 3
-          ? h('button', {
-              class: 'chip u-dim',
-              title: 'Hide the starter templates',
-              on: { click: () => { templatesOpen = false; draw(); } },
-            }, 'Hide')
-          : null,
-      ),
-    );
   };
 
   draw();

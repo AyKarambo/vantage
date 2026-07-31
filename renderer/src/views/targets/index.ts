@@ -3,7 +3,8 @@
  * plain (name, status line, hit-rate, Active toggle) and click through to the
  * target detail page, which carries the analytics and the Edit/Archive/Delete
  * lifecycle; the detail's Edit returns here via `editTargetId` to re-open the
- * builder pre-filled.
+ * builder pre-filled. The Target library card at the bottom lets a player
+ * browse curated starting points and prefill the builder from one.
  */
 import { h } from '../../dom';
 import { card, emptyState } from '../../components/primitives';
@@ -11,6 +12,7 @@ import { viewHead, type ViewContext } from '../view';
 import { builderCard } from './builder';
 import { activeSetCard } from './activeSet';
 import { libraryCard } from './library';
+import { libraryBrowserCard } from './libraryBrowser';
 
 export function targets(ctx: ViewContext): HTMLElement {
   const builder = builderCard(ctx);
@@ -35,5 +37,6 @@ export function targets(ctx: ViewContext): HTMLElement {
       ? card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
           emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true))
       : libraryCard(ctx),
+    libraryBrowserCard(builder),
   );
 }
