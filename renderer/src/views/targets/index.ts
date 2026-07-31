@@ -7,12 +7,18 @@
  * browse curated starting points and prefill the builder from one.
  */
 import { h } from '../../dom';
+import type { ViewParams } from '../../store';
 import { card, emptyState } from '../../components/primitives';
 import { viewHead, type ViewContext } from '../view';
 import { builderCard } from './builder';
 import { activeSetCard } from './activeSet';
 import { libraryCard } from './library';
 import { libraryBrowserCard } from './libraryBrowser';
+
+/** Params objects already applied to the builder. `setView` builds a fresh
+ *  params object per navigation while data refreshes keep the same reference,
+ *  so object identity is exactly "one edit per navigation". */
+const consumedEditParams = new WeakSet<ViewParams>();
 
 export function targets(ctx: ViewContext): HTMLElement {
   const builder = builderCard(ctx);
@@ -22,7 +28,11 @@ export function targets(ctx: ViewContext): HTMLElement {
     builder.prefill({ name: ctx.params.prefillName, mode: 'self', rule: 'You grade it' });
   }
   // A detail page's Edit lands here with the target to re-open in the builder.
-  if (ctx.params.editTargetId) {
+  // One navigation = one edit: a background refresh re-renders this view with
+  // the SAME params object, and replaying builder.edit() then would force the
+  // builder back into edit mode — the silent-overwrite trap (review finding).
+  if (ctx.params.editTargetId && !consumedEditParams.has(ctx.params)) {
+    consumedEditParams.add(ctx.params);
     const editing = ctx.data.targets.find((t) => t.id === ctx.params.editTargetId);
     if (editing) builder.edit(editing);
   }
@@ -37,6 +47,6 @@ export function targets(ctx: ViewContext): HTMLElement {
       ? card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
           emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true))
       : libraryCard(ctx),
-    libraryBrowserCard(builder),
+    libraryBrowserCard(ctx, builder),
   );
 }

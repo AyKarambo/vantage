@@ -63,7 +63,15 @@ function targetRow(t: TargetSummary, ctx: ViewContext): HTMLElement {
 function activeToggle(t: TargetSummary, ctx: ViewContext): HTMLElement {
   return h('span', {
     style: { flex: '0 0 auto' },
-    on: { click: (e) => e.stopPropagation(), keydown: (e) => e.stopPropagation() },
+    on: {
+      click: (e) => e.stopPropagation(),
+      // Stop only the keys the row itself acts on — everything else (Ctrl+K,
+      // PageDown…) must keep bubbling to the global shortcut dispatcher.
+      keydown: (e) => {
+        const key = (e as KeyboardEvent).key;
+        if (key === 'Enter' || key === ' ') e.stopPropagation();
+      },
+    },
   },
     chip(t.isActive ? '◎ Active on Review' : 'Inactive', t.isActive,
       () => void bridge.setTargetActive(t.id, !t.isActive).then(() => ctx.refresh())),
