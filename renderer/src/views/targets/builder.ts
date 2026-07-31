@@ -4,7 +4,7 @@
  */
 import { h, render } from '../../dom';
 import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
-import { TARGET_TEMPLATES, stepFor, parseMeasuredRule } from '../../../../src/core/targets';
+import { TARGET_TEMPLATES, stepFor, parseMeasuredRule, MEASURED_STATS } from '../../../../src/core/targets';
 import { roleOfHero } from '../../../../src/core/heroes';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
@@ -14,7 +14,7 @@ import { roleIcon } from '../../components/roleIcon';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
-export const STATS = ['Deaths', 'Eliminations', 'Assists', 'Damage', 'Healing', 'Mitigation', 'KDA'];
+export const STATS = MEASURED_STATS;
 export const OPS = ['≤', '≥', '='];
 
 export interface BuilderState {

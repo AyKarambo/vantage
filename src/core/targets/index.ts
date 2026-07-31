@@ -24,6 +24,7 @@ export { TARGET_TEMPLATES } from './templates';
 export type { MeasuredOp, ParsedRule, MeasuredScope } from './measured';
 export {
   DEFAULT_PARTIAL_MARGIN,
+  MEASURED_STATS,
   parseMeasuredRule, formatMeasuredRule, matchStatValue, evaluateMeasured, foldMeasuredGradesForExport,
   effectiveImprovementGrade, activeMeasuredTargets, measuredGradesForMatch,
 } from './measured';

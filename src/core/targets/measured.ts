@@ -50,6 +50,9 @@ export function formatMeasuredRule(stat: string, op: string, value: string | num
   return `${stat} ${op} ${value}`;
 }
 
+/** Single source of truth for stats a measured rule may reference (builder dropdown + library validation). */
+export const MEASURED_STATS: readonly string[] = ['Deaths', 'Eliminations', 'Assists', 'Damage', 'Healing', 'Mitigation', 'KDA'];
+
 /** Stat label → the `HeroStat` numeric field it sums. KDA is derived, not a field. */
 const STAT_FIELD: Record<string, keyof Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'>> = {
   Eliminations: 'eliminations',
