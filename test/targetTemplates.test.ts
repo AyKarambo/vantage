@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  TARGET_TEMPLATES, TARGET_CATEGORIES, TARGET_LIBRARY, MEASURED_STATS, parseMeasuredRule,
+  TARGET_CATEGORIES, TARGET_LIBRARY, MEASURED_STATS, parseMeasuredRule,
 } from '../src/core/targets';
 
 // Source of truth for these two constants is renderer/src/views/targets/builder.ts
@@ -91,11 +91,5 @@ describe('TARGET_CATEGORIES', () => {
     for (const c of TARGET_CATEGORIES) {
       expect(c.scope.trim().length).toBeGreaterThan(0);
     }
-  });
-});
-
-describe('TARGET_TEMPLATES', () => {
-  it('is the transitional alias for TARGET_LIBRARY (same array reference)', () => {
-    expect(TARGET_TEMPLATES).toBe(TARGET_LIBRARY);
   });
 });

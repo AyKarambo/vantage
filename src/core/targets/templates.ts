@@ -15,7 +15,8 @@ export interface TargetTemplate {
   name: string;
   mode: TargetMode;
   rule: string;
-  /** One-line coaching context, shown as the chip's `title` tooltip. */
+  /** One-line coaching context — shown as always-visible copy under the entry's
+   *  name in the Target library card (not a hover tooltip). */
   blurb: string;
 }
 
@@ -188,6 +189,3 @@ export const TARGET_LIBRARY: readonly TargetLibraryEntry[] = [
     blurb: 'End the session after two straight losses — tilted games teach tilted habits.',
   },
 ];
-
-/** Transitional alias — deleted together with the builder's template-chip region. */
-export const TARGET_TEMPLATES: readonly TargetTemplate[] = TARGET_LIBRARY;

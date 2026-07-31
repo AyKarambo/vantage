@@ -682,6 +682,26 @@
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
+.library-entry {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.library-entry:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.library-entry:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
 
 /* Definition list (hero drawer, stat grids) --------------------------------- */
 .stat-grid {
