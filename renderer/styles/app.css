@@ -672,6 +672,16 @@
 .target-row:first-child {
   border-top: none;
 }
+.target-row--link {
+  cursor: pointer;
+}
+.target-row--link:hover {
+  background: var(--surface-2);
+}
+.target-row--link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
 
 /* Definition list (hero drawer, stat grids) --------------------------------- */
 .stat-grid {

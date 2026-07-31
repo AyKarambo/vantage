@@ -1,8 +1,9 @@
 /**
- * Improvement Target — the flexible builder plus your tracked library. The
- * builder doubles as the edit surface (row Edit re-opens it pre-filled); library
- * rows carry the lifecycle: Active toggle (graded on Review), Archive/Restore,
- * and permanent Delete behind a confirmation.
+ * Improvement Target — the flexible builder plus your tracked list. Rows stay
+ * plain (name, status line, hit-rate, Active toggle) and click through to the
+ * target detail page, which carries the analytics and the Edit/Archive/Delete
+ * lifecycle; the detail's Edit returns here via `editTargetId` to re-open the
+ * builder pre-filled.
  */
 import { h } from '../../dom';
 import { card, emptyState } from '../../components/primitives';
@@ -18,6 +19,11 @@ export function targets(ctx: ViewContext): HTMLElement {
   if (ctx.params.prefillName) {
     builder.prefill({ name: ctx.params.prefillName, mode: 'self', rule: 'You grade it' });
   }
+  // A detail page's Edit lands here with the target to re-open in the builder.
+  if (ctx.params.editTargetId) {
+    const editing = ctx.data.targets.find((t) => t.id === ctx.params.editTargetId);
+    if (editing) builder.edit(editing);
+  }
   // Real mode with no authored targets shows an honest empty state (not the
   // demo sample library, and not an empty "Your targets" shell).
   const noTargets = !ctx.data.isSample && ctx.data.targets.length === 0;
@@ -28,6 +34,6 @@ export function targets(ctx: ViewContext): HTMLElement {
     noTargets
       ? card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
           emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true))
-      : libraryCard(ctx, builder.edit),
+      : libraryCard(ctx),
   );
 }
