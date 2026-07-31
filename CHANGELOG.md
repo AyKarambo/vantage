@@ -15,7 +15,7 @@ entries short, plain, and about impact.
 Releases before 0.32.0 predate this file. Their notes are auto-generated per PR on the
 [Releases page](https://github.com/AyKarambo/vantage/releases).
 
-## Unreleased
+## 0.34.0 — 31 July 2026
 
 ### Added
 
