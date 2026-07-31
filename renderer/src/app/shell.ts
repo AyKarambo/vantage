@@ -33,6 +33,7 @@ import { mental } from '../views/mental';
 import { trends } from '../views/trends';
 import { readiness } from '../views/readiness';
 import { targets } from '../views/targets';
+import { targetDetail } from '../views/targets/detail';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
 import { logViewer, pauseFollow } from '../views/logViewer';
@@ -50,9 +51,9 @@ import { openWhatsNewPrompt } from './whatsNewPrompt';
 import { changelogSince, shouldShowWhatsNew } from '../../../src/core/whatsNew';
 import { CHANGELOG } from '../generated/changelog';
 
-// matchDetail and playerHistory are parameterized views: registered here
-// (routable) but not in NAV — the sidebar keeps Matches highlighted while active.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
+// matchDetail, playerHistory and targetDetail are parameterized views: registered
+// here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
+const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
@@ -181,7 +182,7 @@ export class App {
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
-  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; playerName?: string; epoch: number } | null = null;
+  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; playerName?: string; targetId?: string; editTargetId?: string; epoch: number } | null = null;
   /** The snapshot the filter bar was last built for. Background refreshes patch
    *  `refreshing`/`status` without changing `data`, so re-rendering the bar then
    *  would tear down its live controls mid-click and swallow the click — the
@@ -411,6 +412,8 @@ export class App {
       flag: state.params.flag,
       prefillName: state.params.prefillName,
       playerName: state.params.playerName,
+      targetId: state.params.targetId,
+      editTargetId: state.params.editTargetId,
       epoch: state.renderEpoch,
     };
     const last = this.lastRendered;
@@ -418,6 +421,7 @@ export class App {
       && last.matchId === key.matchId && last.highlight === key.highlight
       && last.day === key.day && last.flag === key.flag && last.prefillName === key.prefillName
       && last.playerName === key.playerName
+      && last.targetId === key.targetId && last.editTargetId === key.editTargetId
       && last.epoch === key.epoch) return;
     // Having passed the equality check with every non-`data` field equal means
     // only the snapshot changed — a background refresh. If the user is pressing
@@ -427,14 +431,16 @@ export class App {
     // (see bindGlobals). Route/epoch changes fall through and render at once.
     if (this.contentPressed && last && last.view === key.view && last.matchId === key.matchId
       && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
-      && last.prefillName === key.prefillName && last.playerName === key.playerName && last.epoch === key.epoch) {
+      && last.prefillName === key.prefillName && last.playerName === key.playerName
+      && last.targetId === key.targetId && last.editTargetId === key.editTargetId && last.epoch === key.epoch) {
       this.pendingContentRender = true;
       return;
     }
     // Remember where the outgoing route was scrolled; restore it when a
     // navigation (not a data refresh on the same route) returns here.
-    if (last) this.scrollMemory.set(routeKey(last.view, last.matchId, last.playerName), this.contentHost.scrollTop);
-    const navigated = !last || last.view !== key.view || last.matchId !== key.matchId || last.playerName !== key.playerName;
+    if (last) this.scrollMemory.set(routeKey(last.view, last.matchId, last.playerName, last.targetId), this.contentHost.scrollTop);
+    const navigated = !last || last.view !== key.view || last.matchId !== key.matchId
+      || last.playerName !== key.playerName || last.targetId !== key.targetId;
     // A same-route re-render (e.g. a master-data edit round-tripping through
     // store.refresh()) replaces the DOM. That resets scrollTop to 0 and, because
     // a brand-new `.view` is mounted, replays the `rise-in` entry animation —
@@ -446,7 +452,7 @@ export class App {
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
     if (navigated) {
-      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId, key.playerName)) ?? 0;
+      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId, key.playerName, key.targetId)) ?? 0;
     } else {
       const view = this.contentHost.firstElementChild as HTMLElement | null;
       if (view) view.style.animation = 'none';
@@ -481,7 +487,8 @@ export class App {
     const gradedOverlap = d ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId)).length : 0;
     const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
     // Parameterized views highlight their parent list in the sidebar.
-    const activeNav: ViewId = state.view === 'matchDetail' || state.view === 'playerHistory' ? 'matches' : state.view;
+    const activeNav: ViewId = state.view === 'matchDetail' || state.view === 'playerHistory' ? 'matches'
+      : state.view === 'targetDetail' ? 'targets' : state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews);
 
@@ -764,6 +771,10 @@ export class App {
       when: () => store.get().view === 'matchDetail', run: () => store.setView('matches'),
     });
     registerShortcut({
+      combo: 'escape', description: 'Back to Targets (from a target detail)', group: 'Navigate',
+      when: () => store.get().view === 'targetDetail', run: () => store.setView('targets'),
+    });
+    registerShortcut({
       combo: 'arrowleft', description: 'Older match (on a match detail)', group: 'Navigate',
       when: () => store.get().view === 'matchDetail', run: () => this.stepMatch(1),
     });
@@ -817,9 +828,10 @@ export class App {
   }
 }
 
-function routeKey(view: ViewId, matchId?: string, playerName?: string): string {
+function routeKey(view: ViewId, matchId?: string, playerName?: string, targetId?: string): string {
   if (matchId) return `${view}:${matchId}`;
   if (playerName) return `${view}:@${playerName}`;
+  if (targetId) return `${view}:#${targetId}`;
   return view;
 }
 
