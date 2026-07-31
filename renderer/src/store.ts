@@ -16,6 +16,7 @@ export type ViewId =
   | 'matches'
   | 'matchDetail'
   | 'playerHistory'
+  | 'targetDetail'
   | 'maps'
   | 'heroes'
   | 'focus'
@@ -43,6 +44,10 @@ export interface ViewParams {
   prefillName?: string;
   /** playerHistory: the player whose shared-match history to show (a name/battleTag). */
   playerName?: string;
+  /** targetDetail: the improvement target to drill into. */
+  targetId?: string;
+  /** Targets: open the builder pre-filled to edit this target (a detail page's Edit). */
+  editTargetId?: string;
 }
 
 /** Every `ViewParams` key, kept in sync by the compiler: adding a key here
@@ -55,6 +60,8 @@ const VIEW_PARAM_KEYS: Required<{ [K in keyof ViewParams]: true }> = {
   flag: true,
   prefillName: true,
   playerName: true,
+  targetId: true,
+  editTargetId: true,
 };
 
 /** Structural equality over every `ViewParams` key — used by `setView`'s
@@ -86,6 +93,13 @@ type Listener = (state: AppState) => void;
 /** The neutral filter set — exported so the filter bar can offer "Reset". */
 export const FILTER_DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', days: 30 };
 const STORAGE_KEY = 'vantageFilters';
+
+/** Parameterized drill-downs persist their parent list for relaunch restore. */
+const DETAIL_PARENT: Partial<Record<ViewId, ViewId>> = {
+  matchDetail: 'matches',
+  playerHistory: 'matches',
+  targetDetail: 'targets',
+};
 
 /** The last visited top-level view, restored on launch (never a detail page). */
 function initialView(): ViewId {
@@ -121,7 +135,7 @@ class Store {
   setView(view: ViewId, params: ViewParams = {}): void {
     if (view === this.state.view && sameParams(params, this.state.params)) return;
     // Detail pages restore to their parent list on relaunch.
-    prefs.set('view', view === 'matchDetail' || view === 'playerHistory' ? 'matches' : view);
+    prefs.set('view', DETAIL_PARENT[view] ?? view);
     this.patch({ view, params });
   }
 
