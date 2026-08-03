@@ -22,18 +22,25 @@ Two independent reasons:
    missing still leaves GEP refusing to load. Vantage without GEP is not Vantage.
    (Local dev has a Dev Mode carve-out; the requirement is for *distributed* builds.)
 
-   **The two packages are pinned independently, on purpose.** The **builder** is on
-   stable `@overwolf/ow-electron-builder@26.9.0`, because that is what pulls
-   `@overwolf/app-builder-lib@26.9.0` — the only version carrying the signer that reads
-   `OW_BUILD_KEY` (see below). The **runtime** stays on the beta
-   `@overwolf/ow-electron@39.8.10-beta.12`, because **Dev Mode still has no stable
-   release**: on stable, GEP loads, reports Overwatch supported and even fires
-   `game-detected` — and then delivers zero events. Tested in the field; the README has
-   said so all along, and bumping the runtime on the reasoning that npm now serves
-   39.8.10 as `latest` was wrong. `latest` is not the same claim as "Dev Mode is in it".
-   Nothing couples the two: the builder neither depends on nor version-checks the
-   runtime, so stable-builder + beta-runtime is a supported combination. Revisit the
-   runtime pin only with a live GEP test, not a version number.
+   **All three packages are pinned to the mandated GA versions** (`@overwolf/ow-electron@39.8.12`,
+   `@overwolf/ow-electron-builder@26.9.2`, `@overwolf/ow-electron-packages-types@1.1.6-1`),
+   bumped 2026-08-03. Overwolf shipped Dev Mode + App Signing to GA on **2026-07-16** and
+   ended the grace period on **2026-08-06**: past that date the gaming packages stop
+   loading for anyone not on the new runtime *and* signed. This is not an optional bump.
+
+   That retires the split pin this repo carried before. The runtime used to sit on the
+   beta `@overwolf/ow-electron@39.8.10-beta.12` because **Dev Mode had no stable
+   release** — on the then-current stable, GEP loaded, reported Overwatch supported, even
+   fired `game-detected`, and delivered zero events. That is what the GA fixed. Evidence
+   the credential path is genuinely in the stable binary, not just in a version number:
+   `dist/electron.exe` of 39.8.12 carries the `OW_DEV_KEY`, `OW_CLI_EMAIL` and
+   `OW_CLI_API_KEY` strings the Dev Mode check reads (`OW_BUILD_KEY` is absent from it, as
+   expected — that one is build-time only, in `app-builder-lib`).
+
+   **The old warning still applies in one direction:** a version number is not a live GEP
+   test. The strings prove the runtime *looks for* dev credentials; only Overwatch running
+   with `npm start` proves events actually flow. Confirm that once, and note the result
+   here.
 2. **Overwolf gates store review on it.** The submission form asks "Is your app
    signed?" and requires a trusted-CA signature (self-signed is rejected).
 
@@ -47,20 +54,47 @@ hook runs once per file), not as a post-hoc pass over the outer installer.
 **Overwolf's half: the package-integrity signature.** Ours (Certum) only covers the
 exe/uninstaller/installer above — it says nothing about the gaming-package integrity
 signature the App Signing guide also requires. That second signature is stamped by
-`ow-electron-builder`'s own signer (`@overwolf/app-builder-lib@26.9.0`'s
+`ow-electron-builder`'s own signer (`@overwolf/app-builder-lib@26.9.2`'s
 `out/codeSign/owBuildCertificateSigner.js`), which reads exactly three env vars —
 `OW_CLI_EMAIL`, `OW_CLI_API_KEY`, `OW_BUILD_KEY` — and POSTs to Overwolf's backend
 (`https://console-be.overwolf.com`, overridable via `OW_CLI_API_URL`) with an
-`Authorization: Key <email>:<apiKey>` header. **The trap is the failure mode:** if
-those vars are missing, the signer does not fail the build — it logs a warning and
-ships the build **unsigned**. Nothing looks wrong locally; the breakage only shows up
-later, for end users, as GEP silently refusing to attach. Set `OW_REQUIRE_SIGNING=1`
-(or `build.overwolf.requireSigning` in `package.json`) to turn that warning into a
-throw — the same fail-closed shape `VANTAGE_REQUIRE_SIGNING` uses for the Certum side
-(see [How the repo is wired](#how-the-repo-is-wired)). It's also toolchain-dependent:
-the betas previously pinned here resolved `@overwolf/app-builder-lib@26.8.5`, which
-doesn't ship the signer module at all — `OW_BUILD_KEY` was inert until the 26.9.0 bump
-above.
+`Authorization: Key <email>:<apiKey>` header. It runs unconditionally on the Windows
+pack path (`platformPackager.js` → `performOwSigning`); the only question is whether a
+failure throws or warns.
+
+**That question changed default in 26.9.2 — read this before touching the flag.**
+
+| | 26.9.0 | 26.9.2 (now) |
+|---|---|---|
+| `isOwSigningRequired(cfg)` | `cfg === true \|\| envOn` | `cfg !== false \|\| envOn` |
+| Missing credentials | warn, ship **unsigned** | **throw**, no artifact |
+| Turn it **on** | `OW_REQUIRE_SIGNING=1` | on by default |
+| Turn it **off** | default | **only** `build.overwolf.requireSigning:false` |
+
+The old trap was the fail-open: missing vars meant a warning and an **unsigned** build,
+nothing looking wrong locally, the breakage surfacing later for end users as GEP silently
+refusing to attach. 26.9.2 closes that by default — but note the bottom row. `OW_REQUIRE_SIGNING`
+is now a one-way switch: it can only *raise* strictness. Because `cfg !== false` is true for
+an absent flag, **no environment variable can turn signing off** — only the `package.json`
+flag can.
+
+That matters here because `OW_BUILD_KEY` is Console-gated and does not exist yet (step 7
+below). Left at the new default, every build path that legitimately runs without it —
+plain `npm run release` for a personal installer, `publish:release -DryRun`, and the
+`-AllowUnsignedOverwolf` pre-approval escape hatch — would abort instead of producing an
+artifact. So `package.json` sets **`build.overwolf.requireSigning: false`**, and
+`publish-release.ps1` keeps exporting `OW_REQUIRE_SIGNING=1` whenever all three
+credentials resolve. Net effect: real releases are exactly as fail-closed as before the
+upgrade, and the escape hatches still work — the same shape `VANTAGE_REQUIRE_SIGNING` uses
+for the Certum side (see [How the repo is wired](#how-the-repo-is-wired)).
+
+**Delete that flag once `OW_BUILD_KEY` exists.** From then on the library default is
+strictly better than the script-supplied one: it also catches a signing-API failure (a 502
+from Overwolf) on a build started by hand, which `publish-release.ps1` never sees.
+
+It's also toolchain-dependent: the betas previously pinned here resolved
+`@overwolf/app-builder-lib@26.8.5`, which doesn't ship the signer module at all —
+`OW_BUILD_KEY` was inert until the 26.9.0 bump.
 
 ## Why signing runs locally (the hard constraint)
 
@@ -156,6 +190,11 @@ anyway*).
   (avoids a wasteful sha1+sha256 dual pass); `publisherName: "Open Source Developer Timo
   Seikel"` — **must match the cert CN** (electron-builder writes it into the NSIS
   publisher metadata and electron-updater compares it during update verification).
+- `build.overwolf` in `package.json`: `disableAdOptimization: true`, plus
+  `requireSigning: false` — the deliberate opt-out described
+  [above](#why-signing-is-mandatory-not-cosmetic), keeping the pre-`OW_BUILD_KEY` build
+  paths alive while `publish-release.ps1` supplies the strictness for real releases.
+  Remove it once the build key exists.
 - [scripts/ow-build-env.mjs](../scripts/ow-build-env.mjs) — resolves the three env vars
   Overwolf's package-integrity signer needs: email/apiKey via
   [scripts/lib/owCredentials.mjs](../scripts/lib/owCredentials.mjs) (env, else the `ow
