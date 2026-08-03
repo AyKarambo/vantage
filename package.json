@@ -41,7 +41,8 @@
     "asar": true,
     "nodeGypRebuild": false,
     "overwolf": {
-      "disableAdOptimization": true
+      "disableAdOptimization": true,
+      "requireSigning": false
     },
     "directories": {
       "output": "release"
@@ -97,9 +98,9 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@overwolf/ow-electron": "39.8.10-beta.12",
-    "@overwolf/ow-electron-builder": "26.9.0",
-    "@overwolf/ow-electron-packages-types": "^1.1.4",
+    "@overwolf/ow-electron": "39.8.12",
+    "@overwolf/ow-electron-builder": "26.9.2",
+    "@overwolf/ow-electron-packages-types": "1.1.6-1",
     "@types/node": "^22.20.0",
     "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
@@ -110,6 +111,6 @@
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.1": true,
-    "@overwolf/ow-electron@39.8.10-beta.12": true
+    "@overwolf/ow-electron@39.8.12": true
   }
 }

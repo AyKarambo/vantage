@@ -66,9 +66,11 @@ Normally GEP only binds once Overwolf has approved/whitelisted the app (see
 [Dev Mode](https://dev.overwolf.com/ow-electron/guides/dev-tools/dev-mode) bypasses that
 for local development: it loads the gaming packages (GEP, Overlay, Recorder) against an
 unsigned, unpackaged build, as long as the process can authenticate with an Overwolf
-Developer Console identity. This repo's `@overwolf/ow-electron` / `@overwolf/ow-electron-builder`
-devDependencies are pinned to the **beta** versions that support it (no stable release
-exists yet at time of writing).
+Developer Console identity. Dev Mode went GA on 2026-07-16, and since 2026-08-06 the
+gaming packages only load on the new runtime — so this repo's devDependencies are pinned
+to `@overwolf/ow-electron@39.8.12`, `@overwolf/ow-electron-builder@26.9.2` and
+`@overwolf/ow-electron-packages-types@1.1.6-1`. Older betas no longer work; keep these
+three in step when you bump them.
 
 One-time setup:
 
