@@ -15,6 +15,7 @@ import type {
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
+  PlacementOffer, PlacementDeclineInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
 } from '../../shared/contract';
 
@@ -83,6 +84,10 @@ export interface DataProvider {
   cancelPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
   /** Re-derive a completed run's counted matches after history changed under it. */
   recountPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
+  /** Whether to offer this track a placement run right now, or null. */
+  placementOffer(input: PlacementTrackInput): PlacementOffer | null;
+  /** Record a "not now" for a track and season. */
+  declinePlacementRun(input: PlacementDeclineInput): void;
   /** Pull matches from the configured Notion Gametracker database into history. */
   importNotion(): Promise<ImportResult>;
   /** Delete every Notion-imported match from history (for a clean re-import); returns how many were removed. */

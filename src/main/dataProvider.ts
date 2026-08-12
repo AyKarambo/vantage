@@ -33,7 +33,7 @@ import {
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import {
-  PLACEMENT_RUN_LENGTH, countedMatches, hasDrifted, runProgress, type PlacementRun,
+  PLACEMENT_RUN_LENGTH, countedMatches, hasDrifted, runProgress, shouldOfferRun, type PlacementRun,
 } from '../core/placements';
 import type { MasterDataStore } from '../store/masterData';
 import type {
@@ -493,6 +493,30 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (run.completedAt !== undefined) restorePreRunAnchor(deps, run);
       deps.placements.removeRun(input.account, input.role);
       return placementSummaries(deps);
+    },
+    placementOffer: (input) => {
+      // The season the player is currently in, from the EFFECTIVE table, so a
+      // reset the user flagged themselves counts exactly like a shipped one.
+      const now = Date.now();
+      const seasons = [...effectiveMasterData().seasons].sort((a, b) => a.start - b.start);
+      let current: { start: number; label: string; isReset?: boolean } | undefined;
+      for (const s of seasons) {
+        if (s.start <= now) current = s;
+        else break;
+      }
+      if (!current) return null;
+      const offered = shouldOfferRun({
+        seasonStart: current.start,
+        isResetSeason: current.isReset === true,
+        anchor: deps.rankAnchors.get(input.account, input.role) ?? null,
+        existingRun: deps.placements.getRun(input.account, input.role),
+        declinedSeasonStarts: deps.placements.declinedFor(input.account, input.role),
+      });
+      if (!offered) return null;
+      return { account: input.account, role: input.role, seasonStart: current.start, seasonLabel: current.label };
+    },
+    declinePlacementRun: (input) => {
+      deps.placements.addDeclined(input.account, input.role, input.seasonStart);
     },
     recountPlacementRun: (input) => {
       const run = deps.placements.getRun(input.account, input.role);

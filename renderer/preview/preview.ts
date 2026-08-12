@@ -11,7 +11,7 @@ import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
-  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
+  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
   GradingSettings, RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
@@ -38,7 +38,7 @@ import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness'
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, type PlacementRun } from '../../src/core/placements';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -59,6 +59,7 @@ const EDITS_KEY = 'vantagePreviewEdits';
 const DELETED_KEY = 'vantagePreviewDeleted';
 const MASTER_DATA_KEY = 'vantagePreviewMasterData';
 const PLACEMENTS_KEY = 'vantagePreviewPlacements';
+const DECLINED_KEY = 'vantagePreviewPlacementsDeclined';
 
 /** Preview-side master-data overrides, persisted to localStorage like other writes. */
 function loadOverrides(): MasterDataOverrides {
@@ -177,6 +178,8 @@ const loadPlacementRuns = (): Map<string, PlacementRun> => {
   }
 };
 let previewPlacementRuns = loadPlacementRuns();
+/** Reset-season starts already declined per track, mirroring the store's `declined` map. */
+const previewDeclined: Record<string, number[]> = loadMap<number[]>(DECLINED_KEY);
 /**
  * Put a track's anchor back exactly as the run found it — the harness mirror of
  * the provider's `restorePreRunAnchor`. A run started on an unanchored track
@@ -756,6 +759,35 @@ const mock: OwStatsApi = {
     previewPlacementRuns.delete(key);
     savePlacementRuns();
     return getPlacements();
+  },
+  placementOffer: async (input: PlacementTrackInput) => {
+    // Mirrors the provider: the season containing "now" from the EFFECTIVE
+    // table, so a season the developer flags in the preview's Master data
+    // editor raises an offer exactly like a shipped reset does.
+    const now = Date.now();
+    const seasons = [...effectiveMasterData().seasons].sort((a, b) => a.start - b.start);
+    let current: { start: number; label: string; isReset?: boolean } | undefined;
+    for (const s of seasons) {
+      if (s.start <= now) current = s;
+      else break;
+    }
+    if (!current) return null;
+    const anchor = previewAnchors[rankKey(input.account, input.role)];
+    const offered = shouldOfferRun({
+      seasonStart: current.start,
+      isResetSeason: current.isReset === true,
+      anchor: anchor ?? null,
+      existingRun: previewPlacementRuns.get(placementRunKey(input.account, input.role)),
+      declinedSeasonStarts: previewDeclined[rankKey(input.account, input.role)] ?? [],
+    });
+    if (!offered) return null;
+    return { account: input.account, role: input.role, seasonStart: current.start, seasonLabel: current.label };
+  },
+  declinePlacementRun: async (input: PlacementDeclineInput) => {
+    const key = rankKey(input.account, input.role);
+    const list = previewDeclined[key] ?? [];
+    if (!list.includes(input.seasonStart)) previewDeclined[key] = [...list, input.seasonStart];
+    save(DECLINED_KEY, previewDeclined);
   },
   recountPlacementRun: async (_input: PlacementTrackInput) => {
     // No-op refresh: just return the current state.

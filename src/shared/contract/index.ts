@@ -65,7 +65,7 @@ export type { AccountKind } from '../../core/accountsManage';
 // Placement runs
 export type {
   PlacementRunSummary, PredictedRank, PlacementStartInput, PlacementPredictionInput,
-  PlacementCompleteInput, PlacementTrackInput,
+  PlacementCompleteInput, PlacementTrackInput, PlacementOffer, PlacementDeclineInput,
 } from './placements';
 
 // Local file import (Settings → Data)

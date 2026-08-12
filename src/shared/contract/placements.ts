@@ -64,3 +64,26 @@ export interface PlacementTrackInput {
   account: string;
   role: Role;
 }
+
+/**
+ * A standing invitation to place a track, raised after a ladder-reset season
+ * began. Computed in main rather than derived in the renderer: the decision
+ * needs the anchor's `setAt`, the effective season table and the per-track
+ * record of past declines, none of which the renderer has — and shipping the
+ * decline bookkeeping across IPC just to re-derive the answer would be worse.
+ */
+export interface PlacementOffer {
+  account: string;
+  role: Role;
+  /** Start instant of the reset season that raised this offer. */
+  seasonStart: number;
+  /** That season's label, for the prompt copy (e.g. `2026 Season 4`). */
+  seasonLabel: string;
+}
+
+/** Decline the offer for a track and season, so it is not raised again that season. */
+export interface PlacementDeclineInput {
+  account: string;
+  role: Role;
+  seasonStart: number;
+}

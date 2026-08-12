@@ -22,6 +22,7 @@ import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankPicker, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
 import { openPlacementComplete } from './placementComplete';
+import { maybeOfferPlacements } from './placementOffer';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import type { AccountSummary, MatchMental, PlacementRunSummary, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
@@ -208,12 +209,15 @@ function buildForm(
    * a modal can't nest inside one that's closing.
    */
   let placementCompleteFor: { account: string; role: Role; suggestion: { tier: string; division: number } } | undefined;
+  /** Same contract as above, for the "should this track start placements?" offer. */
+  let placementOfferFor: { account: string; role: Role } | undefined;
 
   // Returns false when validation failed, a save is already in flight, or the
   // save itself failed (form stays open, error/toast shown inline).
   const persist = async (): Promise<boolean> => {
     if (saving) return false;
     placementCompleteFor = undefined;
+    placementOfferFor = undefined;
     const map = resolveMap();
     if (!map) {
       mapError.textContent = state.map.trim()
@@ -276,6 +280,13 @@ function buildForm(
         if (run.counted + 1 >= run.target) {
           placementCompleteFor = { account: state.account, role: state.role, suggestion: { tier: state.predTier, division: state.predDivision } };
         }
+      } else {
+        // No run on this track — this is the moment to ask whether one should
+        // start. Only ever after a match, and only for the track just played:
+        // a ladder reset touches every anchored role, but asking about all of
+        // them up front would pester the player about roles they may not queue
+        // all season. Main decides whether an offer is actually due.
+        placementOfferFor = { account: state.account, role: state.role };
       }
     } catch {
       toast('Save failed — nothing was logged. Try again.');
@@ -477,7 +488,11 @@ function buildForm(
       close();
       // Opened AFTER this form's own close (never nested inside a modal
       // that's mid-close), and only for the match that completed the run.
-      if (placementCompleteFor) openPlacementComplete({ ...placementCompleteFor, onDone: () => ctx.refresh() });
+      if (placementCompleteFor) {
+        openPlacementComplete({ ...placementCompleteFor, onDone: () => ctx.refresh() });
+      } else if (placementOfferFor) {
+        void maybeOfferPlacements(placementOfferFor.account, placementOfferFor.role, () => ctx.refresh());
+      }
     });
   };
   const saveAndNext = (): void => {
@@ -492,6 +507,12 @@ function buildForm(
       // that way instead of silently popping the next log form regardless.
       if (placementCompleteFor) {
         openPlacementComplete({ ...placementCompleteFor, onDone: () => { ctx.refresh(); openNext(); } });
+      } else if (placementOfferFor) {
+        // Same one-modal-at-a-time rule as the completion dialog: decide the
+        // offer first, then chain the next log form off its outcome.
+        const { account, role } = placementOfferFor;
+        void maybeOfferPlacements(account, role, () => { ctx.refresh(); openNext(); })
+          .then((shown) => { if (!shown) openNext(); });
       } else {
         openNext();
       }

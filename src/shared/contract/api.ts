@@ -22,7 +22,7 @@ import type {
 import type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
 import type {
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput,
-  PlacementTrackInput,
+  PlacementTrackInput, PlacementOffer, PlacementDeclineInput,
 } from './placements';
 import type { ImportFileResult } from './importFile';
 import type { Role, Result } from '../../core/model';
@@ -105,6 +105,15 @@ export interface OwStatsApi {
   cancelPlacementRun(input: PlacementTrackInput): Promise<PlacementRunSummary[]>;
   /** Recompute a run's counted matches/prediction/completion from current history; returns the refreshed full list. */
   recountPlacementRun(input: PlacementTrackInput): Promise<PlacementRunSummary[]>;
+  /**
+   * Whether this track should be offered a placement run right now, or `null`.
+   * Asked after a competitive match is logged — the offer is raised lazily, per
+   * role, at the moment a track is actually played after a reset boundary, so
+   * nothing interrupts app start and roles you don't play are never asked about.
+   */
+  placementOffer(input: PlacementTrackInput): Promise<PlacementOffer | null>;
+  /** Record a "not now" for a track and season, so the offer is not raised again that season. */
+  declinePlacementRun(input: PlacementDeclineInput): Promise<void>;
   /** Pull matches from the configured Notion Gametracker database into history. */
   importNotion(): Promise<ImportResult>;
   /** Delete every match that came from a Notion import (for a clean re-import); returns how many were removed. */
@@ -315,6 +324,8 @@ export const IPC_CHANNELS = {
   resetPlacementRun: 'placements:reset',
   cancelPlacementRun: 'placements:cancel',
   recountPlacementRun: 'placements:recount',
+  placementOffer: 'placements:offer',
+  declinePlacementRun: 'placements:decline',
   importNotion: 'notion:import',
   deleteImportedMatches: 'notion:delete-imported',
   cleanupNotionDuplicates: 'notion:cleanup-duplicates',

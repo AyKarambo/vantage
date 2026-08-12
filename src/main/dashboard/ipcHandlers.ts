@@ -9,6 +9,7 @@ import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
   MatchEditInput, RankAnchorInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
+  PlacementDeclineInput,
   HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
@@ -111,6 +112,8 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.resetPlacementRun, (_e, input: PlacementTrackInput) => provider.resetPlacementRun(input));
   handle(ch.cancelPlacementRun, (_e, input: PlacementTrackInput) => provider.cancelPlacementRun(input));
   handle(ch.recountPlacementRun, (_e, input: PlacementTrackInput) => provider.recountPlacementRun(input));
+  handle(ch.placementOffer, (_e, input: PlacementTrackInput) => provider.placementOffer(input));
+  handle(ch.declinePlacementRun, (_e, input: PlacementDeclineInput) => provider.declinePlacementRun(input));
 
   // Notion import (pull) + wipe-for-re-import.
   handle(ch.importNotion, () => provider.importNotion());
