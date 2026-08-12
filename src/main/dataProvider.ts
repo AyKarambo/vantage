@@ -31,10 +31,15 @@ import {
   upsertSeasonOverride, removeSeasonOverride, type FetchedCatalog, type MasterData,
 } from '../core/masterData';
 import type { RankAnchorStore } from '../store/rankAnchors';
+import type { PlacementStore } from '../store/placements';
+import {
+  PLACEMENT_RUN_LENGTH, countedMatches, hasDrifted, runProgress, type PlacementRun,
+} from '../core/placements';
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
   DevModeAuthStatusPayload, GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
+  PlacementRunSummary,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -65,7 +70,12 @@ export interface DataProviderDeps {
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
-  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'relabel' | 'removeAccount'>;
+  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'remove' | 'relabel' | 'removeAccount'>;
+  /** Per-(account, role) placement-run tracking and its declined-season bookkeeping. */
+  placements: Pick<
+    PlacementStore,
+    'allRuns' | 'getRun' | 'setRun' | 'removeRun' | 'declinedFor' | 'addDeclined' | 'relabel' | 'removeAccount'
+  >;
   /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
   masterDataStore: Pick<MasterDataStore, 'all' | 'replace'>;
   /** The online-catalog fetch edge (main-process `net.fetch` of OverFast); injected so this stays Electron-free. */
@@ -420,6 +430,85 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return rankSummaries(deps);
     },
     rankAnchorMap: (): RankAnchorMap => deps.rankAnchors.map(),
+    getPlacements: () => placementSummaries(deps),
+    startPlacementRun: (input) => {
+      const existing = deps.placements.getRun(input.account, input.role);
+      // Restarting a completed run must first hand back the rank its completion
+      // wrote, or the "pre-run" state would silently become the placement result.
+      if (existing?.completedAt !== undefined) restorePreRunAnchor(deps, existing);
+      deps.placements.setRun({
+        account: input.account,
+        role: input.role,
+        startedAt: resolveRunStart(deps, input.fromMatchId),
+        // Never re-snapshot over an existing run's snapshot: that original
+        // anchor is the only thing that can undo the run, and overwriting it
+        // with the current one would make "reset to begin" a no-op.
+        preRunAnchor: existing?.preRunAnchor ?? deps.rankAnchors.get(input.account, input.role) ?? null,
+        predictions: {},
+        ...(existing?.seasonStart !== undefined ? { seasonStart: existing.seasonStart } : {}),
+      });
+      return placementSummaries(deps);
+    },
+    setPlacementPrediction: (input) => {
+      const run = deps.placements.getRun(input.account, input.role);
+      if (run) {
+        const predictions = { ...run.predictions };
+        if (input.prediction) predictions[input.matchId] = input.prediction;
+        else delete predictions[input.matchId];
+        deps.placements.setRun({ ...run, predictions });
+      }
+      return placementSummaries(deps);
+    },
+    completePlacementRun: (input) => {
+      const run = deps.placements.getRun(input.account, input.role);
+      if (!run) return placementSummaries(deps);
+      const counted = countedMatches(deps.history.all(), run);
+      // Stamped at the LAST counted match, not Date.now(): `competitiveComps`
+      // filters strictly after the anchor instant, so this is what keeps the ten
+      // placement matches out of the rank arithmetic while everything logged
+      // afterwards moves the rank normally. `setRankAnchor` can't be used here —
+      // it stamps the wall clock (same reason the import path writes directly).
+      const setAt = counted.length ? counted[counted.length - 1].timestamp : run.startedAt;
+      deps.rankAnchors.set({
+        account: input.account,
+        role: input.role,
+        tier: input.tier,
+        division: input.division,
+        progressPct: input.progressPct ?? 0,
+        setAt,
+      });
+      deps.placements.setRun({ ...run, completedAt: setAt, completedMatchIds: counted.map((g) => g.matchId) });
+      return placementSummaries(deps);
+    },
+    resetPlacementRun: (input) => {
+      const run = deps.placements.getRun(input.account, input.role);
+      if (!run) return placementSummaries(deps);
+      deps.placements.setRun({ ...reopened(deps, run), predictions: {} });
+      return placementSummaries(deps);
+    },
+    cancelPlacementRun: (input) => {
+      const run = deps.placements.getRun(input.account, input.role);
+      if (!run) return placementSummaries(deps);
+      if (run.completedAt !== undefined) restorePreRunAnchor(deps, run);
+      deps.placements.removeRun(input.account, input.role);
+      return placementSummaries(deps);
+    },
+    recountPlacementRun: (input) => {
+      const run = deps.placements.getRun(input.account, input.role);
+      if (!run || run.completedAt === undefined) return placementSummaries(deps);
+      const counted = countedMatches(deps.history.all(), run);
+      if (counted.length >= PLACEMENT_RUN_LENGTH) {
+        // Still a full run — the matches merely changed identity. Re-baseline the
+        // snapshot so the drift notice clears; the anchor stays as completed.
+        deps.placements.setRun({ ...run, completedMatchIds: counted.map((g) => g.matchId) });
+      } else {
+        // No longer ten matches: withdraw the anchor the completion wrote and
+        // reopen. Predictions survive — they belong to matches, not to the run's
+        // completion, and re-entering them by hand would be pure busywork.
+        deps.placements.setRun(reopened(deps, run));
+      }
+      return placementSummaries(deps);
+    },
     importNotion: async () => {
       const res = await deps.notion.import();
       if (res.unavailable) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
@@ -723,6 +812,65 @@ function mostPlayedHeroesByAccount(deps: DataProviderDeps): Record<string, Parti
     if (Object.keys(perRole).length) out[account] = perRole;
   }
   return out;
+}
+
+/**
+ * Put the track's anchor back exactly as it stood before `run` started.
+ *
+ * A run that began on an un-anchored track snapshots `null`, and restoring that
+ * has to mean "no anchor" again rather than "keep whatever completion wrote" —
+ * otherwise resetting such a run would strand a rank the player never set. This
+ * is why {@link ../store/rankAnchors RankAnchorStore} grew a per-track `remove`.
+ */
+function restorePreRunAnchor(deps: DataProviderDeps, run: PlacementRun): void {
+  if (run.preRunAnchor) {
+    deps.rankAnchors.set({ ...run.preRunAnchor, account: run.account, role: run.role });
+  } else {
+    deps.rankAnchors.remove(run.account, run.role);
+  }
+}
+
+/**
+ * `run` rewound to an open, uncompleted state, restoring the pre-run anchor on
+ * the way when the run had actually written one.
+ *
+ * The restore is deliberately conditional on `completedAt`: an OPEN run never
+ * touched the anchor, so "restoring" it there would clobber a rank the player
+ * may have set by hand mid-run — undo only what we actually did.
+ */
+function reopened(deps: DataProviderDeps, run: PlacementRun): PlacementRun {
+  if (run.completedAt !== undefined) restorePreRunAnchor(deps, run);
+  const { completedAt: _completedAt, completedMatchIds: _completedMatchIds, ...open } = run;
+  return open;
+}
+
+/**
+ * When a run begins. `fromMatchId` backdates it to an already-logged match — the
+ * "I only realised four games in that I was placing" case — so those matches are
+ * reclassified as placements. Their recorded ±% stays in the record and is only
+ * ignored while the run is open, which is what keeps backdating reversible.
+ */
+function resolveRunStart(deps: DataProviderDeps, fromMatchId?: string): number {
+  if (!fromMatchId) return Date.now();
+  const match = deps.history.all().find((g) => g.matchId === fromMatchId);
+  return match ? match.timestamp : Date.now();
+}
+
+/** Progress, prediction and drift for every tracked placement run. */
+function placementSummaries(deps: DataProviderDeps): PlacementRunSummary[] {
+  const games = deps.history.all();
+  return deps.placements.allRuns().map((run) => {
+    const { counted, target, latestPrediction } = runProgress(games, run);
+    return {
+      account: run.account,
+      role: run.role,
+      counted,
+      target,
+      ...(latestPrediction ? { latestPrediction } : {}),
+      completed: run.completedAt !== undefined,
+      drifted: hasDrifted(games, run),
+    };
+  });
 }
 
 /** Compute the live rank for every anchored (account, role). */

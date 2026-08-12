@@ -53,6 +53,22 @@ export class RankAnchorStore {
     return record;
   }
 
+  /**
+   * Drop the anchor for a single (account, role). Returns whether one was there.
+   *
+   * Exists for the placement-run undo: a run started on a track that had no
+   * anchor snapshots `null`, and restoring that snapshot has to mean "no anchor"
+   * again — not "leave whatever the run's completion wrote". Without a per-track
+   * delete, resetting such a run would strand a rank the player never set.
+   */
+  remove(account: string, role: Role): boolean {
+    const key = rankKey(account, role);
+    if (!(key in this.state)) return false;
+    delete this.state[key];
+    this.save();
+    return true;
+  }
+
   /** Drop every anchor keyed to an account (across roles) — the rank-anchor half
    *  of deleting a detected account. Returns how many anchors were removed. */
   removeAccount(account: string): number {

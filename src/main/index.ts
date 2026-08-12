@@ -14,6 +14,7 @@ import { resolveDataDir } from '../store/historyLocation';
 import { migrateDataFolder, type DataMigrationStores } from '../store/dataMigration';
 import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
+import { PlacementStore } from '../store/placements';
 import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
@@ -182,6 +183,7 @@ function main(): void {
   // with its grades; `removeTarget` is a no-op once the seeded target is gone.
   manual.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
   const rankAnchors = new RankAnchorStore(dataDir);
+  const placements = new PlacementStore(dataDir);
   const masterDataStore = new MasterDataStore(dataDir);
   // Effective (defaults ⊕ overrides) map views for the Notion Maps seed (all maps)
   // and the sample generator's competitive pool (active only).
@@ -198,6 +200,7 @@ function main(): void {
     manualLog: manual,
     outbox,
     rankAnchors,
+    placements,
     masterData: masterDataStore,
   });
 
@@ -376,6 +379,7 @@ function main(): void {
     history,
     manual,
     rankAnchors,
+    placements,
     masterDataStore,
     fetchMasterDataUpdate: () => fetchOverfast(config.masterData.overfastBaseUrl),
     notion,

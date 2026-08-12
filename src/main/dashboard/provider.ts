@@ -13,6 +13,7 @@ import type {
   DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
+  PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
 } from '../../shared/contract';
 
@@ -63,6 +64,20 @@ export interface DataProvider {
   setRankAnchor(input: RankAnchorInput): RankSummary[];
   /** Anchors keyed for the rank engine, passed into the match-detail read. */
   rankAnchorMap(): RankAnchorMap;
+  /** Every tracked placement run, with progress, latest prediction and drift. */
+  getPlacements(): PlacementRunSummary[];
+  /** Begin a run for an (account, role); `fromMatchId` backdates it to an already-logged match. */
+  startPlacementRun(input: PlacementStartInput): PlacementRunSummary[];
+  /** Record (or clear) the predicted rank Overwatch showed after one placement match. */
+  setPlacementPrediction(input: PlacementPredictionInput): PlacementRunSummary[];
+  /** Confirm the real post-placement rank; writes the new anchor at the last counted match. */
+  completePlacementRun(input: PlacementCompleteInput): PlacementRunSummary[];
+  /** Rewind a run to its beginning, restoring the pre-run anchor, and keep it open. */
+  resetPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
+  /** Rewind as above, then drop the run entirely — its matches return to normal rank arithmetic. */
+  cancelPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
+  /** Re-derive a completed run's counted matches after history changed under it. */
+  recountPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
   /** Pull matches from the configured Notion Gametracker database into history. */
   importNotion(): Promise<ImportResult>;
   /** Delete every Notion-imported match from history (for a clean re-import); returns how many were removed. */
