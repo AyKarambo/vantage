@@ -359,6 +359,8 @@ function openBackdateStart(account: string, role: Role, onDone: () => void): voi
     h('div', { class: 'hint' },
       'Pick the match that was your first placement. It and every later competitive match on this track count '
       + 'toward the run; their logged ±% stays in your data but is ignored while the run is open.'),
+    h('div', { class: 'hint u-dim' },
+      'Shows this track’s matches within your current dashboard filter — widen the time range if the one you want isn’t listed.'),
     ...(rows.length
       ? [h('div', { class: 'stack', style: { gap: '6px', maxHeight: '320px', overflowY: 'auto' } },
           ...rows.map((m) => button(

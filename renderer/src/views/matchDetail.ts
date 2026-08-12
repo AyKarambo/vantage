@@ -384,10 +384,14 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
   editorOpening = true;
   // Preload mirrors the log card: current ranks feed the Set-current re-seed
   // on a role switch; per-account most-played heroes feed the picker shortlist.
-  void Promise.all([bridge.getRanks(), bridge.mostPlayedHeroes()]).then(
-    ([ranks, mostPlayed]) => {
+  // Placement runs are fetched rather than read off ctx.data, which is a frozen
+  // snapshot from when the ViewContext was minted: a run started elsewhere (the
+  // Settings controls, or the offer after a logged match) would otherwise be
+  // invisible here and the editor would offer ±% entry for a placement match.
+  void Promise.all([bridge.getRanks(), bridge.mostPlayedHeroes(), bridge.getPlacements()]).then(
+    ([ranks, mostPlayed, placements]) => {
       editorOpening = false;
-      buildMatchEditor(ctx, d, ranks, mostPlayed);
+      buildMatchEditor(ctx, d, ranks, mostPlayed, placements);
     },
     (err) => {
       editorOpening = false;
@@ -401,6 +405,7 @@ function buildMatchEditor(
   d: MatchDetail,
   ranks: RankSummary[],
   mostPlayed: Record<string, Partial<Record<Role, string[]>>>,
+  placements: PlacementRunSummary[],
 ): void {
   const active = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
@@ -451,12 +456,13 @@ function buildMatchEditor(
     anchorPct = String(Math.round(r.progressPct));
   };
 
-  // A track is "in an open run" when ctx.data.placements carries an
-  // uncompleted summary for it — mirrors log-match's openRun/predictionFor
-  // exactly, except the account is always the match's OWN account (d.account
-  // — this editor edits an existing match, there's no account picker here).
+  // A track is "in an open run" when the freshly fetched `placements` list
+  // carries an uncompleted summary for it — mirrors log-match's
+  // openRun/predictionFor exactly, except the account is always the match's OWN
+  // account (d.account — this editor edits an existing match, there's no
+  // account picker here). Not ctx.data.placements: see the fetch above.
   const openRun = (account: string, role: Role): PlacementRunSummary | undefined =>
-    ctx.data.placements.find((p) => p.account === account && p.role === role && !p.completed);
+    placements.find((p) => p.account === account && p.role === role && !p.completed);
 
   /**
    * Seed the predicted-rank tier/division for (d.account, role): the open

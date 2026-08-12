@@ -103,9 +103,18 @@ export function openLogMatch(ctx: ViewContext, carry?: LogCarry): void {
   // Accounts + current ranks decide the picker options and whether the first-time
   // rank anchor is still needed; most-played heroes seed the hero-picker shortlist.
   // All fetched before building the form.
-  void Promise.all([bridge.listAccounts(), bridge.getRanks(), bridge.mostPlayedHeroes()]).then(
-    ([accounts, ranks, mostPlayed]) => {
-      openModal((close) => buildForm(ctx, close, accounts, ranks, mostPlayed, carry), {
+  //
+  // Placement runs are fetched here rather than read off `ctx.data`, which is a
+  // FROZEN snapshot taken when the ViewContext was minted (see shell.ts's
+  // `context()`). "Save & next" re-opens this form with the very same ctx, so a
+  // snapshot read would have every form in a placement chain seeing the counter
+  // it had at the first match — the run would never reach its target and the
+  // reveal-rank confirmation would never fire.
+  void Promise.all([
+    bridge.listAccounts(), bridge.getRanks(), bridge.mostPlayedHeroes(), bridge.getPlacements(),
+  ]).then(
+    ([accounts, ranks, mostPlayed, placements]) => {
+      openModal((close) => buildForm(ctx, close, accounts, ranks, mostPlayed, placements, carry), {
         panelClass: 'modal-card--wide',
       });
     },
@@ -118,6 +127,7 @@ function buildForm(
   accounts: AccountSummary[],
   ranks: RankSummary[],
   mostPlayed: Record<string, Partial<Record<Role, string[]>>>,
+  placements: PlacementRunSummary[],
   carry?: LogCarry,
 ): HTMLElement {
   const accountOptions = accounts.length
@@ -138,11 +148,12 @@ function buildForm(
   const hasAnchor = (account: string, role: Role): boolean =>
     ranks.some((r) => r.account === account && r.role === role);
 
-  // A track is "in an open run" when ctx.data.placements carries an
-  // uncompleted summary for it — that's when this form must swap the normal
-  // SR entry for the tier/division-only placementPicker (see paintRank/persist).
+  // A track is "in an open run" when `placements` carries an uncompleted summary
+  // for it — that's when this form must swap the normal SR entry for the
+  // tier/division-only placementPicker (see paintRank/persist). Deliberately the
+  // list fetched in openLogMatch, NOT ctx.data.placements: see the note there.
   const openRun = (account: string, role: Role): PlacementRunSummary | undefined =>
-    ctx.data.placements.find((p) => p.account === account && p.role === role && !p.completed);
+    placements.find((p) => p.account === account && p.role === role && !p.completed);
 
   /**
    * Seed the predicted-rank tier/division for an (account, role): the open
