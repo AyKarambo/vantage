@@ -743,7 +743,7 @@ function main(): void {
  * thrown — Vantage should still start rather than block on backfill trouble.
  */
 function backfillLegacySideStores(defaultDir: string, targetDir: string, log: Pick<Logger, 'info' | 'error'>): void {
-  const fileNames = ['manual.json', 'outbox.json', 'rankAnchors.json', 'history.json'];
+  const fileNames = ['manual.json', 'outbox.json', 'rankAnchors.json', 'placements.json', 'history.json'];
   try {
     fs.mkdirSync(targetDir, { recursive: true });
   } catch (err) {
