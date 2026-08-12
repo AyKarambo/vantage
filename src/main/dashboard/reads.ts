@@ -75,6 +75,7 @@ export function dashboardRead(
       sessionSettings: provider.getSessionSettings(),
       grading: provider.getGrading(),
       rankAnchors: provider.rankAnchorMap(),
+      placementRuns: provider.placementRuns(),
     },
     provider.effectiveMasterData(),
     // Held "needs result" matches ride on the same payload the Review screen
@@ -114,7 +115,30 @@ export function matchDetailRead(
   return matchDetail(
     games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured,
     provider.getGrading().partialMargin,
+    resetBoundaryFor(provider, games, matchId),
   );
+}
+
+/**
+ * The rank-reset instant that applies to one match's (account, role), or
+ * undefined when that track has never completed a placement run.
+ *
+ * A COMPLETED run is the boundary: its `startedAt` is where the old ladder
+ * stopped meaning anything, so a match before it cannot be reconstructed from
+ * the post-placement anchor. An open run is not a boundary — it has written no
+ * anchor yet, so the old one still describes the ladder the match was played on.
+ */
+function resetBoundaryFor(
+  provider: DataProvider,
+  games: GameRecord[],
+  matchId: string,
+): number | undefined {
+  const game = games.find((g) => g.matchId === matchId);
+  if (!game) return undefined;
+  const run = provider.placementRuns().find(
+    (r) => r.account === game.account && r.role === game.role && r.completedAt !== undefined,
+  );
+  return run?.startedAt;
 }
 
 /**

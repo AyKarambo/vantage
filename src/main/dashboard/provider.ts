@@ -8,6 +8,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
+import type { PlacementRun } from '../../core/placements';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
@@ -66,6 +67,10 @@ export interface DataProvider {
   rankAnchorMap(): RankAnchorMap;
   /** Every tracked placement run, with progress, latest prediction and drift. */
   getPlacements(): PlacementRunSummary[];
+  /** The raw runs, for the dashboard read — it needs `startedAt` and the counted
+   *  set to suppress open-run deltas, which the summaries deliberately don't carry.
+   *  Main-internal, like {@link DataProvider.rankAnchorMap}; never crosses IPC. */
+  placementRuns(): PlacementRun[];
   /** Begin a run for an (account, role); `fromMatchId` backdates it to an already-logged match. */
   startPlacementRun(input: PlacementStartInput): PlacementRunSummary[];
   /** Record (or clear) the predicted rank Overwatch showed after one placement match. */

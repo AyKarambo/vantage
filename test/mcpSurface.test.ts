@@ -106,6 +106,7 @@ function auditProvider(): DataProvider {
     getSessionSettings: () => DEFAULT_SESSION_SETTINGS,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    placementRuns: () => [],
     isSample: () => false,
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }),

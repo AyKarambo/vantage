@@ -53,6 +53,7 @@ function fakeProvider(
     getSessionSettings: () => DEFAULT_SESSION_SETTINGS,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    placementRuns: () => [],
     effectiveMasterData: () => master,
     pendingMatches: () => [],
   };

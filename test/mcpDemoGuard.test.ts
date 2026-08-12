@@ -35,6 +35,7 @@ function provider(demo: boolean): { p: DataProvider; mutations: string[] } {
     getSessionSettings: () => DEFAULT_SESSION_SETTINGS,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    placementRuns: () => [],
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }) as never,
     logMatch: forbid('logMatch') as never,

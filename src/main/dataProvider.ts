@@ -431,6 +431,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     rankAnchorMap: (): RankAnchorMap => deps.rankAnchors.map(),
     getPlacements: () => placementSummaries(deps),
+    placementRuns: (): PlacementRun[] => deps.placements.allRuns(),
     startPlacementRun: (input) => {
       const existing = deps.placements.getRun(input.account, input.role);
       // Restarting a completed run must first hand back the rank its completion

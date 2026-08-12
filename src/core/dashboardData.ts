@@ -21,6 +21,7 @@ import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakRemin
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { currentRank, rankKey, rankToPoints, type RankAnchorMap } from './rank';
+import { hasDrifted, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
@@ -41,6 +42,14 @@ export interface ManualData {
   grading?: GradingSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
   rankAnchors?: RankAnchorMap;
+  /**
+   * Tracked placement runs. Open ones make their counted matches contribute no
+   * ladder movement (Overwatch shows no ±% during placements), and every run —
+   * open or completed — becomes a {@link DashboardData.placements} summary so
+   * rank surfaces can say `Placements N/10` instead of a rank the player
+   * doesn't have.
+   */
+  placementRuns?: PlacementRun[];
 }
 
 export function computeDashboard(
@@ -71,10 +80,28 @@ export function computeDashboard(
   // Scoped to the selected account when one is active, else the most-played one,
   // so switching accounts in the sidebar re-points the rank too.
   const primaryAccount = filters.account && filters.account !== 'all' ? filters.account : topAccount(all);
-  const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount, filters.role);
+  // Matches inside an OPEN placement run contribute no ladder movement: the game
+  // shows no ±% during placements, so any delta recorded against them (a
+  // backdated match, say) must lie dormant until the run completes or is
+  // cancelled. Derived once here and shared by both rank readers below.
+  const placementRuns = manual?.placementRuns ?? [];
+  const suppressed = suppressedMatchIds(all, placementRuns);
+  const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount, filters.role, suppressed);
   // Per-account rank for the sidebar's account-switcher popover — the account's
   // most-played anchored role, no movement (the arrow is Overview-KPI-only).
-  const accountRanks = accountRanksOf(all, manual?.rankAnchors);
+  const accountRanks = accountRanksOf(all, manual?.rankAnchors, suppressed);
+  const placements = placementRuns.map((run) => {
+    const { counted, target, latestPrediction } = runProgress(all, run);
+    return {
+      account: run.account,
+      role: run.role,
+      counted,
+      target,
+      ...(latestPrediction ? { latestPrediction } : {}),
+      completed: run.completedAt !== undefined,
+      drifted: hasDrifted(all, run),
+    };
+  });
   // Long ranges (all-time, >90d) bucket the trend by week; a season (~63d) and
   // shorter windows stay daily, matching the pre-'season' behavior of the old 90.
   const days = filters.days ?? 30;
@@ -123,10 +150,7 @@ export function computeDashboard(
     progression: progression(games),
     ...(primaryRank ? { primaryRank } : {}),
     accountRanks,
-    // Placeholder until the placement-run summaries are threaded in: an empty
-    // list is the truthful value for a build that tracks no runs yet, and it
-    // keeps every rank surface on today's behaviour rather than a special case.
-    placements: [],
+    placements,
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
     byRole: byRole(games),
     byAccount: byAccount(games),
@@ -313,6 +337,7 @@ function primaryRankOf(
   anchors: RankAnchorMap | undefined,
   account: string,
   roleFilter?: string,
+  suppressed?: ReadonlySet<string>,
 ): DashboardData['primaryRank'] {
   if (!anchors) return undefined;
   const anchored = ROLES.filter((role) => anchors[rankKey(account, role)]);
@@ -323,7 +348,7 @@ function primaryRankOf(
   const filtered = anchored.find((r) => r === roleFilter);
   const role = filtered ?? mostPlayed;
   const anchor = anchors[rankKey(account, role)];
-  const rank = currentRank(all, anchors, account, role);
+  const rank = currentRank(all, anchors, account, role, undefined, suppressed);
   if (!rank || !anchor) return undefined;
   return {
     account, role,
@@ -345,11 +370,12 @@ function primaryRankOf(
 function accountRanksOf(
   all: GameRecord[],
   anchors: RankAnchorMap | undefined,
+  suppressed?: ReadonlySet<string>,
 ): DashboardData['accountRanks'] {
   const out: DashboardData['accountRanks'] = {};
   if (!anchors) return out;
   for (const account of distinct(all.map((g) => g.account))) {
-    const r = primaryRankOf(all, anchors, account);
+    const r = primaryRankOf(all, anchors, account, undefined, suppressed);
     if (r) out[account] = { tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected };
   }
   return out;
