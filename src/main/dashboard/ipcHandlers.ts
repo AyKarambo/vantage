@@ -8,6 +8,7 @@ import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
   MatchEditInput, RankAnchorInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
+  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
@@ -101,6 +102,15 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.getRanks, () => provider.getRanks());
   handle(ch.setRankAnchor, (_e, input: RankAnchorInput) => provider.setRankAnchor(input));
   handle(ch.mostPlayedHeroes, () => provider.mostPlayedHeroes());
+
+  // Placement runs: the post-reset 10-match state, and its undo paths.
+  handle(ch.getPlacements, () => provider.getPlacements());
+  handle(ch.startPlacementRun, (_e, input: PlacementStartInput) => provider.startPlacementRun(input));
+  handle(ch.setPlacementPrediction, (_e, input: PlacementPredictionInput) => provider.setPlacementPrediction(input));
+  handle(ch.completePlacementRun, (_e, input: PlacementCompleteInput) => provider.completePlacementRun(input));
+  handle(ch.resetPlacementRun, (_e, input: PlacementTrackInput) => provider.resetPlacementRun(input));
+  handle(ch.cancelPlacementRun, (_e, input: PlacementTrackInput) => provider.cancelPlacementRun(input));
+  handle(ch.recountPlacementRun, (_e, input: PlacementTrackInput) => provider.recountPlacementRun(input));
 
   // Notion import (pull) + wipe-for-re-import.
   handle(ch.importNotion, () => provider.importNotion());
