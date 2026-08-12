@@ -76,11 +76,13 @@ describe('progression', () => {
   });
 
   it('maps a rating to tier, division (1–5, 5=lowest) and a 0–100 progress percent', () => {
-    const diamond = tierOf(2200);
+    // Emerald (2026 S4) owns the 2000s band, so Diamond starts at 2500.
+    expect(tierOf(2200)).toMatchObject({ tier: 'Emerald', division: 3 });
+    const diamond = tierOf(2700);
     expect(diamond.tier).toBe('Diamond');
     expect(diamond.division).toBe(3);
     expect(tierOf(0)).toMatchObject({ tier: 'Bronze', division: 5 });
-    const champ = tierOf(3999);
+    const champ = tierOf(4499);
     expect(champ.tier).toBe('Champion');
     expect(champ.division).toBe(1);
     // C2: exact tier-floor + division boundaries (5=lowest band, 1=highest).
@@ -93,7 +95,7 @@ describe('progression', () => {
   });
 
   it('keeps progressPct within [0,100) across the whole ladder (C3)', () => {
-    for (let sr = 0; sr <= 3999; sr += 37) {
+    for (let sr = 0; sr <= 4499; sr += 37) {
       const { division, progressPct } = tierOf(sr);
       expect(division).toBeGreaterThanOrEqual(1);
       expect(division).toBeLessThanOrEqual(5);
@@ -117,12 +119,13 @@ describe('progression', () => {
   it('reports a signed delta in percentage points when the newer half climbs or falls', () => {
     const t = (ts: number, result: Result): GameRecord => game({ result, map: 'Ilios', role: 'damage', timestamp: ts });
     // Older half all losses, newer half all wins → positive delta.
-    // Older half 0% (rating 0), newer half 100% (rating 3999) → +3999/DIV_SPAN*100.
+    // Older half 0% (rating 0), newer half 100% (rating 4499, the nine-tier
+    // ceiling since Emerald) → +4499/DIV_SPAN*100.
     // Pins the magnitude, so a wrong divisor or a dropped ×100 is caught, not just the sign.
     const climbing = [t(1, 'Loss'), t(2, 'Loss'), t(3, 'Win'), t(4, 'Win')];
-    expect(progression(climbing).delta).toBeCloseTo(3999, 0);
+    expect(progression(climbing).delta).toBeCloseTo(4499, 0);
     const falling = [t(1, 'Win'), t(2, 'Win'), t(3, 'Loss'), t(4, 'Loss')];
-    expect(progression(falling).delta).toBeCloseTo(-3999, 0);
+    expect(progression(falling).delta).toBeCloseTo(-4499, 0);
     // Fewer than 4 games → no delta.
     expect(progression([t(1, 'Win'), t(2, 'Loss')]).delta).toBe(0);
   });

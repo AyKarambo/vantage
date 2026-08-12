@@ -8,7 +8,7 @@ import type { Role } from './model';
 
 export const HEROES_BY_ROLE: Record<Exclude<Role, 'openQ'>, readonly string[]> = {
   tank: [
-    'D.Va', 'Domina', 'Doomfist', 'Hazard', 'Junker Queen', 'Mauga', 'Orisa',
+    'D.Mon', 'D.Va', 'Domina', 'Doomfist', 'Hazard', 'Junker Queen', 'Mauga', 'Orisa',
     'Ramattra', 'Reinhardt', 'Roadhog', 'Sigma', 'Winston', 'Wrecking Ball',
     'Zarya',
   ],

@@ -241,10 +241,15 @@ describe('rank timeline — GameRecord bridge', () => {
 });
 
 describe('rank engine — ladder scale', () => {
-  it('ladderPoints is a monotonic 0..4000 scale, 500 per tier / 100 per division', () => {
+  it('ladderPoints is a monotonic 0..4500 scale, 500 per tier / 100 per division', () => {
     expect(ladderPoints({ tier: 'Bronze', division: 5, progressPct: 0 })).toBe(0);
-    expect(ladderPoints({ tier: 'Champion', division: 1, progressPct: 100 })).toBe(4000);
+    // Nine tiers since Emerald landed in 2026 S4 → the ceiling is 4500, not 4000.
+    expect(ladderPoints({ tier: 'Champion', division: 1, progressPct: 100 })).toBe(4500);
     expect(ladderPoints({ tier: 'Gold', division: 3, progressPct: 40 })).toBe(1240);
+    // Emerald sits between Platinum and Diamond, so it owns the 2000s band and
+    // pushes Diamond up a tier's worth of points.
+    expect(ladderPoints({ tier: 'Emerald', division: 5, progressPct: 0 })).toBe(2000);
+    expect(ladderPoints({ tier: 'Diamond', division: 5, progressPct: 0 })).toBe(2500);
     // A rank-protection buffer sits just below the division floor.
     expect(ladderPoints({ tier: 'Gold', division: 3, progressPct: -18 })).toBe(1182);
   });
