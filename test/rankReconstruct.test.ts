@@ -56,6 +56,29 @@ describe('rankAfterMatch — backward (before the anchor)', () => {
   });
 });
 
+describe('rankAfterMatch — reset-boundary guard', () => {
+  it('returns null for a match strictly before the reset instant', () => {
+    const a = anchors();
+    expect(rankAfterMatch(games, a, 'Main', 'damage', 50, 60)).toBeNull();
+  });
+
+  it('returns the normal reconstruction for a match at/after the reset instant', () => {
+    const a = anchors();
+    expect(posOf(rankAfterMatch(games, a, 'Main', 'damage', 50, 50))).toEqual(pos('Gold', 3, 50));
+    expect(posOf(rankAfterMatch(games, a, 'Main', 'damage', 150, 60))).toEqual(
+      posOf(rankAfterMatch(games, a, 'Main', 'damage', 150)),
+    );
+  });
+
+  it('omitting resetBefore reproduces existing behavior exactly', () => {
+    const a = anchors();
+    expect(posOf(rankAfterMatch(games, a, 'Main', 'damage', 50, undefined))).toEqual(
+      posOf(rankAfterMatch(games, a, 'Main', 'damage', 50)),
+    );
+    expect(posOf(rankAfterMatch(games, a, 'Main', 'damage', 150))).toEqual(pos('Gold', 3, 60));
+  });
+});
+
 describe('srDeltaForSetRank — back-compute the SR % from an entered rank', () => {
   it('derives the delta from the reconstructed rank-before (target is first after the anchor)', () => {
     // Only m3 present → no comp before it → rank-before = the anchor (Gold 3 40).

@@ -240,6 +240,55 @@ describe('rank timeline — GameRecord bridge', () => {
   });
 });
 
+describe('rank timeline — suppression (open placement runs)', () => {
+  const g = (p: Partial<GameRecord>): GameRecord => ({
+    matchId: 'm', timestamp: 0, account: 'Main', role: 'damage', map: 'Ilios',
+    result: 'Win', gameType: 'Competitive', heroes: [], ...p,
+  });
+
+  it('a suppressed match is still emitted but with srDelta undefined', () => {
+    const games = [
+      g({ matchId: 'a', timestamp: 50, result: 'Win', srDelta: 20 }),
+      g({ matchId: 'b', timestamp: 60, result: 'Loss', srDelta: -10 }),
+    ];
+    const comps = competitiveComps(games, 'Main', 'damage', 10, undefined, new Set(['a']));
+    expect(comps).toEqual([{ result: 'Win', srDelta: undefined }, { result: 'Loss', srDelta: -10 }]);
+  });
+
+  it('a suppressed match contributes 0 while an unsuppressed one with the same delta moves the ladder', () => {
+    const anchors = { [rankKey('Main', 'damage')]: anchorAt('Gold', 3, 40, 10) };
+    const games = [g({ matchId: 'a', timestamp: 50, result: 'Win', srDelta: 20 })];
+    const suppressed = currentRank(games, anchors, 'Main', 'damage', undefined, new Set(['a']));
+    expect(pos(suppressed!)).toEqual({ tier: 'Gold', division: 3, progressPct: 40 }); // unchanged
+    const unsuppressed = currentRank(games, anchors, 'Main', 'damage', undefined, new Set());
+    expect(pos(unsuppressed!)).toEqual({ tier: 'Gold', division: 3, progressPct: 60 }); // 40 + 20
+  });
+
+  it('suppressing a match with no srDelta is a no-op', () => {
+    const anchors = { [rankKey('Main', 'damage')]: anchorAt('Gold', 3, 40, 10) };
+    const games = [g({ matchId: 'a', timestamp: 50, result: 'Win' })]; // no srDelta logged
+    const withoutSuppression = currentRank(games, anchors, 'Main', 'damage');
+    const withSuppression = currentRank(games, anchors, 'Main', 'damage', undefined, new Set(['a']));
+    expect(pos(withSuppression!)).toEqual(pos(withoutSuppression!));
+    expect(pos(withSuppression!)).toEqual({ tier: 'Gold', division: 3, progressPct: 40 });
+  });
+
+  it('omitting suppressed reproduces the existing result exactly', () => {
+    const anchors = { [rankKey('Main', 'damage')]: anchorAt('Gold', 3, 40, 10) };
+    const games = [
+      g({ matchId: 'a', timestamp: 50, result: 'Win', srDelta: 20 }),
+      g({ matchId: 'b', timestamp: 60, result: 'Loss', srDelta: -10 }),
+    ];
+    expect(competitiveComps(games, 'Main', 'damage', 10)).toEqual(
+      competitiveComps(games, 'Main', 'damage', 10, undefined, undefined),
+    );
+    expect(pos(currentRank(games, anchors, 'Main', 'damage')!)).toEqual(
+      pos(currentRank(games, anchors, 'Main', 'damage', undefined, undefined)!),
+    );
+    expect(currentRank(games, anchors, 'Main', 'damage')!.progressPct).toBe(50); // 40 + 20 - 10
+  });
+});
+
 describe('rank engine — ladder scale', () => {
   it('ladderPoints is a monotonic 0..4500 scale, 500 per tier / 100 per division', () => {
     expect(ladderPoints({ tier: 'Bronze', division: 5, progressPct: 0 })).toBe(0);
