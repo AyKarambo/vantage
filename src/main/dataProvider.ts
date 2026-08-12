@@ -443,8 +443,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         startedAt: resolveRunStart(deps, input.fromMatchId),
         // Never re-snapshot over an existing run's snapshot: that original
         // anchor is the only thing that can undo the run, and overwriting it
-        // with the current one would make "reset to begin" a no-op.
-        preRunAnchor: existing?.preRunAnchor ?? deps.rankAnchors.get(input.account, input.role) ?? null,
+        // with the current one would make "reset to begin" a no-op. Keyed on
+        // whether a run EXISTS, not on `?? `: a run that legitimately snapshotted
+        // `null` (started on an unanchored track) is nullish, so `??` would fall
+        // through and quietly adopt whatever anchor is live now.
+        preRunAnchor: existing
+          ? existing.preRunAnchor
+          : deps.rankAnchors.get(input.account, input.role) ?? null,
         predictions: {},
         ...(existing?.seasonStart !== undefined ? { seasonStart: existing.seasonStart } : {}),
       });
