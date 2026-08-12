@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createDataProvider, type DataProviderDeps } from '../src/main/dataProvider';
 import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../src/core/rank';
 import type { PlacementRun } from '../src/core/placements';
+import { DEFAULT_MASTER_DATA } from '../src/core/masterData';
 import type { GameRecord } from '../src/core/analytics';
 import type { Role } from '../src/core/model';
 
@@ -71,10 +72,15 @@ function harness(games: GameRecord[], initialAnchor?: ReturnType<typeof anchor>)
       setRun: (run: PlacementRun) => { runs[rankKey(run.account, run.role)] = run; return run; },
       removeRun: (a: string, r: Role) => delete runs[rankKey(a, r)],
       declinedFor: (a: string, r: Role) => declined[rankKey(a, r)] ?? [],
-      addDeclined: () => undefined,
+      addDeclined: (a: string, r: Role, seasonStart: number) => {
+        const key = rankKey(a, r);
+        const list = declined[key] ?? [];
+        if (!list.includes(seasonStart)) declined[key] = [...list, seasonStart];
+      },
       relabel: () => 0,
       removeAccount: () => 0,
     },
+    masterDataStore: { all: () => ({ heroes: {}, maps: {}, seasons: {} }) },
     getConfig: () => ({ accounts: {} }),
   } as unknown as DataProviderDeps;
 
@@ -213,6 +219,50 @@ describe('placement runs — reversibility', () => {
 
     provider.resetPlacementRun(track);
     expect(anchorNow()).toMatchObject({ tier: 'Emerald', division: 4 });
+  });
+});
+
+describe('placement runs — the offer', () => {
+  /**
+   * Whether the CURRENT season is a reset is settled by `shouldOfferRun` and
+   * tested there; it depends on the wall clock, which this provider reads
+   * directly, so the cases pinned here are the wall-clock-independent ones —
+   * exactly the wiring the offer adds on top.
+   */
+  it('never offers while a run already exists', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    expect(provider.placementOffer(track)).toBeNull();
+  });
+
+  it('never offers for a completed run either', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
+    expect(provider.placementOffer(track)).toBeNull();
+  });
+
+  it('offers exactly when the shipped current season is a reset, and a decline silences it', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    // Derived from the same table the provider reads, so this asserts in both
+    // directions instead of quietly skipping once the calendar moves past the
+    // last flagged reset.
+    const seasons = [...DEFAULT_MASTER_DATA.seasons].sort((a, b) => a.start - b.start);
+    const current = seasons.filter((s) => s.start <= Date.now()).pop();
+    const offer = provider.placementOffer(track);
+
+    if (!current?.isReset) {
+      expect(offer).toBeNull();
+      return;
+    }
+    expect(offer).toMatchObject({ account: ACCOUNT, role: ROLE, seasonStart: current.start });
+    provider.declinePlacementRun({ ...track, seasonStart: current.start });
+    expect(provider.placementOffer(track)).toBeNull();
+  });
+
+  it('never offers on a track with no anchor — there is no rank to place from', () => {
+    const { provider } = harness(tenMatches());
+    expect(provider.placementOffer(track)).toBeNull();
   });
 });
 
