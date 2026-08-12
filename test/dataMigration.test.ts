@@ -9,6 +9,7 @@ import {
   MANUAL_LOG_FILE,
   OUTBOX_FILE,
   RANK_ANCHORS_FILE,
+  PLACEMENTS_FILE,
   LEGACY_HISTORY_JSON_FILE,
   type DataArtifactPresence,
 } from '../src/core/dataMigration';
@@ -27,6 +28,7 @@ function presence(overrides: Partial<DataArtifactPresence> = {}): DataArtifactPr
     manualLog: false,
     outbox: false,
     rankAnchors: false,
+    placements: false,
     legacyHistoryJson: false,
     ...overrides,
   };
@@ -56,6 +58,7 @@ describe('planDataMigration', () => {
         manualLog: true,
         outbox: true,
         rankAnchors: true,
+        placements: true,
         legacyHistoryJson: true,
       }),
       fromDir,
@@ -66,6 +69,7 @@ describe('planDataMigration', () => {
       MANUAL_LOG_FILE,
       OUTBOX_FILE,
       RANK_ANCHORS_FILE,
+      PLACEMENTS_FILE,
       LEGACY_HISTORY_JSON_FILE,
     ]);
   });
@@ -87,6 +91,7 @@ describe('planDataMigration', () => {
         manualLog: true,
         outbox: true,
         rankAnchors: true,
+        placements: true,
         legacyHistoryJson: true,
       }),
       fromDir,
@@ -97,14 +102,16 @@ describe('planDataMigration', () => {
     expect(byName[MANUAL_LOG_FILE].optional).toBe(true);
     expect(byName[OUTBOX_FILE].optional).toBe(true);
     expect(byName[RANK_ANCHORS_FILE].optional).toBe(true);
+    expect(byName[PLACEMENTS_FILE].optional).toBe(true);
     expect(byName[LEGACY_HISTORY_JSON_FILE].optional).toBe(true);
   });
 
   it('marks every artifact as kind "file"', () => {
-    const plan = planDataMigration(presence({ historyDb: true, manualLog: true }), fromDir, toDir);
+    const plan = planDataMigration(presence({ historyDb: true, manualLog: true, placements: true }), fromDir, toDir);
     const byName = Object.fromEntries(plan.ops.map((op) => [op.name, op]));
     expect(byName[HISTORY_DB_FILE].kind).toBe('file');
     expect(byName[MANUAL_LOG_FILE].kind).toBe('file');
+    expect(byName[PLACEMENTS_FILE].kind).toBe('file');
   });
 
   it('joins fromDir/toDir onto each artifact name for from/to paths', () => {
@@ -114,6 +121,13 @@ describe('planDataMigration', () => {
     expect(byName[HISTORY_DB_FILE].to).toBe(path.join(toDir, HISTORY_DB_FILE));
     expect(byName[MANUAL_LOG_FILE].from).toBe(path.join(fromDir, MANUAL_LOG_FILE));
     expect(byName[MANUAL_LOG_FILE].to).toBe(path.join(toDir, MANUAL_LOG_FILE));
+  });
+
+  it('includes placements.json when present, omits when absent', () => {
+    const planWithPlacements = planDataMigration(presence({ historyDb: true, placements: true }), fromDir, toDir);
+    expect(planWithPlacements.ops.map((op) => op.name)).toContain(PLACEMENTS_FILE);
+    const planWithoutPlacements = planDataMigration(presence({ historyDb: true }), fromDir, toDir);
+    expect(planWithoutPlacements.ops.map((op) => op.name)).not.toContain(PLACEMENTS_FILE);
   });
 });
 
