@@ -30,6 +30,11 @@ export interface SeasonEntry {
   /** Season start instant (UTC ms) — the stable identity. */
   start: number;
   label: string;
+  /**
+   * The season begins a competitive ladder reset, so every rank track is
+   * offered a placement run. Optional — most seasons are not resets.
+   */
+  isReset?: boolean;
 }
 
 export interface MasterData {
@@ -55,6 +60,11 @@ export interface MapPatch {
 export interface SeasonPatch {
   start?: number;
   label?: string;
+  /**
+   * The season begins a competitive ladder reset, so every rank track is
+   * offered a placement run. Optional — most seasons are not resets.
+   */
+  isReset?: boolean;
   removed?: boolean;
 }
 

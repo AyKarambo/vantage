@@ -11,7 +11,7 @@
  */
 import { HEROES_BY_ROLE } from '../heroes';
 import { MAP_MODES, isStadiumOnlyMap, type MapMode } from '../maps';
-import { SEASON_STARTS, seasonEntriesFromStarts } from '../season';
+import { RESET_SEASON_STARTS, SEASON_STARTS, seasonEntriesFromStarts } from '../season';
 import type { HeroEntry, HeroRole, MapEntry, MasterData } from './types';
 
 /** Maps that exist in the game but are out of the competitive pool at release. */
@@ -42,12 +42,23 @@ function defaultMaps(): MapEntry[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Season entries with the known ladder resets ({@link RESET_SEASON_STARTS})
+ * flagged. Only sets `isReset` when true — non-reset seasons keep the
+ * minimal `{ start, label }` shape.
+ */
+function defaultSeasons(): MasterData['seasons'] {
+  return seasonEntriesFromStarts(SEASON_STARTS).map((entry) =>
+    RESET_SEASON_STARTS.has(entry.start) ? { ...entry, isReset: true } : entry,
+  );
+}
+
 /** Immutable default catalog — deep-cloned per call so consumers can't mutate it. */
 export function defaultMasterData(): MasterData {
   return {
     heroes: defaultHeroes(),
     maps: defaultMaps(),
-    seasons: seasonEntriesFromStarts(SEASON_STARTS),
+    seasons: defaultSeasons(),
   };
 }
 

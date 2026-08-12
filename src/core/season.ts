@@ -46,6 +46,21 @@ export const SEASON_STARTS: readonly number[] = [
 ].map((d) => Date.parse(d));
 
 /**
+ * The known competitive **ladder reset** boundaries: Overwatch resets the
+ * ladder (fresh placements, rank decay cleared) roughly every six months
+ * rather than every season, so most season starts in {@link SEASON_STARTS}
+ * are *not* resets. These two are: the 2026 annual reset that kicked off the
+ * story-arc restructure, and the Season 4 redistribution. Any other season
+ * being a reset is user-flagged via the master-data editor (`isReset` on
+ * `SeasonEntry`/`SeasonPatch`) — this table is only the seed for the built-in
+ * defaults, not an exhaustive or self-updating source of truth.
+ */
+export const RESET_SEASON_STARTS: ReadonlySet<number> = new Set([
+  Date.parse('2026-02-10'),
+  Date.parse('2026-08-11'),
+]);
+
+/**
  * The starts list to actually work from: an EMPTY list falls back to the
  * built-in table.
  *

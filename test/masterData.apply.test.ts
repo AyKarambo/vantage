@@ -93,4 +93,24 @@ describe('season overrides', () => {
     const merged = mergeMasterData(defaults, ov);
     expect(merged.seasons.find((s) => s.start === start)?.label).toBe('Summer Split');
   });
+
+  it('writes isReset into the patch', () => {
+    const start = Date.parse('2025-06-01'); // user-added season, no default counterpart
+    const ov = upsertSeasonOverride(emptyOverrides(), defaults, { start, label: 'Summer Split', isReset: true });
+    expect(ov.seasons['S:2025-06-01']).toEqual({ start, label: 'Summer Split', isReset: true });
+  });
+
+  it('drops the override when toggled back to exactly the default (start, label AND isReset)', () => {
+    const { start, label } = defaults.seasons[0]; // default is not a reset (isReset undefined)
+    let ov = upsertSeasonOverride(emptyOverrides(), defaults, { start, label, isReset: true });
+    expect(ov.seasons['S:2025-01-01']).toBeDefined();
+    ov = upsertSeasonOverride(ov, defaults, { start, label, isReset: false });
+    expect(ov.seasons['S:2025-01-01']).toBeUndefined();
+  });
+
+  it('keeps the override when only isReset differs from the default', () => {
+    const { start, label } = defaults.seasons[0];
+    const ov = upsertSeasonOverride(emptyOverrides(), defaults, { start, label, isReset: true });
+    expect(ov.seasons['S:2025-01-01']).toEqual({ start, label, isReset: true });
+  });
 });

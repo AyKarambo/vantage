@@ -86,8 +86,12 @@ export function upsertSeasonOverride(
   const key = seasonKey(entry.start);
   const def = findSeason(defaults, key);
   const seasons = { ...overrides.seasons };
-  if (def && def.label === entry.label) delete seasons[key];
-  else seasons[key] = { start: entry.start, label: entry.label };
+  const isReset = entry.isReset ?? false;
+  if (def && def.start === entry.start && def.label === entry.label && (def.isReset ?? false) === isReset) {
+    delete seasons[key];
+  } else {
+    seasons[key] = { start: entry.start, label: entry.label, isReset };
+  }
   return { ...overrides, seasons };
 }
 
