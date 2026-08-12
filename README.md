@@ -312,7 +312,22 @@ a network port, and Vantage sends nothing outward through it; see
   value read from the game. **Rank protection** (a loss that would drop below 0% holds the
   division and carries the true negative, matching the game's own display) and the resulting
   **SR movement** are shown **consistently everywhere rank appears** — Overview, match rows,
-  match detail, Log match, and Settings → Accounts.
+  match detail, Log match, and Settings → Accounts. When a season is marked as a **ladder reset**
+  (flagged per-season in Settings → Master data → Seasons), Vantage **offers** a placement run
+  when that (account × role) logs its first competitive match after the reset boundary — lazily
+  per role, never unsolicited. Placement runs can also be **started manually** at any time (new
+  account, role never queued, or a long layoff). During an open run the ±% input becomes a
+  **predicted-rank picker** (tier and division only; entering a prediction is optional), and rank
+  surfaces show **`Placements N/10`** plus your latest prediction instead of an absolute rank. At
+  the 10th match a **confirmation dialog** prefilled from your prediction asks for the actual rank
+  the game revealed; confirming it writes a new rank anchor at that match. **Everything is
+  reversible**: **"Reset to begin"** rewinds to 0/10 and restores the pre-run rank, **"Cancel"**
+  removes the run and hands its matches back to normal ±% arithmetic. A run can be **backdated**
+  to an already-logged match if you didn't catch it at the time. If a counted match is deleted or
+  moved to a different role afterward, the run **flags the inconsistency** and offers **"Recount"**
+  — no match history is silently altered. Matches logged before a completed run show **"before the
+  rank reset"** in match detail rather than a reconstructed rank: a reset makes the ladder
+  discontinuous, so walking backward across it would report ranks you never held.
 - The manual (◎) surfaces now **persist**: Log match writes a real game to the local history
   (feeding every stat, including the mental composite), authored improvement targets are
   saved to a local store and shown in your Targets library, and grading a game on the
