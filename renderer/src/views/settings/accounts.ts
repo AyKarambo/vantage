@@ -1,8 +1,9 @@
 import { h, render } from '../../dom';
 import type { AccountSummary, PlacementRunSummary, RankSummary, Role } from '../../../../src/shared/contract';
 import { bridge } from '../../bridge';
-import { button, card, pill, select } from '../../components/primitives';
+import { button, card, confirmButton, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
+import { openPlacementComplete } from '../../app/placementComplete';
 import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
 import { placementParts, rankParts } from '../../../../src/core/rankDisplay';
@@ -70,6 +71,7 @@ export function accountsCard(): HTMLElement {
           ...actions,
         ),
         ranksLine(a.label, accRanks, accPlacements),
+        placementsBlock(a.label, accRanks, accPlacements, reload),
       );
     };
     const edit = (): void => {
@@ -163,6 +165,104 @@ export function accountsCard(): HTMLElement {
     return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' } },
       ...(pills.length ? pills : [h('span', { class: 'hint' }, 'No rank set yet')]),
       button('Set rank', { variant: 'ghost', onClick: () => openSetRank(account, accRanks, reload) }),
+    );
+  }
+
+  /**
+   * The per-role placement-run controls, listed below the rank pills. Shown
+   * only for roles this account already tracks — a rank anchor and/or a run —
+   * so an untouched role doesn't add a row nobody asked for. This is the
+   * feature's manual escape hatch: every state (no run, open, completed,
+   * drifted) exposes a way back to "begin placements", including undoing a
+   * run that already finished.
+   */
+  function placementsBlock(account: string, accRanks: RankSummary[], accPlacements: PlacementRunSummary[], onDone: () => void): Node | null {
+    const roles = ROLE_OPTIONS
+      .map((o) => o.value)
+      .filter((role) => accRanks.some((r) => r.role === role) || accPlacements.some((p) => p.role === role));
+    if (!roles.length) return null;
+    return h('div', { class: 'stack', style: { gap: '6px', marginTop: '2px' } },
+      ...roles.map((role) => placementRow(account, role, accPlacements.find((p) => p.role === role), onDone)),
+    );
+  }
+
+  /** One (account, role) track's placement-run controls; see {@link placementsBlock}. */
+  function placementRow(account: string, role: Role, run: PlacementRunSummary | undefined, onDone: () => void): HTMLElement {
+    // Every action here can move the anchor a track reads its computed rank
+    // from (start/reset/cancel restore or replace it, complete sets a fresh
+    // one) — reload the accounts card AND refresh the dashboard store, same
+    // as openSetRank's save path, so the sidebar chip and Overview KPI don't
+    // go stale.
+    const refresh = (): void => { onDone(); void store.refresh(); };
+    const roleTag = h('span', { class: 'u-dim', style: { fontSize: '11px', minWidth: '76px' } }, roleLabel(role));
+
+    if (!run) {
+      return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        roleTag,
+        button('Start placements', {
+          variant: 'ghost',
+          // The bridge takes a `fromMatchId` to backdate a run to an already-logged
+          // match (the "I started tracking too late" case), but doing that well
+          // needs a real match picker this file doesn't have — surfaced via the
+          // tooltip instead of half-building one. See task report.
+          title: "Starts counting from now. Backdating to an earlier match isn't available on this screen yet.",
+          onClick: () => void bridge.startPlacementRun({ account, role }).then(refresh),
+        }),
+      );
+    }
+
+    const pp = placementParts(run.counted, run.target, run.latestPrediction);
+    // Reset and Cancel both throw away the run's progress and, for a COMPLETED
+    // run, the confirmed rank it produced — the one thing this task exists to
+    // make undoable. A stray click here is worse than most destructive actions
+    // in the app (it silently reverts a rank the player may have already told
+    // Notion or a teammate about), so both go through the same two-click
+    // confirmButton guard the match-delete flows use, in every run state.
+    const resetBtn = confirmButton({
+      label: 'Reset to begin',
+      confirmLabel: 'Reset — replay from match 1?',
+      variant: 'ghost',
+      title: 'Rewinds this run to its start and restores the rank the track had before it. The run stays open to replay.',
+      confirmTitle: "Restarts the run from match 1 and restores the pre-run rank — undoes the confirmed rank too, if this run finished. Can't be undone.",
+      onConfirm: (reset) => void bridge.resetPlacementRun({ account, role }).then(refresh).catch(() => reset()),
+    });
+    const cancelBtn = confirmButton({
+      label: 'Cancel',
+      confirmLabel: 'Cancel — remove this run?',
+      variant: 'ghost',
+      title: 'Restores the rank the track had before this run and removes the run — its matches return to normal ±% tracking.',
+      confirmTitle: "Removes the run and hands its matches back to ±% tracking — undoes the confirmed rank too, if this run finished. Can't be undone.",
+      onConfirm: (reset) => void bridge.cancelPlacementRun({ account, role }).then(refresh).catch(() => reset()),
+    });
+
+    const actions: Node[] = [resetBtn, cancelBtn];
+    if (!run.completed) {
+      actions.push(button('Finish early', {
+        variant: 'ghost',
+        // Same reveal-rank confirmation the 10th placement match opens from
+        // log-match.ts — one dialog for "the game just showed me a rank",
+        // whether that happens naturally at match 10 or the player forces it
+        // here. Seeded with the run's latest prediction, same as there.
+        onClick: () => openPlacementComplete({ account, role, suggestion: run.latestPrediction, onDone: refresh }),
+      }));
+    }
+
+    const drifted = run.completed && run.drifted
+      ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginLeft: '84px' } },
+          h('span', { class: 'hint', style: { fontSize: '11px' } }, 'The matches this run counted have changed since it finished.'),
+          button('Recount', { variant: 'ghost', onClick: () => void bridge.recountPlacementRun({ account, role }).then(refresh) }),
+        )
+      : null;
+
+    return h('div', { class: 'stack', style: { gap: '4px' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        roleTag,
+        run.completed
+          ? pill('Placements complete', 'win')
+          : pill(`${pp.counter}${pp.predictionLabel ? ` · ${pp.predictionLabel}` : ''}`, 'accent'),
+        ...actions,
+      ),
+      drifted,
     );
   }
 
