@@ -7,10 +7,18 @@ import {
   seasonsForData,
   seasonWindowById,
   migrateLegacySeasonDays,
+  SEASON_STARTS,
 } from '../src/core/season';
 
 const at = (iso: string) => Date.parse(iso);
 const DAY = 86_400_000;
+/**
+ * The newest entry in the shipped table, derived rather than written out: the
+ * extrapolation tests below are about behaviour *past the end of the table*, so
+ * pinning a literal date only means they quietly stop testing that the moment a
+ * new season is appended.
+ */
+const LAST_KNOWN_START = SEASON_STARTS[SEASON_STARTS.length - 1];
 
 describe('season window', () => {
   it('returns the table start when now sits exactly on a boundary', () => {
@@ -32,7 +40,7 @@ describe('season window', () => {
   });
 
   it('extrapolates by a whole cadence past the last known season', () => {
-    const last = at('2026-06-16');
+    const last = LAST_KNOWN_START;
     // One cadence + 5 days past the last table entry → exactly one cadence forward.
     const now = last + SEASON_CADENCE_MS + 5 * DAY;
     const { start, end } = currentSeason(now);
@@ -42,8 +50,15 @@ describe('season window', () => {
   });
 
   it('stays on the last known season within its first cadence', () => {
-    const last = at('2026-06-16');
+    const last = LAST_KNOWN_START;
     expect(seasonStart(last + 10 * DAY)).toBe(last);
+  });
+
+  it('has S4 (Heroes of Busan) in the table, ending the S3 window', () => {
+    const { start, end } = currentSeason(at('2026-08-12'));
+    expect(start).toBe(at('2026-08-11'));
+    expect(currentSeason(at('2026-08-10')).end).toBe(at('2026-08-11'));
+    expect(end).toBeGreaterThan(start);
   });
 
   it('is defensive for a now that precedes the table', () => {

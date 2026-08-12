@@ -43,7 +43,7 @@ describe('default master-data snapshot', () => {
       expect(s.label.length).toBeGreaterThan(0);
       expect(Number.isFinite(s.start)).toBe(true);
     }
-    expect(DEFAULT_MASTER_DATA.seasons[DEFAULT_MASTER_DATA.seasons.length - 1].label).toBe('2026 Season 3');
+    expect(DEFAULT_MASTER_DATA.seasons[DEFAULT_MASTER_DATA.seasons.length - 1].label).toBe('2026 Season 4');
   });
 
   it('returns a fresh, independent copy each call', () => {

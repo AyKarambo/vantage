@@ -217,7 +217,7 @@ Vantage tracks **competitive matches only** — quick play and arcade games are 
 live or manually logged, so every stat, count, and export is competitive by construction (existing
 non-competitive rows from before this were simply hidden, not deleted). Filter by role and time
 range — with a one-click **Reset** chip and savable presets. The time filter offers `Last 7 days`,
-`Last 30 days`, one entry per **named competitive season** with data (e.g. `2026 Season 3`, newest
+`Last 30 days`, one entry per **named competitive season** with data (e.g. `2026 Season 4`, newest
 first, current season always listed), and `All time`; there's no account or game-mode filter in the
 bar — the account switcher in the top-left already covers "which account", and mode no longer
 applies. **Role icons appear app-wide** (filter bar, scoreboard, hero picker) so
@@ -305,7 +305,8 @@ a network port, and Vantage sends nothing outward through it; see
   later in Settings). Demo data is badged "Demo data" and yields to real games automatically
   once tracking starts — the pipeline is identical. With no demo and no authored targets, the
   Targets screen stays honestly empty rather than showing sample targets.
-- Competitive **rank** follows the current Overwatch model: eight tiers Bronze→**Champion**,
+- Competitive **rank** follows the current Overwatch model: nine tiers Bronze→**Champion**
+  (**Emerald** sits between Platinum and Diamond since 2026 Season 4),
   five divisions each (5 = lowest, 1 = highest), with within-division progress shown as a
   **percentage (0–100%)**. It is a winrate-derived heuristic (GEP does not report rank), not a
   value read from the game. **Rank protection** (a loss that would drop below 0% holds the

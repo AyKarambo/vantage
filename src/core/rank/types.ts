@@ -2,7 +2,8 @@ import type { Role } from '../model';
 
 /**
  * Types for the calculated-rank engine. Overwatch comp rank is a tier
- * (Bronze→Champion) × division (5 lowest … 1 highest) plus a 0–100% progress
+ * (Bronze→Champion, nine of them since Emerald landed in 2026 Season 4)
+ * × division (5 lowest … 1 highest) plus a 0–100% progress
  * within the division; wins add %, losses subtract %. Rank is tracked per
  * (account × role, Open Queue included), so each role/account pair carries its
  * own anchor and running position.

@@ -6,7 +6,16 @@ import type { RankAnchor, RankMatchInput, RankPosition, RankState } from './type
  * randomness — fully unit-tested.
  */
 
-export const TIERS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master', 'Grandmaster', 'Champion'];
+/**
+ * Ladder tiers, lowest → highest. `Emerald` was inserted between Platinum and
+ * Diamond by the 2026 Season 4 ("Heroes of Busan") competitive rework; every
+ * scale in this module derives its bounds from `TIERS.length`, so the insertion
+ * widens the ladder rather than renumbering anything by hand. Anchors persist the
+ * tier *name*, so stored ranks keep meaning across the change.
+ */
+export const TIERS = [
+  'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Champion',
+];
 const TOP = TIERS.length - 1;
 
 /** Champion 1, 100% — the top of the ladder in {@link ladderPoints} units. */
@@ -20,7 +29,7 @@ const tierIdx = (tier: string) => {
 
 /**
  * Project a ladder position onto a single monotonic scale: 0 = Bronze 5 / 0%,
- * 4000 = Champion 1 / 100%, each tier worth 500 and each division 100 (divisions
+ * {@link MAX_POINTS} = Champion 1 / 100%, each tier worth 500 and each division 100 (divisions
  * run 5 lowest → 1 highest). A negative `progressPct` — a rank-protection buffer —
  * yields a value below the division floor, which is exactly what lets one carry
  * handle both promotion and demotion.

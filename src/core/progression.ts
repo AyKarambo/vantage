@@ -6,7 +6,8 @@ import { winLoss, type GameRecord } from './analytics';
  * the UI, not ground truth, and is intentionally easy to swap out once a real
  * rank source exists.
  *
- * Modern Overwatch shape: eight tiers Bronze→Champion, each split into five
+ * Modern Overwatch shape: nine tiers Bronze→Champion (Emerald added between
+ * Platinum and Diamond in 2026 Season 4), each split into five
  * divisions (5 = lowest band, 1 = highest), with progress toward the next
  * division shown as a percentage (0–100%) rather than raw points. The internal
  * scalar below is an implementation detail and is never displayed.
@@ -21,7 +22,9 @@ export interface Progression {
   delta: number;
 }
 
-const TIERS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master', 'Grandmaster', 'Champion'];
+const TIERS = [
+  'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Champion',
+];
 const TIER_SPAN = 500; // internal rating points per tier
 const DIV_SPAN = 100; // internal rating points per division (5 → 1)
 const MAX_RATING = TIERS.length * TIER_SPAN - 1; // top of Champion 1

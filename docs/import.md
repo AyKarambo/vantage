@@ -88,7 +88,7 @@ absolute rank from a single **anchor**:
 - Omit `-CurrentRank` to import SR changes only (no absolute rank shown). Importing without an anchor
   never clears an anchor you already set.
 
-Tiers: `Bronze, Silver, Gold, Platinum, Diamond, Master, Grandmaster, Champion`. Division `1` is the
+Tiers: `Bronze, Silver, Gold, Platinum, Emerald, Diamond, Master, Grandmaster, Champion`. Division `1` is the
 highest band of a tier, `5` the lowest. `progressPct` is `0–100` within the division.
 
 ## The Vantage import file format

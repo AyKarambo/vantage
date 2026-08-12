@@ -21,7 +21,7 @@ export const SEASON_CADENCE_MS = 63 * 86_400_000;
 
 /**
  * Known Overwatch competitive season start dates (UTC midnight), ascending. Grounded
- * against Blizzard's published schedule as of 2026-07; the last entry is the
+ * against Blizzard's published schedule as of 2026-08; the last entry is the
  * current season. Append new seasons here as they are announced — anything past
  * the last entry is extrapolated by {@link SEASON_CADENCE_MS}.
  *
@@ -42,6 +42,7 @@ export const SEASON_STARTS: readonly number[] = [
   '2026-02-10', // 2026 arc S1
   '2026-04-14', // 2026 arc S2 Summit
   '2026-06-16', // 2026 arc S3 Into the Tiger's Den
+  '2026-08-11', // 2026 arc S4 Heroes of Busan
 ].map((d) => Date.parse(d));
 
 /**
