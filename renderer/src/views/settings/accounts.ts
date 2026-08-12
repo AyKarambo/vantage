@@ -201,12 +201,13 @@ export function accountsCard(): HTMLElement {
         roleTag,
         button('Start placements', {
           variant: 'ghost',
-          // The bridge takes a `fromMatchId` to backdate a run to an already-logged
-          // match (the "I started tracking too late" case), but doing that well
-          // needs a real match picker this file doesn't have — surfaced via the
-          // tooltip instead of half-building one. See task report.
-          title: "Starts counting from now. Backdating to an earlier match isn't available on this screen yet.",
+          title: 'Counts the next 10 competitive matches on this track as placements.',
           onClick: () => void bridge.startPlacementRun({ account, role }).then(refresh),
+        }),
+        button('Start from an earlier match…', {
+          variant: 'ghost',
+          title: 'Backdate the run — for when the placements were already under way before you started tracking them.',
+          onClick: () => openBackdateStart(account, role, refresh),
         }),
       );
     }
@@ -332,6 +333,46 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
       ),
     );
   });
+}
+
+/**
+ * Backdated start: pick an already-logged match to count as placement 1.
+ *
+ * The case this exists for is "I was four games in before I started tracking" —
+ * without it, those games stay ordinary ±% matches and the run reads four short
+ * forever. Reclassifying is non-destructive: each match keeps its recorded ±% in
+ * the data, it is merely ignored while the run is open, so cancelling the run
+ * puts the rank back exactly as it was.
+ *
+ * The list comes from the dashboard snapshot rather than a dedicated read — this
+ * screen already holds it, and a run can only start from a match recent enough
+ * to be in view anyway.
+ */
+function openBackdateStart(account: string, role: Role, onDone: () => void): void {
+  const rows = (store.get().data?.matches ?? [])
+    .filter((m) => m.account === account && m.role === role)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 15);
+
+  openModal((close) => h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw' } },
+    h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Start placements from — ${roleLabel(role)} on ${account}`),
+    h('div', { class: 'hint' },
+      'Pick the match that was your first placement. It and every later competitive match on this track count '
+      + 'toward the run; their logged ±% stays in your data but is ignored while the run is open.'),
+    ...(rows.length
+      ? [h('div', { class: 'stack', style: { gap: '6px', maxHeight: '320px', overflowY: 'auto' } },
+          ...rows.map((m) => button(
+            `${new Date(m.timestamp).toLocaleString()} · ${m.result} · ${m.map}`,
+            {
+              variant: 'ghost',
+              class: 'btn--block',
+              onClick: () => void bridge.startPlacementRun({ account, role, fromMatchId: m.matchId })
+                .then(() => { close(); onDone(); void store.refresh(); }),
+            },
+          )))]
+      : [h('div', { class: 'hint' }, 'No matches logged for this track yet — start the run and log as you play.')]),
+    h('div', { style: { display: 'flex', gap: '10px' } }, button('Cancel', { variant: 'ghost', onClick: close })),
+  ));
 }
 
 function numField(value: string, onChange: (v: string) => void): HTMLInputElement {
