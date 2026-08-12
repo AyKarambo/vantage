@@ -53,6 +53,7 @@ function setup() {
     getSessionSettings: () => DEFAULT_SESSION_SETTINGS,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    placementRuns: () => [],
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }) as never,
     logMatch: (() => { mutations.push('logMatch'); return { matchId: 'x' }; }) as never,

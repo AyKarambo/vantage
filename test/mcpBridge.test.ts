@@ -45,6 +45,7 @@ function setup(over: { demo?: boolean; games?: GameRecord[] } = {}) {
     getSessionSettings: () => DEFAULT_SESSION_SETTINGS,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    placementRuns: () => [],
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }) as never,
     logMatch: ((input: { map: string }) => {
