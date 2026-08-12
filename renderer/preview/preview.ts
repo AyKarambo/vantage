@@ -10,7 +10,8 @@
 import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
-  MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
+  MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
+  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   GradingSettings, RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
@@ -37,6 +38,7 @@ import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness'
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -56,6 +58,7 @@ const ANCHORS_KEY = 'vantagePreviewAnchors';
 const EDITS_KEY = 'vantagePreviewEdits';
 const DELETED_KEY = 'vantagePreviewDeleted';
 const MASTER_DATA_KEY = 'vantagePreviewMasterData';
+const PLACEMENTS_KEY = 'vantagePreviewPlacements';
 
 /** Preview-side master-data overrides, persisted to localStorage like other writes. */
 function loadOverrides(): MasterDataOverrides {
@@ -161,6 +164,63 @@ const savedGrading = loadMap<unknown>(GRADING_KEY) as Partial<GradingSettings>;
 let grading: GradingSettings = Object.keys(savedGrading).length
   ? normalizeGradingSettings(savedGrading)
   : { ...DEFAULT_GRADING_SETTINGS };
+
+// In-memory placement run tracker. Keyed by `${account}::${role}`.
+const loadPlacementRuns = (): Map<string, PlacementRun> => {
+  try {
+    const stored = localStorage.getItem(PLACEMENTS_KEY);
+    if (!stored) return new Map();
+    const records: Array<[string, PlacementRun]> = JSON.parse(stored);
+    return new Map(Array.isArray(records) ? records : []);
+  } catch {
+    return new Map();
+  }
+};
+let previewPlacementRuns = loadPlacementRuns();
+/**
+ * Put a track's anchor back exactly as the run found it — the harness mirror of
+ * the provider's `restorePreRunAnchor`. A run started on an unanchored track
+ * snapshots `null`, and restoring that has to mean unanchored again, or the
+ * preview would show a rank the "player" never set and quietly misrepresent the
+ * one behaviour this feature is built around.
+ */
+function restorePreviewAnchor(run: PlacementRun): void {
+  const key = rankKey(run.account, run.role);
+  if (run.preRunAnchor) {
+    previewAnchors[key] = { ...run.preRunAnchor, account: run.account, role: run.role };
+  } else {
+    delete previewAnchors[key];
+  }
+  save(ANCHORS_KEY, previewAnchors);
+}
+
+const savePlacementRuns = (): void => {
+  try {
+    localStorage.setItem(PLACEMENTS_KEY, JSON.stringify([...previewPlacementRuns.entries()]));
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+const placementRunKey = (account: string, role: Role): string => `${account}::${role}`;
+
+const getPlacements = (): PlacementRunSummary[] => {
+  const games = dataset();
+  const summaries: PlacementRunSummary[] = [];
+  for (const run of previewPlacementRuns.values()) {
+    const { counted, target, latestPrediction } = runProgress(games, run);
+    summaries.push({
+      account: run.account,
+      role: run.role,
+      counted,
+      target,
+      ...(latestPrediction ? { latestPrediction } : {}),
+      completed: run.completedAt !== undefined,
+      drifted: hasDrifted(games, run),
+    });
+  }
+  return summaries;
+};
 
 // Saved reviews are overlaid onto the dataset so the pure core exercises the
 // full pipeline (inbox, mental merge, target scoring) exactly as in the app.
@@ -358,7 +418,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap() }, effectiveMasterData()),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()] }, effectiveMasterData()),
   heroDetail: async (hero: string, f: DashboardFilters) =>
     heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
@@ -602,15 +662,105 @@ const mock: OwStatsApi = {
     return accountList();
   },
   getRanks: async () => previewRanks(),
-  // Placement runs are not simulated in the browser harness yet — every call
-  // reports "no runs", which is the state the harness's dataset is actually in.
-  getPlacements: async () => [],
-  startPlacementRun: async () => [],
-  setPlacementPrediction: async () => [],
-  completePlacementRun: async () => [],
-  resetPlacementRun: async () => [],
-  cancelPlacementRun: async () => [],
-  recountPlacementRun: async () => [],
+  getPlacements: async () => getPlacements(),
+  startPlacementRun: async (input: PlacementStartInput) => {
+    const key = placementRunKey(input.account, input.role);
+    // Search the whole dataset, not just `logged` — a backdated run usually
+    // starts on a generated season match, which is the common preview case.
+    const startedAt = input.fromMatchId
+      ? (dataset().find((g) => g.matchId === input.fromMatchId)?.timestamp ?? Date.now())
+      : Date.now();
+    const existing = previewPlacementRuns.get(key);
+    if (existing?.completedAt !== undefined) restorePreviewAnchor(existing);
+    const prior = previewAnchors[rankKey(input.account, input.role)];
+    const run: PlacementRun = {
+      account: input.account,
+      role: input.role,
+      startedAt,
+      // Snapshotting for real matters here: reversibility is the whole point of
+      // this feature, so a harness that always stored `null` would show reset
+      // silently failing to restore anything — worse than not simulating it.
+      preRunAnchor: existing?.preRunAnchor
+        ?? (prior ? { tier: prior.tier, division: prior.division, progressPct: prior.progressPct, setAt: prior.setAt } : null),
+      predictions: {},
+    };
+    previewPlacementRuns.set(key, run);
+    savePlacementRuns();
+    return getPlacements();
+  },
+  setPlacementPrediction: async (input: PlacementPredictionInput) => {
+    const key = placementRunKey(input.account, input.role);
+    const run = previewPlacementRuns.get(key);
+    if (run) {
+      if (input.prediction === null) {
+        delete run.predictions[input.matchId];
+      } else {
+        run.predictions[input.matchId] = input.prediction;
+      }
+      savePlacementRuns();
+    }
+    return getPlacements();
+  },
+  completePlacementRun: async (input: PlacementCompleteInput) => {
+    const key = placementRunKey(input.account, input.role);
+    const run = previewPlacementRuns.get(key);
+    if (run) {
+      const games = dataset();
+      const countedIds = games
+        .filter(
+          (g) =>
+            g.account === run.account &&
+            g.role === run.role &&
+            isCompetitive(g.gameType) &&
+            g.timestamp >= run.startedAt,
+        )
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(0, PLACEMENT_RUN_LENGTH)
+        .map((g) => g.matchId);
+      const counted = games.filter((g) => countedIds.includes(g.matchId));
+      // Anchored at the LAST counted match, mirroring the real provider: the
+      // rank timeline filters strictly after the anchor, which is what keeps the
+      // placement matches from moving the rank they just settled.
+      const setAt = counted.length ? counted[counted.length - 1].timestamp : run.startedAt;
+      previewAnchors[rankKey(input.account, input.role)] = {
+        account: input.account,
+        role: input.role,
+        tier: input.tier,
+        division: input.division,
+        progressPct: input.progressPct ?? 0,
+        setAt,
+      };
+      save(ANCHORS_KEY, previewAnchors);
+      run.completedAt = Date.now();
+      run.completedMatchIds = countedIds;
+      savePlacementRuns();
+    }
+    return getPlacements();
+  },
+  resetPlacementRun: async (input: PlacementTrackInput) => {
+    const key = placementRunKey(input.account, input.role);
+    const run = previewPlacementRuns.get(key);
+    if (run) {
+      if (run.completedAt !== undefined) restorePreviewAnchor(run);
+      run.predictions = {};
+      delete run.completedAt;
+      delete run.completedMatchIds;
+      savePlacementRuns();
+    }
+    return getPlacements();
+  },
+  cancelPlacementRun: async (input: PlacementTrackInput) => {
+    const key = placementRunKey(input.account, input.role);
+    const run = previewPlacementRuns.get(key);
+    if (run?.completedAt !== undefined && run) restorePreviewAnchor(run);
+    previewPlacementRuns.delete(key);
+    savePlacementRuns();
+    return getPlacements();
+  },
+  recountPlacementRun: async (_input: PlacementTrackInput) => {
+    // No-op refresh: just return the current state.
+    return getPlacements();
+  },
   mostPlayedHeroes: async () => {
     const games = dataset();
     const roles: Role[] = ['tank', 'damage', 'support', 'openQ'];
