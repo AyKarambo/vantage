@@ -133,6 +133,47 @@ describe('matchDetail degradation contract', () => {
     expect(matchDetail(all, 'post', all, {})!.competitive!.note).toBe('estimate');
   });
 
+  it('pre-reset: a match before resetBefore reads honestly instead of a fabricated rank', () => {
+    const anchors: RankAnchorMap = {
+      [rankKey('Main', 'damage')]: { tier: 'Gold', division: 3, progressPct: 40, setAt: 100 },
+    };
+    const all = [
+      minimal({ matchId: 'pre', timestamp: 50, result: 'Win', srDelta: 20 }),
+      minimal({ matchId: 'pre2', timestamp: 80, result: 'Loss', srDelta: -10 }),
+      minimal({ matchId: 'post', timestamp: 150, result: 'Win', srDelta: 20 }),
+    ];
+    const resetBefore = 60;
+
+    // Before the reset → 'pre-reset', no tier/division/progressPct, but the
+    // match's own logged delta survives; NOT the winrate 'estimate' fallback,
+    // which would otherwise still show a made-up rank.
+    const pre = matchDetail(all, 'pre', all, anchors, undefined, [], undefined, resetBefore)!.competitive;
+    expect(pre).toMatchObject({ note: 'pre-reset', delta: 20 });
+    expect(pre!.note).not.toBe('estimate');
+    expect(pre!.tier).toBeUndefined();
+    expect(pre!.division).toBeUndefined();
+    expect(pre!.progressPct).toBeUndefined();
+    expect(pre!.protected).toBeUndefined();
+
+    // Still pre-reset, and still not the estimate fallback, even with no anchor at all.
+    const preNoAnchor = matchDetail(all, 'pre', all, {}, undefined, [], undefined, resetBefore)!.competitive;
+    expect(preNoAnchor!.note).toBe('pre-reset');
+    expect(preNoAnchor!.note).not.toBe('estimate');
+
+    // At/after the reset → unaffected, same reconstructed/calculated notes as before.
+    expect(matchDetail(all, 'pre2', all, anchors, undefined, [], undefined, resetBefore)!.competitive).toMatchObject({
+      note: 'reconstructed', tier: 'Gold', division: 3,
+    });
+    expect(matchDetail(all, 'post', all, anchors, undefined, [], undefined, resetBefore)!.competitive).toMatchObject({
+      note: 'calculated', tier: 'Gold', division: 3, progressPct: 60,
+    });
+
+    // Omitting resetBefore entirely reproduces the pre-existing 'reconstructed' behavior.
+    expect(matchDetail(all, 'pre', all, anchors)!.competitive).toMatchObject({
+      note: 'reconstructed', tier: 'Gold', division: 3, progressPct: 50,
+    });
+  });
+
   it('surfaces the saved review (grades + flags) so the editor can pre-fill, or undefined when ungraded', () => {
     const graded = minimal({ matchId: 'g-1', review: { at: 5, grades: { t1: 'hit' }, flags: { tilt: true } } });
     expect(matchDetail([graded], 'g-1')!.review).toEqual({ at: 5, grades: { t1: 'hit' }, flags: { tilt: true } });

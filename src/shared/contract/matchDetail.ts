@@ -127,14 +127,17 @@ export interface MatchDetail {
    * anchor + logged SR deltas for a match at/after the anchor; 'reconstructed' =
    * the same anchor walked backward for a match older than it (best-effort);
    * 'estimate' = the winrate heuristic fallback when no anchor exists; 'reported'
-   * is reserved for a future GEP upgrade.
+   * is reserved for a future GEP upgrade; 'pre-reset' = the match predates a
+   * competitive ladder reset, so no rank is computed for it — the card says so
+   * rather than inventing one. `tier`/`division`/`progressPct` are absent for
+   * this note (only `delta`, the match's own logged SR change, may be present).
    * `progressPct` is 0–100 within the division, except it can go negative while
    * `protected` is true — the rank-protection buffer's carry (calculated), matching the
    * live client's own negative display. `delta` is signed %-points.
    * `protected` describes the rank-protection state (calculated).
    */
   competitive?: {
-    note: 'estimate' | 'reported' | 'calculated' | 'reconstructed';
+    note: 'estimate' | 'reported' | 'calculated' | 'reconstructed' | 'pre-reset';
     tier?: string;
     division?: number;
     progressPct?: number;

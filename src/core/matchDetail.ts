@@ -27,6 +27,9 @@ import { measuredGradesForMatch, type AuthoredTarget } from './targets';
  * the payload carries their calculated grades for this match (`measuredGrades`)
  * so the Grades card can show them mode-aware. `margin` is the user's
  * partial-credit margin (defaults to the shared constant when omitted).
+ * `resetBefore`, when given, is the instant (epoch ms) of a competitive rank
+ * reset — a match strictly before it gets the honest `'pre-reset'` competitive
+ * note instead of a reconstructed (and possibly fabricated) rank.
  */
 export function matchDetail(
   all: GameRecord[],
@@ -36,6 +39,7 @@ export function matchDetail(
   mapModeOf: MapModeResolver = makeMapMode(DEFAULT_MASTER_DATA.maps),
   activeMeasured: AuthoredTarget[] = [],
   margin?: number,
+  resetBefore?: number,
 ): MatchDetail | null {
   const game = all.find((g) => g.matchId === matchId);
   if (!game) return null;
@@ -61,7 +65,7 @@ export function matchDetail(
     review: game.review,
     measuredGrades: activeMeasured.length ? measuredGradesForMatch(game, activeMeasured, margin) : undefined,
     scoreboard: scoreboardOf(game),
-    competitive: competitiveOf(game, competitiveContext, all, anchors),
+    competitive: competitiveOf(game, competitiveContext, all, anchors, resetBefore),
     playerHistory: playerHistory(all, game),
   };
 }
@@ -144,20 +148,33 @@ function orderScoreboard(entries: ScoreboardEntry[]): ScoreboardEntry[] {
  * anchor + logged SR deltas (including rank protection). Otherwise it falls back
  * to the winrate 'estimate' (the sanctioned feed does not report rank;
  * 'reported' is reserved for a future verified GEP upgrade).
+ *
+ * `resetBefore`, when given, marks a competitive ladder reset: a match strictly
+ * before it can't be reconstructed at all (the backward walk subtracts ladder
+ * points from the anchor, but the reset makes the ladder discontinuous, so
+ * crossing it would report a rank the player never held). That match gets
+ * `'pre-reset'` — no tier/division/progressPct — and deliberately skips the
+ * winrate-estimate fallback below: falling through there would still show a
+ * fabricated rank, defeating the whole point of the honest note.
  */
 function competitiveOf(
   game: GameRecord,
   context: GameRecord[],
   all: GameRecord[],
   anchors: RankAnchorMap,
+  resetBefore?: number,
 ): MatchDetail['competitive'] {
   if (classifyGameType(game.gameType) !== 'competitive') return undefined;
+
+  if (resetBefore !== undefined && game.timestamp < resetBefore) {
+    return { note: 'pre-reset', delta: game.srDelta };
+  }
 
   // Preferred: the rank as of this match, from the anchor timeline. A match
   // at/after the anchor is forward-replayed ('calculated'); an older one is
   // reconstructed backward from the anchor ('reconstructed', best-effort).
   const anchor = anchors[rankKey(game.account, game.role)];
-  const rank = rankAfterMatch(all, anchors, game.account, game.role, game.timestamp);
+  const rank = rankAfterMatch(all, anchors, game.account, game.role, game.timestamp, resetBefore);
   if (rank && anchor) {
     return {
       note: game.timestamp >= anchor.setAt ? 'calculated' : 'reconstructed',
