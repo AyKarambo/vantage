@@ -20,6 +20,10 @@ import type {
   IgnorePendingReviewsInput,
 } from './inputs';
 import type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
+import type {
+  PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput,
+  PlacementTrackInput,
+} from './placements';
 import type { ImportFileResult } from './importFile';
 import type { Role, Result } from '../../core/model';
 import type { LogEntry, LogLevel, LogExportResult, RendererErrorInput } from './logging';
@@ -78,6 +82,29 @@ export interface OwStatsApi {
   mostPlayedHeroes(): Promise<Record<string, Partial<Record<Role, string[]>>>>;
   /** Set (or replace) the one-time rank anchor for an (account, role). */
   setRankAnchor(input: RankAnchorInput): Promise<RankSummary[]>;
+  /** Open and completed placement runs across every (account, role) track. */
+  getPlacements(): Promise<PlacementRunSummary[]>;
+  /** Start a placement run for an (account, role); returns the refreshed full list. */
+  startPlacementRun(input: PlacementStartInput): Promise<PlacementRunSummary[]>;
+  /** Set (or clear, with `null`) a placement match's predicted rank; returns the refreshed full list. */
+  setPlacementPrediction(input: PlacementPredictionInput): Promise<PlacementRunSummary[]>;
+  /** Confirm the real rank a placement run resolved to; returns the refreshed full list. */
+  completePlacementRun(input: PlacementCompleteInput): Promise<PlacementRunSummary[]>;
+  /**
+   * Rewind a run to its beginning (counter to 0, predictions cleared, pre-run
+   * anchor restored) but KEEP it open, so it can be played again. Non-destructive
+   * to match records. Contrast with {@link cancelPlacementRun}. Returns the
+   * refreshed full list.
+   */
+  resetPlacementRun(input: PlacementTrackInput): Promise<PlacementRunSummary[]>;
+  /**
+   * The same restore as {@link resetPlacementRun}, then remove the run entirely:
+   * its matches become ordinary competitive matches again with their recorded
+   * ±% active. Non-destructive to match records. Returns the refreshed full list.
+   */
+  cancelPlacementRun(input: PlacementTrackInput): Promise<PlacementRunSummary[]>;
+  /** Recompute a run's counted matches/prediction/completion from current history; returns the refreshed full list. */
+  recountPlacementRun(input: PlacementTrackInput): Promise<PlacementRunSummary[]>;
   /** Pull matches from the configured Notion Gametracker database into history. */
   importNotion(): Promise<ImportResult>;
   /** Delete every match that came from a Notion import (for a clean re-import); returns how many were removed. */
@@ -281,6 +308,13 @@ export const IPC_CHANNELS = {
   getRanks: 'rank:list',
   mostPlayedHeroes: 'hero:most-played',
   setRankAnchor: 'rank:set-anchor',
+  getPlacements: 'placements:list',
+  startPlacementRun: 'placements:start',
+  setPlacementPrediction: 'placements:set-prediction',
+  completePlacementRun: 'placements:complete',
+  resetPlacementRun: 'placements:reset',
+  cancelPlacementRun: 'placements:cancel',
+  recountPlacementRun: 'placements:recount',
   importNotion: 'notion:import',
   deleteImportedMatches: 'notion:delete-imported',
   cleanupNotionDuplicates: 'notion:cleanup-duplicates',
