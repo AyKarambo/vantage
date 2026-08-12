@@ -1,0 +1,143 @@
+import type { GameRecord } from '../analytics';
+import type { RankAnchor } from '../rank';
+import { classifyGameType } from '../matchFilter';
+import { PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank } from './types';
+
+/**
+ * The pure placement-run engine: derives progress, completion and drift from a
+ * run's bookkeeping fields (`startedAt`, `predictions`, `completedMatchIds`)
+ * against the live match history. No I/O, no dates beyond what's passed in —
+ * fully unit-tested, like {@link ../rank/engine}.
+ */
+
+/**
+ * The ordered matches that count toward `run`: competitive, matching the
+ * run's (account, role), from `run.startedAt` onward, ascending time order,
+ * capped at {@link PLACEMENT_RUN_LENGTH}.
+ *
+ * Deliberately `>=`, not the strict `>` that {@link ../rank/timeline
+ * competitiveComps} uses for a rank anchor's `setAt`: a rank anchor is a
+ * reading taken *between* matches, so the match that produced it must be
+ * excluded from what moves the rank forward from there. A placement run's
+ * `startedAt`, by contrast, is deliberately set to a match's own timestamp
+ * (the first placement match, or the match that triggered the season-reset
+ * prompt) — that match must count, or the run would perpetually read as one
+ * short.
+ */
+export function countedMatches(games: GameRecord[], run: PlacementRun): GameRecord[] {
+  return games
+    .filter(
+      (g) =>
+        g.account === run.account &&
+        g.role === run.role &&
+        classifyGameType(g.gameType) === 'competitive' &&
+        g.timestamp >= run.startedAt,
+    )
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(0, PLACEMENT_RUN_LENGTH);
+}
+
+/**
+ * How far `run` has progressed: how many matches count so far (out of
+ * {@link PLACEMENT_RUN_LENGTH}) and the most recent predicted rank, if any.
+ *
+ * `latestPrediction` walks the counted matches from the newest backward and
+ * returns the first one with a recorded prediction — not simply the last
+ * counted match's prediction, because predictions are sparse (a match can be
+ * logged before its predicted rank is entered, or without one at all) and the
+ * UI wants the freshest real reading, not a blank.
+ */
+export function runProgress(
+  games: GameRecord[],
+  run: PlacementRun,
+): { counted: number; target: number; latestPrediction?: PredictedRank } {
+  const counted = countedMatches(games, run);
+  let latestPrediction: PredictedRank | undefined;
+  for (let i = counted.length - 1; i >= 0; i--) {
+    const prediction = run.predictions[counted[i].matchId];
+    if (prediction) {
+      latestPrediction = prediction;
+      break;
+    }
+  }
+  return { counted: counted.length, target: PLACEMENT_RUN_LENGTH, latestPrediction };
+}
+
+/** True once `run` has counted its full {@link PLACEMENT_RUN_LENGTH} matches. */
+export function isRunComplete(games: GameRecord[], run: PlacementRun): boolean {
+  return countedMatches(games, run).length >= PLACEMENT_RUN_LENGTH;
+}
+
+/**
+ * True when a completed run's counted matches no longer match the snapshot
+ * taken at completion — i.e. match history was edited (a fact changed the
+ * competitive/role/account classification, or a match was added/removed/
+ * retimed) in a way that would change which matches placement counted.
+ *
+ * Only meaningful for completed runs: `run.completedAt` and
+ * `run.completedMatchIds` must both be set, otherwise there is nothing to
+ * compare against and drift is definitionally false. The comparison is
+ * order-sensitive (a reorder is itself a drift worth surfacing, since it
+ * usually means a timestamp edit) rather than a set comparison.
+ */
+export function hasDrifted(games: GameRecord[], run: PlacementRun): boolean {
+  if (run.completedAt === undefined || run.completedMatchIds === undefined) return false;
+  const currentIds = countedMatches(games, run).map((g) => g.matchId);
+  const snapshot = run.completedMatchIds;
+  if (currentIds.length !== snapshot.length) return true;
+  return currentIds.some((id, i) => id !== snapshot[i]);
+}
+
+/**
+ * The matchIds that placement tracking claims across all of `runs`, for one
+ * account/role scope's callers to hide from other rank/history math that
+ * shouldn't double-count them.
+ *
+ * Only OPEN runs (`completedAt === undefined`) contribute: once a run
+ * completes, its counted matches have already been folded into the rank
+ * anchor set at completion (the "post-placement" anchor), so continuing to
+ * suppress them would hide real history from every other view for no reason.
+ * An open run's matches, by contrast, don't have a settled rank yet — the
+ * live client shows no rank at all until placement finishes — so they stay
+ * suppressed from rank math until the run completes or is cancelled.
+ */
+export function suppressedMatchIds(
+  games: GameRecord[],
+  runs: PlacementRun[],
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const run of runs) {
+    if (run.completedAt !== undefined) continue;
+    for (const g of countedMatches(games, run)) ids.add(g.matchId);
+  }
+  return ids;
+}
+
+/**
+ * Whether to prompt the player to start a new placement run for a track,
+ * evaluated once per season reset. All of the following must hold:
+ *  - `isResetSeason`: the caller has already determined `seasonStart` is a
+ *    season boundary the player has just crossed (not just "any season").
+ *  - no `existingRun` for the track yet — don't re-prompt mid-run.
+ *  - `seasonStart` isn't in `declinedSeasonStarts` — respect a past "not now".
+ *  - the track has an anchor at all (`anchor !== null`) — a track with no
+ *    rank history yet has nothing to place *from* and isn't offered a run.
+ *  - `anchor.setAt < seasonStart` — the anchor predates the reset. An anchor
+ *    set inside the new season already means the player has re-anchored
+ *    (e.g. manually entered their placement result), so asking again would
+ *    be redundant.
+ */
+export function shouldOfferRun(opts: {
+  seasonStart: number;
+  isResetSeason: boolean;
+  anchor: RankAnchor | null;
+  existingRun: PlacementRun | undefined;
+  declinedSeasonStarts: readonly number[];
+}): boolean {
+  const { seasonStart, isResetSeason, anchor, existingRun, declinedSeasonStarts } = opts;
+  if (!isResetSeason) return false;
+  if (existingRun) return false;
+  if (declinedSeasonStarts.includes(seasonStart)) return false;
+  if (anchor === null) return false;
+  return anchor.setAt < seasonStart;
+}
