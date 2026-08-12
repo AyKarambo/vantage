@@ -19,11 +19,11 @@ import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankPicker, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
-import type { AccountSummary, MatchMental, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
+import type { AccountSummary, MatchMental, PlacementRunSummary, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
@@ -54,6 +54,13 @@ interface LogState {
   anchorTier: string;
   anchorDivision: number;
   anchorPct: string;
+  /**
+   * Predicted-rank tier/division for an open placement run — shown instead of
+   * the ±% entry (the game reports no percentage, and no protection, until
+   * the run completes). Unused while the selected track has no open run.
+   */
+  predTier: string;
+  predDivision: number;
   /** Absolute end-of-game timestamp (ms epoch), or null for "Just now" (stamped at save time). */
   playedAt: number | null;
   /** Self-rated performance for this match, 0-100, or undefined if not rated. */
@@ -129,6 +136,26 @@ function buildForm(
   const hasAnchor = (account: string, role: Role): boolean =>
     ranks.some((r) => r.account === account && r.role === role);
 
+  // A track is "in an open run" when ctx.data.placements carries an
+  // uncompleted summary for it — that's when this form must swap the normal
+  // SR entry for the tier/division-only placementPicker (see paintRank/persist).
+  const openRun = (account: string, role: Role): PlacementRunSummary | undefined =>
+    ctx.data.placements.find((p) => p.account === account && p.role === role && !p.completed);
+
+  /**
+   * Seed the predicted-rank tier/division for an (account, role): the open
+   * run's own latest prediction when it has one (carries the last entry
+   * forward), else the track's currently recorded rank, else the hardcoded
+   * Gold/3 default — mirrors seedAnchorFromRanks below.
+   */
+  const predictionFor = (account: string, role: Role): { tier: string; division: number } => {
+    const pred = openRun(account, role)?.latestPrediction;
+    if (pred) return { tier: pred.tier, division: pred.division };
+    const r = ranks.find((x) => x.account === account && x.role === role);
+    return r ? { tier: r.tier, division: r.division } : { tier: 'Gold', division: 3 };
+  };
+  const initialPrediction = predictionFor(defaultAccount, initialRole);
+
   const state: LogState = {
     result: 'Win',
     role: initialRole,
@@ -145,6 +172,8 @@ function buildForm(
     anchorTier: 'Gold',
     anchorDivision: 3,
     anchorPct: '',
+    predTier: initialPrediction.tier,
+    predDivision: initialPrediction.division,
     playedAt: null,
     performance: undefined,
   };
@@ -185,12 +214,17 @@ function buildForm(
     state.map = map;
     saving = true;
     try {
+      // An open placement run pre-empts the normal SR entry entirely: no
+      // srDelta (the game reports no ±% during placements) and no rank
+      // anchor (there's no revealed rank yet to anchor) — only the predicted
+      // rank, set below once the match is logged and has a matchId.
+      const run = openRun(state.account, state.role);
       // "Set current rank" re-anchors the rank directly; the match then carries
       // no srDelta so it can't double-count on top of the fresh anchor.
-      const setCurrent = state.srMode === 'set-current';
+      const setCurrent = !run && state.srMode === 'set-current';
       // Vantage is competitive-only (spec D1) — manual logs always report as such.
-      const srDelta = !setCurrent && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
-      await bridge.logMatch({
+      const srDelta = !run && !setCurrent && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
+      const { matchId } = await bridge.logMatch({
         result: state.result,
         role: state.role,
         map,
@@ -213,6 +247,17 @@ function buildForm(
           tier: state.anchorTier,
           division: state.anchorDivision,
           progressPct: Number(state.anchorPct) || 0,
+        });
+      }
+      // Placements: record this match's predicted rank against the run now
+      // that it has a matchId — the single source the run's progress card and
+      // predicted-rank display read from.
+      if (run) {
+        await bridge.setPlacementPrediction({
+          account: state.account,
+          role: state.role,
+          matchId,
+          prediction: { tier: state.predTier, division: state.predDivision },
         });
       }
     } catch {
@@ -260,6 +305,7 @@ function buildForm(
     select(accountOptions, state.account, (v) => {
       state.account = v;
       if (state.srMode === 'set-current') seedAnchorFromRanks();
+      seedPrediction();
       paintRank();
       paintHeroes();
     }),
@@ -283,6 +329,7 @@ function buildForm(
     choiceSegment(Object.keys(ROLE_LABELS), roleLabelInitial, (v) => {
       state.role = ROLE_LABELS[v];
       if (state.srMode === 'set-current') seedAnchorFromRanks();
+      seedPrediction();
       paintRank();
       paintHeroes();
     }),
@@ -326,11 +373,35 @@ function buildForm(
     state.anchorPct = String(Math.round(r.progressPct));
   };
 
+  /** Re-seed predTier/predDivision via {@link predictionFor} for the current account+role. */
+  const seedPrediction = (): void => {
+    const p = predictionFor(state.account, state.role);
+    state.predTier = p.tier;
+    state.predDivision = p.division;
+  };
+
   // Rank block: SR every match, plus the one-time anchor. Everything is
   // competitive now (spec D1), so this always shows — it re-paints when
   // account/role/mode/result change, since those decide what it renders.
   const rankHost = h('div');
   const paintRank = (): void => {
+    // An open placement run pre-empts the whole SR block: the game shows no
+    // ±%, no rank protection, and there's nothing to toggle between "change"
+    // and "set current" during placements — only a predicted rank per match.
+    const run = openRun(state.account, state.role);
+    if (run) {
+      render(rankHost,
+        field(optionalLabel('Predicted rank', '— placements show no ±%'), placementPicker({
+          tier: state.predTier,
+          division: state.predDivision,
+          onTier: (v) => (state.predTier = v),
+          onDivision: (v) => (state.predDivision = v),
+        })),
+        h('div', { class: 'hint', style: { marginTop: '4px' } },
+          `Placements (${run.counted}/${run.target}) for ${roleLabel(state.role)} on ${state.account} — the game shows a predicted rank after each match, no ±% and no rank protection.`));
+      return;
+    }
+
     const toggleRow = field(
       optionalLabel('Skill rating', '— nudge the change or set your rank'),
       srModeToggle(state.srMode, (v) => {

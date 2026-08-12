@@ -72,3 +72,26 @@ export function rankPicker(opts: RankPickerOpts): HTMLElement {
     nudgedInput(opts.pct, 'e.g. 40, or -19 if protected', opts.onPct),
   );
 }
+
+export interface PlacementPickerOpts {
+  tier: string;
+  division: number;
+  onTier: (tier: string) => void;
+  onDivision: (division: number) => void;
+}
+
+/**
+ * The tier/division-only picker for a match logged into an OPEN placement run.
+ * Deliberately not `rankPicker` with the `%` field hidden: during placements
+ * Overwatch itself shows neither a percent-in-division nor a rank-protection
+ * state, only a predicted rank (tier + division) after each match — so
+ * offering either field here would invite the player to invent data the game
+ * never gives them.
+ */
+export function placementPicker(opts: PlacementPickerOpts): HTMLElement {
+  return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+    select(TIERS.map((t) => ({ value: t, label: t })), opts.tier, opts.onTier),
+    select(DIVISIONS.map((d) => ({ value: String(d), label: `Div ${d}` })), String(opts.division),
+      (v) => opts.onDivision(Number(v))),
+  );
+}
