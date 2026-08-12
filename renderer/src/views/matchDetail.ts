@@ -6,7 +6,7 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { applyStyle, h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlayerEncounter, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, signed } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
@@ -18,7 +18,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankPicker, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
@@ -451,6 +451,36 @@ function buildMatchEditor(
     anchorPct = String(Math.round(r.progressPct));
   };
 
+  // A track is "in an open run" when ctx.data.placements carries an
+  // uncompleted summary for it — mirrors log-match's openRun/predictionFor
+  // exactly, except the account is always the match's OWN account (d.account
+  // — this editor edits an existing match, there's no account picker here).
+  const openRun = (account: string, role: Role): PlacementRunSummary | undefined =>
+    ctx.data.placements.find((p) => p.account === account && p.role === role && !p.completed);
+
+  /**
+   * Seed the predicted-rank tier/division for (d.account, role): the open
+   * run's own latest prediction when it has one, else the (account, role)'s
+   * currently recorded rank, else the hardcoded Gold/3 default — mirrors
+   * log-match's predictionFor.
+   */
+  const predictionFor = (role: Role): { tier: string; division: number } => {
+    const pred = openRun(d.account, role)?.latestPrediction;
+    if (pred) return { tier: pred.tier, division: pred.division };
+    const r = ranks.find((x) => x.account === d.account && x.role === role);
+    return r ? { tier: r.tier, division: r.division } : { tier: 'Gold', division: 3 };
+  };
+  const initialPrediction = predictionFor(state.role);
+  let predTier = initialPrediction.tier;
+  let predDivision = initialPrediction.division;
+
+  /** Re-seed predTier/predDivision via {@link predictionFor} for the current role. */
+  const seedPrediction = (): void => {
+    const p = predictionFor(state.role);
+    predTier = p.tier;
+    predDivision = p.division;
+  };
+
   openModal((close) => {
     const rows = active.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
 
@@ -506,8 +536,9 @@ function buildMatchEditor(
         onChange: (v) => {
           state.role = v;
           paintEditorHeroes();
-          if (isComp && srMode === 'set-current') {
-            seedAnchor();
+          if (isComp) {
+            if (srMode === 'set-current') seedAnchor();
+            seedPrediction();
             paintSr();
           }
         },
@@ -522,6 +553,23 @@ function buildMatchEditor(
     // tier/division/% picker the app back-computes the SR % from on save.
     const srHost = h('div');
     const paintSr = (): void => {
+      // An open placement run pre-empts the whole SR block: the game shows no
+      // ±%, no rank protection, and there's nothing to toggle between "change"
+      // and "set current" during placements — only a predicted rank per match.
+      const run = openRun(d.account, state.role);
+      if (run) {
+        render(srHost,
+          field(optionalLabel('Predicted rank', '— placements show no ±%'), placementPicker({
+            tier: predTier,
+            division: predDivision,
+            onTier: (v) => (predTier = v),
+            onDivision: (v) => (predDivision = v),
+          })),
+          h('div', { class: 'hint', style: { marginTop: '4px' } },
+            `Placements (${run.counted}/${run.target}) for ${roleLabel(state.role)} on ${d.account} — the game shows a predicted rank after each match, no ±% and no rank protection.`));
+        return;
+      }
+
       const toggleRow = field(
         optionalLabel('Skill rating', '— nudge the change or set your rank'),
         srModeToggle(srMode, (v) => {
@@ -565,14 +613,18 @@ function buildMatchEditor(
         return;
       }
       state.map = resolved;
-      void bridge.editMatch({
+      // An open placement run pre-empts the whole rank payload: no setRank, no
+      // srDelta (the game reports neither during placements) — the predicted
+      // rank instead, sent separately below (mirrors log-match's persist()).
+      const run = isComp ? openRun(d.account, state.role) : undefined;
+      const edited = bridge.editMatch({
         matchId: d.matchId,
         result: state.result, role: state.role, map: state.map, heroes: [...heroes],
         mental: flags,
         // Competitive rank: Set-current sends the resulting rank (main derives the
         // srDelta); Change sends the raw % (number sets, null clears). Omitted for
-        // non-comp.
-        ...(isComp
+        // non-comp and for a track in an open placement run.
+        ...(isComp && !run
           ? (srMode === 'set-current'
               ? { setRank: { tier: anchorTier, division: anchorDivision, progressPct: Number(anchorPct) || 0 } }
               : { srDelta: srDelta ?? null })
@@ -580,7 +632,16 @@ function buildMatchEditor(
         // number sets, null clears — performance applies to any match, comp or not.
         performance: performance ?? null,
         grades,
-      }).then(() => {
+      });
+      const saved = run
+        ? Promise.all([edited, bridge.setPlacementPrediction({
+            account: d.account,
+            role: state.role,
+            matchId: d.matchId,
+            prediction: { tier: predTier, division: predDivision },
+          })])
+        : edited;
+      void saved.then(() => {
         gradedThisSession.add(d.matchId);
         close();
         ctx.refresh();
