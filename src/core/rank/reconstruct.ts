@@ -55,6 +55,14 @@ function prevCompTs(games: GameRecord[], account: string, role: Role, beforeTs: 
  * role), or null without an anchor. Matches at/after the anchor replay forward
  * (protection-aware, unchanged); matches before it reconstruct backward in
  * scalar space (protection flattened, always unprotected).
+ *
+ * `resetBefore`, when given, is the instant of a competitive rank reset (epoch
+ * ms). A match strictly before it returns null instead of reconstructing:
+ * the backward walk works by subtracting ladder points from the current
+ * anchor, but a rank reset makes the ladder discontinuous, so walking
+ * backward across that boundary would report ranks the player never actually
+ * held. Returning null lets the caller say "before the rank reset" instead of
+ * inventing a number.
  */
 export function rankAfterMatch(
   games: GameRecord[],
@@ -62,7 +70,9 @@ export function rankAfterMatch(
   account: string,
   role: Role,
   matchTs: number,
+  resetBefore?: number,
 ): RankState | null {
+  if (resetBefore !== undefined && matchTs < resetBefore) return null;
   const anchor = anchors[rankKey(account, role)];
   if (!anchor) return null;
   // Forward: at/after the anchor instant, the engine's replay is authoritative.
