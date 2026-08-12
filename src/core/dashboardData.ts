@@ -123,6 +123,10 @@ export function computeDashboard(
     progression: progression(games),
     ...(primaryRank ? { primaryRank } : {}),
     accountRanks,
+    // Placeholder until the placement-run summaries are threaded in: an empty
+    // list is the truthful value for a build that tracks no runs yet, and it
+    // keeps every rank surface on today's behaviour rather than a special case.
+    placements: [],
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
     byRole: byRole(games),
     byAccount: byAccount(games),

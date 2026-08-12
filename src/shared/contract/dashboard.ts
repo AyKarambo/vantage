@@ -16,6 +16,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
+import type { PlacementRunSummary } from './placements';
 
 /** The filters every view is scoped by, chosen in the app shell. */
 export interface DashboardFilters {
@@ -164,6 +165,11 @@ export interface DashboardData {
    * rank anchor appear; carries no movement (the arrow is Overview-KPI-only).
    */
   accountRanks: Record<string, { tier: string; division: number; progressPct: number; protected: boolean }>;
+  /**
+   * Open and completed placement runs across every track, so rank surfaces
+   * can render `Placements N/10` instead of a rank the player does not have.
+   */
+  placements: PlacementRunSummary[];
   session: Session | null;
   byRole: Group[];
   byAccount: Group[];

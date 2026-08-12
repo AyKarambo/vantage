@@ -62,6 +62,12 @@ export type {
 export type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
 export type { AccountKind } from '../../core/accountsManage';
 
+// Placement runs
+export type {
+  PlacementRunSummary, PredictedRank, PlacementStartInput, PlacementPredictionInput,
+  PlacementCompleteInput, PlacementTrackInput,
+} from './placements';
+
 // Local file import (Settings → Data)
 export type { ImportFileResult } from './importFile';
 

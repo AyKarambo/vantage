@@ -602,6 +602,15 @@ const mock: OwStatsApi = {
     return accountList();
   },
   getRanks: async () => previewRanks(),
+  // Placement runs are not simulated in the browser harness yet — every call
+  // reports "no runs", which is the state the harness's dataset is actually in.
+  getPlacements: async () => [],
+  startPlacementRun: async () => [],
+  setPlacementPrediction: async () => [],
+  completePlacementRun: async () => [],
+  resetPlacementRun: async () => [],
+  cancelPlacementRun: async () => [],
+  recountPlacementRun: async () => [],
   mostPlayedHeroes: async () => {
     const games = dataset();
     const roles: Role[] = ['tank', 'damage', 'support', 'openQ'];
