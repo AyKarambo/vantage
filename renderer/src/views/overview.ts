@@ -3,7 +3,7 @@ import { h } from '../dom';
 import type { DashboardData, Group, SessionRecap } from '../../../src/shared/contract';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, signed, streakText } from '../format';
-import { rankParts } from '../../../src/core/rankDisplay';
+import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
@@ -107,10 +107,20 @@ function kpiRow(d: DashboardData): HTMLElement {
  * This is the ONE surface that shows the anchor→now movement arrow (▴/▾/neutral),
  * so it's the only caller that passes `movement` to the shared rank renderer —
  * and the arrow is truthful (no more hard-coded `dir: 'up'`).
+ *
+ * While the anchored (account, role) track is in an OPEN placement run, none of
+ * that applies — Overwatch shows no ±%, no protection and no movement during
+ * placements — so this renders `Placements N/10` (+ the latest prediction, when
+ * one exists) instead, via the shared {@link placementParts}.
  */
 function rankKpi(d: DashboardData): HTMLElement {
   const r = d.primaryRank;
   if (r) {
+    const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
+    if (openRun) {
+      const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
+      return kpiCard({ label: 'Rank', value: pp.counter, delta: { text: pp.predictionLabel ?? 'no prediction yet' } });
+    }
     const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected, movement: r.movement });
     const arrow = p.movementDir === 'up' ? '▴ ' : p.movementDir === 'down' ? '▾ ' : '';
     const context = r.protected ? `${p.bufferPctText} · rank protected` : `${p.bufferPctText} in division`;
@@ -123,6 +133,25 @@ function rankKpi(d: DashboardData): HTMLElement {
         ...(p.movementDir === 'up' ? { dir: 'up' as const } : p.movementDir === 'down' ? { dir: 'down' as const } : {}),
       },
     });
+  }
+  // No anchored rank — but check for an open run before falling back to the
+  // winrate heuristic. An UNANCHORED track is the likeliest place to be placing
+  // at all (a fresh account, a role never queued), and showing a winrate-derived
+  // rank while the player is mid-placements is precisely the fabrication this
+  // feature exists to remove. `primaryRank` is absent here, so the track comes
+  // from the active filter scope instead.
+  const scoped = d.placements.filter((p) =>
+    !p.completed
+    && (d.filters.account === 'all' || p.account === d.filters.account)
+    && (d.filters.role === 'all' || p.role === d.filters.role));
+  if (scoped.length === 1) {
+    const pp = placementParts(scoped[0].counted, scoped[0].target, scoped[0].latestPrediction);
+    return kpiCard({ label: 'Rank', value: pp.counter, delta: { text: pp.predictionLabel ?? 'no prediction yet' } });
+  }
+  if (scoped.length > 1) {
+    // Several tracks placing and nothing to disambiguate them: say that plainly
+    // rather than picking one arbitrarily or reverting to the heuristic.
+    return kpiCard({ label: 'Rank', value: 'Placements', delta: { text: `${scoped.length} tracks in progress` } });
   }
   return kpiCard({
     label: 'Rank',

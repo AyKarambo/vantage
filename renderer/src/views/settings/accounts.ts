@@ -1,11 +1,11 @@
 import { h, render } from '../../dom';
-import type { AccountSummary, RankSummary, Role } from '../../../../src/shared/contract';
+import type { AccountSummary, PlacementRunSummary, RankSummary, Role } from '../../../../src/shared/contract';
 import { bridge } from '../../bridge';
 import { button, card, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
 import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
-import { rankParts } from '../../../../src/core/rankDisplay';
+import { placementParts, rankParts } from '../../../../src/core/rankDisplay';
 import { store } from '../../store';
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string }> = [
@@ -23,19 +23,21 @@ export function accountsCard(): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '12px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
 
   const reload = (): void => {
-    void Promise.all([bridge.listAccounts(), bridge.getRanks()]).then(([accounts, ranks]) => paint(accounts, ranks));
+    void Promise.all([bridge.listAccounts(), bridge.getRanks(), bridge.getPlacements()])
+      .then(([accounts, ranks, placements]) => paint(accounts, ranks, placements));
   };
 
-  function paint(accounts: AccountSummary[], ranks: RankSummary[]): void {
+  function paint(accounts: AccountSummary[], ranks: RankSummary[], placements: PlacementRunSummary[]): void {
     render(body,
       accounts.length
-        ? h('div', { class: 'stack', style: { gap: '10px' } }, ...accounts.map((a) => accountRow(a, ranks.filter((r) => r.account === a.label))))
+        ? h('div', { class: 'stack', style: { gap: '10px' } }, ...accounts.map((a) =>
+            accountRow(a, ranks.filter((r) => r.account === a.label), placements.filter((p) => p.account === a.label))))
         : h('div', { class: 'hint' }, 'No accounts yet — add one below so you can pick it when logging a match.'),
       addForm(),
     );
   }
 
-  function accountRow(a: AccountSummary, accRanks: RankSummary[]): HTMLElement {
+  function accountRow(a: AccountSummary, accRanks: RankSummary[], accPlacements: PlacementRunSummary[]): HTMLElement {
     const row = h('div', { class: 'account-row' });
     const gameCount = `${a.games} ${a.games === 1 ? 'game' : 'games'}`;
     // Sub-line: configured shows its BattleTag; detected accounts explain why
@@ -67,7 +69,7 @@ export function accountsCard(): HTMLElement {
           ),
           ...actions,
         ),
-        ranksLine(a.label, accRanks),
+        ranksLine(a.label, accRanks, accPlacements),
       );
     };
     const edit = (): void => {
@@ -143,8 +145,16 @@ export function accountsCard(): HTMLElement {
     else void store.refresh();
   }
 
-  function ranksLine(account: string, accRanks: RankSummary[]): HTMLElement {
+  function ranksLine(account: string, accRanks: RankSummary[], accPlacements: PlacementRunSummary[]): HTMLElement {
     const pills = accRanks.map((r) => {
+      // While this role's track is in an OPEN placement run, the computed rank
+      // above is stale/meaningless (no ±%, no protection during placements) —
+      // show `Placements N/10` (+ the latest prediction, when one exists) instead.
+      const openRun = accPlacements.find((p) => p.role === r.role && !p.completed);
+      if (openRun) {
+        const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
+        return pill(`${roleLabel(r.role)}: ${pp.counter}${pp.predictionLabel ? ` · ${pp.predictionLabel}` : ''}`, 'accent');
+      }
       // Shared rank parts — no movement arrow here (Overview KPI only), identical
       // shield/buffer rendering to every other surface.
       const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected });

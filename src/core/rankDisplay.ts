@@ -71,3 +71,33 @@ export function rankParts(input: RankPartsInput): RankParts {
   if (input.movement !== undefined) parts.movementDir = movementDirOf(input.movement);
   return parts;
 }
+
+/**
+ * The parts a rank surface renders INSTEAD OF {@link RankParts} while a
+ * track's placement run is open (a `DashboardData.placements` entry with
+ * `completed === false`). Overwatch itself shows no ±%, no rank-protection
+ * shield and no ladder-movement arrow during placements — the player doesn't
+ * have a rank yet, only a match count and, once one placement match has
+ * posted, a same-screen *prediction* the game itself marks as unofficial.
+ * `PlacementParts` mirrors that on purpose: there is no shield/bufferPctText/
+ * movementDir equivalent here, so a surface branches on "is this track's run
+ * open" and picks one shape or the other rather than layering placement text
+ * onto `rankParts`'s output.
+ */
+export interface PlacementParts {
+  /** "Placements 4/10" — always present, even before any match has a prediction. */
+  counter: string;
+  /** "Platinum 4 (predicted)" — present only once a placement match has posted a prediction. */
+  predictionLabel?: string;
+}
+
+/** Decompose an open placement run into the shared display parts; see {@link PlacementParts}. */
+export function placementParts(
+  counted: number,
+  target: number,
+  prediction?: { tier: string; division: number },
+): PlacementParts {
+  const parts: PlacementParts = { counter: `Placements ${counted}/${target}` };
+  if (prediction) parts.predictionLabel = `${rankLabelOf(prediction.tier, prediction.division)} (predicted)`;
+  return parts;
+}
