@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rankParts, movementDirOf, rankLabelOf, RANK_MOVEMENT_NEUTRAL_THRESHOLD,
+  rankParts, movementDirOf, rankLabelOf, placementParts, RANK_MOVEMENT_NEUTRAL_THRESHOLD,
 } from '../src/core/rankDisplay';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { GameRecord } from '../src/core/analytics';
@@ -37,6 +37,26 @@ describe('rankDisplay — rankParts', () => {
   it('edge cases: movement of exactly 0 (or exactly the threshold) reads neutral, not up', () => {
     expect(rankParts({ tier: 'Gold', division: 3, progressPct: 40, protected: false, movement: 0 }).movementDir).toBe('neutral');
     expect(rankParts({ tier: 'Gold', division: 3, progressPct: 40, protected: true, movement: -5 }).movementDir).toBe('neutral');
+  });
+});
+
+describe('rankDisplay — placementParts', () => {
+  it('counter reads "Placements N/10" regardless of prediction', () => {
+    expect(placementParts(4, 10).counter).toBe('Placements 4/10');
+    expect(placementParts(0, 10).counter).toBe('Placements 0/10');
+    expect(placementParts(10, 10, { tier: 'Platinum', division: 4 }).counter).toBe('Placements 10/10');
+  });
+
+  it('predictionLabel is absent until a prediction exists, then reuses rankLabelOf + "(predicted)"', () => {
+    expect(placementParts(4, 10).predictionLabel).toBeUndefined();
+    expect(placementParts(4, 10, { tier: 'Platinum', division: 4 }).predictionLabel).toBe('Platinum 4 (predicted)');
+  });
+
+  it('carries no shield, percentage or movement — placements deliberately have none of those (see JSDoc)', () => {
+    const p = placementParts(4, 10, { tier: 'Platinum', division: 4 });
+    expect(p).not.toHaveProperty('shield');
+    expect(p).not.toHaveProperty('bufferPctText');
+    expect(p).not.toHaveProperty('movementDir');
   });
 });
 

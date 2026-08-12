@@ -21,7 +21,7 @@ import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, signed } from '../format';
-import { rankParts } from '../../../src/core/rankDisplay';
+import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
@@ -545,7 +545,15 @@ export class App {
       // A per-account rank line, when that account has an anchor set. Same shared
       // parts as every other surface (no movement arrow — Overview KPI only), so
       // protection reads identically here. "All accounts" has no single rank.
+      // While the account has a track in an OPEN placement run, that computed
+      // rank is stale/meaningless (no ±%, no protection during placements) —
+      // show `Placements N/10` instead, via the shared placementParts.
       const rankSub = (account: string): HTMLElement | null => {
+        const openRun = d.placements.find((p) => p.account === account && !p.completed);
+        if (openRun) {
+          const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
+          return h('span', { class: 'acct-menu-rank u-dim' }, pp.predictionLabel ? `${pp.counter} · ${pp.predictionLabel}` : pp.counter);
+        }
         const rk = d.accountRanks[account];
         if (!rk) return null;
         const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected });
@@ -839,10 +847,20 @@ function routeKey(view: ViewId, matchId?: string, playerName?: string, targetId?
  * The sidebar rank line: the user's real anchored rank when they've set one,
  * otherwise the winrate-derived heuristic estimate. Showing the heuristic while
  * an anchor exists was the "says Platinum 1 even though I set my rank" bug.
+ *
+ * While the anchored (account, role) track is in an OPEN placement run, the
+ * computed rank above is stale/meaningless (Overwatch shows no ±% or protection
+ * during placements) — this shows `Placements N/10` (+ the latest prediction,
+ * when one exists) instead, via the shared placementParts.
  */
 function rankLine(d: DashboardData): string {
   const r = d.primaryRank;
   if (r) {
+    const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
+    if (openRun) {
+      const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
+      return pp.predictionLabel ? `${pp.counter} · ${pp.predictionLabel}` : pp.counter;
+    }
     // Shared parts — no `movement` passed, so the sidebar shows no arrow (that's
     // the Overview KPI's job). The shield keeps a protected negative % from reading
     // as broken.
