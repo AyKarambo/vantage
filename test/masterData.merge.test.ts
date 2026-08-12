@@ -90,6 +90,7 @@ describe('mergeMaps', () => {
 describe('mergeSeasons', () => {
   const s1 = Date.parse('2025-01-01');
   const s2 = Date.parse('2025-03-05');
+  const reset = Date.parse('2026-02-10'); // a known default reset (RESET_SEASON_STARTS)
 
   it('adds a user season and applies a custom label', () => {
     const out = mergeSeasons([s1], { [`S:${new Date(s2).toISOString().slice(0, 10)}`]: { start: s2, label: 'My Split' } });
@@ -101,6 +102,36 @@ describe('mergeSeasons', () => {
     const key = `S:${new Date(s1).toISOString().slice(0, 10)}`;
     const out = mergeSeasons([s1, s2], { [key]: { removed: true } });
     expect(out.some((s) => s.start === s1)).toBe(false);
+  });
+
+  it('a default reset season keeps isReset through mergeSeasons/mergeMasterData', () => {
+    const out = mergeSeasons([s1, reset], {});
+    expect(out.find((s) => s.start === reset)?.isReset).toBe(true);
+    expect(out.find((s) => s.start === s1)?.isReset).toBeFalsy();
+
+    const merged = mergeMasterData(
+      { heroes, maps, seasons: [{ start: s1, label: 'S1' }, { start: reset, label: 'S2', isReset: true }] },
+      { ...emptyOverrides() },
+    );
+    expect(merged.seasons.find((s) => s.start === reset)?.isReset).toBe(true);
+  });
+
+  it('a patch can turn a default reset season off', () => {
+    const key = `S:${new Date(reset).toISOString().slice(0, 10)}`;
+    const out = mergeSeasons([s1, reset], { [key]: { isReset: false } });
+    expect(out.find((s) => s.start === reset)?.isReset).toBeFalsy();
+  });
+
+  it('a patch can turn isReset on for a non-reset season', () => {
+    const key = `S:${new Date(s1).toISOString().slice(0, 10)}`;
+    const out = mergeSeasons([s1, reset], { [key]: { isReset: true } });
+    expect(out.find((s) => s.start === s1)?.isReset).toBe(true);
+  });
+
+  it('a user-added season can carry isReset', () => {
+    const key = `S:${new Date(s2).toISOString().slice(0, 10)}`;
+    const out = mergeSeasons([s1], { [key]: { start: s2, label: 'My Split', isReset: true } });
+    expect(out.find((s) => s.start === s2)?.isReset).toBe(true);
   });
 });
 

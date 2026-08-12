@@ -3,7 +3,7 @@
  * `MasterData`. This is the single place identity, tombstones and the
  * `isActive` default live, so every consumer sees the same effective catalog.
  */
-import { seasonEntriesFromStarts } from '../season';
+import { RESET_SEASON_STARTS, seasonEntriesFromStarts } from '../season';
 import type {
   HeroEntry,
   HeroPatch,
@@ -79,9 +79,24 @@ export function mergeSeasons(
   overrides: Record<string, SeasonPatch>,
 ): SeasonEntry[] {
   const starts = mergeSeasonStarts(defaultStarts, overrides);
+  // `defaultStarts` here is already the bare starts `mergeMasterData` projects
+  // seasons down to (see its and `effectiveSeasonStarts`'s callers), so this is
+  // the ONLY place that can restore `isReset` on a default entry: recompute
+  // which of those starts are the known ladder resets ({@link RESET_SEASON_STARTS}
+  // — the same source `defaultMasterData` itself uses), keyed by season key so
+  // it lines up with the override map.
+  const defaultResetByKey = new Map<string, boolean>();
+  for (const s of defaultStarts) defaultResetByKey.set(seasonKey(s), RESET_SEASON_STARTS.has(s));
   return seasonEntriesFromStarts(starts).map((entry) => {
-    const patch = overrides[seasonKey(entry.start)];
-    return patch?.label ? { ...entry, label: patch.label } : entry;
+    const key = seasonKey(entry.start);
+    const patch = overrides[key];
+    const withLabel = patch?.label ? { ...entry, label: patch.label } : entry;
+    // The patch's value wins when specified (including an explicit `false`
+    // turning a default reset off); otherwise fall back to the default
+    // entry's value for this key, or `false` for a season with no default
+    // (e.g. a purely user-added one with no `isReset` patch either).
+    const isReset = patch?.isReset ?? defaultResetByKey.get(key) ?? false;
+    return isReset ? { ...withLabel, isReset: true } : withLabel;
   });
 }
 

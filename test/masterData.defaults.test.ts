@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_MASTER_DATA, defaultMasterData } from '../src/core/masterData';
 import { HEROES_BY_ROLE } from '../src/core/heroes';
 import { MAP_MODES, STADIUM_ONLY_MAPS } from '../src/core/maps';
-import { SEASON_STARTS } from '../src/core/season';
+import { RESET_SEASON_STARTS, SEASON_STARTS } from '../src/core/season';
 
 describe('default master-data snapshot', () => {
   it('lists every current map as active', () => {
@@ -44,6 +44,15 @@ describe('default master-data snapshot', () => {
       expect(Number.isFinite(s.start)).toBe(true);
     }
     expect(DEFAULT_MASTER_DATA.seasons[DEFAULT_MASTER_DATA.seasons.length - 1].label).toBe('2026 Season 4');
+  });
+
+  it('flags the 2026-02-10 and 2026-08-11 ladder resets, and no others', () => {
+    for (const s of DEFAULT_MASTER_DATA.seasons) {
+      if (RESET_SEASON_STARTS.has(s.start)) expect(s.isReset, s.label).toBe(true);
+      else expect(s.isReset, s.label).toBeUndefined();
+    }
+    const resetLabels = DEFAULT_MASTER_DATA.seasons.filter((s) => s.isReset).map((s) => s.label);
+    expect(resetLabels.sort()).toEqual(['2026 Season 1', '2026 Season 4'].sort());
   });
 
   it('returns a fresh, independent copy each call', () => {
