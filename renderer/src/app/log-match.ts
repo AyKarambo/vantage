@@ -21,6 +21,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankPicker, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
+import { openPlacementComplete } from './placementComplete';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import type { AccountSummary, MatchMental, PlacementRunSummary, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
@@ -199,10 +200,20 @@ function buildForm(
   // dedupe downstream can't catch a double-fire here.
   let saving = false;
 
+  /**
+   * Set by persist() when the just-logged match was a placement run's target
+   * match (its 10th) — the caller opens the reveal-rank confirmation with
+   * this AFTER its own close/refresh. Never opened from inside persist()
+   * itself: this modal would still be open (or mid-close) at that point, and
+   * a modal can't nest inside one that's closing.
+   */
+  let placementCompleteFor: { account: string; role: Role; suggestion: { tier: string; division: number } } | undefined;
+
   // Returns false when validation failed, a save is already in flight, or the
   // save itself failed (form stays open, error/toast shown inline).
   const persist = async (): Promise<boolean> => {
     if (saving) return false;
+    placementCompleteFor = undefined;
     const map = resolveMap();
     if (!map) {
       mapError.textContent = state.map.trim()
@@ -259,6 +270,12 @@ function buildForm(
           matchId,
           prediction: { tier: state.predTier, division: state.predDivision },
         });
+        // This match took the run to its target (its 10th) — Overwatch has now
+        // revealed the real rank, so flag the reveal-rank confirmation for the
+        // caller, seeded with the prediction just entered here.
+        if (run.counted + 1 >= run.target) {
+          placementCompleteFor = { account: state.account, role: state.role, suggestion: { tier: state.predTier, division: state.predDivision } };
+        }
       }
     } catch {
       toast('Save failed — nothing was logged. Try again.');
@@ -454,13 +471,30 @@ function buildForm(
       )
     : null;
 
-  const saveAndClose = (): void => { void persist().then((ok) => { if (ok) close(); }); };
+  const saveAndClose = (): void => {
+    void persist().then((ok) => {
+      if (!ok) return;
+      close();
+      // Opened AFTER this form's own close (never nested inside a modal
+      // that's mid-close), and only for the match that completed the run.
+      if (placementCompleteFor) openPlacementComplete({ ...placementCompleteFor, onDone: () => ctx.refresh() });
+    });
+  };
   const saveAndNext = (): void => {
     void persist().then((ok) => {
       if (!ok) return;
       close();
       // Same sitting → the heroes usually hold; map/result never do.
-      openLogMatch(ctx, { heroes: [...state.heroes] });
+      const openNext = (): void => openLogMatch(ctx, { heroes: [...state.heroes] });
+      // A completing match gets the reveal-rank confirmation first rather
+      // than stacking a second modal under/over it — "next" chains onto its
+      // confirm. A Cancel here means "I'll finish this later", so it stays
+      // that way instead of silently popping the next log form regardless.
+      if (placementCompleteFor) {
+        openPlacementComplete({ ...placementCompleteFor, onDone: () => { ctx.refresh(); openNext(); } });
+      } else {
+        openNext();
+      }
     });
   };
 
