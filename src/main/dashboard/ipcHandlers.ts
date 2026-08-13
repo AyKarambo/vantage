@@ -7,7 +7,7 @@ import type { GradingSettings } from '../../core/gradingSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
-  MatchEditInput, RankAnchorInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
+  MatchEditInput, RankAnchorInput, RankEntryPreviewInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementDeclineInput,
   HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
@@ -102,6 +102,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.deleteDetectedAccount, (_e, account: string) => provider.deleteDetectedAccount(account));
   handle(ch.getRanks, () => provider.getRanks());
   handle(ch.setRankAnchor, (_e, input: RankAnchorInput) => provider.setRankAnchor(input));
+  handle(ch.rankEntryPreview, (_e, input: RankEntryPreviewInput) => provider.rankEntryPreview(input));
   handle(ch.mostPlayedHeroes, () => provider.mostPlayedHeroes());
 
   // Placement runs: the post-reset 10-match state, and its undo paths.

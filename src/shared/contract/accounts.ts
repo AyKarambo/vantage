@@ -50,6 +50,32 @@ export interface RankAnchorInput {
   progressPct: number;
 }
 
+/**
+ * "I ended this match at THIS rank" — asked while the player is picking a rank,
+ * so the entry surfaces can turn it into the ±% they would otherwise have typed.
+ *
+ * The rank picker is an input aid for the SR-% field, not a second way to store
+ * a match: every surface submits `srDelta` and nothing downstream needs to know
+ * a rank was ever entered. This preview is the one place that translation happens.
+ */
+export interface RankEntryPreviewInput {
+  account: string;
+  role: Role;
+  /** The match's own timestamp — the delta is measured against the rank just before it. */
+  timestamp: number;
+  rank: { tier: string; division: number; progressPct: number };
+}
+
+/**
+ * The translation's result. `anchored: false` means the track has no rank anchor
+ * yet, so there is nothing to measure a delta against — entering a rank there
+ * *establishes* the anchor instead, and the caller must say so rather than show
+ * a fabricated 0.
+ */
+export type RankEntryPreview =
+  | { anchored: true; srDelta: number }
+  | { anchored: false };
+
 /** The computed live rank for one anchored (account, role). */
 export interface RankSummary {
   account: string;

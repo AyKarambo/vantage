@@ -13,7 +13,7 @@ import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
-  RankAnchorInput, RankSummary, RendererErrorInput, Result, ReviewInput, TargetEditInput,
+  RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementOffer, PlacementDeclineInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
@@ -66,6 +66,8 @@ export interface DataProvider {
   setRankAnchor(input: RankAnchorInput): RankSummary[];
   /** Anchors keyed for the rank engine, passed into the match-detail read. */
   rankAnchorMap(): RankAnchorMap;
+  /** Translate an entered "rank after this match" into its ±%; read-only. */
+  rankEntryPreview(input: RankEntryPreviewInput): RankEntryPreview;
   /** Every tracked placement run, with progress, latest prediction and drift. */
   getPlacements(): PlacementRunSummary[];
   /** The raw runs, for the dashboard read — it needs `startedAt` and the counted

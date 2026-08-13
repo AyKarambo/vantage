@@ -54,16 +54,15 @@ export interface MatchEditInput {
   /** Replacement hero list. Takes precedence over {@link hero}; `[]` clears. Hand-logged only. */
   heroes?: string[];
   mental?: MatchMental;
-  /** New SR %, or `null` to clear it; `undefined` leaves it unchanged. */
-  srDelta?: number | null;
   /**
-   * Absolute rank held AFTER this match (the editor's "Set current rank" mode).
-   * Main back-computes the match's `srDelta` from it against the reconstructed
-   * rank-before; when no anchor exists yet it bootstraps one at this match
-   * instead. Ignored for non-competitive matches. Takes precedence over
-   * {@link srDelta} when both are provided.
+   * New SR %, or `null` to clear it; `undefined` leaves it unchanged.
+   *
+   * This is the ONLY way a match records rank movement. The editor's "Set
+   * current rank" mode is an input aid, not a second representation: it asks
+   * `rankEntryPreview` to translate the entered rank into this number and fills
+   * the field with it, so what arrives here is a plain delta either way.
    */
-  setRank?: { tier: string; division: number; progressPct: number };
+  srDelta?: number | null;
   /** New performance rating (0-100), or `null` to clear it; `undefined` leaves it unchanged. */
   performance?: number | null;
   grades?: Record<string, TargetGrade>;

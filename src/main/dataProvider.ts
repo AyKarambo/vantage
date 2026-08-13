@@ -275,38 +275,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // The manual layer applies to any match. srDelta: number sets it, null
       // clears it (editManual deletes on null), undefined leaves it unchanged.
       if (input.mental !== undefined) patch.mental = input.mental;
-      // Competitive rank input: either a direct srDelta (Change mode) or an
-      // absolute "rank after this match" (Set-current mode) we back-compute a
-      // srDelta from. setRank wins over srDelta when both are present.
-      if (classifyGameType(game.gameType) === 'competitive' && input.setRank) {
-        // Rank is tracked per (account, role) — key the back-compute/anchor on the
-        // role the match will actually LAND on (a manual edit can change role in the
-        // same save), not the pre-edit role, so the derived srDelta/anchor go onto
-        // the correct ladder.
-        const rankRole = patch.role ?? game.role;
-        const anchor = deps.rankAnchors.get(game.account, rankRole);
-        if (anchor) {
-          // Derive the SR % from the entered rank and the reconstructed rank
-          // before this match; the live anchor is left untouched.
-          patch.srDelta = srDeltaForSetRank(
-            deps.history.all(), deps.rankAnchors.map(), game.account, rankRole, game.timestamp, input.setRank,
-          );
-        } else {
-          // No anchor yet → bootstrap one at this match (nothing before it to diff
-          // against, so no srDelta is derived) — mirrors log-match's "no anchor →
-          // Set current rank establishes the anchor".
-          deps.rankAnchors.set({
-            account: game.account,
-            role: rankRole,
-            tier: input.setRank.tier,
-            division: input.setRank.division,
-            progressPct: input.setRank.progressPct,
-            setAt: game.timestamp,
-          });
-        }
-      } else if (input.srDelta !== undefined) {
-        patch.srDelta = input.srDelta;
-      }
+      // Rank movement arrives as a plain srDelta, always. "Set current rank" is
+      // an input aid the renderer resolves through `rankEntryPreview` before
+      // saving, so there is no absolute-rank branch to maintain here.
+      if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
       if (input.performance !== undefined) patch.performance = input.performance;
       // Stamp a review when there are grades to save, OR when the match is
       // already reviewed — an edit with no targets shouldn't mark an otherwise-
@@ -430,6 +402,21 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return rankSummaries(deps);
     },
     rankAnchorMap: (): RankAnchorMap => deps.rankAnchors.map(),
+    rankEntryPreview: (input) => {
+      // Read-only by construction: this is the translation from "I ended at this
+      // rank" to the ±% the player would otherwise have typed. Without an anchor
+      // there is no rank-before to measure against — srDeltaForSetRank would
+      // return a meaningless 0 — so say that instead, and let the caller offer
+      // anchoring rather than show a fabricated number.
+      if (!deps.rankAnchors.get(input.account, input.role)) return { anchored: false };
+      return {
+        anchored: true,
+        srDelta: srDeltaForSetRank(
+          deps.history.all(), deps.rankAnchors.map(),
+          input.account, input.role, input.timestamp, input.rank,
+        ),
+      };
+    },
     getPlacements: () => placementSummaries(deps),
     placementRuns: (): PlacementRun[] => deps.placements.allRuns(),
     startPlacementRun: (input) => {

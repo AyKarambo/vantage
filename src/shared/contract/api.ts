@@ -19,7 +19,10 @@ import type {
   ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput,
   IgnorePendingReviewsInput,
 } from './inputs';
-import type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
+import type {
+  AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary,
+  RankEntryPreviewInput, RankEntryPreview,
+} from './accounts';
 import type {
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput,
   PlacementTrackInput, PlacementOffer, PlacementDeclineInput,
@@ -82,6 +85,15 @@ export interface OwStatsApi {
   mostPlayedHeroes(): Promise<Record<string, Partial<Record<Role, string[]>>>>;
   /** Set (or replace) the one-time rank anchor for an (account, role). */
   setRankAnchor(input: RankAnchorInput): Promise<RankSummary[]>;
+  /**
+   * Translate "I ended this match at THIS rank" into the ±% for it — read-only,
+   * writes nothing. Called while the player picks a rank, so an entry surface can
+   * fill the SR-% field with the result; it then submits a plain `srDelta` like
+   * any other match, and nothing downstream needs to know a rank was entered.
+   * Reports `anchored: false` when the track has no anchor to measure against —
+   * there, entering a rank sets the anchor instead (see {@link setRankAnchor}).
+   */
+  rankEntryPreview(input: RankEntryPreviewInput): Promise<RankEntryPreview>;
   /** Open and completed placement runs across every (account, role) track. */
   getPlacements(): Promise<PlacementRunSummary[]>;
   /** Start a placement run for an (account, role); returns the refreshed full list. */
@@ -317,6 +329,7 @@ export const IPC_CHANNELS = {
   getRanks: 'rank:list',
   mostPlayedHeroes: 'hero:most-played',
   setRankAnchor: 'rank:set-anchor',
+  rankEntryPreview: 'rank:entry-preview',
   getPlacements: 'placements:list',
   startPlacementRun: 'placements:start',
   setPlacementPrediction: 'placements:set-prediction',

@@ -19,13 +19,15 @@ import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
 import { openPlacementComplete } from './placementComplete';
 import { maybeOfferPlacements } from './placementOffer';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
-import type { AccountSummary, MatchMental, PlacementRunSummary, RankSummary, Result, Role, TargetGrade } from '../../../src/shared/contract';
+import type {
+  AccountSummary, MatchMental, PlacementRunSummary, RankEntryPreview, RankSummary, Result, Role, TargetGrade,
+} from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
@@ -56,6 +58,12 @@ interface LogState {
   anchorTier: string;
   anchorDivision: number;
   anchorPct: string;
+  /**
+   * The latest translation of the picked rank into a ±% (or "this would anchor
+   * the track"). Set by {@link rankEntry}; `persist` submits what it says rather
+   * than deriving anything itself.
+   */
+  rankPreview?: RankEntryPreview;
   /**
    * Predicted-rank tier/division for an open placement run — shown instead of
    * the ±% entry (the game reports no percentage, and no protection, until
@@ -245,11 +253,19 @@ function buildForm(
       // anchor (there's no revealed rank yet to anchor) — only the predicted
       // rank, set below once the match is logged and has a matchId.
       const run = openRun(state.account, state.role);
-      // "Set current rank" re-anchors the rank directly; the match then carries
-      // no srDelta so it can't double-count on top of the fresh anchor.
+      // "Set current rank" is an input aid, not a second kind of record: the
+      // picker already translated the entered rank into a ±% (rankEntry →
+      // rankEntryPreview), so the match carries a plain srDelta either way. The
+      // one exception is a track with no anchor yet — nothing to measure against,
+      // so that entry establishes the anchor instead.
       const setCurrent = !run && state.srMode === 'set-current';
+      const anchoring = setCurrent && state.rankPreview?.anchored === false;
       // Vantage is competitive-only (spec D1) — manual logs always report as such.
-      const srDelta = !run && !setCurrent && state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined;
+      const srDelta = run || anchoring
+        ? undefined
+        : setCurrent
+          ? (state.rankPreview?.anchored ? state.rankPreview.srDelta : undefined)
+          : (state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined);
       const { matchId } = await bridge.logMatch({
         result: state.result,
         role: state.role,
@@ -263,10 +279,11 @@ function buildForm(
         ...(Object.keys(grades).length ? { grades } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
-      // Only "Set current rank" re-anchors — it's the single path for
-      // establishing/correcting the rank now (a negative % is preserved as a
-      // rank-protection carry). Change mode only ever records the srDelta above.
-      if (setCurrent) {
+      // Anchoring only happens for a track that has none yet — the first rank
+      // you enter defines where tracking starts (a negative % is preserved as a
+      // rank-protection carry). An anchored track never re-anchors from here;
+      // its entry became the srDelta above.
+      if (anchoring) {
         await bridge.setRankAnchor({
           account: state.account,
           role: state.role,
@@ -452,16 +469,21 @@ function buildForm(
 
     if (state.srMode === 'set-current') {
       render(rankHost, toggleRow,
-        field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker({
+        field(optionalLabel('Rank after this match', '— negative % means in rank protection'), rankEntry({
+          account: state.account,
+          role: state.role,
+          // The match's own instant, so the change is measured from the rank
+          // held just before it — "Just now" resolves at save time, and now is
+          // the closest honest stand-in while the form is open.
+          timestamp: state.playedAt ?? Date.now(),
           tier: state.anchorTier,
           division: state.anchorDivision,
           pct: state.anchorPct,
           onTier: (v) => (state.anchorTier = v),
           onDivision: (v) => (state.anchorDivision = v),
           onPct: (v) => (state.anchorPct = v),
-        })),
-        h('div', { class: 'hint', style: { marginTop: '4px' } },
-          `Sets ${roleLabel(state.role)} on ${state.account} to this rank — we track from here.`));
+          onResolved: (p) => (state.rankPreview = p),
+        })));
       return;
     }
 

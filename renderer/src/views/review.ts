@@ -9,13 +9,13 @@
  * re-render locally (no refetch); `gradedThisSession` keeps the list honest.
  */
 import { h, render } from '../dom';
-import type { MatchMental, MatchRow, PendingMatch, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { MatchMental, MatchRow, PendingMatch, PlacementRunSummary, RankEntryPreview, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { parseMeasuredRule } from '../../../src/core/targets';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, confirmButton, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
-import { srDeltaInput, suggestedSrDelta } from '../components/srControls';
+import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { store } from '../store';
@@ -63,7 +63,8 @@ export function review(ctx: ViewContext): HTMLElement {
     head,
     activeStrip(active),
     needsResultSection,
-    h('div', { class: 'stack', style: { gap: '10px' } }, ...pending.map((m, i) => item(m, active, i === 0))),
+    h('div', { class: 'stack', style: { gap: '10px' } },
+      ...pending.map((m, i) => item(m, active, i === 0, d.placements))),
   );
 }
 
@@ -171,12 +172,17 @@ function activeStrip(active: TargetSummary[]): HTMLElement {
 }
 
 /** One inbox entry: a collapsed row that expands into the grading card. */
-function item(m: MatchRow, active: TargetSummary[], startOpen: boolean): HTMLElement {
+function item(
+  m: MatchRow,
+  active: TargetSummary[],
+  startOpen: boolean,
+  placements: PlacementRunSummary[],
+): HTMLElement {
   const host = h('div');
   let open = startOpen;
   const draw = (): void => {
     render(host, open
-      ? expanded(m, active, () => store.rerender(), () => { open = false; draw(); })
+      ? expanded(m, active, () => store.rerender(), () => { open = false; draw(); }, placements)
       : collapsed(m, () => { open = true; draw(); }));
   };
   draw();
@@ -196,7 +202,13 @@ function collapsed(m: MatchRow, onGrade: () => void): HTMLElement {
   );
 }
 
-function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onSkip: () => void): HTMLElement {
+function expanded(
+  m: MatchRow,
+  active: TargetSummary[],
+  onSaved: () => void,
+  onSkip: () => void,
+  placements: PlacementRunSummary[],
+): HTMLElement {
   const grades: Record<string, TargetGrade> = {};
   const flags: MatchMental = {};
   // Seed from any already-stored rating (mirrors the match-detail editor) so an
@@ -209,6 +221,24 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   let srText = m.srDelta != null
     ? String(m.srDelta)
     : (isComp && m.result !== 'Draw' ? suggestedSrDelta(m.result) : '');
+  // Review offers the same Change / Set-current choice as the log card and the
+  // match editor — the three surfaces are meant to be interchangeable, which is
+  // why srControls exists. Set-current is an input aid: rankEntry translates the
+  // picked rank into the ±% and this card submits that, like any other review.
+  let srMode: SrMode = 'change';
+  let rankPreview: RankEntryPreview | undefined;
+  let rankTier = 'Gold';
+  let rankDivision = 3;
+  let rankPct = '';
+  // An OPEN placement run pre-empts SR entry entirely, exactly as it does in the
+  // log card and the match editor: Overwatch shows no ±% and no rank protection
+  // during placements, only a predicted rank after each match. Reviewing a
+  // placement game must therefore offer that and nothing else.
+  const run = isComp
+    ? placements.find((p) => p.account === m.account && p.role === m.role && !p.completed)
+    : undefined;
+  let predTier = run?.latestPrediction?.tier ?? 'Gold';
+  let predDivision = run?.latestPrediction?.division ?? 3;
 
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
@@ -222,21 +252,84 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
   };
   markFocus();
 
+  // Repaints in place on a mode switch, so the card keeps its scroll position
+  // and the keyboard grading focus — the same host-plus-paint idiom the log card
+  // and the match editor use for their SR block.
+  const srHost = h('div', { class: 'stack', style: { gap: '6px' } });
+  const paintSr = (): void => {
+    if (run) {
+      render(srHost,
+        placementPicker({
+          tier: predTier,
+          division: predDivision,
+          onTier: (v) => (predTier = v),
+          onDivision: (v) => (predDivision = v),
+        }),
+        h('div', { class: 'hint' },
+          `Placements (${run.counted}/${run.target}) for ${roleLabel(m.role)} on ${m.account} — `
+          + 'the game shows a predicted rank after each match, no ±% and no rank protection.'));
+      return;
+    }
+    const toggle = srModeToggle(srMode, (v) => { srMode = v; paintSr(); });
+    if (srMode === 'set-current') {
+      render(srHost, toggle,
+        rankEntry({
+          account: m.account,
+          role: m.role,
+          timestamp: m.timestamp,
+          tier: rankTier,
+          division: rankDivision,
+          pct: rankPct,
+          onTier: (v) => (rankTier = v),
+          onDivision: (v) => (rankDivision = v),
+          onPct: (v) => (rankPct = v),
+          onResolved: (p) => (rankPreview = p),
+        }));
+      return;
+    }
+    render(srHost, toggle,
+      srDeltaInput(srText, (v) => { srText = v; }),
+      h('div', { class: 'hint' }, "the % the game showed (e.g. +22 or −19) — GEP can't report this"));
+  };
+  const srSection = (): HTMLElement => { paintSr(); return srHost; };
+
   const doSave = (): void => {
     // Send the SR % only for competitive matches and only when the field parses
     // to a finite number. The field pre-fills a suggested ±25, so saving records
     // it unless the player clears the field (blank leaves the stored SR unchanged).
     const t = srText.trim();
     let srDelta: number | undefined;
-    if (isComp && t !== '') {
+    // A match inside an open run carries no ±% at all — only the predicted rank,
+    // recorded against the run after the review saves.
+    if (run) {
+      srDelta = undefined;
+    } else if (isComp && srMode === 'set-current') {
+      // Already translated by rankEntry. An unanchored track has no delta to
+      // record — that entry sets the starting rank instead, below.
+      if (rankPreview?.anchored) srDelta = rankPreview.srDelta;
+    } else if (isComp && t !== '') {
       const n = Number(t);
       if (Number.isFinite(n)) srDelta = n;
     }
-    void bridge.saveReview({
+    const anchoring = !run && isComp && srMode === 'set-current' && rankPreview?.anchored === false;
+    if (anchoring) {
+      void bridge.setRankAnchor({
+        account: m.account, role: m.role,
+        tier: rankTier, division: rankDivision, progressPct: Number(rankPct) || 0,
+      });
+    }
+    const reviewed = bridge.saveReview({
       matchId: m.matchId, grades, flags,
       ...(performance != null ? { performance } : {}),
       ...(srDelta !== undefined ? { srDelta } : {}),
-    }).then(() => {
+    });
+    void (run
+      ? reviewed.then(() => bridge.setPlacementPrediction({
+          account: m.account, role: m.role, matchId: m.matchId,
+          prediction: { tier: predTier, division: predDivision },
+        }))
+      : reviewed
+    ).then(() => {
       gradedThisSession.add(m.matchId);
       kbHook = null;
       onSaved();
@@ -270,12 +363,7 @@ function expanded(m: MatchRow, active: TargetSummary[], onSaved: () => void, onS
     section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
     // Competitive only — GEP can't report SR, so the player enters what the game
     // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
-    isComp
-      ? section('◎ SR change (%)', h('div', { class: 'stack', style: { gap: '6px' } },
-          srDeltaInput(srText, (v) => { srText = v; }),
-          h('div', { class: 'hint' }, "the % the game showed (e.g. +22 or −19) — GEP can't report this"),
-        ))
-      : null,
+    isComp ? section(run ? '◎ Predicted rank' : '◎ Skill rating', srSection()) : null,
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),

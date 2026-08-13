@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createDataProvider, type DataProviderDeps } from '../src/main/dataProvider';
-import { rankKey } from '../src/core/rank';
+import { currentRank, rankKey } from '../src/core/rank';
 import type { GameRecord } from '../src/core/analytics';
 import type { Role } from '../src/core/model';
 import type { ManualMatchInput } from '../src/shared/contract';
@@ -171,7 +171,7 @@ describe('editMatch — review/flags sync', () => {
   });
 });
 
-describe('editMatch — Set current rank (back-compute)', () => {
+describe('rankEntryPreview — "I ended at this rank" translated to a ±%', () => {
   type Anchor = { account: string; role: Role; tier: string; division: number; progressPct: number; setAt: number };
   function rankHarness(game: GameRecord, seed: Anchor[] = []) {
     const patches: Array<Partial<GameRecord>> = [];
@@ -194,48 +194,62 @@ describe('editMatch — Set current rank (back-compute)', () => {
     result: 'Loss', gameType: 'Competitive', source: 'manual', heroes: [],
   });
 
-  it('back-computes the SR % from the entered rank against the anchor', () => {
+  it('translates the entered rank into the ±% the player would have typed', () => {
     // Anchor at the match instant → rank-before = the anchor (Gold 3 40%).
-    const { provider, patches } = rankHarness(compGame(), [
+    const { provider } = rankHarness(compGame(), [
       { account: 'Main', role: 'damage', tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 },
     ]);
     // Entered Gold 2 10% (=1310 pts) − Gold 3 40% (=1240 pts) = +70.
-    provider.editMatch({ matchId: 'm-set', setRank: { tier: 'Gold', division: 2, progressPct: 10 } });
-    expect(patches[0].srDelta).toBe(70);
+    expect(provider.rankEntryPreview({
+      account: 'Main', role: 'damage', timestamp: 1000, rank: { tier: 'Gold', division: 2, progressPct: 10 },
+    })).toEqual({ anchored: true, srDelta: 70 });
   });
 
-  it('keys the back-compute on the NEW role when the same edit changes role', () => {
-    // Both ladders anchored at the match instant; the edit moves the match to tank.
-    const { provider, patches } = rankHarness(compGame('damage'), [
+  it('measures against the ladder named in the input, not another role', () => {
+    const { provider } = rankHarness(compGame('damage'), [
       { account: 'Main', role: 'damage', tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 },
       { account: 'Main', role: 'tank', tier: 'Platinum', division: 2, progressPct: 30, setAt: 1000 },
     ]);
-    // Must diff against the TANK anchor (Plat 2 30% = 1830), not damage:
-    // entered Plat 2 50% (=1850) − 1830 = +20. (The old, buggy code diffed vs
-    // the damage anchor 1240 and produced +610.)
-    provider.editMatch({ matchId: 'm-set', role: 'tank', setRank: { tier: 'Platinum', division: 2, progressPct: 50 } });
-    expect(patches[0].role).toBe('tank');
-    expect(patches[0].srDelta).toBe(20);
+    // Against the TANK anchor (Plat 2 30% = 1830): entered Plat 2 50% (=1850) = +20.
+    // Diffing against damage's 1240 would give +610 — a rank track is per role.
+    expect(provider.rankEntryPreview({
+      account: 'Main', role: 'tank', timestamp: 1000, rank: { tier: 'Platinum', division: 2, progressPct: 50 },
+    })).toEqual({ anchored: true, srDelta: 20 });
   });
 
-  it('bootstraps a fresh anchor (no srDelta) on the role the match lands on when none exists', () => {
+  it('reports an unanchored track instead of a fabricated zero', () => {
+    const { provider } = rankHarness(compGame('damage'), []);
+    // There is no rank-before to measure against; the caller must offer to set
+    // the starting rank rather than show "+0%".
+    expect(provider.rankEntryPreview({
+      account: 'Main', role: 'tank', timestamp: 1000, rank: { tier: 'Diamond', division: 3, progressPct: 50 },
+    })).toEqual({ anchored: false });
+  });
+
+  it('writes nothing — no anchor, no match patch', () => {
     const { provider, patches, store } = rankHarness(compGame('damage'), []);
-    provider.editMatch({ matchId: 'm-set', role: 'tank', setRank: { tier: 'Diamond', division: 3, progressPct: 50 } });
-    // Anchor created for TANK (where the match now lives), at the match's timestamp.
-    expect(store[rankKey('Main', 'tank')]).toMatchObject({
-      role: 'tank', tier: 'Diamond', division: 3, progressPct: 50, setAt: 1000,
+    provider.rankEntryPreview({
+      account: 'Main', role: 'damage', timestamp: 1000, rank: { tier: 'Gold', division: 2, progressPct: 10 },
     });
-    expect(store[rankKey('Main', 'damage')]).toBeUndefined();
-    // Nothing before it to diff against → no srDelta derived.
-    expect(patches[0]?.srDelta).toBeUndefined();
+    expect(Object.keys(store)).toHaveLength(0);
+    expect(patches).toHaveLength(0);
   });
 
-  it('ignores setRank on a non-competitive match', () => {
-    const { provider, patches, store } = rankHarness(
-      { ...compGame('damage'), gameType: 'Quick Play' }, []);
-    provider.editMatch({ matchId: 'm-set', setRank: { tier: 'Gold', division: 2, progressPct: 10 } });
-    expect(patches[0]?.srDelta).toBeUndefined();
-    expect(Object.keys(store)).toHaveLength(0); // no anchor bootstrapped
+  it('a match carrying the translated delta lands on exactly the entered rank', () => {
+    // The whole promise of the mode, asserted rather than described: enter a
+    // rank, submit the delta it produced, and the computed rank must equal what
+    // was entered.
+    const anchors = { [rankKey('Main', 'damage')]: { tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 } };
+    const match = { ...compGame('damage', 2000) };
+    const { provider } = rankHarness(match, [
+      { account: 'Main', role: 'damage', tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 },
+    ]);
+    const entered = { tier: 'Gold', division: 2, progressPct: 10 };
+    const preview = provider.rankEntryPreview({ account: 'Main', role: 'damage', timestamp: 2000, rank: entered });
+    if (!preview.anchored) throw new Error('expected an anchored track');
+
+    const after = currentRank([{ ...match, srDelta: preview.srDelta }], anchors, 'Main', 'damage');
+    expect(after).toMatchObject(entered);
   });
 });
 

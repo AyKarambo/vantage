@@ -59,7 +59,10 @@ export type {
 } from './inputs';
 
 // Accounts + rank
-export type { AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary } from './accounts';
+export type {
+  AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary,
+  RankEntryPreviewInput, RankEntryPreview,
+} from './accounts';
 export type { AccountKind } from '../../core/accountsManage';
 
 // Placement runs

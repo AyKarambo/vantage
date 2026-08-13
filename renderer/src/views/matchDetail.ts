@@ -6,7 +6,7 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { applyStyle, h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { fmt, relTime, roleLabel, signed } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
@@ -18,7 +18,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
-import { srModeToggle, srDeltaInput, rankPicker, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
+import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
@@ -426,6 +426,8 @@ function buildMatchEditor(
   // on the card (reconstructed as of this match), so a drift-correction starts
   // from where you actually are.
   let srMode: SrMode = 'change';
+  /** Latest translation of the picked rank into a ±%; see {@link rankEntry}. */
+  let rankPreview: RankEntryPreview | undefined;
   let anchorTier = d.competitive?.tier ?? 'Gold';
   let anchorDivision = d.competitive?.division ?? 3;
   let anchorPct = d.competitive?.progressPct != null ? String(Math.round(d.competitive.progressPct)) : '';
@@ -586,16 +588,18 @@ function buildMatchEditor(
       );
       if (srMode === 'set-current') {
         render(srHost, toggleRow,
-          field(optionalLabel('Current rank', '— negative % means in rank protection'), rankPicker({
+          field(optionalLabel('Rank after this match', '— negative % means in rank protection'), rankEntry({
+            account: d.account,
+            role: state.role,
+            timestamp: d.timestamp,
             tier: anchorTier,
             division: anchorDivision,
             pct: anchorPct,
             onTier: (v) => (anchorTier = v),
             onDivision: (v) => (anchorDivision = v),
             onPct: (v) => (anchorPct = v),
-          })),
-          h('div', { class: 'hint', style: { marginTop: '4px' } },
-            'The rank you were at after this match — we back-calculate its SR %. Your live rank tracking is left as-is.'));
+            onResolved: (p) => (rankPreview = p),
+          })));
         return;
       }
       render(srHost, toggleRow,
@@ -627,18 +631,22 @@ function buildMatchEditor(
         matchId: d.matchId,
         result: state.result, role: state.role, map: state.map, heroes: [...heroes],
         mental: flags,
-        // Competitive rank: Set-current sends the resulting rank (main derives the
-        // srDelta); Change sends the raw % (number sets, null clears). Omitted for
-        // non-comp and for a track in an open placement run.
+        // Competitive rank is always a plain ±%. Set-current mode differs only in
+        // how the number was arrived at: rankEntry already translated the picked
+        // rank into it. An unanchored track is the one case with no delta to
+        // send — that entry sets the anchor instead, handled after the save.
         ...(isComp && !run
           ? (srMode === 'set-current'
-              ? { setRank: { tier: anchorTier, division: anchorDivision, progressPct: Number(anchorPct) || 0 } }
+              ? (rankPreview?.anchored ? { srDelta: rankPreview.srDelta } : {})
               : { srDelta: srDelta ?? null })
           : {}),
         // number sets, null clears — performance applies to any match, comp or not.
         performance: performance ?? null,
         grades,
       });
+      // A track with no anchor yet: the entered rank defines where tracking
+      // starts, since there is no rank-before for it to be a change from.
+      const anchoring = isComp && !run && srMode === 'set-current' && rankPreview?.anchored === false;
       const saved = run
         ? Promise.all([edited, bridge.setPlacementPrediction({
             account: d.account,
@@ -646,7 +654,15 @@ function buildMatchEditor(
             matchId: d.matchId,
             prediction: { tier: predTier, division: predDivision },
           })])
-        : edited;
+        : anchoring
+          ? Promise.all([edited, bridge.setRankAnchor({
+              account: d.account,
+              role: state.role,
+              tier: anchorTier,
+              division: anchorDivision,
+              progressPct: Number(anchorPct) || 0,
+            })])
+          : edited;
       void saved.then(() => {
         gradedThisSession.add(d.matchId);
         close();

@@ -12,7 +12,7 @@ import type {
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
-  GradingSettings, RankAnchorInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
+  GradingSettings, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import { activeMeasuredTargets, type AuthoredTarget } from '../../src/core/targets';
@@ -32,7 +32,7 @@ import {
   type MasterDataOverrides, type FetchedCatalog,
 } from '../../src/core/masterData';
 import { sourceOf } from '../../src/core/source';
-import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
+import { currentRank, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
@@ -665,6 +665,15 @@ const mock: OwStatsApi = {
     return accountList();
   },
   getRanks: async () => previewRanks(),
+  rankEntryPreview: async (input: RankEntryPreviewInput) => {
+    // Mirrors the provider: without an anchor there is no rank-before to measure
+    // against, so report that rather than a fabricated 0.
+    if (!previewAnchors[rankKey(input.account, input.role)]) return { anchored: false as const };
+    return {
+      anchored: true as const,
+      srDelta: srDeltaForSetRank(dataset(), anchorMap(), input.account, input.role, input.timestamp, input.rank),
+    };
+  },
   getPlacements: async () => getPlacements(),
   startPlacementRun: async (input: PlacementStartInput) => {
     const key = placementRunKey(input.account, input.role);
