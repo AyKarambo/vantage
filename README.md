@@ -316,19 +316,23 @@ a network port, and Vantage sends nothing outward through it; see
   (flagged per-season in Settings → Master data → Seasons), Vantage **offers** a placement run
   when that (account × role) logs its first competitive match after the reset boundary — lazily
   per role, never unsolicited. Placement runs can also be **started manually** at any time (new
-  account, role never queued, or a long layoff). During an open run the ±% input becomes a
-  **predicted-rank picker** (tier and division only; entering a prediction is optional), and rank
-  surfaces show **`Placements N/10`** plus your latest prediction instead of an absolute rank.
-  Matches you play after the tenth but before confirming stay out of the rank arithmetic too —
-  the track has no settled rank for them to move yet. Once the run has counted its ten matches a
-  **confirmation dialog** prefilled from your prediction asks for the actual rank the game
-  revealed; confirming it writes a new rank anchor at that match. That prompt is raised **whichever
-  way the run finishes** — a live-tracked match graded on Review, a hand-logged one, an edit that
-  pulls a tenth match in, or a backdated start that reaches ten the moment it begins. Until you
-  answer it, the run is shown as **`Placements 10/10 · confirm your rank`** rather than as a
-  prediction (a prediction is a guess, and the run is over), with a **Confirm rank** button on the
-  Overview rank tile and **"Confirm revealed rank"** in Settings → Accounts. Dismissing the dialog
-  writes nothing and leaves the run open — nothing is ever confirmed on your behalf. **Everything is
+  account, role never queued, or a long layoff). For each of the **ten counted matches** the ±%
+  input becomes a **predicted-rank picker** (tier and division only; entering a prediction is
+  optional), and rank surfaces show **`Placements N/10`** plus your latest prediction instead of an
+  absolute rank. Once the run has counted its ten matches a **confirmation dialog** prefilled from
+  your prediction asks for the rank the game is showing you; confirming it writes a new rank
+  anchor. That prompt is raised **whichever way the run finishes** — a live-tracked match graded on
+  Review, a hand-logged one, an edit that pulls a tenth match in, or a backdated start that reaches
+  ten the moment it begins. Until you answer it, the run is shown as
+  **`Placements 10/10 · confirm your rank`** rather than as a prediction (a prediction is a guess,
+  and the run is over), with a **Confirm rank** button on the Overview rank tile and
+  **"Confirm revealed rank"** in Settings → Accounts. Dismissing the dialog writes nothing and
+  leaves the run open — nothing is ever confirmed on your behalf.
+  Keep playing before you confirm and those extra matches are **ordinary games**: the game has
+  revealed your rank and shows a ±% again, so Vantage takes the ±% for them like any other match.
+  It just holds them out of the rank arithmetic until you confirm — there is no settled rank for
+  them to move from yet — and the rank you then enter is taken as-is, because it already reflects
+  them. **Everything is
   reversible**: **"Reset to begin"** rewinds to 0/10 and restores the pre-run rank, **"Cancel"**
   removes the run and hands its matches back to normal ±% arithmetic. A run can be **backdated**
   to an already-logged match if you didn't catch it at the time. If a counted match is deleted or

@@ -63,6 +63,12 @@ function prevCompTs(games: GameRecord[], account: string, role: Role, beforeTs: 
  * backward across that boundary would report ranks the player never actually
  * held. Returning null lets the caller say "before the rank reset" instead of
  * inventing a number.
+ *
+ * `suppressed` threads through to the same read-time mask every other rank
+ * surface applies (see {@link ../placements/engine suppressedMatchIds}): a match
+ * inside an OPEN placement run has no settled rank to move yet. Without it this
+ * would report a per-match rank built from ±% the rest of the app is
+ * deliberately holding back — the same number disagreeing with itself.
  */
 export function rankAfterMatch(
   games: GameRecord[],
@@ -71,12 +77,13 @@ export function rankAfterMatch(
   role: Role,
   matchTs: number,
   resetBefore?: number,
+  suppressed?: ReadonlySet<string>,
 ): RankState | null {
   if (resetBefore !== undefined && matchTs < resetBefore) return null;
   const anchor = anchors[rankKey(account, role)];
   if (!anchor) return null;
   // Forward: at/after the anchor instant, the engine's replay is authoritative.
-  if (matchTs >= anchor.setAt) return currentRank(games, anchors, account, role, matchTs);
+  if (matchTs >= anchor.setAt) return currentRank(games, anchors, account, role, matchTs, suppressed);
   // Backward: subtract every comp match strictly after the target, up to the
   // anchor reading, from the anchor's scalar.
   const points = rankToPoints(anchor) - sumSr(games, account, role, (ts) => ts > matchTs && ts <= anchor.setAt);
