@@ -21,7 +21,7 @@ import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, signed } from '../format';
-import { placementParts, rankParts } from '../../../src/core/rankDisplay';
+import { accountPlacementNote, placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
@@ -545,19 +545,24 @@ export class App {
       // A per-account rank line, when that account has an anchor set. Same shared
       // parts as every other surface (no movement arrow — Overview KPI only), so
       // protection reads identically here. "All accounts" has no single rank.
-      // While the account has a track in an OPEN placement run, that computed
-      // rank is stale/meaningless (no ±%, no protection during placements) —
-      // show `Placements N/10` instead, via the shared placementParts.
+      //
+      // A placement run APPENDS to that rank, it does not replace it. This used to
+      // take the first open run on the account regardless of role, so one stale
+      // Support run hid an account's real rank behind `Placements N/10` — the menu
+      // then contradicted the header chip above it, which is the second half of
+      // #184. `accountRanks` is the same role-aggregated, suppression-aware value
+      // the header shows, so leading with it keeps the two in agreement, and
+      // `accountPlacementNote` says what the open runs are doing in a few words.
       const rankSub = (account: string): HTMLElement | null => {
-        const openRun = d.placements.find((p) => p.account === account && !p.completed);
-        if (openRun) {
-          const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-          return h('span', { class: 'acct-menu-rank u-dim' }, pp.predictionLabel ? `${pp.counter} · ${pp.predictionLabel}` : pp.counter);
-        }
+        const note = accountPlacementNote(d.placements.filter((p) => p.account === account));
         const rk = d.accountRanks[account];
-        if (!rk) return null;
+        if (!rk) {
+          // No rank to lead with — a track mid-placements with nothing behind it.
+          return note ? h('span', { class: 'acct-menu-rank u-dim' }, note) : null;
+        }
         const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected });
-        return h('span', { class: 'acct-menu-rank u-dim' }, `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`);
+        const rank = `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
+        return h('span', { class: 'acct-menu-rank u-dim' }, note ? `${rank} · ${note}` : rank);
       };
       const item = (label: string, active: boolean, run: () => void, account?: string): HTMLElement => {
         const sub = account ? rankSub(account) : null;
