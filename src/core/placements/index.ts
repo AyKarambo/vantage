@@ -6,3 +6,5 @@ export {
   countedMatches, trackMatchesFrom, runProgress, isRunComplete, isAwaitingRank, hasDrifted,
   suppressedMatchIds, shouldOfferRun,
 } from './engine';
+export { srEntryMode, isStillCounting } from './entryMode';
+export type { SrEntryMode, EntryModeRun } from './entryMode';

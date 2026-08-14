@@ -33,7 +33,8 @@ import {
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import {
-  PLACEMENT_RUN_LENGTH, countedMatches, hasDrifted, isAwaitingRank, runProgress, shouldOfferRun,
+  PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, hasDrifted, isAwaitingRank, runProgress,
+  shouldOfferRun, suppressedMatchIds,
   type PlacementRun,
 } from '../core/placements';
 import type { MasterDataStore } from '../store/masterData';
@@ -456,13 +457,23 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     completePlacementRun: (input) => {
       const run = deps.placements.getRun(input.account, input.role);
       if (!run) return placementSummaries(deps);
-      const counted = countedMatches(deps.history.all(), run);
-      // Stamped at the LAST counted match, not Date.now(): `competitiveComps`
-      // filters strictly after the anchor instant, so this is what keeps the ten
-      // placement matches out of the rank arithmetic while everything logged
-      // afterwards moves the rank normally. `setRankAnchor` can't be used here —
-      // it stamps the wall clock (same reason the import path writes directly).
-      const setAt = counted.length ? counted[counted.length - 1].timestamp : run.startedAt;
+      const games = deps.history.all();
+      const counted = countedMatches(games, run);
+      // Stamped at the LAST match in the run's WINDOW, not Date.now():
+      // `competitiveComps` filters strictly after the anchor instant, so this is
+      // what keeps the suppressed matches out of the rank arithmetic while
+      // everything logged afterwards moves the rank normally. `setRankAnchor`
+      // can't be used here — it stamps the wall clock (same reason the import
+      // path writes directly).
+      //
+      // The window, not the counted ten: the rank being entered is the one the
+      // game is showing the player NOW, which already reflects every match they
+      // played after their tenth. Anchoring at the tenth would re-apply those
+      // matches' ±% on top of a rank that already includes them — measured at a
+      // full division of overshoot. With no surplus (the ordinary case) the two
+      // are the same match, so this changes nothing for a run confirmed promptly.
+      const window = trackMatchesFrom(games, run);
+      const setAt = window.length ? window[window.length - 1].timestamp : run.startedAt;
       deps.rankAnchors.set({
         account: input.account,
         role: input.role,
@@ -878,7 +889,7 @@ function resolveRunStart(deps: DataProviderDeps, fromMatchId?: string): number {
 function placementSummaries(deps: DataProviderDeps): PlacementRunSummary[] {
   const games = deps.history.all();
   return deps.placements.allRuns().map((run) => {
-    const { counted, target, latestPrediction } = runProgress(games, run);
+    const { counted, target, latestPrediction, countedMatchIds } = runProgress(games, run);
     return {
       account: run.account,
       role: run.role,
@@ -888,16 +899,27 @@ function placementSummaries(deps: DataProviderDeps): PlacementRunSummary[] {
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(games, run),
       awaitingRank: isAwaitingRank(games, run),
+      countedMatchIds,
     };
   });
 }
 
-/** Compute the live rank for every anchored (account, role). */
+/**
+ * Compute the live rank for every anchored (account, role).
+ *
+ * Suppressed exactly as the dashboard suppresses (see `core/dashboardData`): a
+ * match inside an open placement run has no settled rank to move yet. Without
+ * this the two disagree — `getRanks()` would report a rank built from matches
+ * the Overview KPI is deliberately holding back, and since this also backs the
+ * Log-match rank seeding, Settings → Accounts and the MCP `vantage_ranks` tool,
+ * the app would contradict itself in three places at once.
+ */
 function rankSummaries(deps: DataProviderDeps): RankSummary[] {
   const games = deps.history.all();
   const map = deps.rankAnchors.map();
+  const suppressed = suppressedMatchIds(games, deps.placements.allRuns());
   return deps.rankAnchors.all().map((a) => {
-    const s = currentRank(games, map, a.account, a.role);
+    const s = currentRank(games, map, a.account, a.role, undefined, suppressed);
     return {
       account: a.account,
       role: a.role,

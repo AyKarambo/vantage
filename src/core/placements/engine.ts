@@ -63,7 +63,12 @@ export function trackMatchesFrom(games: GameRecord[], run: PlacementRun): GameRe
 export function runProgress(
   games: GameRecord[],
   run: PlacementRun,
-): { counted: number; target: number; latestPrediction?: PredictedRank } {
+): {
+  counted: number;
+  target: number;
+  latestPrediction?: PredictedRank;
+  countedMatchIds: string[];
+} {
   const counted = countedMatches(games, run);
   let latestPrediction: PredictedRank | undefined;
   for (let i = counted.length - 1; i >= 0; i--) {
@@ -73,7 +78,17 @@ export function runProgress(
       break;
     }
   }
-  return { counted: counted.length, target: PLACEMENT_RUN_LENGTH, latestPrediction };
+  return {
+    counted: counted.length,
+    target: PLACEMENT_RUN_LENGTH,
+    latestPrediction,
+    // Carried so consumers can ask the PER-MATCH question ("is this particular
+    // match one of the ten?") instead of only the per-run one. `counted` alone
+    // can't answer it, and the difference matters the moment a run reaches its
+    // target with the player still logging: match eleven is not a placement
+    // match, but matches one through ten stay placement matches forever.
+    countedMatchIds: counted.map((g) => g.matchId),
+  };
 }
 
 /** True once `run` has counted its full {@link PLACEMENT_RUN_LENGTH} matches. */

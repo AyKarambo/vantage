@@ -70,7 +70,17 @@ describe('runProgress', () => {
     const run = runAt({ startedAt: 0, predictions: { a: pred('Gold', 3) } });
     expect(runProgress(games, run)).toEqual({
       counted: 3, target: PLACEMENT_RUN_LENGTH, latestPrediction: { tier: 'Gold', division: 3 },
+      countedMatchIds: ['a', 'b', 'c'],
     });
+  });
+
+  it('reports the ids of the counted matches, in order and capped at ten', () => {
+    const games = Array.from({ length: 13 }, (_, i) => g({ matchId: `m${i}`, timestamp: 100 + i }));
+    const { countedMatchIds } = runProgress(games, runAt({ startedAt: 100 }));
+    expect(countedMatchIds).toHaveLength(PLACEMENT_RUN_LENGTH);
+    // m10..m12 are on the track but past the cap — they are ordinary games, and
+    // this is exactly what lets a caller tell them apart from the counted ten.
+    expect(countedMatchIds).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9']);
   });
 
   it('picks the latest counted match with a prediction, skipping blanks', () => {

@@ -91,7 +91,7 @@ export function computeDashboard(
   // most-played anchored role, no movement (the arrow is Overview-KPI-only).
   const accountRanks = accountRanksOf(all, manual?.rankAnchors, suppressed);
   const placements = placementRuns.map((run) => {
-    const { counted, target, latestPrediction } = runProgress(all, run);
+    const { counted, target, latestPrediction, countedMatchIds } = runProgress(all, run);
     return {
       account: run.account,
       role: run.role,
@@ -101,6 +101,7 @@ export function computeDashboard(
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(all, run),
       awaitingRank: isAwaitingRank(all, run),
+      countedMatchIds,
     };
   });
   // Long ranges (all-time, >90d) bucket the trend by week; a season (~63d) and

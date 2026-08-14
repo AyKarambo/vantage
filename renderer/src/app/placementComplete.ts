@@ -67,8 +67,9 @@ export function openPlacementComplete(opts: {
       h('div', { style: { fontSize: '15px', fontWeight: '600' } },
         `Placements complete — ${roleLabel(role)} on ${account}`),
       h('div', { class: 'hint' },
-        'Overwatch just revealed your real rank for this run — enter exactly what it showed you, not another ' +
-        'prediction. Dismissing this writes nothing; the run stays open and you can finish it later.'),
+        'Enter the rank Overwatch is showing you right now — not a prediction. If you have played more on this ' +
+        'track since your tenth placement, that rank already includes those matches, so Vantage takes it as-is ' +
+        'rather than re-applying them. Dismissing this writes nothing; the run stays open and you can finish it later.'),
       field('Revealed rank', picker),
       field(optionalLabel('% into division', '— optional, straight out of placements it’s usually 0 or blank'), pctInput),
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
