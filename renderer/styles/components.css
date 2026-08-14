@@ -94,6 +94,14 @@
 .kpi-delta.is-down {
   color: var(--loss-text);
 }
+/* The KPI's optional CTA (e.g. "Confirm rank") — smaller than a normal button
+   so it reads as a card affordance, not a competing primary action. */
+.kpi-action {
+  display: flex;
+  margin-top: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
 
 /* Buttons ------------------------------------------------------------------- */
 .btn {

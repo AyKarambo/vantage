@@ -858,8 +858,9 @@ function rankLine(d: DashboardData): string {
   if (r) {
     const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
     if (openRun) {
-      const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-      return pp.predictionLabel ? `${pp.counter} · ${pp.predictionLabel}` : pp.counter;
+      const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction, openRun.awaitingRank);
+      const suffix = pp.predictionLabel ?? pp.awaitingLabel;
+      return suffix ? `${pp.counter} · ${suffix}` : pp.counter;
     }
     // Shared parts — no `movement` passed, so the sidebar shows no arrow (that's
     // the Overview KPI's job). The shield keeps a protected negative % from reading

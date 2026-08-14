@@ -154,8 +154,9 @@ export function accountsCard(): HTMLElement {
       // show `Placements N/10` (+ the latest prediction, when one exists) instead.
       const openRun = accPlacements.find((p) => p.role === r.role && !p.completed);
       if (openRun) {
-        const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-        return pill(`${roleLabel(r.role)}: ${pp.counter}${pp.predictionLabel ? ` · ${pp.predictionLabel}` : ''}`, 'accent');
+        const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction, openRun.awaitingRank);
+        const suffix = pp.predictionLabel ?? pp.awaitingLabel;
+        return pill(`${roleLabel(r.role)}: ${pp.counter}${suffix ? ` · ${suffix}` : ''}`, 'accent');
       }
       // Shared rank parts — no movement arrow here (Overview KPI only), identical
       // shield/buffer rendering to every other surface.
@@ -218,7 +219,7 @@ export function accountsCard(): HTMLElement {
       );
     }
 
-    const pp = placementParts(run.counted, run.target, run.latestPrediction);
+    const pp = placementParts(run.counted, run.target, run.latestPrediction, run.awaitingRank);
     // Reset and Cancel both throw away the run's progress and, for a COMPLETED
     // run, the confirmed rank it produced — the one thing this task exists to
     // make undoable. A stray click here is worse than most destructive actions
@@ -244,14 +245,26 @@ export function accountsCard(): HTMLElement {
 
     const actions: Node[] = [resetBtn, cancelBtn];
     if (!run.completed) {
-      actions.push(button('Finish early', {
-        variant: 'ghost',
-        // Same reveal-rank confirmation the 10th placement match opens from
-        // log-match.ts — one dialog for "the game just showed me a rank",
-        // whether that happens naturally at match 10 or the player forces it
-        // here. Seeded with the run's latest prediction, same as there.
-        onClick: () => openPlacementComplete({ account, role, suggestion: run.latestPrediction, onDone: refresh }),
-      }));
+      // Same reveal-rank confirmation the 10th placement match opens from
+      // log-match.ts — one dialog for "the game just showed me a rank",
+      // whether that happens naturally at match 10 or the player forces it
+      // here. Seeded with the run's latest prediction, same as there.
+      const openReveal = (): void => openPlacementComplete({ account, role, suggestion: run.latestPrediction, onDone: refresh });
+      actions.push(
+        run.awaitingRank
+          // The run already counted out its ten matches — "early" would be a
+          // lie, and this is the CTA the player is actually here for.
+          ? button('Confirm revealed rank', {
+              variant: 'primary',
+              title: 'Overwatch has revealed your rank for this run — enter exactly what it showed you.',
+              onClick: openReveal,
+            })
+          : button('Finish early', {
+              variant: 'ghost',
+              title: 'End this run before its ten matches, using the rank Overwatch reveals now.',
+              onClick: openReveal,
+            }),
+      );
     }
 
     const drifted = run.completed && run.drifted
@@ -261,12 +274,13 @@ export function accountsCard(): HTMLElement {
         )
       : null;
 
+    const suffix = pp.predictionLabel ?? pp.awaitingLabel;
     return h('div', { class: 'stack', style: { gap: '4px' } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
         roleTag,
         run.completed
           ? pill('Placements complete', 'win')
-          : pill(`${pp.counter}${pp.predictionLabel ? ` · ${pp.predictionLabel}` : ''}`, 'accent'),
+          : pill(`${pp.counter}${suffix ? ` · ${suffix}` : ''}`, 'accent'),
         ...actions,
       ),
       drifted,
