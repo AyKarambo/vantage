@@ -320,3 +320,51 @@ describe('placement runs — drift and recount', () => {
     expect(summary).toMatchObject({ counted: 3, completed: false });
   });
 });
+
+describe('placement runs — awaiting rank', () => {
+  it('is true once a run counts its full target but the revealed rank is not confirmed yet', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.getPlacements();
+    expect(summary).toMatchObject({ counted: 10, target: 10, completed: false, awaitingRank: true });
+  });
+
+  it('is false mid-run, when there is nothing to confirm yet', () => {
+    const { provider } = harness(tenMatches().slice(0, 4), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.getPlacements();
+    expect(summary).toMatchObject({ counted: 4, target: 10, awaitingRank: false });
+  });
+
+  it('is false again once the run is completed — confirmation resolves it', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
+    expect(summary).toMatchObject({ completed: true, awaitingRank: false });
+  });
+
+  it('backdating a run start onto ten already-logged matches reports awaitingRank immediately (AC2)', () => {
+    const games = tenMatches();
+    const { provider } = harness(games, anchor());
+    // fromMatchId backdates startedAt to m-1's own timestamp, which already has
+    // nine later competitive matches on the track sitting in history — the run
+    // reaches its target the instant it starts, with no new match required.
+    const [summary] = provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    expect(summary).toMatchObject({ counted: 10, target: 10, completed: false, awaitingRank: true });
+  });
+
+  it('rebuilding summaries never auto-resolves a run awaiting rank (AC10)', () => {
+    const { provider, anchorNow } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const anchorBefore = anchorNow();
+
+    // Recomputing the summary (as a fresh dashboard/getPlacements call would)
+    // must be idempotent: still open, still awaiting, anchor untouched. Nothing
+    // short of an explicit completePlacementRun may resolve it.
+    const first = provider.getPlacements()[0];
+    const second = provider.getPlacements()[0];
+    expect(first).toMatchObject({ completed: false, awaitingRank: true });
+    expect(second).toMatchObject({ completed: false, awaitingRank: true });
+    expect(anchorNow()).toEqual(anchorBefore);
+  });
+});

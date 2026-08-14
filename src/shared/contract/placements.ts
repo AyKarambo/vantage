@@ -25,6 +25,8 @@ export interface PlacementRunSummary {
   completed: boolean;
   /** History changed under a completed run — the counted set no longer matches the completion snapshot. */
   drifted: boolean;
+  /** Full length counted but the revealed rank hasn't been confirmed yet — waiting on the player, not more matches. */
+  awaitingRank: boolean;
 }
 
 /**

@@ -21,7 +21,7 @@ import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakRemin
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { currentRank, rankKey, rankToPoints, type RankAnchorMap } from './rank';
-import { hasDrifted, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
+import { hasDrifted, isAwaitingRank, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
@@ -100,6 +100,7 @@ export function computeDashboard(
       ...(latestPrediction ? { latestPrediction } : {}),
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(all, run),
+      awaitingRank: isAwaitingRank(all, run),
     };
   });
   // Long ranges (all-time, >90d) bucket the trend by week; a season (~63d) and

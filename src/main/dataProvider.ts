@@ -33,7 +33,8 @@ import {
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import {
-  PLACEMENT_RUN_LENGTH, countedMatches, hasDrifted, runProgress, shouldOfferRun, type PlacementRun,
+  PLACEMENT_RUN_LENGTH, countedMatches, hasDrifted, isAwaitingRank, runProgress, shouldOfferRun,
+  type PlacementRun,
 } from '../core/placements';
 import type { MasterDataStore } from '../store/masterData';
 import type {
@@ -886,6 +887,7 @@ function placementSummaries(deps: DataProviderDeps): PlacementRunSummary[] {
       ...(latestPrediction ? { latestPrediction } : {}),
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(games, run),
+      awaitingRank: isAwaitingRank(games, run),
     };
   });
 }

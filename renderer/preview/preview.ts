@@ -38,7 +38,7 @@ import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness'
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -220,6 +220,7 @@ const getPlacements = (): PlacementRunSummary[] => {
       ...(latestPrediction ? { latestPrediction } : {}),
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(games, run),
+      awaitingRank: isAwaitingRank(games, run),
     });
   }
   return summaries;
