@@ -105,7 +105,7 @@ export function openPlacementComplete(opts: {
  * caller with no track in mind takes the first awaiting run.
  */
 export async function maybeConfirmPlacementRank(opts: {
-  /** The track just played, preferred over any other awaiting run. */
+  /** The track just played. Given both, the question is scoped to it alone. */
   account?: string;
   role?: Role;
   /** Runs after a successful confirm, once the dialog has already closed. */

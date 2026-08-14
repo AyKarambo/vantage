@@ -95,9 +95,11 @@
   color: var(--loss-text);
 }
 /* The KPI's optional CTA (e.g. "Confirm rank") — smaller than a normal button
-   so it reads as a card affordance, not a competing primary action. */
-.kpi-action {
-  display: flex;
+   so it reads as a card affordance, not a competing primary action.
+   Qualified with `.btn` on purpose: `.btn` is declared further down this file, so
+   at equal specificity it would win on source order and this rule would set
+   nothing but the margin. */
+.btn.kpi-action {
   margin-top: 8px;
   padding: 5px 10px;
   font-size: 11.5px;
