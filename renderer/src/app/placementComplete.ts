@@ -11,7 +11,7 @@
  * tracker instead of having a guess promoted for them.
  */
 import { h } from '../dom';
-import type { Role } from '../../../src/shared/contract';
+import type { PlacementRunSummary, Role } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { button } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -77,4 +77,53 @@ export function openPlacementComplete(opts: {
       ),
     );
   });
+}
+
+/**
+ * Raise {@link openPlacementComplete} for a track whose run has played out its ten
+ * matches but has no confirmed rank yet — the single trigger every caller shares.
+ *
+ * This exists because the prompt used to be bolted onto exactly one code path (the
+ * manual log form's save, gated on a locally counted `counted + 1 >= target`), so a
+ * run that reached ten any other way — reviewing an auto-tracked match, backdating a
+ * start, an edit that pulled a tenth match in — sat at `Placements 10/10` forever
+ * with nothing asking for the rank. Callers no longer decide *whether* a run is
+ * finished; they say "something changed on this track" and this asks the store.
+ *
+ * Reads `getPlacements()` fresh rather than a view snapshot — the same trap commit
+ * `4729f0d` already fixed once: the summary a caller is holding predates the write
+ * that just completed the run.
+ *
+ * Opens AT MOST ONE dialog, preferring the track just played, so several finished
+ * tracks can never stack modals (and it composes with the season-reset offer's
+ * one-at-a-time rule). Resolves to whether one was shown, so callers that chain
+ * something afterwards can tell "asked" from "nothing to ask".
+ */
+export async function maybeConfirmPlacementRank(opts: {
+  /** The track just played, preferred over any other awaiting run. */
+  account?: string;
+  role?: Role;
+  /** Runs after a successful confirm, once the dialog has already closed. */
+  onDone: () => void;
+}): Promise<boolean> {
+  const { account, role, onDone } = opts;
+  let awaiting: PlacementRunSummary[];
+  try {
+    awaiting = (await bridge.getPlacements()).filter((p) => p.awaitingRank);
+  } catch {
+    // A failed read must not break the caller's own save/close flow — the run
+    // stays awaiting and every surface still shows its "confirm your rank" call
+    // to action, so nothing is lost but this one prompt.
+    return false;
+  }
+  if (!awaiting.length) return false;
+  const run =
+    awaiting.find((p) => p.account === account && p.role === role) ?? awaiting[0];
+  openPlacementComplete({
+    account: run.account,
+    role: run.role,
+    ...(run.latestPrediction ? { suggestion: run.latestPrediction } : {}),
+    onDone,
+  });
+  return true;
 }

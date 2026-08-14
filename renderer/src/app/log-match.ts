@@ -21,7 +21,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
-import { openPlacementComplete } from './placementComplete';
+import { maybeConfirmPlacementRank } from './placementComplete';
 import { maybeOfferPlacements } from './placementOffer';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
@@ -221,13 +221,18 @@ function buildForm(
   let saving = false;
 
   /**
-   * Set by persist() when the just-logged match was a placement run's target
-   * match (its 10th) — the caller opens the reveal-rank confirmation with
-   * this AFTER its own close/refresh. Never opened from inside persist()
-   * itself: this modal would still be open (or mid-close) at that point, and
-   * a modal can't nest inside one that's closing.
+   * Set by persist() when the just-logged match landed on a track with an open
+   * placement run — the caller then asks whether that run is now finished and
+   * needs its revealed rank, AFTER its own close/refresh. Never opened from
+   * inside persist() itself: this modal would still be open (or mid-close) at
+   * that point, and a modal can't nest inside one that's closing.
+   *
+   * Deliberately NOT "is this the 10th match?" — that question is answered by
+   * maybeConfirmPlacementRank against the store, which knows what the write
+   * actually did. Counting locally is what made the prompt miss every path
+   * other than this form (see #184).
    */
-  let placementCompleteFor: { account: string; role: Role; suggestion: { tier: string; division: number } } | undefined;
+  let placementTrackFor: { account: string; role: Role } | undefined;
   /** Same contract as above, for the "should this track start placements?" offer. */
   let placementOfferFor: { account: string; role: Role } | undefined;
 
@@ -235,7 +240,7 @@ function buildForm(
   // save itself failed (form stays open, error/toast shown inline).
   const persist = async (): Promise<boolean> => {
     if (saving) return false;
-    placementCompleteFor = undefined;
+    placementTrackFor = undefined;
     placementOfferFor = undefined;
     const map = resolveMap();
     if (!map) {
@@ -302,12 +307,9 @@ function buildForm(
           matchId,
           prediction: { tier: state.predTier, division: state.predDivision },
         });
-        // This match took the run to its target (its 10th) — Overwatch has now
-        // revealed the real rank, so flag the reveal-rank confirmation for the
-        // caller, seeded with the prediction just entered here.
-        if (run.counted + 1 >= run.target) {
-          placementCompleteFor = { account: state.account, role: state.role, suggestion: { tier: state.predTier, division: state.predDivision } };
-        }
+        // This match may have taken the run to its target — the caller asks the
+        // store, which knows whether it did, rather than re-deriving it here.
+        placementTrackFor = { account: state.account, role: state.role };
       } else {
         // No run on this track — this is the moment to ask whether one should
         // start. Only ever after a match, and only for the track just played:
@@ -520,9 +522,9 @@ function buildForm(
       if (!ok) return;
       close();
       // Opened AFTER this form's own close (never nested inside a modal
-      // that's mid-close), and only for the match that completed the run.
-      if (placementCompleteFor) {
-        openPlacementComplete({ ...placementCompleteFor, onDone: () => ctx.refresh() });
+      // that's mid-close), and only when the run actually finished.
+      if (placementTrackFor) {
+        void maybeConfirmPlacementRank({ ...placementTrackFor, onDone: () => ctx.refresh() });
       } else if (placementOfferFor) {
         void maybeOfferPlacements(placementOfferFor.account, placementOfferFor.role, () => ctx.refresh());
       }
@@ -538,8 +540,13 @@ function buildForm(
       // than stacking a second modal under/over it — "next" chains onto its
       // confirm. A Cancel here means "I'll finish this later", so it stays
       // that way instead of silently popping the next log form regardless.
-      if (placementCompleteFor) {
-        openPlacementComplete({ ...placementCompleteFor, onDone: () => { ctx.refresh(); openNext(); } });
+      // When the run ISN'T finished, nothing is asked and "next" proceeds —
+      // hence the same shown/not-shown chaining the offer branch below uses.
+      if (placementTrackFor) {
+        void maybeConfirmPlacementRank({
+          ...placementTrackFor,
+          onDone: () => { ctx.refresh(); openNext(); },
+        }).then((shown) => { if (!shown) openNext(); });
       } else if (placementOfferFor) {
         // Same one-modal-at-a-time rule as the completion dialog: decide the
         // offer first, then chain the next log form off its outcome.
