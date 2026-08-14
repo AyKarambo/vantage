@@ -94,10 +94,15 @@ export function openPlacementComplete(opts: {
  * `4729f0d` already fixed once: the summary a caller is holding predates the write
  * that just completed the run.
  *
- * Opens AT MOST ONE dialog, preferring the track just played, so several finished
- * tracks can never stack modals (and it composes with the season-reset offer's
- * one-at-a-time rule). Resolves to whether one was shown, so callers that chain
- * something afterwards can tell "asked" from "nothing to ask".
+ * Opens AT MOST ONE dialog, so several finished tracks can never stack modals (and
+ * it composes with the season-reset offer's one-at-a-time rule). Resolves to whether
+ * one was shown, so callers that chain something afterwards can tell "asked" from
+ * "nothing to ask".
+ *
+ * Naming a track scopes the question to it and nothing else: a match on Tank must
+ * never surface a dialog about Support, however overdue Support is. Those are
+ * reached through the persistent "confirm your rank" call to action instead. Only a
+ * caller with no track in mind takes the first awaiting run.
  */
 export async function maybeConfirmPlacementRank(opts: {
   /** The track just played, preferred over any other awaiting run. */
@@ -116,9 +121,11 @@ export async function maybeConfirmPlacementRank(opts: {
     // to action, so nothing is lost but this one prompt.
     return false;
   }
-  if (!awaiting.length) return false;
   const run =
-    awaiting.find((p) => p.account === account && p.role === role) ?? awaiting[0];
+    account !== undefined && role !== undefined
+      ? awaiting.find((p) => p.account === account && p.role === role)
+      : awaiting[0];
+  if (!run) return false;
   openPlacementComplete({
     account: run.account,
     role: run.role,

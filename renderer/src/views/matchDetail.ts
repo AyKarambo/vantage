@@ -12,6 +12,7 @@ import { fmt, relTime, roleLabel, signed } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
+import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
@@ -668,6 +669,13 @@ function buildMatchEditor(
         close();
         ctx.refresh();
         toast(`Match updated — ${state.map}`);
+        // Opened AFTER this modal's own close, never nested inside it. An edit
+        // can pull a tenth match onto a track's counted set (e.g. correcting
+        // the role/account onto one with an open run) — only worth asking when
+        // this save actually touched such a track.
+        if (run) {
+          void maybeConfirmPlacementRank({ account: d.account, role: state.role, onDone: () => ctx.refresh() });
+        }
       });
     };
     const clear = (): void => {

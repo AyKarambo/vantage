@@ -23,6 +23,7 @@ import { bridge } from '../bridge';
 import { registerShortcut } from '../shortcuts';
 import { gradedThisSession } from '../reviews';
 import { deleteMatch } from '../matchActions';
+import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { viewHead, type ViewContext } from './view';
 
 /**
@@ -343,6 +344,13 @@ function expanded(
           }),
         },
       });
+      // Auto-tracked matches land here, never through the log form — this is
+      // the path that made the reveal-rank prompt reportable in the first
+      // place (#184). Only a match on a track with an open run can possibly
+      // have finished one; a non-placement review has nothing to confirm.
+      if (run) {
+        void maybeConfirmPlacementRank({ account: m.account, role: m.role, onDone: () => store.rerender() });
+      }
     });
   };
 

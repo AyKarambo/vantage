@@ -3,7 +3,7 @@ import type { AccountSummary, PlacementRunSummary, RankSummary, Role } from '../
 import { bridge } from '../../bridge';
 import { button, card, confirmButton, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
-import { openPlacementComplete } from '../../app/placementComplete';
+import { openPlacementComplete, maybeConfirmPlacementRank } from '../../app/placementComplete';
 import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
 import { placementParts, rankParts } from '../../../../src/core/rankDisplay';
@@ -202,7 +202,13 @@ export function accountsCard(): HTMLElement {
         button('Start placements', {
           variant: 'ghost',
           title: 'Counts the next 10 competitive matches on this track as placements.',
-          onClick: () => void bridge.startPlacementRun({ account, role }).then(refresh),
+          onClick: () => void bridge.startPlacementRun({ account, role }).then(() => {
+            refresh();
+            // A fresh run can't finish on its own start, but that question
+            // belongs to maybeConfirmPlacementRank, not a guess here — same
+            // trigger the backdated start below uses, which CAN finish instantly.
+            void maybeConfirmPlacementRank({ account, role, onDone: refresh });
+          }),
         }),
         button('Start from an earlier match…', {
           variant: 'ghost',
@@ -369,7 +375,16 @@ function openBackdateStart(account: string, role: Role, onDone: () => void): voi
               variant: 'ghost',
               class: 'btn--block',
               onClick: () => void bridge.startPlacementRun({ account, role, fromMatchId: m.matchId })
-                .then(() => { close(); onDone(); void store.refresh(); }),
+                .then(() => {
+                  close();
+                  onDone();
+                  void store.refresh();
+                  // Opened AFTER this modal's own close, never nested inside
+                  // it. Backdating onto already-logged matches can reach the
+                  // target instantly, so the run may be finished the moment
+                  // it starts.
+                  void maybeConfirmPlacementRank({ account, role, onDone });
+                }),
             },
           )))]
       : [h('div', { class: 'hint' }, 'No matches logged for this track yet — start the run and log as you play.')]),
