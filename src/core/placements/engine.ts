@@ -25,6 +25,20 @@ import { PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank } from './t
  * short.
  */
 export function countedMatches(games: GameRecord[], run: PlacementRun): GameRecord[] {
+  return trackMatchesFrom(games, run).slice(0, PLACEMENT_RUN_LENGTH);
+}
+
+/**
+ * Every competitive match on the run's track from `startedAt` onward, ascending —
+ * the same selection as {@link countedMatches} but WITHOUT its
+ * {@link PLACEMENT_RUN_LENGTH} cap.
+ *
+ * The cap is right for progress and drift (a run is ten matches, by definition),
+ * but wrong for suppression: a player can keep queueing after the tenth match and
+ * before confirming the revealed rank, and those extra matches belong to the same
+ * "no settled rank yet" window. See {@link suppressedMatchIds}.
+ */
+export function trackMatchesFrom(games: GameRecord[], run: PlacementRun): GameRecord[] {
   return games
     .filter(
       (g) =>
@@ -33,8 +47,7 @@ export function countedMatches(games: GameRecord[], run: PlacementRun): GameReco
         classifyGameType(g.gameType) === 'competitive' &&
         g.timestamp >= run.startedAt,
     )
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .slice(0, PLACEMENT_RUN_LENGTH);
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 /**
@@ -69,6 +82,22 @@ export function isRunComplete(games: GameRecord[], run: PlacementRun): boolean {
 }
 
 /**
+ * True when `run` has played out its full length but the rank Overwatch revealed
+ * has not been confirmed yet — the run is waiting on the player, not on more
+ * matches.
+ *
+ * This is the state the UI was missing: `counted === target` with
+ * `completedAt === undefined` used to render exactly like a mid-run track, so a
+ * finished run advertised `Placements 10/10 · Diamond 1 (predicted)` forever with
+ * nothing indicating that the last step is a question only the player can answer.
+ * Deliberately derived, never stored: it is a function of history and the run's
+ * own bookkeeping, so it can never drift out of step with either.
+ */
+export function isAwaitingRank(games: GameRecord[], run: PlacementRun): boolean {
+  return run.completedAt === undefined && isRunComplete(games, run);
+}
+
+/**
  * True when a completed run's counted matches no longer match the snapshot
  * taken at completion — i.e. match history was edited (a fact changed the
  * competitive/role/account classification, or a match was added/removed/
@@ -100,6 +129,14 @@ export function hasDrifted(games: GameRecord[], run: PlacementRun): boolean {
  * An open run's matches, by contrast, don't have a settled rank yet — the
  * live client shows no rank at all until placement finishes — so they stay
  * suppressed from rank math until the run completes or is cancelled.
+ *
+ * Uses {@link trackMatchesFrom}, NOT {@link countedMatches}: suppression follows
+ * the "no settled rank yet" window, which is not capped at ten. A player who keeps
+ * queueing after the tenth match but before confirming the revealed rank would
+ * otherwise have those extra matches apply their ±% to the PRE-run anchor — a rank
+ * the track no longer has. Completion then re-admits them at once, since it anchors
+ * at the tenth counted match and the rank timeline filters strictly after that
+ * instant.
  */
 export function suppressedMatchIds(
   games: GameRecord[],
@@ -108,7 +145,7 @@ export function suppressedMatchIds(
   const ids = new Set<string>();
   for (const run of runs) {
     if (run.completedAt !== undefined) continue;
-    for (const g of countedMatches(games, run)) ids.add(g.matchId);
+    for (const g of trackMatchesFrom(games, run)) ids.add(g.matchId);
   }
   return ids;
 }
