@@ -139,10 +139,10 @@ export interface DashboardData {
   /** Winrate-derived heuristic estimate (the fallback rank). */
   progression: Progression;
   /**
-   * The user's actual calculated rank for the greeting account's most-played
-   * anchored role — the "real" rank the sidebar/KPI show. Absent when no rank
-   * anchor is set for that account, in which case {@link progression} (the
-   * winrate heuristic) is the fallback.
+   * The user's actual calculated rank for the most-recently-played account's
+   * most-recently-played anchored role — the "real" rank the sidebar/KPI show.
+   * Absent when no rank anchor is set for that account, in which case
+   * {@link progression} (the winrate heuristic) is the fallback.
    */
   primaryRank?: {
     account: string;
@@ -160,11 +160,19 @@ export interface DashboardData {
     movement: number;
   };
   /**
-   * Per-account calculated rank for the sidebar account-switcher popover: account
-   * name → its most-played anchored role's rank + protection. Only accounts with a
-   * rank anchor appear; carries no movement (the arrow is Overview-KPI-only).
+   * Per-account calculated rank for surfaces that show one line per account:
+   * account name → its most-recently-played anchored role's rank + protection.
+   * Only accounts with a rank anchor appear; carries no movement (the arrow is
+   * Overview-KPI-only).
    */
   accountRanks: Record<string, { tier: string; division: number; progressPct: number; protected: boolean }>;
+  /**
+   * EVERY anchored (account, role)'s calculated rank, for the account-switcher's
+   * expanded per-role listing — account name → role → rank + protection. A role
+   * absent here has no rank anchor on that account (never started, or still
+   * mid-placement — see {@link placements} for that state instead).
+   */
+  accountRoleRanks: Record<string, Partial<Record<Role, { tier: string; division: number; progressPct: number; protected: boolean }>>>;
   /**
    * Open and completed placement runs across every track, so rank surfaces
    * can render `Placements N/10` instead of a rank the player does not have.
