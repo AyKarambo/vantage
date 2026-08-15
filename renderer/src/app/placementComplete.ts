@@ -11,7 +11,7 @@
  * tracker instead of having a guess promoted for them.
  */
 import { h } from '../dom';
-import type { Role } from '../../../src/shared/contract';
+import type { PlacementRunSummary, Role } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { button } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -67,8 +67,9 @@ export function openPlacementComplete(opts: {
       h('div', { style: { fontSize: '15px', fontWeight: '600' } },
         `Placements complete — ${roleLabel(role)} on ${account}`),
       h('div', { class: 'hint' },
-        'Overwatch just revealed your real rank for this run — enter exactly what it showed you, not another ' +
-        'prediction. Dismissing this writes nothing; the run stays open and you can finish it later.'),
+        'Enter the rank Overwatch is showing you right now — not a prediction. If you have played more on this ' +
+        'track since your tenth placement, that rank already includes those matches, so Vantage takes it as-is ' +
+        'rather than re-applying them. Dismissing this writes nothing; the run stays open and you can finish it later.'),
       field('Revealed rank', picker),
       field(optionalLabel('% into division', '— optional, straight out of placements it’s usually 0 or blank'), pctInput),
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
@@ -77,4 +78,60 @@ export function openPlacementComplete(opts: {
       ),
     );
   });
+}
+
+/**
+ * Raise {@link openPlacementComplete} for a track whose run has played out its ten
+ * matches but has no confirmed rank yet — the single trigger every caller shares.
+ *
+ * This exists because the prompt used to be bolted onto exactly one code path (the
+ * manual log form's save, gated on a locally counted `counted + 1 >= target`), so a
+ * run that reached ten any other way — reviewing an auto-tracked match, backdating a
+ * start, an edit that pulled a tenth match in — sat at `Placements 10/10` forever
+ * with nothing asking for the rank. Callers no longer decide *whether* a run is
+ * finished; they say "something changed on this track" and this asks the store.
+ *
+ * Reads `getPlacements()` fresh rather than a view snapshot — the same trap commit
+ * `4729f0d` already fixed once: the summary a caller is holding predates the write
+ * that just completed the run.
+ *
+ * Opens AT MOST ONE dialog, so several finished tracks can never stack modals (and
+ * it composes with the season-reset offer's one-at-a-time rule). Resolves to whether
+ * one was shown, so callers that chain something afterwards can tell "asked" from
+ * "nothing to ask".
+ *
+ * Naming a track scopes the question to it and nothing else: a match on Tank must
+ * never surface a dialog about Support, however overdue Support is. Those are
+ * reached through the persistent "confirm your rank" call to action instead. Only a
+ * caller with no track in mind takes the first awaiting run.
+ */
+export async function maybeConfirmPlacementRank(opts: {
+  /** The track just played. Given both, the question is scoped to it alone. */
+  account?: string;
+  role?: Role;
+  /** Runs after a successful confirm, once the dialog has already closed. */
+  onDone: () => void;
+}): Promise<boolean> {
+  const { account, role, onDone } = opts;
+  let awaiting: PlacementRunSummary[];
+  try {
+    awaiting = (await bridge.getPlacements()).filter((p) => p.awaitingRank);
+  } catch {
+    // A failed read must not break the caller's own save/close flow — the run
+    // stays awaiting and every surface still shows its "confirm your rank" call
+    // to action, so nothing is lost but this one prompt.
+    return false;
+  }
+  const run =
+    account !== undefined && role !== undefined
+      ? awaiting.find((p) => p.account === account && p.role === role)
+      : awaiting[0];
+  if (!run) return false;
+  openPlacementComplete({
+    account: run.account,
+    role: run.role,
+    ...(run.latestPrediction ? { suggestion: run.latestPrediction } : {}),
+    onDone,
+  });
+  return true;
 }

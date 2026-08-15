@@ -21,8 +21,9 @@ import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
-import { openPlacementComplete } from './placementComplete';
+import { maybeConfirmPlacementRank } from './placementComplete';
 import { maybeOfferPlacements } from './placementOffer';
+import { srEntryMode } from '../../../src/core/placements';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import type {
@@ -221,13 +222,18 @@ function buildForm(
   let saving = false;
 
   /**
-   * Set by persist() when the just-logged match was a placement run's target
-   * match (its 10th) — the caller opens the reveal-rank confirmation with
-   * this AFTER its own close/refresh. Never opened from inside persist()
-   * itself: this modal would still be open (or mid-close) at that point, and
-   * a modal can't nest inside one that's closing.
+   * Set by persist() when the just-logged match landed on a track with an open
+   * placement run — the caller then asks whether that run is now finished and
+   * needs its revealed rank, AFTER its own close/refresh. Never opened from
+   * inside persist() itself: this modal would still be open (or mid-close) at
+   * that point, and a modal can't nest inside one that's closing.
+   *
+   * Deliberately NOT "is this the 10th match?" — that question is answered by
+   * maybeConfirmPlacementRank against the store, which knows what the write
+   * actually did. Counting locally is what made the prompt miss every path
+   * other than this form (see #184).
    */
-  let placementCompleteFor: { account: string; role: Role; suggestion: { tier: string; division: number } } | undefined;
+  let placementTrackFor: { account: string; role: Role } | undefined;
   /** Same contract as above, for the "should this track start placements?" offer. */
   let placementOfferFor: { account: string; role: Role } | undefined;
 
@@ -235,7 +241,7 @@ function buildForm(
   // save itself failed (form stays open, error/toast shown inline).
   const persist = async (): Promise<boolean> => {
     if (saving) return false;
-    placementCompleteFor = undefined;
+    placementTrackFor = undefined;
     placementOfferFor = undefined;
     const map = resolveMap();
     if (!map) {
@@ -248,20 +254,30 @@ function buildForm(
     state.map = map;
     saving = true;
     try {
-      // An open placement run pre-empts the normal SR entry entirely: no
-      // srDelta (the game reports no ±% during placements) and no rank
-      // anchor (there's no revealed rank yet to anchor) — only the predicted
-      // rank, set below once the match is logged and has a matchId.
+      // A placement run pre-empts the normal SR entry only while it is still
+      // COUNTING: during placements the game reports no ±% and there's no
+      // revealed rank to anchor, so the match carries a predicted rank instead
+      // (set below, once it has a matchId). Once the run has counted its ten,
+      // Overwatch has revealed the rank and gone back to showing ±% — so a match
+      // logged then is an ordinary game and must record its real ±%, or the
+      // number is lost for good (suppression masks a stored value; it cannot
+      // invent one). See core/placements/entryMode.
       const run = openRun(state.account, state.role);
+      const mode = srEntryMode(run);
       // "Set current rank" is an input aid, not a second kind of record: the
       // picker already translated the entered rank into a ±% (rankEntry →
       // rankEntryPreview), so the match carries a plain srDelta either way. The
       // one exception is a track with no anchor yet — nothing to measure against,
       // so that entry establishes the anchor instead.
-      const setCurrent = !run && state.srMode === 'set-current';
+      //
+      // Gated on 'full', never merely on "not a placement match": that aid
+      // measures against the track's LIVE anchor, which while a run is open is
+      // still the pre-run one. A player entering the rank the game just revealed
+      // would have the entire season-reset gap stored as one match's ±%.
+      const setCurrent = mode === 'full' && state.srMode === 'set-current';
       const anchoring = setCurrent && state.rankPreview?.anchored === false;
       // Vantage is competitive-only (spec D1) — manual logs always report as such.
-      const srDelta = run || anchoring
+      const srDelta = mode === 'placement' || anchoring
         ? undefined
         : setCurrent
           ? (state.rankPreview?.anchored ? state.rankPreview.srDelta : undefined)
@@ -294,20 +310,22 @@ function buildForm(
       }
       // Placements: record this match's predicted rank against the run now
       // that it has a matchId — the single source the run's progress card and
-      // predicted-rank display read from.
-      if (run) {
+      // predicted-rank display read from. Only for a counted match: runProgress
+      // reads predictions off the counted ten, so a prediction written for the
+      // eleventh could never be read back.
+      if (mode === 'placement') {
         await bridge.setPlacementPrediction({
           account: state.account,
           role: state.role,
           matchId,
           prediction: { tier: state.predTier, division: state.predDivision },
         });
-        // This match took the run to its target (its 10th) — Overwatch has now
-        // revealed the real rank, so flag the reveal-rank confirmation for the
-        // caller, seeded with the prediction just entered here.
-        if (run.counted + 1 >= run.target) {
-          placementCompleteFor = { account: state.account, role: state.role, suggestion: { tier: state.predTier, division: state.predDivision } };
-        }
+      }
+      // Keyed on the RUN, not the mode: a match logged after the target still
+      // wants the reveal-rank prompt (that run is exactly the one waiting on an
+      // answer). The caller asks the store whether one is due.
+      if (run) {
+        placementTrackFor = { account: state.account, role: state.role };
       } else {
         // No run on this track — this is the moment to ask whether one should
         // start. Only ever after a match, and only for the track just played:
@@ -441,11 +459,12 @@ function buildForm(
   // account/role/mode/result change, since those decide what it renders.
   const rankHost = h('div');
   const paintRank = (): void => {
-    // An open placement run pre-empts the whole SR block: the game shows no
-    // ±%, no rank protection, and there's nothing to toggle between "change"
+    // A run that is still COUNTING pre-empts the whole SR block: the game shows
+    // no ±%, no rank protection, and there's nothing to toggle between "change"
     // and "set current" during placements — only a predicted rank per match.
     const run = openRun(state.account, state.role);
-    if (run) {
+    const mode = srEntryMode(run);
+    if (mode === 'placement' && run) {
       render(rankHost,
         field(optionalLabel('Predicted rank', '— placements show no ±%'), placementPicker({
           tier: state.predTier,
@@ -455,6 +474,17 @@ function buildForm(
         })),
         h('div', { class: 'hint', style: { marginTop: '4px' } },
           `Placements (${run.counted}/${run.target}) for ${roleLabel(state.role)} on ${state.account} — the game shows a predicted rank after each match, no ±% and no rank protection.`));
+      return;
+    }
+    // The run counted out but its rank isn't confirmed yet. The game HAS
+    // revealed it and is showing ±% again, so take the number — but not via
+    // "set current rank", which would measure against the stale pre-run anchor.
+    if (mode === 'delta-only') {
+      render(rankHost,
+        field(optionalLabel('Skill rating', '— the ± the game showed'),
+          srDeltaInput(state.srDelta, (v) => { state.srDelta = v; })),
+        h('div', { class: 'hint', style: { marginTop: '4px' } },
+          'Placements are done on this track — confirm the rank Overwatch revealed and this ±% starts counting from it.'));
       return;
     }
 
@@ -520,9 +550,9 @@ function buildForm(
       if (!ok) return;
       close();
       // Opened AFTER this form's own close (never nested inside a modal
-      // that's mid-close), and only for the match that completed the run.
-      if (placementCompleteFor) {
-        openPlacementComplete({ ...placementCompleteFor, onDone: () => ctx.refresh() });
+      // that's mid-close), and only when the run actually finished.
+      if (placementTrackFor) {
+        void maybeConfirmPlacementRank({ ...placementTrackFor, onDone: () => ctx.refresh() });
       } else if (placementOfferFor) {
         void maybeOfferPlacements(placementOfferFor.account, placementOfferFor.role, () => ctx.refresh());
       }
@@ -538,8 +568,13 @@ function buildForm(
       // than stacking a second modal under/over it — "next" chains onto its
       // confirm. A Cancel here means "I'll finish this later", so it stays
       // that way instead of silently popping the next log form regardless.
-      if (placementCompleteFor) {
-        openPlacementComplete({ ...placementCompleteFor, onDone: () => { ctx.refresh(); openNext(); } });
+      // When the run ISN'T finished, nothing is asked and "next" proceeds —
+      // hence the same shown/not-shown chaining the offer branch below uses.
+      if (placementTrackFor) {
+        void maybeConfirmPlacementRank({
+          ...placementTrackFor,
+          onDone: () => { ctx.refresh(); openNext(); },
+        }).then((shown) => { if (!shown) openNext(); });
       } else if (placementOfferFor) {
         // Same one-modal-at-a-time rule as the completion dialog: decide the
         // offer first, then chain the next log form off its outcome.

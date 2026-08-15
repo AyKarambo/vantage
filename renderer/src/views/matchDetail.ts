@@ -12,6 +12,8 @@ import { fmt, relTime, roleLabel, signed } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
+import { maybeConfirmPlacementRank } from '../app/placementComplete';
+import { srEntryMode } from '../../../src/core/placements';
 import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
@@ -561,11 +563,15 @@ function buildMatchEditor(
     // tier/division/% picker the app back-computes the SR % from on save.
     const srHost = h('div');
     const paintSr = (): void => {
-      // An open placement run pre-empts the whole SR block: the game shows no
-      // ±%, no rank protection, and there's nothing to toggle between "change"
-      // and "set current" during placements — only a predicted rank per match.
+      // A COUNTED placement match pre-empts the whole SR block: the game shows
+      // no ±%, no rank protection, and there's nothing to toggle between
+      // "change" and "set current" during placements — only a predicted rank.
+      // Per MATCH (see core/placements/entryMode): editing placement match four
+      // must still offer the picker after the run has reached ten, or its
+      // prediction becomes uncorrectable.
       const run = openRun(d.account, state.role);
-      if (run) {
+      const mode = srEntryMode(run, d.matchId);
+      if (mode === 'placement' && run) {
         render(srHost,
           field(optionalLabel('Predicted rank', '— placements show no ±%'), placementPicker({
             tier: predTier,
@@ -575,6 +581,19 @@ function buildMatchEditor(
           })),
           h('div', { class: 'hint', style: { marginTop: '4px' } },
             `Placements (${run.counted}/${run.target}) for ${roleLabel(state.role)} on ${d.account} — the game shows a predicted rank after each match, no ±% and no rank protection.`));
+        return;
+      }
+      // On the track but outside the counted ten. The ±% is editable here — and
+      // this is the only place a match that lost its ±% to the old gate can have
+      // it filled back in by hand.
+      if (mode === 'delta-only') {
+        render(srHost,
+          field(optionalLabel('Skill rating', '— the ± the game showed'),
+            srDeltaInput(srDelta != null ? String(srDelta) : '', (v) => {
+              srDelta = v.trim() === '' ? undefined : Number(v);
+            })),
+          h('div', { class: 'hint', style: { marginTop: '4px' } },
+            'Outside this track\'s ten placement matches — the game showed a ±% for it.'));
         return;
       }
 
@@ -623,10 +642,11 @@ function buildMatchEditor(
         return;
       }
       state.map = resolved;
-      // An open placement run pre-empts the whole rank payload: no setRank, no
-      // srDelta (the game reports neither during placements) — the predicted
+      // A COUNTED placement match pre-empts the whole rank payload: no setRank,
+      // no srDelta (the game reports neither during placements) — the predicted
       // rank instead, sent separately below (mirrors log-match's persist()).
       const run = isComp ? openRun(d.account, state.role) : undefined;
+      const mode = isComp ? srEntryMode(run, d.matchId) : 'full';
       const edited = bridge.editMatch({
         matchId: d.matchId,
         result: state.result, role: state.role, map: state.map, heroes: [...heroes],
@@ -635,8 +655,11 @@ function buildMatchEditor(
         // how the number was arrived at: rankEntry already translated the picked
         // rank into it. An unanchored track is the one case with no delta to
         // send — that entry sets the anchor instead, handled after the save.
-        ...(isComp && !run
-          ? (srMode === 'set-current'
+        //
+        // 'delta-only' sends the key so the value is editable AND clearable:
+        // omitting it left a surplus match's ±% frozen at whatever it had.
+        ...(isComp && mode !== 'placement'
+          ? (mode === 'full' && srMode === 'set-current'
               ? (rankPreview?.anchored ? { srDelta: rankPreview.srDelta } : {})
               : { srDelta: srDelta ?? null })
           : {}),
@@ -646,8 +669,8 @@ function buildMatchEditor(
       });
       // A track with no anchor yet: the entered rank defines where tracking
       // starts, since there is no rank-before for it to be a change from.
-      const anchoring = isComp && !run && srMode === 'set-current' && rankPreview?.anchored === false;
-      const saved = run
+      const anchoring = mode === 'full' && srMode === 'set-current' && rankPreview?.anchored === false;
+      const saved = mode === 'placement'
         ? Promise.all([edited, bridge.setPlacementPrediction({
             account: d.account,
             role: state.role,
@@ -668,6 +691,13 @@ function buildMatchEditor(
         close();
         ctx.refresh();
         toast(`Match updated — ${state.map}`);
+        // Opened AFTER this modal's own close, never nested inside it. An edit
+        // can pull a tenth match onto a track's counted set (e.g. correcting
+        // the role/account onto one with an open run) — only worth asking when
+        // this save actually touched such a track.
+        if (run) {
+          void maybeConfirmPlacementRank({ account: d.account, role: state.role, onDone: () => ctx.refresh() });
+        }
       });
     };
     const clear = (): void => {

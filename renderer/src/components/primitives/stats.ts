@@ -7,6 +7,7 @@ import type { CalendarDay } from '../../../../src/shared/contract';
 import { pct } from '../../format';
 import { PALETTE, wrColor } from '../../theme';
 import { tooltipLayer } from '../../charts/tooltip';
+import { button } from './controls';
 
 type Child = Node | string | number | null | undefined | false;
 
@@ -16,14 +17,19 @@ export interface KpiOpts {
   value: string;
   delta?: { text: string; dir?: 'up' | 'down' };
   accent?: boolean;
+  /** Call-to-action button (e.g. "Confirm rank") — mirrors {@link ToastOpts.action}
+   *  in `components/toast.ts`. Renders below the delta; omitted, the card's
+   *  layout is unchanged. */
+  action?: { label: string; run: () => void };
 }
 
-/** Headline metric tile with an optional up/down delta. */
+/** Headline metric tile with an optional up/down delta and an optional CTA. */
 export function kpiCard(o: KpiOpts): HTMLElement {
   return h('div', { class: `kpi${o.accent ? ' kpi--accent' : ''}` },
     h('div', { class: 'kpi-label' }, o.label),
     h('div', { class: 'kpi-value' }, o.value),
     o.delta && h('div', { class: `kpi-delta${o.delta.dir ? ' is-' + o.delta.dir : ''}` }, o.delta.text),
+    o.action && button(o.action.label, { variant: 'soft', class: 'kpi-action', onClick: o.action.run }),
   );
 }
 

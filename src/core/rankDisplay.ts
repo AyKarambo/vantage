@@ -89,15 +89,56 @@ export interface PlacementParts {
   counter: string;
   /** "Platinum 4 (predicted)" — present only once a placement match has posted a prediction. */
   predictionLabel?: string;
+  /**
+   * "confirm your rank" — present only once the run's matches are all
+   * counted but the player hasn't confirmed the real rank Overwatch
+   * revealed yet (mirrors the contract's `awaitingRank`). Mutually
+   * exclusive with `predictionLabel`: the run is over, so the in-run guess
+   * is stale and showing it would present it as the outcome.
+   */
+  awaitingLabel?: string;
 }
 
-/** Decompose an open placement run into the shared display parts; see {@link PlacementParts}. */
+/**
+ * Decompose an open placement run into the shared display parts; see
+ * {@link PlacementParts}. `awaitingRank` overrides the prediction: once the
+ * run has counted out and is only waiting on the player to confirm the
+ * revealed rank, `awaitingLabel` is set and `predictionLabel` is omitted
+ * even when a `prediction` is still passed in, so a surface can't be made to
+ * show the in-run guess as if it were the confirmed result.
+ */
 export function placementParts(
   counted: number,
   target: number,
   prediction?: { tier: string; division: number },
+  awaitingRank = false,
 ): PlacementParts {
   const parts: PlacementParts = { counter: `Placements ${counted}/${target}` };
-  if (prediction) parts.predictionLabel = `${rankLabelOf(prediction.tier, prediction.division)} (predicted)`;
+  if (awaitingRank) {
+    parts.awaitingLabel = 'confirm your rank';
+  } else if (prediction) {
+    parts.predictionLabel = `${rankLabelOf(prediction.tier, prediction.division)} (predicted)`;
+  }
   return parts;
+}
+
+/**
+ * The account-switcher popover shows one rank per account; an open
+ * placement run makes that number provisional (or, once awaiting, correct
+ * but unconfirmed), so this rolls an account's open runs into one short
+ * suffix appended after its real rank rather than letting the switcher show
+ * a rank the header itself no longer trusts (AC8). Completed runs are
+ * ignored — they already resolved to a real rank and need no suffix.
+ * Structural param, not `PlacementRunSummary`: `src/core/` must not depend
+ * on `src/shared/contract/` (the contract imports core, not the reverse),
+ * and this only needs a few of that DTO's fields.
+ */
+export function accountPlacementNote(
+  runs: readonly { counted: number; target: number; completed: boolean; awaitingRank: boolean }[],
+): string | undefined {
+  const open = runs.filter((r) => !r.completed);
+  if (open.length === 0) return undefined;
+  if (open.some((r) => r.awaitingRank)) return 'confirm your rank';
+  if (open.length === 1) return `placements ${open[0].counted}/${open[0].target}`;
+  return `${open.length} tracks in placements`;
 }

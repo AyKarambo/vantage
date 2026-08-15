@@ -93,6 +93,27 @@ describe('the competitive-only gate applies to every filter-scoped read', () => 
     expect(matchDetailRead(provider, 'qp-1', {})).toBeNull();
   });
 
+  it('matchDetailRead suppresses a match inside an open placement run', () => {
+    // A match in an open run has no settled rank yet — every other surface holds
+    // its ±% back, so the per-match "calculated" rank must too, or the drill-down
+    // reports a number the Overview KPI is deliberately not showing.
+    const t0 = Date.parse('2026-06-01T12:00:00Z');
+    const runMatch = game({
+      matchId: 'run-1', result: 'Win', map: 'Ilios', role: 'tank',
+      timestamp: t0 + 60_000, srDelta: 500,
+    });
+    const { provider } = fakeProvider({ games: [runMatch] });
+    provider.rankAnchorMap = () => ({
+      'Karambo::tank': { tier: 'Gold', division: 3, progressPct: 40, setAt: t0 },
+    });
+    provider.placementRuns = () => [
+      { account: 'Karambo', role: 'tank', startedAt: t0, preRunAnchor: null, predictions: {} },
+    ];
+    const d = matchDetailRead(provider, 'run-1', {});
+    // Its own +500 must not show up in the rank calculated for it.
+    expect(d?.competitive).toMatchObject({ tier: 'Gold', division: 3, progressPct: 40 });
+  });
+
   it('heroDetailRead and playerHistoryRead run over the gated history', () => {
     const { provider } = fakeProvider({ games: [comp, quick] });
     expect(heroDetailRead(provider, 'Tracer', {})).toBeDefined();

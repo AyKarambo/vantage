@@ -40,6 +40,7 @@ export function matchDetail(
   activeMeasured: AuthoredTarget[] = [],
   margin?: number,
   resetBefore?: number,
+  suppressed?: ReadonlySet<string>,
 ): MatchDetail | null {
   const game = all.find((g) => g.matchId === matchId);
   if (!game) return null;
@@ -65,7 +66,7 @@ export function matchDetail(
     review: game.review,
     measuredGrades: activeMeasured.length ? measuredGradesForMatch(game, activeMeasured, margin) : undefined,
     scoreboard: scoreboardOf(game),
-    competitive: competitiveOf(game, competitiveContext, all, anchors, resetBefore),
+    competitive: competitiveOf(game, competitiveContext, all, anchors, resetBefore, suppressed),
     playerHistory: playerHistory(all, game),
   };
 }
@@ -163,6 +164,7 @@ function competitiveOf(
   all: GameRecord[],
   anchors: RankAnchorMap,
   resetBefore?: number,
+  suppressed?: ReadonlySet<string>,
 ): MatchDetail['competitive'] {
   if (classifyGameType(game.gameType) !== 'competitive') return undefined;
 
@@ -174,7 +176,7 @@ function competitiveOf(
   // at/after the anchor is forward-replayed ('calculated'); an older one is
   // reconstructed backward from the anchor ('reconstructed', best-effort).
   const anchor = anchors[rankKey(game.account, game.role)];
-  const rank = rankAfterMatch(all, anchors, game.account, game.role, game.timestamp, resetBefore);
+  const rank = rankAfterMatch(all, anchors, game.account, game.role, game.timestamp, resetBefore, suppressed);
   if (rank && anchor) {
     return {
       note: game.timestamp >= anchor.setAt ? 'calculated' : 'reconstructed',

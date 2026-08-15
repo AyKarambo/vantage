@@ -102,3 +102,42 @@ describe('dashboard — placement summaries', () => {
     expect(d.primaryRank).toMatchObject({ progressPct: 60 });
   });
 });
+
+describe('dashboard — awaiting rank', () => {
+  const tenGames = () => Array.from({ length: 10 }, (_, i) => g(i + 1));
+
+  it('is true once a run counts its full target but the revealed rank is not confirmed yet', () => {
+    const d = computeDashboard(tenGames(), { days: 'all' }, demo, {
+      rankAnchors: anchors,
+      placementRuns: [run()],
+    });
+    expect(d.placements[0]).toMatchObject({ counted: 10, target: 10, completed: false, awaitingRank: true });
+  });
+
+  it('is false mid-run', () => {
+    const games = [g(1), g(2), g(3), g(4)];
+    const d = computeDashboard(games, { days: 'all' }, demo, {
+      rankAnchors: anchors,
+      placementRuns: [run()],
+    });
+    expect(d.placements[0]).toMatchObject({ counted: 4, target: 10, awaitingRank: false });
+  });
+
+  it('is false once the run is completed', () => {
+    const games = tenGames();
+    const d = computeDashboard(games, { days: 'all' }, demo, {
+      rankAnchors: anchors,
+      placementRuns: [run({ completedAt: T0, completedMatchIds: games.map((x) => x.matchId) })],
+    });
+    expect(d.placements[0]).toMatchObject({ completed: true, awaitingRank: false });
+  });
+
+  it('rebuilding the dashboard never flips completed or moves the anchor on its own (AC10)', () => {
+    const opts = { rankAnchors: anchors, placementRuns: [run()] };
+    const first = computeDashboard(tenGames(), { days: 'all' }, demo, opts);
+    const second = computeDashboard(tenGames(), { days: 'all' }, demo, opts);
+    expect(first.placements[0]).toMatchObject({ completed: false, awaitingRank: true });
+    expect(second.placements[0]).toMatchObject({ completed: false, awaitingRank: true });
+    expect(second.primaryRank).toEqual(first.primaryRank);
+  });
+});

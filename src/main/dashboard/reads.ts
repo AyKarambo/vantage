@@ -5,6 +5,7 @@ import { playerMatchHistory } from '../../core/playerIndex';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
+import { suppressedMatchIds } from '../../core/placements';
 import type {
   DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerMatchHistory,
 } from '../../shared/contract';
@@ -116,6 +117,9 @@ export function matchDetailRead(
     games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured,
     provider.getGrading().partialMargin,
     resetBoundaryFor(provider, games, matchId),
+    // The same mask the dashboard applies, so a match inside an open run doesn't
+    // report a per-match rank built from ±% every other surface is holding back.
+    suppressedMatchIds(games, provider.placementRuns()),
   );
 }
 

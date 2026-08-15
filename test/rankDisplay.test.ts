@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rankParts, movementDirOf, rankLabelOf, placementParts, RANK_MOVEMENT_NEUTRAL_THRESHOLD,
+  rankParts, movementDirOf, rankLabelOf, placementParts, accountPlacementNote, RANK_MOVEMENT_NEUTRAL_THRESHOLD,
 } from '../src/core/rankDisplay';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { GameRecord } from '../src/core/analytics';
@@ -57,6 +57,58 @@ describe('rankDisplay — placementParts', () => {
     expect(p).not.toHaveProperty('shield');
     expect(p).not.toHaveProperty('bufferPctText');
     expect(p).not.toHaveProperty('movementDir');
+  });
+
+  it('awaitingRank true sets awaitingLabel and omits predictionLabel even when a prediction is passed', () => {
+    const p = placementParts(10, 10, { tier: 'Platinum', division: 4 }, true);
+    expect(p.awaitingLabel).toBe('confirm your rank');
+    expect(p).not.toHaveProperty('predictionLabel');
+  });
+
+  it('awaitingRank false (the default) behaves exactly as before: no awaitingLabel, prediction still shown', () => {
+    const withoutArg = placementParts(4, 10, { tier: 'Platinum', division: 4 });
+    expect(withoutArg).not.toHaveProperty('awaitingLabel');
+    expect(withoutArg.predictionLabel).toBe('Platinum 4 (predicted)');
+
+    const explicitFalse = placementParts(4, 10, { tier: 'Platinum', division: 4 }, false);
+    expect(explicitFalse).not.toHaveProperty('awaitingLabel');
+    expect(explicitFalse.predictionLabel).toBe('Platinum 4 (predicted)');
+  });
+});
+
+describe('rankDisplay — accountPlacementNote', () => {
+  it('no open runs → undefined', () => {
+    expect(accountPlacementNote([])).toBeUndefined();
+    expect(accountPlacementNote([{ counted: 10, target: 10, completed: true, awaitingRank: false }])).toBeUndefined();
+  });
+
+  it('any open run awaiting rank confirmation → "confirm your rank", regardless of other open runs', () => {
+    expect(accountPlacementNote([{ counted: 10, target: 10, completed: false, awaitingRank: true }])).toBe('confirm your rank');
+    expect(accountPlacementNote([
+      { counted: 4, target: 10, completed: false, awaitingRank: false },
+      { counted: 10, target: 10, completed: false, awaitingRank: true },
+    ])).toBe('confirm your rank');
+  });
+
+  it('exactly one open run, not awaiting → "placements N/target" (lowercase, a suffix not a heading)', () => {
+    expect(accountPlacementNote([{ counted: 4, target: 10, completed: false, awaitingRank: false }])).toBe('placements 4/10');
+  });
+
+  it('more than one open run, none awaiting → "N tracks in placements"', () => {
+    expect(accountPlacementNote([
+      { counted: 4, target: 10, completed: false, awaitingRank: false },
+      { counted: 7, target: 10, completed: false, awaitingRank: false },
+    ])).toBe('2 tracks in placements');
+  });
+
+  it('completed runs are ignored entirely — only OPEN runs count and count toward the tally', () => {
+    expect(accountPlacementNote([
+      { counted: 10, target: 10, completed: true, awaitingRank: false },
+      { counted: 4, target: 10, completed: false, awaitingRank: false },
+    ])).toBe('placements 4/10');
+    expect(accountPlacementNote([
+      { counted: 10, target: 10, completed: true, awaitingRank: true },
+    ])).toBeUndefined();
   });
 });
 

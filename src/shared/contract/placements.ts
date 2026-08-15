@@ -25,6 +25,16 @@ export interface PlacementRunSummary {
   completed: boolean;
   /** History changed under a completed run — the counted set no longer matches the completion snapshot. */
   drifted: boolean;
+  /** Full length counted but the revealed rank hasn't been confirmed yet — waiting on the player, not more matches. */
+  awaitingRank: boolean;
+  /**
+   * The matches this run counts, in order. Lets a consumer ask the PER-MATCH
+   * question ("is this one of the ten?") rather than only the per-run one —
+   * needed once a run reaches its target while the player keeps logging, since
+   * match eleven is an ordinary game but matches one to ten stay placement
+   * matches. Derived, never stored.
+   */
+  countedMatchIds: string[];
 }
 
 /**

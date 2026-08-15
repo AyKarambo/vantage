@@ -6,7 +6,7 @@
  */
 import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
-import type { DashboardData, GameLoggedPayload, GepStatusPayload } from '../../../src/shared/contract';
+import type { DashboardData, GameLoggedPayload, GepStatusPayload, Role } from '../../../src/shared/contract';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { statusText, store } from '../store';
 import { bridge } from '../bridge';
@@ -20,8 +20,9 @@ import { openModal } from '../components/overlay';
 import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
-import { pct, rankLabel, relTime, signed } from '../format';
-import { placementParts, rankParts } from '../../../src/core/rankDisplay';
+import { pct, rankLabel, relTime, roleLabel, signed } from '../format';
+import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
+import { roleStatus } from '../roleStatus';
 import { overview } from '../views/overview';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
@@ -61,6 +62,9 @@ const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDeta
  *  playerHistory is a cross-history drill-down over the full local index. faq
  *  is static help copy, unaffected by any filter. */
 const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq']);
+
+/** Display order for the account switcher's per-role expansion. */
+const SWITCHER_ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
 
 interface NavItem {
   id: ViewId;
@@ -474,10 +478,17 @@ export class App {
   private renderSidebar(state: AppState): void {
     if (!this.sidebarBuilt) this.buildSidebar();
     const d = state.data;
-    // The chip doubles as the account switcher: it shows the active account
-    // filter's name, or "All accounts" literally when that's the active scope
-    // (never silently substituting the most-played account) — and its rank.
-    const displayName = d ? (d.filters.account !== 'all' ? d.filters.account : 'All accounts') : 'Vantage';
+    // The chip doubles as the account switcher: a PINNED filter always shows
+    // that account's own name — a manual choice is never silently overridden.
+    // Unpinned ("All accounts"), it shows whoever was played most recently
+    // instead of the literal "All accounts" label, so the corner widget reads
+    // as "what am I doing right now" — d.primaryRank already resolves to that
+    // account (see dashboardData's mostRecentAccount), so this just borrows it
+    // rather than re-deriving anything. Falls back to the literal label only
+    // when there's no rank data to resolve from at all (a brand-new profile).
+    const displayName = d
+      ? (d.filters.account !== 'all' ? d.filters.account : (d.primaryRank?.account ?? 'All accounts'))
+      : 'Vantage';
     this.avatarEl.textContent = displayName.charAt(0).toUpperCase();
     this.accountNameEl.textContent = displayName;
     this.accountSubEl.textContent = d ? rankLine(d) : '—';
@@ -545,25 +556,49 @@ export class App {
       // A per-account rank line, when that account has an anchor set. Same shared
       // parts as every other surface (no movement arrow — Overview KPI only), so
       // protection reads identically here. "All accounts" has no single rank.
-      // While the account has a track in an OPEN placement run, that computed
-      // rank is stale/meaningless (no ±%, no protection during placements) —
-      // show `Placements N/10` instead, via the shared placementParts.
+      //
+      // A placement run APPENDS to that rank, it does not replace it. This used to
+      // take the first open run on the account regardless of role, so one stale
+      // Support run hid an account's real rank behind `Placements N/10` — the menu
+      // then contradicted the header chip above it, which is the second half of
+      // #184. `accountRanks` is the same role-aggregated, suppression-aware value
+      // the header shows, so leading with it keeps the two in agreement, and
+      // `accountPlacementNote` says what the open runs are doing in a few words.
       const rankSub = (account: string): HTMLElement | null => {
-        const openRun = d.placements.find((p) => p.account === account && !p.completed);
-        if (openRun) {
-          const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-          return h('span', { class: 'acct-menu-rank u-dim' }, pp.predictionLabel ? `${pp.counter} · ${pp.predictionLabel}` : pp.counter);
-        }
+        const note = accountPlacementNote(d.placements.filter((p) => p.account === account));
         const rk = d.accountRanks[account];
-        if (!rk) return null;
+        if (!rk) {
+          // No rank to lead with — a track mid-placements with nothing behind it.
+          return note ? h('span', { class: 'acct-menu-rank u-dim' }, note) : null;
+        }
         const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected });
-        return h('span', { class: 'acct-menu-rank u-dim' }, `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`);
+        const rank = `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
+        return h('span', { class: 'acct-menu-rank u-dim' }, note ? `${rank} · ${note}` : rank);
+      };
+      // The ACTIVE account expands into one line per role it tracks — everything
+      // else stays the single collapsed line above, so the popover doesn't turn
+      // into every account's full roster at once (that's what Settings is for).
+      const roleRows = (account: string): HTMLElement | null => {
+        const perRole = d.accountRoleRanks[account];
+        const runs = d.placements.filter((p) => p.account === account);
+        const roles = SWITCHER_ROLES.filter((role) => perRole?.[role] || runs.some((p) => p.role === role));
+        if (!roles.length) return null;
+        return h('div', { class: 'acct-menu-roles' },
+          ...roles.map((role) => {
+            const openRun = runs.find((p) => p.role === role && !p.completed);
+            const status = roleStatus(perRole?.[role], openRun);
+            return h('div', { class: 'acct-menu-role-row' },
+              h('span', null, roleLabel(role)),
+              h('span', { class: status.tone === 'placement' ? 'acct-menu-role-accent' : undefined }, status.text),
+            );
+          }),
+        );
       };
       const item = (label: string, active: boolean, run: () => void, account?: string): HTMLElement => {
         const sub = account ? rankSub(account) : null;
         return h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
           sub
-            ? h('span', { class: 'acct-menu-label' }, h('span', null, label), sub)
+            ? h('span', { class: 'acct-menu-label' }, h('span', null, label), sub, active ? roleRows(account!) : null)
             : h('span', null, label),
           active ? h('span', { class: 'acct-menu-check' }, '✓') : null,
         );
@@ -848,24 +883,23 @@ function routeKey(view: ViewId, matchId?: string, playerName?: string, targetId?
  * otherwise the winrate-derived heuristic estimate. Showing the heuristic while
  * an anchor exists was the "says Platinum 1 even though I set my rank" bug.
  *
+ * Prefixed with the role name: `d.primaryRank` resolves to whichever role was
+ * most recently played (see dashboardData), so without the prefix the number
+ * alone wouldn't say which of an account's roles it belongs to.
+ *
  * While the anchored (account, role) track is in an OPEN placement run, the
  * computed rank above is stale/meaningless (Overwatch shows no ±% or protection
  * during placements) — this shows `Placements N/10` (+ the latest prediction,
- * when one exists) instead, via the shared placementParts.
+ * when one exists) instead, via the shared roleStatus/placementParts.
  */
 function rankLine(d: DashboardData): string {
   const r = d.primaryRank;
   if (r) {
     const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
-    if (openRun) {
-      const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-      return pp.predictionLabel ? `${pp.counter} · ${pp.predictionLabel}` : pp.counter;
-    }
-    // Shared parts — no `movement` passed, so the sidebar shows no arrow (that's
-    // the Overview KPI's job). The shield keeps a protected negative % from reading
-    // as broken.
-    const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected });
-    return `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
+    // No `movement` passed through roleStatus's rankParts call — the sidebar
+    // shows no arrow (that's the Overview KPI's job).
+    const status = roleStatus(r, openRun);
+    return `${roleLabel(r.role)} · ${status.text}`;
   }
   return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }

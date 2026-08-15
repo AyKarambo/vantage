@@ -212,46 +212,90 @@ describe('computeDashboard', () => {
     // No anchor → primaryRank absent, so the sidebar/KPI fall back to progression.
     expect(computeDashboard([g('a')], { days: 'all' }, demo, {}).primaryRank).toBeUndefined();
 
-    // Multiple anchored roles → the most-played one wins (tank ×2 over support ×1).
-    const multi = computeDashboard([g('a', 'tank'), g('b', 'tank'), g('c', 'support')], { days: 'all' }, demo, {
+    // Multiple anchored roles → the most RECENTLY played one wins, not the
+    // most-played — tank has two games but its last was ages ago; support has
+    // only one, played after both of tank's.
+    const gAt = (matchId: string, role: string, timestamp: number): GameRecord =>
+      ({ matchId, timestamp, account: 'Main', role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const multi = computeDashboard([gAt('a', 'tank', 100), gAt('b', 'tank', 200), gAt('c', 'support', 300)], { days: 'all' }, demo, {
       rankAnchors: {
         'Main::tank': { tier: 'Silver', division: 2, progressPct: 10, setAt: 1000 },
         'Main::support': { tier: 'Diamond', division: 4, progressPct: 90, setAt: 1000 },
       },
     });
-    expect(multi.primaryRank).toMatchObject({ role: 'tank', tier: 'Silver' });
+    expect(multi.primaryRank).toMatchObject({ role: 'support', tier: 'Diamond' });
   });
 
   it('scopes primaryRank to the selected account (the sidebar switcher re-points the rank)', () => {
-    const g = (matchId: string, account: string): GameRecord =>
-      ({ matchId, timestamp: 100, account, role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const g = (matchId: string, account: string, timestamp: number): GameRecord =>
+      ({ matchId, timestamp, account, role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
     const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
     const anchors = {
       'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 },
       'Smurf::damage': { tier: 'Bronze', division: 5, progressPct: 5, setAt: 1000 },
     };
-    // Main is most-played, so 'all' shows Main's rank…
-    const games = [g('a', 'Main'), g('b', 'Main'), g('c', 'Smurf')];
+    // Main was played most RECENTLY (Smurf's game is older, despite there being
+    // two Main games) — 'all' follows recency, so it shows Main's rank…
+    const games = [g('c', 'Smurf', 50), g('a', 'Main', 100), g('b', 'Main', 200)];
     expect(computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Main', tier: 'Gold' });
-    // …but filtering to Smurf re-points the rank to Smurf.
+    // …but filtering to Smurf re-points the rank to Smurf regardless.
     expect(computeDashboard(games, { days: 'all', account: 'Smurf' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Smurf', tier: 'Bronze' });
   });
 
+  it('re-points primaryRank to whichever account was played most recently, not the one with the most games', () => {
+    // The behavior change itself: Main has more total games, but Smurf's last
+    // game is the most recent thing played — the corner chip is "what am I
+    // doing right now", so Smurf must win despite Main's larger history.
+    const g = (matchId: string, account: string, timestamp: number): GameRecord =>
+      ({ matchId, timestamp, account, role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const anchors = {
+      'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 },
+      'Smurf::damage': { tier: 'Bronze', division: 5, progressPct: 5, setAt: 1000 },
+    };
+    const games = [
+      g('a', 'Main', 100), g('b', 'Main', 200), g('c', 'Main', 300),
+      g('d', 'Smurf', 400),
+    ];
+    expect(computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors }).primaryRank)
+      .toMatchObject({ account: 'Smurf', tier: 'Bronze' });
+  });
+
   it('re-points primaryRank to the active Role filter when that role is anchored', () => {
-    const g = (matchId: string, role = 'damage'): GameRecord =>
+    const g = (matchId: string, role: string, timestamp: number): GameRecord =>
+      ({ matchId, timestamp, account: 'Main', role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const anchors = {
+      'Main::tank': { tier: 'Silver', division: 2, progressPct: 10, setAt: 1000 },
+      'Main::support': { tier: 'Diamond', division: 4, progressPct: 90, setAt: 1000 },
+    };
+    // Tank's last game (200) is more recent than support's only one (150).
+    const games = [g('a', 'tank', 100), g('b', 'tank', 200), g('c', 'support', 150)];
+    // No role filter → most recently played (tank) wins.
+    expect(computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank', tier: 'Silver' });
+    // Role filter names the less-recently-played anchored role → it surfaces.
+    expect(computeDashboard(games, { days: 'all', role: 'support' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'support', tier: 'Diamond' });
+    // Role filter on an unanchored role → falls back to most recently played.
+    expect(computeDashboard(games, { days: 'all', role: 'damage' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank' });
+  });
+
+  it('accountRoleRanks carries every anchored role, not just the primary one', () => {
+    const g = (matchId: string, role: string): GameRecord =>
       ({ matchId, timestamp: 100, account: 'Main', role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
     const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
     const anchors = {
       'Main::tank': { tier: 'Silver', division: 2, progressPct: 10, setAt: 1000 },
       'Main::support': { tier: 'Diamond', division: 4, progressPct: 90, setAt: 1000 },
     };
-    const games = [g('a', 'tank'), g('b', 'tank'), g('c', 'support')];
-    // No role filter → most-played (tank) wins.
-    expect(computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank', tier: 'Silver' });
-    // Role filter names the less-played anchored role → it surfaces.
-    expect(computeDashboard(games, { days: 'all', role: 'support' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'support', tier: 'Diamond' });
-    // Role filter on an unanchored role → falls back to most-played.
-    expect(computeDashboard(games, { days: 'all', role: 'damage' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ role: 'tank' });
+    const d = computeDashboard([g('a', 'tank'), g('b', 'support')], { days: 'all' }, demo, { rankAnchors: anchors });
+    expect(d.accountRoleRanks.Main).toMatchObject({
+      tank: { tier: 'Silver', division: 2 },
+      support: { tier: 'Diamond', division: 4 },
+    });
+    // Damage was never played and has no anchor — absent, not a blank entry.
+    expect(d.accountRoleRanks.Main?.damage).toBeUndefined();
+    // An account with no anchor at all is simply absent from the map.
+    expect(computeDashboard([g('a', 'tank')], { days: 'all' }, demo, {}).accountRoleRanks.Main).toBeUndefined();
   });
 
   it('session: account "all" lets a cross-account game within the gap threshold join the current session', () => {

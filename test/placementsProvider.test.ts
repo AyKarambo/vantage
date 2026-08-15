@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createDataProvider, type DataProviderDeps } from '../src/main/dataProvider';
 import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../src/core/rank';
-import type { PlacementRun } from '../src/core/placements';
+import { suppressedMatchIds, type PlacementRun } from '../src/core/placements';
 import { DEFAULT_MASTER_DATA } from '../src/core/masterData';
 import type { GameRecord } from '../src/core/analytics';
 import type { Role } from '../src/core/model';
@@ -86,8 +86,16 @@ function harness(games: GameRecord[], initialAnchor?: ReturnType<typeof anchor>)
 
   const provider = createDataProvider(deps);
   const rankNow = () => currentRank(history, deps.rankAnchors.map(), ACCOUNT, ROLE);
+  // What every rank SURFACE renders while a run is open: the same read-time mask
+  // the dashboard applies. `rankNow` is the unsuppressed view — the two must
+  // agree whenever no run is open, and only the masked one is meaningful while
+  // one is.
+  const rankShown = () => currentRank(
+    history, deps.rankAnchors.map(), ACCOUNT, ROLE, undefined,
+    suppressedMatchIds(history, Object.values(runs)),
+  );
   const anchorNow = () => anchors[rankKey(ACCOUNT, ROLE)];
-  return { provider, rankNow, anchorNow, runs, history, recorded: () => recordedGames };
+  return { provider, rankNow, rankShown, anchorNow, runs, history, recorded: () => recordedGames };
 }
 
 /** Ten placement matches, each carrying a delta that must stay dormant while the run is open. */
@@ -96,15 +104,83 @@ const tenMatches = () => Array.from({ length: 10 }, (_, i) => g(i + 1, { srDelta
 const track = { account: ACCOUNT, role: ROLE };
 
 describe('placement runs — start and complete', () => {
-  it('completion anchors at the LAST counted match, not the wall clock', () => {
+  it('completion anchors at the last match in the run\'s window, not the wall clock', () => {
     const games = tenMatches();
     const { provider, anchorNow } = harness(games, anchor());
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
-    // The 10th match's timestamp — so competitiveComps (strictly after the
-    // anchor) excludes every placement match from the rank arithmetic.
+    // With no surplus the window IS the counted ten, so this is the 10th match's
+    // timestamp — competitiveComps (strictly after the anchor) then excludes
+    // every placement match from the rank arithmetic.
     expect(anchorNow().setAt).toBe(games[9].timestamp);
     expect(anchorNow()).toMatchObject({ tier: 'Platinum', division: 2, progressPct: 0 });
+  });
+
+  it('anchors past the tenth match when the player kept queueing before confirming', () => {
+    // Thirteen matches inside the window: the entered rank is what the game shows
+    // NOW, which already reflects m-11..m-13, so the anchor must sit after them.
+    const games = [...tenMatches(), g(11, { srDelta: 20 }), g(12, { srDelta: 20 }), g(13, { srDelta: 20 })];
+    const { provider, anchorNow } = harness(games, anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
+    expect(anchorNow().setAt).toBe(games[12].timestamp);
+  });
+
+  it('a surplus match\'s ±% is absorbed by the confirmed rank, never applied twice', () => {
+    // The double-count regression test. Anchoring at the tenth match instead of
+    // the last would re-apply m-11..m-13's +20 on top of a rank that already
+    // includes them — measured at a full division of overshoot.
+    const games = [...tenMatches(), g(11, { srDelta: 20 }), g(12, { srDelta: 20 }), g(13, { srDelta: 20 })];
+    const { provider, rankNow } = harness(games, anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2, progressPct: 60 });
+    expect(rankNow()).toMatchObject({ tier: 'Platinum', division: 2, progressPct: 60 });
+  });
+
+  it('a surplus match\'s ±% stays dormant while the run still awaits its rank', () => {
+    const games = [...tenMatches(), g(11, { srDelta: 20 }), g(12, { srDelta: 20 })];
+    const { provider, rankShown } = harness(games, anchor());
+    const [summary] = provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    expect(summary).toMatchObject({ counted: 10, completed: false, awaitingRank: true });
+    // Suppression covers the whole window, so nothing reaches the PRE-run anchor.
+    expect(rankShown()).toMatchObject({ tier: 'Gold', division: 3, progressPct: 40 });
+  });
+
+  it('getRanks() agrees with what the rank surfaces show while a run is open', () => {
+    const games = [...tenMatches(), g(11, { srDelta: 20 }), g(12, { srDelta: 20 })];
+    const { provider, rankShown } = harness(games, anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.getRanks();
+    const shown = rankShown();
+    // Without suppression here, getRanks() reported a rank built from matches the
+    // Overview KPI is deliberately holding back — the same number in two places
+    // disagreeing. This also backs Settings → Accounts and the MCP ranks tool.
+    expect(summary).toMatchObject({
+      tier: shown!.tier, division: shown!.division, progressPct: shown!.progressPct,
+    });
+  });
+
+  it('cancelling an awaiting run hands the surplus matches\' ±% back, exactly as if no run had existed', () => {
+    const games = [...tenMatches(), g(11, { srDelta: 20 }), g(12, { srDelta: -10 })];
+    const cancelled = harness(games, anchor());
+    cancelled.provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    cancelled.provider.cancelPlacementRun({ ...track });
+    // The oracle for "exact undo": a harness that never had a run at all. Asserting
+    // against that rather than a hardcoded rank is the point — cancel is defined as
+    // a byte-identical restoration, including the surplus matches' deltas.
+    const untouched = harness(games, anchor());
+    expect(cancelled.rankNow()).toEqual(untouched.rankNow());
+    expect(cancelled.anchorNow()).toMatchObject({ tier: 'Gold', division: 3, progressPct: 40 });
+  });
+
+  it('reset on an awaiting run leaves the surplus deltas untouched and writes no match', () => {
+    const games = [...tenMatches(), g(11, { srDelta: 20 })];
+    const { provider, history, recorded } = harness(games, anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.resetPlacementRun({ ...track });
+    expect(summary).toMatchObject({ counted: 10, completed: false, awaitingRank: true });
+    expect(history.find((x) => x.matchId === 'm-11')?.srDelta).toBe(20);
+    expect(recorded()).toBe(0);
   });
 
   it('the ten placement matches do not move the post-placement rank', () => {
@@ -318,5 +394,53 @@ describe('placement runs — drift and recount', () => {
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     const [summary] = provider.recountPlacementRun(track);
     expect(summary).toMatchObject({ counted: 3, completed: false });
+  });
+});
+
+describe('placement runs — awaiting rank', () => {
+  it('is true once a run counts its full target but the revealed rank is not confirmed yet', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.getPlacements();
+    expect(summary).toMatchObject({ counted: 10, target: 10, completed: false, awaitingRank: true });
+  });
+
+  it('is false mid-run, when there is nothing to confirm yet', () => {
+    const { provider } = harness(tenMatches().slice(0, 4), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.getPlacements();
+    expect(summary).toMatchObject({ counted: 4, target: 10, awaitingRank: false });
+  });
+
+  it('is false again once the run is completed — confirmation resolves it', () => {
+    const { provider } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const [summary] = provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
+    expect(summary).toMatchObject({ completed: true, awaitingRank: false });
+  });
+
+  it('backdating a run start onto ten already-logged matches reports awaitingRank immediately (AC2)', () => {
+    const games = tenMatches();
+    const { provider } = harness(games, anchor());
+    // fromMatchId backdates startedAt to m-1's own timestamp, which already has
+    // nine later competitive matches on the track sitting in history — the run
+    // reaches its target the instant it starts, with no new match required.
+    const [summary] = provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    expect(summary).toMatchObject({ counted: 10, target: 10, completed: false, awaitingRank: true });
+  });
+
+  it('rebuilding summaries never auto-resolves a run awaiting rank (AC10)', () => {
+    const { provider, anchorNow } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    const anchorBefore = anchorNow();
+
+    // Recomputing the summary (as a fresh dashboard/getPlacements call would)
+    // must be idempotent: still open, still awaiting, anchor untouched. Nothing
+    // short of an explicit completePlacementRun may resolve it.
+    const first = provider.getPlacements()[0];
+    const second = provider.getPlacements()[0];
+    expect(first).toMatchObject({ completed: false, awaitingRank: true });
+    expect(second).toMatchObject({ completed: false, awaitingRank: true });
+    expect(anchorNow()).toEqual(anchorBefore);
   });
 });

@@ -3,5 +3,8 @@
 export { PLACEMENT_RUN_LENGTH } from './types';
 export type { PredictedRank, PlacementRun } from './types';
 export {
-  countedMatches, runProgress, isRunComplete, hasDrifted, suppressedMatchIds, shouldOfferRun,
+  countedMatches, trackMatchesFrom, runProgress, isRunComplete, isAwaitingRank, hasDrifted,
+  suppressedMatchIds, shouldOfferRun,
 } from './engine';
+export { srEntryMode, isStillCounting } from './entryMode';
+export type { SrEntryMode, EntryModeRun } from './entryMode';

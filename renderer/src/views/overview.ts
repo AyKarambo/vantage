@@ -1,12 +1,13 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h } from '../dom';
-import type { DashboardData, Group, SessionRecap } from '../../../src/shared/contract';
+import type { DashboardData, Group, PlacementRunSummary, SessionRecap } from '../../../src/shared/contract';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
+import { openPlacementComplete } from '../app/placementComplete';
 import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
 
@@ -24,7 +25,7 @@ export function overview(ctx: ViewContext): HTMLElement {
     head,
     hiddenHistoryBanner(ctx),
     recapCard(d),
-    kpiRow(d),
+    kpiRow(ctx),
     scatterCard(ctx),
     bottomRow(ctx),
   );
@@ -80,7 +81,8 @@ function recapLine(r: SessionRecap): string {
   return bits.join(' · ');
 }
 
-function kpiRow(d: DashboardData): HTMLElement {
+function kpiRow(ctx: ViewContext): HTMLElement {
+  const d = ctx.data;
   const trendDelta = wrTrendDelta(d.trend, d.overall.winrate);
   return h('div', { class: 'kpi-row' },
     kpiCard({
@@ -91,7 +93,7 @@ function kpiRow(d: DashboardData): HTMLElement {
         : undefined,
     }),
     kpiCard({ label: 'Games', value: int(d.overall.games), delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` } }),
-    rankKpi(d),
+    rankKpi(ctx),
     kpiCard({
       label: 'Streak',
       value: streakText(d.streak),
@@ -111,16 +113,17 @@ function kpiRow(d: DashboardData): HTMLElement {
  * While the anchored (account, role) track is in an OPEN placement run, none of
  * that applies — Overwatch shows no ±%, no protection and no movement during
  * placements — so this renders `Placements N/10` (+ the latest prediction, when
- * one exists) instead, via the shared {@link placementParts}.
+ * one exists) instead, via the shared {@link placementParts}. Once that run is
+ * `awaitingRank`, {@link placementKpi} swaps the prediction for the "confirm
+ * your rank" label and a `Confirm rank` CTA — Overview is the home screen, so
+ * this is the main place the player meets it.
  */
-function rankKpi(d: DashboardData): HTMLElement {
+function rankKpi(ctx: ViewContext): HTMLElement {
+  const d = ctx.data;
   const r = d.primaryRank;
   if (r) {
     const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
-    if (openRun) {
-      const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-      return kpiCard({ label: 'Rank', value: pp.counter, delta: { text: pp.predictionLabel ?? 'no prediction yet' } });
-    }
+    if (openRun) return placementKpi(openRun, ctx);
     const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected, movement: r.movement });
     const arrow = p.movementDir === 'up' ? '▴ ' : p.movementDir === 'down' ? '▾ ' : '';
     const context = r.protected ? `${p.bufferPctText} · rank protected` : `${p.bufferPctText} in division`;
@@ -144,10 +147,7 @@ function rankKpi(d: DashboardData): HTMLElement {
     !p.completed
     && (d.filters.account === 'all' || p.account === d.filters.account)
     && (d.filters.role === 'all' || p.role === d.filters.role));
-  if (scoped.length === 1) {
-    const pp = placementParts(scoped[0].counted, scoped[0].target, scoped[0].latestPrediction);
-    return kpiCard({ label: 'Rank', value: pp.counter, delta: { text: pp.predictionLabel ?? 'no prediction yet' } });
-  }
+  if (scoped.length === 1) return placementKpi(scoped[0], ctx);
   if (scoped.length > 1) {
     // Several tracks placing and nothing to disambiguate them: say that plainly
     // rather than picking one arbitrarily or reverting to the heuristic.
@@ -160,6 +160,36 @@ function rankKpi(d: DashboardData): HTMLElement {
       text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
       dir: d.progression.delta >= 0 ? 'up' : 'down',
     },
+  });
+}
+
+/**
+ * The Rank KPI's shape for an OPEN placement run — shared by both of
+ * {@link rankKpi}'s placement branches (the anchored track's own run, and the
+ * "exactly one track placing" fallback) so the CTA is only wired once. Once
+ * the run has counted out and is `awaitingRank`, the stale in-run prediction
+ * is replaced with the "confirm your rank" label plus a `Confirm rank` button
+ * that opens the same reveal-rank dialog every other surface uses (AC5).
+ */
+function placementKpi(run: PlacementRunSummary, ctx: ViewContext): HTMLElement {
+  const pp = placementParts(run.counted, run.target, run.latestPrediction, run.awaitingRank);
+  return kpiCard({
+    label: 'Rank',
+    value: pp.counter,
+    delta: { text: pp.predictionLabel ?? pp.awaitingLabel ?? 'no prediction yet' },
+    ...(run.awaitingRank
+      ? {
+          action: {
+            label: 'Confirm rank',
+            run: () => openPlacementComplete({
+              account: run.account,
+              role: run.role,
+              suggestion: run.latestPrediction,
+              onDone: () => ctx.refresh(),
+            }),
+          },
+        }
+      : {}),
   });
 }
 

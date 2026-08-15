@@ -21,7 +21,7 @@ import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakRemin
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { currentRank, rankKey, rankToPoints, type RankAnchorMap } from './rank';
-import { hasDrifted, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
+import { hasDrifted, isAwaitingRank, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
@@ -77,9 +77,14 @@ export function computeDashboard(
   const overall = winLoss(games);
   // Rank is per-person, computed over the FULL history (like readiness), not the
   // filtered set — the anchored "real" rank the sidebar/KPI show over the heuristic.
-  // Scoped to the selected account when one is active, else the most-played one,
-  // so switching accounts in the sidebar re-points the rank too.
-  const primaryAccount = filters.account && filters.account !== 'all' ? filters.account : topAccount(all);
+  // Scoped to the selected account when one is active, else the one most recently
+  // played, so switching accounts (and just playing another account) both re-point
+  // the rank — the corner chip is "what am I doing right now", not "where do I have
+  // the most history". Falls back to topAccount's 'Player' placeholder only when
+  // there are no games at all (mostRecentAccount has nothing to pick from then).
+  const primaryAccount = filters.account && filters.account !== 'all'
+    ? filters.account
+    : mostRecentAccount(all) ?? topAccount(all);
   // Matches inside an OPEN placement run contribute no ladder movement: the game
   // shows no ±% during placements, so any delta recorded against them (a
   // backdated match, say) must lie dormant until the run completes or is
@@ -88,10 +93,15 @@ export function computeDashboard(
   const suppressed = suppressedMatchIds(all, placementRuns);
   const primaryRank = primaryRankOf(all, manual?.rankAnchors, primaryAccount, filters.role, suppressed);
   // Per-account rank for the sidebar's account-switcher popover — the account's
-  // most-played anchored role, no movement (the arrow is Overview-KPI-only).
+  // most-recently-played anchored role, no movement (the arrow is Overview-KPI-only).
   const accountRanks = accountRanksOf(all, manual?.rankAnchors, suppressed);
+  // EVERY anchored (account, role)'s rank — accountRanks above picks one role per
+  // account; the switcher's expanded per-role listing needs all of them, and
+  // computing it here (once, alongside accountRanks) keeps the renderer a thin
+  // reader instead of re-deriving rank math from raw history.
+  const accountRoleRanks = accountRoleRanksOf(all, manual?.rankAnchors, suppressed);
   const placements = placementRuns.map((run) => {
-    const { counted, target, latestPrediction } = runProgress(all, run);
+    const { counted, target, latestPrediction, countedMatchIds } = runProgress(all, run);
     return {
       account: run.account,
       role: run.role,
@@ -100,6 +110,8 @@ export function computeDashboard(
       ...(latestPrediction ? { latestPrediction } : {}),
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(all, run),
+      awaitingRank: isAwaitingRank(all, run),
+      countedMatchIds,
     };
   });
   // Long ranges (all-time, >90d) bucket the trend by week; a season (~63d) and
@@ -150,6 +162,7 @@ export function computeDashboard(
     progression: progression(games),
     ...(primaryRank ? { primaryRank } : {}),
     accountRanks,
+    accountRoleRanks,
     placements,
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
     byRole: byRole(games),
@@ -322,15 +335,37 @@ function topAccount(games: GameRecord[]): string {
   return byAccount(games)[0]?.key ?? 'Player';
 }
 
+/**
+ * The account of the single most recently played game, or undefined with no
+ * games at all. Deliberately a DIFFERENT heuristic from {@link topAccount}
+ * (most games, not most recent) — that one still drives the Overview greeting,
+ * which is about who you are, not what you last did; this one drives the
+ * corner rank chip, which is about what you last did.
+ */
+function mostRecentAccount(games: GameRecord[]): string | undefined {
+  return games.reduce<GameRecord | undefined>(
+    (latest, g) => (!latest || g.timestamp > latest.timestamp ? g : latest),
+    undefined,
+  )?.account;
+}
+
 const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
+
+/** The most recently played timestamp for `account`/`role` in `all`, or -Infinity if never played. */
+function lastPlayedAt(all: GameRecord[], account: string, role: Role): number {
+  return all.reduce((ts, g) => (g.account === account && g.role === role && g.timestamp > ts ? g.timestamp : ts), -Infinity);
+}
 
 /**
  * The user's real rank for `account`: the calculated rank of the active Role
- * filter when it names an anchored role, otherwise its most-played *anchored*
- * role. Undefined when that account has no rank anchor — the caller falls back
- * to the winrate heuristic. This is what makes the sidebar/KPI reflect the rank
- * the user set in Settings instead of a number derived from winrate, and lets a
- * Role filter re-point it to whichever role you're looking at.
+ * filter when it names an anchored role, otherwise its most RECENTLY PLAYED
+ * *anchored* role. Undefined when that account has no rank anchor — the caller
+ * falls back to the winrate heuristic. This is what makes the sidebar/KPI
+ * reflect the rank the user set in Settings instead of a number derived from
+ * winrate, and lets a Role filter re-point it to whichever role you're looking
+ * at. Recency, not volume: the corner chip and the KPI are both "what's my rank
+ * right now", so a track you just started placing on should outrank one you
+ * happen to have thousands of old games on.
  */
 function primaryRankOf(
   all: GameRecord[],
@@ -342,11 +377,10 @@ function primaryRankOf(
   if (!anchors) return undefined;
   const anchored = ROLES.filter((role) => anchors[rankKey(account, role)]);
   if (!anchored.length) return undefined;
-  const plays = (role: Role): number => all.reduce((n, g) => (g.account === account && g.role === role ? n + 1 : n), 0);
-  const mostPlayed = [...anchored].sort((a, b) => plays(b) - plays(a))[0];
-  // Honor an active Role filter that has an anchor here; else most-played.
+  const mostRecent = [...anchored].sort((a, b) => lastPlayedAt(all, account, b) - lastPlayedAt(all, account, a))[0];
+  // Honor an active Role filter that has an anchor here; else most recently played.
   const filtered = anchored.find((r) => r === roleFilter);
-  const role = filtered ?? mostPlayed;
+  const role = filtered ?? mostRecent;
   const anchor = anchors[rankKey(account, role)];
   const rank = currentRank(all, anchors, account, role, undefined, suppressed);
   if (!rank || !anchor) return undefined;
@@ -362,10 +396,11 @@ function primaryRankOf(
 }
 
 /**
- * The per-account rank shown in the account-switcher popover: each account's
- * most-played anchored role's calculated rank (no active Role filter, no
- * movement arrow). Only accounts with a rank anchor appear; the "All accounts"
- * scope has no single rank and is simply absent from the map.
+ * The per-account rank shown wherever only ONE line per account fits (the
+ * sidebar chip, the greeting): each account's most-recently-played anchored
+ * role's calculated rank (no active Role filter, no movement arrow). Only
+ * accounts with a rank anchor appear; the "All accounts" scope has no single
+ * rank and is simply absent from the map.
  */
 function accountRanksOf(
   all: GameRecord[],
@@ -377,6 +412,33 @@ function accountRanksOf(
   for (const account of distinct(all.map((g) => g.account))) {
     const r = primaryRankOf(all, anchors, account, undefined, suppressed);
     if (r) out[account] = { tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected };
+  }
+  return out;
+}
+
+/**
+ * EVERY anchored (account, role)'s calculated rank — unlike {@link
+ * accountRanksOf}, which picks one role per account, this keeps all of them.
+ * Feeds the account-switcher's expanded per-role listing, so an account with
+ * several tracked roles shows each one instead of a single aggregate line.
+ */
+function accountRoleRanksOf(
+  all: GameRecord[],
+  anchors: RankAnchorMap | undefined,
+  suppressed?: ReadonlySet<string>,
+): DashboardData['accountRoleRanks'] {
+  const out: DashboardData['accountRoleRanks'] = {};
+  if (!anchors) return out;
+  for (const account of distinct(all.map((g) => g.account))) {
+    for (const role of ROLES) {
+      const anchor = anchors[rankKey(account, role)];
+      if (!anchor) continue;
+      const rank = currentRank(all, anchors, account, role, undefined, suppressed);
+      if (!rank) continue;
+      (out[account] ??= {})[role] = {
+        tier: rank.tier, division: rank.division, progressPct: rank.progressPct, protected: rank.protected,
+      };
+    }
   }
   return out;
 }

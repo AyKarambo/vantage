@@ -25,6 +25,20 @@ import { PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank } from './t
  * short.
  */
 export function countedMatches(games: GameRecord[], run: PlacementRun): GameRecord[] {
+  return trackMatchesFrom(games, run).slice(0, PLACEMENT_RUN_LENGTH);
+}
+
+/**
+ * Every competitive match on the run's track from `startedAt` onward, ascending —
+ * the same selection as {@link countedMatches} but WITHOUT its
+ * {@link PLACEMENT_RUN_LENGTH} cap.
+ *
+ * The cap is right for progress and drift (a run is ten matches, by definition),
+ * but wrong for suppression: a player can keep queueing after the tenth match and
+ * before confirming the revealed rank, and those extra matches belong to the same
+ * "no settled rank yet" window. See {@link suppressedMatchIds}.
+ */
+export function trackMatchesFrom(games: GameRecord[], run: PlacementRun): GameRecord[] {
   return games
     .filter(
       (g) =>
@@ -33,8 +47,7 @@ export function countedMatches(games: GameRecord[], run: PlacementRun): GameReco
         classifyGameType(g.gameType) === 'competitive' &&
         g.timestamp >= run.startedAt,
     )
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .slice(0, PLACEMENT_RUN_LENGTH);
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 /**
@@ -50,7 +63,12 @@ export function countedMatches(games: GameRecord[], run: PlacementRun): GameReco
 export function runProgress(
   games: GameRecord[],
   run: PlacementRun,
-): { counted: number; target: number; latestPrediction?: PredictedRank } {
+): {
+  counted: number;
+  target: number;
+  latestPrediction?: PredictedRank;
+  countedMatchIds: string[];
+} {
   const counted = countedMatches(games, run);
   let latestPrediction: PredictedRank | undefined;
   for (let i = counted.length - 1; i >= 0; i--) {
@@ -60,12 +78,38 @@ export function runProgress(
       break;
     }
   }
-  return { counted: counted.length, target: PLACEMENT_RUN_LENGTH, latestPrediction };
+  return {
+    counted: counted.length,
+    target: PLACEMENT_RUN_LENGTH,
+    latestPrediction,
+    // Carried so consumers can ask the PER-MATCH question ("is this particular
+    // match one of the ten?") instead of only the per-run one. `counted` alone
+    // can't answer it, and the difference matters the moment a run reaches its
+    // target with the player still logging: match eleven is not a placement
+    // match, but matches one through ten stay placement matches forever.
+    countedMatchIds: counted.map((g) => g.matchId),
+  };
 }
 
 /** True once `run` has counted its full {@link PLACEMENT_RUN_LENGTH} matches. */
 export function isRunComplete(games: GameRecord[], run: PlacementRun): boolean {
   return countedMatches(games, run).length >= PLACEMENT_RUN_LENGTH;
+}
+
+/**
+ * True when `run` has played out its full length but the rank Overwatch revealed
+ * has not been confirmed yet — the run is waiting on the player, not on more
+ * matches.
+ *
+ * This is the state the UI was missing: `counted === target` with
+ * `completedAt === undefined` used to render exactly like a mid-run track, so a
+ * finished run advertised `Placements 10/10 · Diamond 1 (predicted)` forever with
+ * nothing indicating that the last step is a question only the player can answer.
+ * Deliberately derived, never stored: it is a function of history and the run's
+ * own bookkeeping, so it can never drift out of step with either.
+ */
+export function isAwaitingRank(games: GameRecord[], run: PlacementRun): boolean {
+  return run.completedAt === undefined && isRunComplete(games, run);
 }
 
 /**
@@ -100,6 +144,14 @@ export function hasDrifted(games: GameRecord[], run: PlacementRun): boolean {
  * An open run's matches, by contrast, don't have a settled rank yet — the
  * live client shows no rank at all until placement finishes — so they stay
  * suppressed from rank math until the run completes or is cancelled.
+ *
+ * Uses {@link trackMatchesFrom}, NOT {@link countedMatches}: suppression follows
+ * the "no settled rank yet" window, which is not capped at ten. A player who keeps
+ * queueing after the tenth match but before confirming the revealed rank would
+ * otherwise have those extra matches apply their ±% to the PRE-run anchor — a rank
+ * the track no longer has. Completion then re-admits them at once, since it anchors
+ * at the tenth counted match and the rank timeline filters strictly after that
+ * instant.
  */
 export function suppressedMatchIds(
   games: GameRecord[],
@@ -108,7 +160,7 @@ export function suppressedMatchIds(
   const ids = new Set<string>();
   for (const run of runs) {
     if (run.completedAt !== undefined) continue;
-    for (const g of countedMatches(games, run)) ids.add(g.matchId);
+    for (const g of trackMatchesFrom(games, run)) ids.add(g.matchId);
   }
   return ids;
 }

@@ -23,6 +23,8 @@ import { bridge } from '../bridge';
 import { registerShortcut } from '../shortcuts';
 import { gradedThisSession } from '../reviews';
 import { deleteMatch } from '../matchActions';
+import { maybeConfirmPlacementRank } from '../app/placementComplete';
+import { srEntryMode } from '../../../src/core/placements';
 import { viewHead, type ViewContext } from './view';
 
 /**
@@ -230,13 +232,19 @@ function expanded(
   let rankTier = 'Gold';
   let rankDivision = 3;
   let rankPct = '';
-  // An OPEN placement run pre-empts SR entry entirely, exactly as it does in the
-  // log card and the match editor: Overwatch shows no ±% and no rank protection
-  // during placements, only a predicted rank after each match. Reviewing a
-  // placement game must therefore offer that and nothing else.
+  // A COUNTED placement match pre-empts SR entry entirely, exactly as in the log
+  // card and the match editor: Overwatch shows no ±% and no rank protection
+  // during placements, only a predicted rank after each match.
+  //
+  // Per MATCH, not per run: this is the auto-tracked (GEP) path, so the inbox
+  // routinely holds matches from before the run reached its target alongside
+  // ones from after. Match four stays a placement match forever; match eleven
+  // never was one, and is the player's only chance to record the ±% the game
+  // showed for it — nothing else in the app can capture it later.
   const run = isComp
     ? placements.find((p) => p.account === m.account && p.role === m.role && !p.completed)
     : undefined;
+  const mode = srEntryMode(run, m.matchId);
   let predTier = run?.latestPrediction?.tier ?? 'Gold';
   let predDivision = run?.latestPrediction?.division ?? 3;
 
@@ -257,7 +265,7 @@ function expanded(
   // and the match editor use for their SR block.
   const srHost = h('div', { class: 'stack', style: { gap: '6px' } });
   const paintSr = (): void => {
-    if (run) {
+    if (mode === 'placement' && run) {
       render(srHost,
         placementPicker({
           tier: predTier,
@@ -268,6 +276,17 @@ function expanded(
         h('div', { class: 'hint' },
           `Placements (${run.counted}/${run.target}) for ${roleLabel(m.role)} on ${m.account} — `
           + 'the game shows a predicted rank after each match, no ±% and no rank protection.'));
+      return;
+    }
+    // On the track but outside the counted ten — the run has revealed its rank
+    // (or this match predates the run), so the game did show a ±%. Offer the
+    // field, but not the "set current rank" toggle: that measures against the
+    // track's live anchor, which is still the pre-run one until confirmation.
+    if (mode === 'delta-only') {
+      render(srHost,
+        srDeltaInput(srText, (v) => { srText = v; }),
+        h('div', { class: 'hint' },
+          'Placements are done on this track — confirm the revealed rank and this ±% starts counting from it.'));
       return;
     }
     const toggle = srModeToggle(srMode, (v) => { srMode = v; paintSr(); });
@@ -299,11 +318,13 @@ function expanded(
     // it unless the player clears the field (blank leaves the stored SR unchanged).
     const t = srText.trim();
     let srDelta: number | undefined;
-    // A match inside an open run carries no ±% at all — only the predicted rank,
-    // recorded against the run after the review saves.
-    if (run) {
+    // A COUNTED placement match carries no ±% at all — only the predicted rank,
+    // recorded against the run after the review saves. A match outside the ten
+    // records its ±% normally: this is its one chance, since GEP can't report
+    // one and no later step can reconstruct it.
+    if (mode === 'placement') {
       srDelta = undefined;
-    } else if (isComp && srMode === 'set-current') {
+    } else if (isComp && mode === 'full' && srMode === 'set-current') {
       // Already translated by rankEntry. An unanchored track has no delta to
       // record — that entry sets the starting rank instead, below.
       if (rankPreview?.anchored) srDelta = rankPreview.srDelta;
@@ -311,7 +332,7 @@ function expanded(
       const n = Number(t);
       if (Number.isFinite(n)) srDelta = n;
     }
-    const anchoring = !run && isComp && srMode === 'set-current' && rankPreview?.anchored === false;
+    const anchoring = mode === 'full' && isComp && srMode === 'set-current' && rankPreview?.anchored === false;
     if (anchoring) {
       void bridge.setRankAnchor({
         account: m.account, role: m.role,
@@ -323,7 +344,7 @@ function expanded(
       ...(performance != null ? { performance } : {}),
       ...(srDelta !== undefined ? { srDelta } : {}),
     });
-    void (run
+    void (mode === 'placement'
       ? reviewed.then(() => bridge.setPlacementPrediction({
           account: m.account, role: m.role, matchId: m.matchId,
           prediction: { tier: predTier, division: predDivision },
@@ -343,6 +364,13 @@ function expanded(
           }),
         },
       });
+      // Auto-tracked matches land here, never through the log form — this is
+      // the path that made the reveal-rank prompt reportable in the first
+      // place (#184). Only a match on a track with an open run can possibly
+      // have finished one; a non-placement review has nothing to confirm.
+      if (run) {
+        void maybeConfirmPlacementRank({ account: m.account, role: m.role, onDone: () => store.rerender() });
+      }
     });
   };
 

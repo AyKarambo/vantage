@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  countedMatches, runProgress, isRunComplete, hasDrifted, suppressedMatchIds, shouldOfferRun,
+  countedMatches, trackMatchesFrom, runProgress, isRunComplete, isAwaitingRank, hasDrifted,
+  suppressedMatchIds, shouldOfferRun,
   PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank,
 } from '../src/core/placements';
 import type { GameRecord } from '../src/core/analytics';
@@ -69,7 +70,17 @@ describe('runProgress', () => {
     const run = runAt({ startedAt: 0, predictions: { a: pred('Gold', 3) } });
     expect(runProgress(games, run)).toEqual({
       counted: 3, target: PLACEMENT_RUN_LENGTH, latestPrediction: { tier: 'Gold', division: 3 },
+      countedMatchIds: ['a', 'b', 'c'],
     });
+  });
+
+  it('reports the ids of the counted matches, in order and capped at ten', () => {
+    const games = Array.from({ length: 13 }, (_, i) => g({ matchId: `m${i}`, timestamp: 100 + i }));
+    const { countedMatchIds } = runProgress(games, runAt({ startedAt: 100 }));
+    expect(countedMatchIds).toHaveLength(PLACEMENT_RUN_LENGTH);
+    // m10..m12 are on the track but past the cap — they are ordinary games, and
+    // this is exactly what lets a caller tell them apart from the counted ten.
+    expect(countedMatchIds).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9']);
   });
 
   it('picks the latest counted match with a prediction, skipping blanks', () => {
@@ -96,6 +107,57 @@ describe('isRunComplete', () => {
     const run = runAt({ startedAt: 0 });
     expect(isRunComplete(nine, run)).toBe(false);
     expect(isRunComplete(ten, run)).toBe(true);
+  });
+});
+
+describe('trackMatchesFrom', () => {
+  it('selects the same matches as countedMatches but WITHOUT the ten-match cap', () => {
+    const games = Array.from({ length: 14 }, (_, i) => g({ matchId: `m${i}`, timestamp: 100 + i }));
+    const run = runAt({ startedAt: 100 });
+    expect(countedMatches(games, run)).toHaveLength(PLACEMENT_RUN_LENGTH);
+    const all = trackMatchesFrom(games, run);
+    expect(all).toHaveLength(14);
+    // Same filter and ordering — the cap is the only difference.
+    expect(all.slice(0, PLACEMENT_RUN_LENGTH)).toEqual(countedMatches(games, run));
+  });
+
+  it('applies the same account/role/competitive/startedAt filter', () => {
+    const games = [
+      g({ matchId: 'before', timestamp: 50 }),
+      g({ matchId: 'at', timestamp: 100 }), // >= startedAt, like countedMatches
+      g({ matchId: 'otherRole', timestamp: 110, role: 'tank' }),
+      g({ matchId: 'otherAccount', timestamp: 120, account: 'Alt' }),
+      g({ matchId: 'quickPlay', timestamp: 130, gameType: 'Quick Play' }),
+      g({ matchId: 'after', timestamp: 140 }),
+    ];
+    const run = runAt({ startedAt: 100 });
+    expect(trackMatchesFrom(games, run).map((m) => m.matchId)).toEqual(['at', 'after']);
+  });
+});
+
+describe('isAwaitingRank', () => {
+  const tenGames = () => Array.from({ length: 10 }, (_, i) => g({ matchId: `m${i}`, timestamp: i }));
+
+  it('false mid-run — the run is waiting on matches, not on the player', () => {
+    const nine = Array.from({ length: 9 }, (_, i) => g({ matchId: `m${i}`, timestamp: i }));
+    expect(isAwaitingRank(nine, runAt({ startedAt: 0 }))).toBe(false);
+  });
+
+  it('true at the target while completedAt is still unset — the reported bug state', () => {
+    expect(isAwaitingRank(tenGames(), runAt({ startedAt: 0 }))).toBe(true);
+  });
+
+  it('false once the revealed rank has been confirmed', () => {
+    const games = tenGames();
+    const run = runAt({
+      startedAt: 0, completedAt: 9, completedMatchIds: games.map((m) => m.matchId),
+    });
+    expect(isAwaitingRank(games, run)).toBe(false);
+  });
+
+  it('stays true past the target — extra matches never confirm a rank on the player\'s behalf', () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => g({ matchId: `m${i}`, timestamp: i }));
+    expect(isAwaitingRank(twelve, runAt({ startedAt: 0 }))).toBe(true);
   });
 });
 
@@ -140,6 +202,26 @@ describe('suppressedMatchIds', () => {
 
   it('an empty run list suppresses nothing', () => {
     expect(suppressedMatchIds([g({ matchId: 'a' })], [])).toEqual(new Set());
+  });
+
+  it('suppresses PAST the tenth match while the run is still open — those matches have no settled rank to move', () => {
+    const games = Array.from({ length: 13 }, (_, i) => g({ matchId: `m${i}`, timestamp: i }));
+    const openRun = runAt({ startedAt: 0 });
+    const ids = suppressedMatchIds(games, [openRun]);
+    expect(ids.size).toBe(13);
+    // m10..m12 fall outside countedMatches' ten-match cap but inside the run's
+    // "no settled rank yet" window — the ±% they carry must not reach the PRE-run anchor.
+    expect(ids.has('m10')).toBe(true);
+    expect(ids.has('m12')).toBe(true);
+  });
+
+  it('re-admits everything the moment the run completes, including the surplus', () => {
+    const games = Array.from({ length: 13 }, (_, i) => g({ matchId: `m${i}`, timestamp: i }));
+    const completed = runAt({
+      startedAt: 0, completedAt: 9,
+      completedMatchIds: games.slice(0, PLACEMENT_RUN_LENGTH).map((m) => m.matchId),
+    });
+    expect(suppressedMatchIds(games, [completed])).toEqual(new Set());
   });
 });
 

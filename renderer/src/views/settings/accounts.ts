@@ -3,10 +3,10 @@ import type { AccountSummary, PlacementRunSummary, RankSummary, Role } from '../
 import { bridge } from '../../bridge';
 import { button, card, confirmButton, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
-import { openPlacementComplete } from '../../app/placementComplete';
+import { openPlacementComplete, maybeConfirmPlacementRank } from '../../app/placementComplete';
 import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
-import { placementParts, rankParts } from '../../../../src/core/rankDisplay';
+import { roleStatus } from '../../roleStatus';
 import { store } from '../../store';
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string }> = [
@@ -54,7 +54,9 @@ export function accountsCard(): HTMLElement {
       // (Delete, non-destructive); detected raw tags can be Labelled or have
       // their data deleted; the Unknown bucket can only be deleted (no tag to
       // label against). Every data-deleting action goes through the confirm.
-      const actions: Node[] = [];
+      // "Set rank" first — it's the one action every account offers regardless
+      // of kind, and the per-role rows below cover everything role-specific.
+      const actions: Node[] = [button('Set rank', { variant: 'ghost', onClick: () => openSetRank(a.label, accRanks, reload) })];
       if (a.kind === 'configured') {
         actions.push(button('Edit', { variant: 'ghost', onClick: edit }));
         actions.push(button('Delete', { variant: 'ghost', onClick: () => void bridge.deleteAccount(a.battleTag).then(reload) }));
@@ -70,8 +72,7 @@ export function accountsCard(): HTMLElement {
           ),
           ...actions,
         ),
-        ranksLine(a.label, accRanks, accPlacements),
-        placementsBlock(a.label, accRanks, accPlacements, reload),
+        rolesBlock(a.label, accRanks, accPlacements, reload),
       );
     };
     const edit = (): void => {
@@ -147,62 +148,64 @@ export function accountsCard(): HTMLElement {
     else void store.refresh();
   }
 
-  function ranksLine(account: string, accRanks: RankSummary[], accPlacements: PlacementRunSummary[]): HTMLElement {
-    const pills = accRanks.map((r) => {
-      // While this role's track is in an OPEN placement run, the computed rank
-      // above is stale/meaningless (no ±%, no protection during placements) —
-      // show `Placements N/10` (+ the latest prediction, when one exists) instead.
-      const openRun = accPlacements.find((p) => p.role === r.role && !p.completed);
-      if (openRun) {
-        const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction);
-        return pill(`${roleLabel(r.role)}: ${pp.counter}${pp.predictionLabel ? ` · ${pp.predictionLabel}` : ''}`, 'accent');
-      }
-      // Shared rank parts — no movement arrow here (Overview KPI only), identical
-      // shield/buffer rendering to every other surface.
-      const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected });
-      return pill(`${roleLabel(r.role)}: ${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`, 'accent');
-    });
-    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' } },
-      ...(pills.length ? pills : [h('span', { class: 'hint' }, 'No rank set yet')]),
-      button('Set rank', { variant: 'ghost', onClick: () => openSetRank(account, accRanks, reload) }),
-    );
-  }
-
   /**
-   * The per-role placement-run controls, listed below the rank pills. Shown
-   * only for roles this account already tracks — a rank anchor and/or a run —
-   * so an untouched role doesn't add a row nobody asked for. This is the
-   * feature's manual escape hatch: every state (no run, open, completed,
-   * drifted) exposes a way back to "begin placements", including undoing a
-   * run that already finished.
+   * One line per role: status (rank, or placement progress) plus whatever
+   * actions that state offers. Shown only for roles this account already
+   * tracks — a rank anchor and/or a run — so an untouched role doesn't add a
+   * row nobody asked for. Replaces the old rank-pill row + a SEPARATE
+   * placement-controls row per role, which routinely said the same thing
+   * twice: a completed run showed both its real rank (in the pill row) and a
+   * static "Placements complete" pill (in the row below) at once.
    */
-  function placementsBlock(account: string, accRanks: RankSummary[], accPlacements: PlacementRunSummary[], onDone: () => void): Node | null {
+  function rolesBlock(account: string, accRanks: RankSummary[], accPlacements: PlacementRunSummary[], onDone: () => void): Node | null {
     const roles = ROLE_OPTIONS
       .map((o) => o.value)
       .filter((role) => accRanks.some((r) => r.role === role) || accPlacements.some((p) => p.role === role));
-    if (!roles.length) return null;
-    return h('div', { class: 'stack', style: { gap: '6px', marginTop: '2px' } },
-      ...roles.map((role) => placementRow(account, role, accPlacements.find((p) => p.role === role), onDone)),
+    if (!roles.length) return h('div', { class: 'hint', style: { marginTop: '6px' } }, 'No rank set yet.');
+    return h('div', { class: 'stack', style: { gap: '0px', marginTop: '4px' } },
+      ...roles.map((role) => roleRow(
+        account, role,
+        accRanks.find((r) => r.role === role),
+        accPlacements.find((p) => p.role === role),
+        onDone,
+      )),
     );
   }
 
-  /** One (account, role) track's placement-run controls; see {@link placementsBlock}. */
-  function placementRow(account: string, role: Role, run: PlacementRunSummary | undefined, onDone: () => void): HTMLElement {
+  /** One (account, role) track's status + controls; see {@link rolesBlock}. */
+  function roleRow(
+    account: string, role: Role, rank: RankSummary | undefined, run: PlacementRunSummary | undefined, onDone: () => void,
+  ): HTMLElement {
     // Every action here can move the anchor a track reads its computed rank
     // from (start/reset/cancel restore or replace it, complete sets a fresh
     // one) — reload the accounts card AND refresh the dashboard store, same
     // as openSetRank's save path, so the sidebar chip and Overview KPI don't
     // go stale.
     const refresh = (): void => { onDone(); void store.refresh(); };
-    const roleTag = h('span', { class: 'u-dim', style: { fontSize: '11px', minWidth: '76px' } }, roleLabel(role));
+    const roleTag = h('span', { class: 'u-dim', style: { fontSize: '11.5px', width: '56px', flex: '0 0 auto' } }, roleLabel(role));
+    // roleStatus only ever takes an OPEN run — a completed one has already told
+    // its story via the anchor it wrote, which `rank` carries.
+    const openRun = run && !run.completed ? run : undefined;
+    const status = roleStatus(rank, openRun, run?.completed === true);
+    const statusEl = pill(status.text, 'accent');
+    const placedTag = status.tone === 'placed'
+      ? h('span', { class: 'u-dim', style: { fontSize: '10px' } }, 'placed')
+      : null;
+    const rowStyle = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const, padding: '5px 0', borderTop: '1px solid var(--border)' };
 
     if (!run) {
-      return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-        roleTag,
+      return h('div', { style: rowStyle },
+        roleTag, statusEl,
         button('Start placements', {
           variant: 'ghost',
           title: 'Counts the next 10 competitive matches on this track as placements.',
-          onClick: () => void bridge.startPlacementRun({ account, role }).then(refresh),
+          onClick: () => void bridge.startPlacementRun({ account, role }).then(() => {
+            refresh();
+            // A fresh run can't finish on its own start, but that question
+            // belongs to maybeConfirmPlacementRank, not a guess here — same
+            // trigger the backdated start below uses, which CAN finish instantly.
+            void maybeConfirmPlacementRank({ account, role, onDone: refresh });
+          }),
         }),
         button('Start from an earlier match…', {
           variant: 'ghost',
@@ -212,7 +215,6 @@ export function accountsCard(): HTMLElement {
       );
     }
 
-    const pp = placementParts(run.counted, run.target, run.latestPrediction);
     // Reset and Cancel both throw away the run's progress and, for a COMPLETED
     // run, the confirmed rank it produced — the one thing this task exists to
     // make undoable. A stray click here is worse than most destructive actions
@@ -238,29 +240,38 @@ export function accountsCard(): HTMLElement {
 
     const actions: Node[] = [resetBtn, cancelBtn];
     if (!run.completed) {
-      actions.push(button('Finish early', {
-        variant: 'ghost',
-        // Same reveal-rank confirmation the 10th placement match opens from
-        // log-match.ts — one dialog for "the game just showed me a rank",
-        // whether that happens naturally at match 10 or the player forces it
-        // here. Seeded with the run's latest prediction, same as there.
-        onClick: () => openPlacementComplete({ account, role, suggestion: run.latestPrediction, onDone: refresh }),
-      }));
+      // Same reveal-rank confirmation the 10th placement match opens from
+      // log-match.ts — one dialog for "the game just showed me a rank",
+      // whether that happens naturally at match 10 or the player forces it
+      // here. Seeded with the run's latest prediction, same as there.
+      const openReveal = (): void => openPlacementComplete({ account, role, suggestion: run.latestPrediction, onDone: refresh });
+      actions.push(
+        run.awaitingRank
+          // The run already counted out its ten matches — "early" would be a
+          // lie, and this is the CTA the player is actually here for.
+          ? button('Confirm revealed rank', {
+              variant: 'primary',
+              title: 'Overwatch has revealed your rank for this run — enter exactly what it showed you.',
+              onClick: openReveal,
+            })
+          : button('Finish early', {
+              variant: 'ghost',
+              title: 'End this run before its ten matches, using the rank Overwatch reveals now.',
+              onClick: openReveal,
+            }),
+      );
     }
 
     const drifted = run.completed && run.drifted
-      ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginLeft: '84px' } },
+      ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginLeft: '64px' } },
           h('span', { class: 'hint', style: { fontSize: '11px' } }, 'The matches this run counted have changed since it finished.'),
           button('Recount', { variant: 'ghost', onClick: () => void bridge.recountPlacementRun({ account, role }).then(refresh) }),
         )
       : null;
 
-    return h('div', { class: 'stack', style: { gap: '4px' } },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-        roleTag,
-        run.completed
-          ? pill('Placements complete', 'win')
-          : pill(`${pp.counter}${pp.predictionLabel ? ` · ${pp.predictionLabel}` : ''}`, 'accent'),
+    return h('div', { class: 'stack', style: { gap: '2px' } },
+      h('div', { style: rowStyle },
+        roleTag, statusEl, placedTag,
         ...actions,
       ),
       drifted,
@@ -369,7 +380,16 @@ function openBackdateStart(account: string, role: Role, onDone: () => void): voi
               variant: 'ghost',
               class: 'btn--block',
               onClick: () => void bridge.startPlacementRun({ account, role, fromMatchId: m.matchId })
-                .then(() => { close(); onDone(); void store.refresh(); }),
+                .then(() => {
+                  close();
+                  onDone();
+                  void store.refresh();
+                  // Opened AFTER this modal's own close, never nested inside
+                  // it. Backdating onto already-logged matches can reach the
+                  // target instantly, so the run may be finished the moment
+                  // it starts.
+                  void maybeConfirmPlacementRank({ account, role, onDone });
+                }),
             },
           )))]
       : [h('div', { class: 'hint' }, 'No matches logged for this track yet — start the run and log as you play.')]),

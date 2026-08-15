@@ -38,7 +38,7 @@ import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness'
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -211,7 +211,7 @@ const getPlacements = (): PlacementRunSummary[] => {
   const games = dataset();
   const summaries: PlacementRunSummary[] = [];
   for (const run of previewPlacementRuns.values()) {
-    const { counted, target, latestPrediction } = runProgress(games, run);
+    const { counted, target, latestPrediction, countedMatchIds } = runProgress(games, run);
     summaries.push({
       account: run.account,
       role: run.role,
@@ -220,6 +220,8 @@ const getPlacements = (): PlacementRunSummary[] => {
       ...(latestPrediction ? { latestPrediction } : {}),
       completed: run.completedAt !== undefined,
       drifted: hasDrifted(games, run),
+      awaitingRank: isAwaitingRank(games, run),
+      countedMatchIds,
     });
   }
   return summaries;
@@ -718,7 +720,7 @@ const mock: OwStatsApi = {
     const run = previewPlacementRuns.get(key);
     if (run) {
       const games = dataset();
-      const countedIds = games
+      const window = games
         .filter(
           (g) =>
             g.account === run.account &&
@@ -726,14 +728,14 @@ const mock: OwStatsApi = {
             isCompetitive(g.gameType) &&
             g.timestamp >= run.startedAt,
         )
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .slice(0, PLACEMENT_RUN_LENGTH)
-        .map((g) => g.matchId);
-      const counted = games.filter((g) => countedIds.includes(g.matchId));
-      // Anchored at the LAST counted match, mirroring the real provider: the
-      // rank timeline filters strictly after the anchor, which is what keeps the
-      // placement matches from moving the rank they just settled.
-      const setAt = counted.length ? counted[counted.length - 1].timestamp : run.startedAt;
+        .sort((a, b) => a.timestamp - b.timestamp);
+      const countedIds = window.slice(0, PLACEMENT_RUN_LENGTH).map((g) => g.matchId);
+      // Anchored at the LAST match in the run's window, mirroring the real
+      // provider: the rank timeline filters strictly after the anchor, which is
+      // what keeps every suppressed match from moving the rank they just settled.
+      // The window rather than the counted ten, because the rank being entered
+      // already includes anything played after the tenth — see the note there.
+      const setAt = window.length ? window[window.length - 1].timestamp : run.startedAt;
       previewAnchors[rankKey(input.account, input.role)] = {
         account: input.account,
         role: input.role,
