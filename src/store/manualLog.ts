@@ -56,7 +56,7 @@ export class ManualStore {
    *  (e.g. switching a measured target back to self-rated). */
   updateTarget(
     id: string,
-    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string },
+    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] },
   ): void {
     const t = this.state.targets.find((x) => x.id === id);
     if (!t) return;
@@ -125,6 +125,7 @@ export class ManualStore {
           ...t,
           isActive: t.isActive ?? true,
           activatedAt: t.activatedAt ?? t.createdAt,
+          heroScope: t.heroScope == null ? undefined : Array.isArray(t.heroScope) ? t.heroScope : [t.heroScope],
         })),
       };
     } catch {
