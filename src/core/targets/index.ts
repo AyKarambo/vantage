@@ -29,6 +29,10 @@ export {
   effectiveImprovementGrade, activeMeasuredTargets, measuredGradesForMatch,
 } from './measured';
 
+// Coarse per-match scope-eligibility check shared by self-mode targets and Review
+export type { TargetScope } from './scope';
+export { matchInTargetScope } from './scope';
+
 // Wheel/stepper step sizes for the measured threshold field
 export { stepFor, COARSE_FACTOR } from './stepSizes';
 
