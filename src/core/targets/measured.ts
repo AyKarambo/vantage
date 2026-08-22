@@ -11,20 +11,17 @@
  * mitigation and one decimal for the count rates; KDA is the ratio, not a rate.
  */
 import type { GameRecord, HeroStat, TargetGrade } from '../analytics';
-import type { Role } from '../model';
 import { effectiveHeroMinutes, mergeHeroStats } from '../perHero';
 import { heroMatchKey } from '../heroes';
 import { aggregateImprovementGrade } from './aggregateGrade';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
 import type { AuthoredTarget } from './types';
+import type { TargetScope } from './scope';
 
 export type MeasuredOp = '≤' | '≥' | '=';
 
 /** Optional role/hero scope for a measured evaluation (D). Both absent = global. */
-export interface MeasuredScope {
-  roleScope?: Role;
-  heroScope?: string;
-}
+export type MeasuredScope = TargetScope;
 
 export interface ParsedRule {
   stat: string;
@@ -98,7 +95,8 @@ function statOver(rows: readonly HeroStat[], stat: string, minutes: number): num
  *
  * With a `scope` (D), the value is computed over only the in-scope hero rows:
  * `roleScope` keeps rows of that role (and skips open-queue matches entirely),
- * `heroScope` keeps a single hero (matched via {@link ../heroes heroMatchKey}).
+ * `heroScope` keeps rows for any of one or more heroes (matched via
+ * {@link ../heroes heroMatchKey}).
  * When no row is in scope the match is skipped (`null`) — never a miss; this also
  * makes a contradictory role+hero combo permanently skip, and skips a role-scoped
  * target on rows whose role GEP never reported. Both scope fields absent keeps the
@@ -112,18 +110,19 @@ export function matchStatValue(game: GameRecord, stat: string, scope?: MeasuredS
   const heroScope = scope?.heroScope;
 
   // Unscoped: sum every row over the whole match duration (legacy behavior).
-  if (roleScope == null && heroScope == null) {
+  if (roleScope == null && (heroScope == null || heroScope.length === 0)) {
     return statOver(rows, stat, game.durationMinutes ?? 0);
   }
 
   // A role-scoped target can't apply to an open-queue match.
   if (roleScope != null && game.role === 'openQ') return null;
 
+  const heroKeys = heroScope && heroScope.length > 0 ? new Set(heroScope.map(heroMatchKey)) : null;
   const merged = mergeHeroStats(rows);
   const scoped = merged.filter(
     (r) =>
       (roleScope == null || r.role === roleScope) &&
-      (heroScope == null || heroMatchKey(r.hero) === heroMatchKey(heroScope)),
+      (heroKeys == null || heroKeys.has(heroMatchKey(r.hero))),
   );
   if (scoped.length === 0) return null;
 

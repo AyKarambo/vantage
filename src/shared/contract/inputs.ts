@@ -73,9 +73,9 @@ export interface AuthoredTargetInput {
   name: string;
   mode: TargetMode;
   rule: string;
-  /** Measured-target scope (D): restrict evaluation to one role and/or hero. */
+  /** Role/hero scope, shared by both modes (D): restrict evaluation to a role and/or heroes. */
   roleScope?: Role;
-  heroScope?: string;
+  heroScope?: string[];
 }
 
 /** An edit to an existing target — lifecycle state and accrued grades are kept. */
@@ -84,9 +84,9 @@ export interface TargetEditInput {
   name: string;
   mode: TargetMode;
   rule: string;
-  /** Measured-target scope (D); absent clears any previously-saved scope. */
+  /** Role/hero scope, shared by both modes (D); absent clears any previously-saved scope. */
   roleScope?: Role;
-  heroScope?: string;
+  heroScope?: string[];
 }
 
 /** A Review-screen read (target grades + feel flags) for one tracked match. */

@@ -10,7 +10,7 @@
  */
 import { h, render } from '../dom';
 import type { MatchMental, MatchRow, PendingMatch, PlacementRunSummary, RankEntryPreview, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
-import { parseMeasuredRule } from '../../../src/core/targets';
+import { matchInTargetScope, parseMeasuredRule } from '../../../src/core/targets';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, confirmButton, emptyState, resultPill } from '../components/primitives';
@@ -250,7 +250,9 @@ function expanded(
 
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
-  const selfTargets = active.filter((t) => t.mode !== 'measured');
+  // Self-rated targets hide outright when the match is out of scope; measured
+  // targets stay visible with their read-only "no stat this match" row.
+  const selfTargets = active.filter((t) => t.mode !== 'measured' && matchInTargetScope(m, t));
   const measuredTargets = active.filter((t) => t.mode === 'measured');
   const rows = selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
   const targetEls = [...rows.map((r) => r.el), ...measuredTargets.map((t) => measuredResultRow(t, m.measuredGrades?.[t.id]))];

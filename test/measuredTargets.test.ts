@@ -90,16 +90,16 @@ describe('matchStatValue — role/hero scope (D)', () => {
 
   it('hero scope measures only that hero over its own minutes', () => {
     // Tracer: 12000 damage over its 10 equal-split minutes → 12000 per 10.
-    expect(matchStatValue(multi(), 'Damage', { heroScope: 'Tracer' })).toBe(12000);
+    expect(matchStatValue(multi(), 'Damage', { heroScope: ['Tracer'] })).toBe(12000);
   });
 
   it('hero scope folds casing / accents / punctuation via heroMatchKey', () => {
-    expect(matchStatValue(multi(), 'Damage', { heroScope: 'tracer' })).toBe(12000);
+    expect(matchStatValue(multi(), 'Damage', { heroScope: ['tracer'] })).toBe(12000);
   });
 
   it('a match with no in-scope hero is skipped (null), never a miss', () => {
     const g = game({ durationMinutes: 20, perHero: [hero({ hero: 'Bastion', role: 'damage', damage: 40000 })] });
-    expect(matchStatValue(g, 'Damage', { heroScope: 'Tracer' })).toBeNull();
+    expect(matchStatValue(g, 'Damage', { heroScope: ['Tracer'] })).toBeNull();
   });
 
   it('role scope counts only that role’s heroes', () => {
@@ -121,12 +121,12 @@ describe('matchStatValue — role/hero scope (D)', () => {
     const g = game({ role: 'openQ', durationMinutes: 20, perHero: [hero({ hero: 'Ana', role: 'support', healing: 10000 })] });
     expect(matchStatValue(g, 'Healing', { roleScope: 'support' })).toBeNull();
     // 10000 healing over the single hero's 20 min → 5000 per 10.
-    expect(matchStatValue(g, 'Healing', { heroScope: 'Ana' })).toBe(5000);
+    expect(matchStatValue(g, 'Healing', { heroScope: ['Ana'] })).toBe(5000);
   });
 
   it('a contradictory role+hero combo matches no row → permanently skipped', () => {
     const g = game({ durationMinutes: 20, perHero: [hero({ hero: 'Tracer', role: 'damage', damage: 12000 })] });
-    expect(matchStatValue(g, 'Damage', { roleScope: 'support', heroScope: 'Tracer' })).toBeNull();
+    expect(matchStatValue(g, 'Damage', { roleScope: 'support', heroScope: ['Tracer'] })).toBeNull();
   });
 
   it('a role-scoped target skips rows whose role GEP never reported', () => {
@@ -168,7 +168,7 @@ describe('evaluateMeasured — Hit / Partial / Missed bands (default m = 20%)', 
     });
     // Unscoped 26000 ≥ 20000 → hit; scoped to Tracer (12000) → below 16000 (20% band) → missed.
     expect(evaluateMeasured(g, target('Damage ≥ 20000'))?.grade).toBe('hit');
-    expect(evaluateMeasured(g, target('Damage ≥ 20000', { heroScope: 'Tracer' }))?.grade).toBe('missed');
+    expect(evaluateMeasured(g, target('Damage ≥ 20000', { heroScope: ['Tracer'] }))?.grade).toBe('missed');
   });
 
   it('honours a caller-supplied margin, widening/tightening the partial band', () => {
@@ -223,7 +223,7 @@ describe('effectiveImprovementGrade — export signature reflects measured grade
       ],
     });
     const global = effectiveImprovementGrade(g, [target('Damage ≥ 15000')], new Set(['t'])); // hit
-    const scoped = effectiveImprovementGrade(g, [target('Damage ≥ 15000', { heroScope: 'Tracer' })], new Set(['t'])); // 12000 → partial (20% band)
+    const scoped = effectiveImprovementGrade(g, [target('Damage ≥ 15000', { heroScope: ['Tracer'] })], new Set(['t'])); // 12000 → partial (20% band)
     expect(global).not.toBe(scoped);
     expect(matchExportSignature(g, global)).not.toBe(matchExportSignature(g, scoped));
   });
@@ -285,7 +285,7 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
   });
 
   it('scopes auto-grading to a single hero and round-trips the scope onto the summary', () => {
-    const t = target('Damage ≥ 15000', { createdAt: 0, heroScope: 'Tracer' });
+    const t = target('Damage ≥ 15000', { createdAt: 0, heroScope: ['Tracer'] });
     const games = [
       game({
         result: 'Win', durationMinutes: 20,
@@ -299,7 +299,7 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
     const [s] = buildTargets(games, false, [t]);
     expect(s.attempts).toBe(1);
     expect(s.hits).toBe(1);
-    expect(s.heroScope).toBe('Tracer'); // D1 round-trip through scoring.ts
+    expect(s.heroScope).toEqual(['Tracer']); // D1 round-trip through scoring.ts
     expect(s.roleScope).toBeUndefined();
   });
 });

@@ -889,7 +889,7 @@ const mock: OwStatsApi = {
     t.rule = input.rule;
     if (input.roleScope != null) t.roleScope = input.roleScope;
     else delete t.roleScope;
-    if (input.heroScope != null) t.heroScope = input.heroScope;
+    if (input.heroScope != null && input.heroScope.length > 0) t.heroScope = input.heroScope;
     else delete t.heroScope;
     save(TARGETS_KEY, targets);
   },

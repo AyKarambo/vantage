@@ -29,6 +29,7 @@ import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
+import { matchInTargetScope } from '../../../src/core/targets';
 import { PALETTE, wrHsl } from '../theme';
 import type { ViewContext } from './view';
 
@@ -314,8 +315,10 @@ function gradesSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
         const mg = measured[t.id];
         return mg && mg !== 'no-stat' ? [gradeRow(t, mg.grade)] : [];
       }
+      // A self grade stored before the target picked up a scope that now
+      // excludes this match no longer counts — mirrors the Review screen.
       const grade = selfGrades[t.id];
-      return grade ? [gradeRow(t, grade)] : [];
+      return grade && matchInTargetScope(d, t) ? [gradeRow(t, grade)] : [];
     });
   const perf = d.performance != null
     ? statBar({
@@ -409,7 +412,11 @@ function buildMatchEditor(
   mostPlayed: Record<string, Partial<Record<Role, string[]>>>,
   placements: PlacementRunSummary[],
 ): void {
-  const active = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
+  // Self-rated targets scoped away from this match's hero/role aren't offered
+  // here either — mirrors the Review screen; measured targets are unaffected
+  // (their own read-only grade already skips out-of-scope matches).
+  const active = ctx.data.targets.filter((t) =>
+    t.isActive && !t.archivedAt && (t.mode === 'measured' || matchInTargetScope(d, t)));
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
   const isComp = classifyGameType(d.gameType) === 'competitive';

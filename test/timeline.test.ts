@@ -19,9 +19,21 @@ describe('targetTimeline', () => {
     expect(tl.map((a) => a.grade)).toEqual([undefined, 'missed', 'hit']);
   });
 
+  it('self-rated: a heroScope excludes an off-hero game entirely, keeping an in-scope ungraded one', () => {
+    const t: AuthoredTarget = { id: 'S', name: '', mode: 'self', rule: '', heroScope: ['Tracer'], createdAt: 0, isActive: true };
+    const g = (ts: number, hero: string, grade?: 'hit' | 'partial' | 'missed'): GameRecord => ({
+      matchId: `m${++seq}`, timestamp: ts, account: 'M', role: 'damage', map: 'Ilios',
+      result: 'Win', gameType: 'Competitive', heroes: [hero],
+      ...(grade ? { review: { at: 0, grades: { S: grade }, flags: {} } } : {}),
+    });
+    const tl = targetTimeline([g(1, 'Tracer', 'hit'), g(2, 'Widowmaker', 'hit'), g(3, 'Tracer')], t);
+    expect(tl.map((a) => a.timestamp)).toEqual([1, 3]); // the off-hero (Widowmaker) entry is absent entirely
+    expect(tl.map((a) => a.grade)).toEqual(['hit', undefined]); // in-scope ungraded game still included
+  });
+
   it('measured: only games where evaluateMeasured resolves (inside the hero scope)', () => {
     const t: AuthoredTarget = {
-      id: 'M', name: '', mode: 'measured', rule: 'Eliminations ≥ 10', heroScope: 'Tracer',
+      id: 'M', name: '', mode: 'measured', rule: 'Eliminations ≥ 10', heroScope: ['Tracer'],
       createdAt: 0, isActive: true,
     };
     const g = (ts: number, hero: string, elim: number): GameRecord => ({

@@ -56,7 +56,7 @@ export class ManualStore {
    *  (e.g. switching a measured target back to self-rated). */
   updateTarget(
     id: string,
-    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string },
+    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] },
   ): void {
     const t = this.state.targets.find((x) => x.id === id);
     if (!t) return;
@@ -65,7 +65,9 @@ export class ManualStore {
     t.rule = patch.rule;
     if (patch.roleScope != null) t.roleScope = patch.roleScope;
     else delete t.roleScope;
-    if (patch.heroScope != null) t.heroScope = patch.heroScope;
+    // An explicit [] means the same thing as absent — normalize so "scoped?"
+    // checks elsewhere can rely on a plain presence check, not a length check.
+    if (patch.heroScope != null && patch.heroScope.length > 0) t.heroScope = patch.heroScope;
     else delete t.heroScope;
     this.save();
   }
@@ -125,6 +127,7 @@ export class ManualStore {
           ...t,
           isActive: t.isActive ?? true,
           activatedAt: t.activatedAt ?? t.createdAt,
+          heroScope: t.heroScope == null ? undefined : Array.isArray(t.heroScope) ? t.heroScope : [t.heroScope],
         })),
       };
     } catch {

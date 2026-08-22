@@ -73,19 +73,19 @@ describe('ManualStore', () => {
 
   it('addTarget persists a measured target’s roleScope/heroScope across instances', () => {
     const store = new ManualStore(dir);
-    store.addTarget({ ...target('t1'), mode: 'measured', rule: 'Damage ≥ 9000', roleScope: 'damage', heroScope: 'Tracer' });
+    store.addTarget({ ...target('t1'), mode: 'measured', rule: 'Damage ≥ 9000', roleScope: 'damage', heroScope: ['Tracer'] });
     const t = new ManualStore(dir).targets()[0];
     expect(t.roleScope).toBe('damage');
-    expect(t.heroScope).toBe('Tracer');
+    expect(t.heroScope).toEqual(['Tracer']);
   });
 
   it('updateTarget persists roleScope/heroScope, and clears them when the patch omits them', () => {
     const store = new ManualStore(dir);
     store.addTarget(target('t1'));
-    store.updateTarget('t1', { name: 'scoped', mode: 'measured', rule: 'Healing ≥ 9000', roleScope: 'support', heroScope: 'Ana' });
+    store.updateTarget('t1', { name: 'scoped', mode: 'measured', rule: 'Healing ≥ 9000', roleScope: 'support', heroScope: ['Ana'] });
     let t = new ManualStore(dir).targets()[0];
     expect(t.roleScope).toBe('support');
-    expect(t.heroScope).toBe('Ana');
+    expect(t.heroScope).toEqual(['Ana']);
     // Switching back to self-rated (no scope in the patch) clears the saved scope.
     store.updateTarget('t1', { name: 'unscoped', mode: 'self', rule: 'You grade it' });
     t = new ManualStore(dir).targets()[0];
@@ -120,6 +120,22 @@ describe('ManualStore', () => {
     const store = new ManualStore(dir);
     expect(store.targets()[0].isActive).toBe(true);
     expect(store.targets()[0].archivedAt).toBeUndefined();
+  });
+
+  it('migration: a legacy bare-string heroScope is upgraded to a one-item array', () => {
+    const legacy = {
+      targets: [{ id: 't1', name: 't1', mode: 'self', rule: 'You grade it', createdAt: 1, isActive: true, heroScope: 'Tracer' }],
+    };
+    fs.writeFileSync(path.join(dir, 'manual.json'), JSON.stringify(legacy));
+    const store = new ManualStore(dir);
+    expect(store.targets()[0].heroScope).toEqual(['Tracer']);
+  });
+
+  it('updateTarget persists a multi-hero heroScope array across instances', () => {
+    const store = new ManualStore(dir);
+    store.addTarget(target('t1'));
+    store.updateTarget('t1', { name: 't1', mode: 'self', rule: 'You grade it', heroScope: ['Tracer', 'Genji'] });
+    expect(new ManualStore(dir).targets()[0].heroScope).toEqual(['Tracer', 'Genji']);
   });
 
   it('relocate re-points and reloads from the new dir', () => {

@@ -131,6 +131,38 @@ describe('buildTargets — grade scoring', () => {
     expect(real).toHaveLength(1);
     expect(real[0].id).toBe('t1');
   });
+
+  describe('scope (D) — self-rated attempts only count in-scope games', () => {
+    it('a hero-scoped target ignores a graded game on a different hero', () => {
+      const games = [
+        game({ result: 'Win', heroes: ['Tracer'], review: review({ t1: 'hit' }) }),
+        game({ result: 'Win', heroes: ['Widowmaker'], review: review({ t1: 'hit' }) }),
+      ];
+      const [t] = buildTargets(games, false, [authored('t1', { heroScope: ['Tracer'] })]);
+      expect(t.attempts).toBe(1);
+      expect(t.hits).toBe(1);
+    });
+
+    it('narrows derived attempts without ever touching the stored grade on the game', () => {
+      // The grade was stored before the target picked up a heroScope that now
+      // excludes this game — the raw GameRecord must be left exactly as graded.
+      const offScope = game({ result: 'Win', heroes: ['Widowmaker'], review: review({ t1: 'hit' }) });
+      const [t] = buildTargets([offScope], false, [authored('t1', { heroScope: ['Tracer'] })]);
+      expect(t.attempts).toBe(0);
+      expect(offScope.review?.grades.t1).toBe('hit');
+    });
+
+    it('a role-scoped target ignores a different role and an open-queue match', () => {
+      const games = [
+        game({ result: 'Win', role: 'damage', review: review({ t1: 'hit' }) }),
+        game({ result: 'Loss', role: 'support', review: review({ t1: 'hit' }) }),
+        game({ result: 'Win', role: 'openQ', review: review({ t1: 'hit' }) }),
+      ];
+      const [t] = buildTargets(games, false, [authored('t1', { roleScope: 'damage' })]);
+      expect(t.attempts).toBe(1);
+      expect(t.hits).toBe(1);
+    });
+  });
 });
 
 describe('mentalSummary — review-flag merge', () => {
