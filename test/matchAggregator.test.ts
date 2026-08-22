@@ -210,7 +210,34 @@ describe('MatchAggregator per-hero stats', () => {
     expect(rec).not.toBeNull();
     expect(rec?.heroes).toEqual([]);
     expect(rec?.perHero).toBeUndefined();
+    expect(rec?.heroRole).toBeUndefined(); // nothing was really played, so no role is known
     expect(rec?.outcome).toBe('Defeat'); // the match itself is still recorded
+  });
+
+  it('does not let a trailing spawn-only swap flip the recorded heroRole', () => {
+    let t = 0;
+    const agg = new MatchAggregator(() => t);
+    const at = (ms: number, m: GepMessage) => {
+      t = ms;
+      return agg.handle(m);
+    };
+    at(0, event('match_start'));
+    agg.handle(info('game_info', 'battle_tag', 'P#1'));
+    agg.handle(info('match_info', 'pseudo_match_id', 'm-trailing-swap'));
+    // Genji, played for real: substantial stats over 5 minutes.
+    at(0, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    at(300_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', kills: 10, deaths: 2, assists: 3, damage: 9000 }));
+    // Browsing hero-select on the post-round screen: swap to Mercy, zero stats, match ends 0.5s later.
+    at(300_500, info('roster', 'roster_0', { name: 'P#1', hero: 'Mercy', role: 'support', kills: 10, deaths: 2, assists: 3, damage: 9000 }));
+    agg.handle(info('match_info', 'match_outcome', 'Victory'));
+    const rec = at(300_500, event('match_end'));
+
+    expect(rec?.heroes).toEqual(['Genji']); // Mercy excluded — spawn-only, zero stats
+    expect(rec?.perHero).toHaveLength(1);
+    // heroRole must track the last hero that actually counted as played (Genji,
+    // damage), not the raw last-seen roster role (Mercy, support) — otherwise a
+    // harmless post-round browse would misclassify the whole match's role.
+    expect(rec?.heroRole).toBe('damage');
   });
 });
 

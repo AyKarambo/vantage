@@ -18,10 +18,12 @@ import type { HeroStat, Role } from './model';
 export const MIN_PLAYED_SECONDS = 60;
 
 /**
- * A hero segment counts as genuinely "played" — not a spawn-room swap before
- * the round started — when it has at least a minute of tracked time, or any
- * evidence of actual combat activity even under a minute (a quick death or a
- * lucky elimination right as the round starts).
+ * A hero segment counts as genuinely "played" when it has at least a minute of
+ * tracked time, or any evidence of actual combat activity even under a minute
+ * (a quick death or a lucky elimination) — the proxy this app uses for "not
+ * just a spawn-room swap before the round started". A missing `minutes` (as
+ * on manually-logged entries, which never reach this function today) is
+ * treated the same as zero — only the stat-evidence branch can still qualify it.
  */
 export function isPlayedSegment(stat: HeroStat): boolean {
   if ((stat.minutes ?? 0) * 60 >= MIN_PLAYED_SECONDS) return true;
