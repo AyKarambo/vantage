@@ -1,9 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { mergeHeroStats, heroLines, effectiveHeroMinutes, combinedHeroLine } from '../src/core/perHero';
+import { mergeHeroStats, heroLines, effectiveHeroMinutes, combinedHeroLine, isPlayedSegment } from '../src/core/perHero';
 import type { HeroStat } from '../src/core/model';
 
 const stat = (p: Partial<HeroStat> & { hero: string }): HeroStat => ({
   role: 'damage', eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0, ...p,
+});
+
+describe('isPlayedSegment', () => {
+  it('is false with no timed minutes and no combat activity', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer' }))).toBe(false);
+  });
+
+  it('is false below the 60s threshold with no combat activity', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer', minutes: 0.5 }))).toBe(false);
+  });
+
+  it('is true exactly at the 60s threshold', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer', minutes: 1 }))).toBe(true);
+  });
+
+  it('is true well above the threshold', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer', minutes: 2 }))).toBe(true);
+  });
+
+  it('is true with no timed segment but a nonzero stat', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer', deaths: 1 }))).toBe(true);
+  });
+
+  it('is true with a nonzero stat well under the time threshold', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer', minutes: 0.1, damage: 50 }))).toBe(true);
+  });
+
+  it('is true for mitigation alone, same as any other counting stat', () => {
+    expect(isPlayedSegment(stat({ hero: 'Tracer', mitigation: 1 }))).toBe(true);
+  });
 });
 
 describe('mergeHeroStats', () => {

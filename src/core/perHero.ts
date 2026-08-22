@@ -15,6 +15,26 @@ import type { HeroStat, Role } from './model';
  * and the on-hero minutes, keeping first-seen order and the first role observed.
  * Idempotent: merging already-merged input is a no-op.
  */
+export const MIN_PLAYED_SECONDS = 60;
+
+/**
+ * A hero segment counts as genuinely "played" — not a spawn-room swap before
+ * the round started — when it has at least a minute of tracked time, or any
+ * evidence of actual combat activity even under a minute (a quick death or a
+ * lucky elimination right as the round starts).
+ */
+export function isPlayedSegment(stat: HeroStat): boolean {
+  if ((stat.minutes ?? 0) * 60 >= MIN_PLAYED_SECONDS) return true;
+  return (
+    stat.eliminations > 0 ||
+    stat.deaths > 0 ||
+    stat.assists > 0 ||
+    stat.damage > 0 ||
+    stat.healing > 0 ||
+    stat.mitigation > 0
+  );
+}
+
 export function mergeHeroStats(perHero: HeroStat[]): HeroStat[] {
   const order: string[] = [];
   const byHero = new Map<string, HeroStat>();
