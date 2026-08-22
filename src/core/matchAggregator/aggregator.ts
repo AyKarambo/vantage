@@ -9,7 +9,7 @@
  * normalized messages in (guardrail #1: GEP is the only live data source).
  */
 import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from '../model';
-import { mergeHeroStats } from '../perHero';
+import { isPlayedSegment, mergeHeroStats } from '../perHero';
 import { K } from './keys';
 import { asNumber, asString, parseRoster } from './gepValues';
 import { resolveMapId } from '../resolvers/mapId';
@@ -110,7 +110,9 @@ export class MatchAggregator {
     const isLocalPlayer = rec.battleTag ? isLocal(player.battleTag, rec.battleTag) : Boolean(player.isLocal);
     if (!isLocalPlayer) return;
 
-    if (player.heroName && !rec.heroes.includes(player.heroName)) rec.heroes.push(player.heroName);
+    // heroes[] is derived from the surviving perHero segments in finalize() — a
+    // spawn-only swap must never appear there (guardrail against the eager,
+    // unfiltered push this replaced).
     if (player.heroRole) rec.heroRole = player.heroRole;
 
     const r = this.current.rosterLocal;
@@ -138,13 +140,18 @@ export class MatchAggregator {
       const nowMs = this.now();
       if (c.currentHero) {
         const minutes = Math.max(0, (nowMs - (c.currentHeroStartMs ?? nowMs)) / 60000);
-        c.perHero.push(closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum, minutes));
+        const closed = closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum, minutes);
+        if (isPlayedSegment(closed)) c.perHero.push(closed);
+        c.segmentsClosed++;
       }
       c.currentHero = player.heroName;
       c.currentRole = player.heroRole ?? c.currentRole;
       c.heroStart = { ...c.lastCum }; // new hero starts at the swap-point cumulative
       // First hero's clock starts at match start; later heroes at the swap moment.
-      c.currentHeroStartMs = c.perHero.length === 0 && c.record.startedAt != null ? c.record.startedAt : nowMs;
+      // Counts every closed segment, not just qualifying ones (`c.perHero.length`
+      // would under-count once spawn-only segments are filtered out, wrongly
+      // re-anchoring the next real hero to match start and inflating its minutes).
+      c.currentHeroStartMs = c.segmentsClosed === 0 && c.record.startedAt != null ? c.record.startedAt : nowMs;
     } else if (player.heroRole) {
       c.currentRole = player.heroRole;
     }
@@ -189,12 +196,17 @@ export class MatchAggregator {
     if (this.current.currentHero) {
       const endMs = rec.endedAt ?? this.now();
       const minutes = Math.max(0, (endMs - (this.current.currentHeroStartMs ?? endMs)) / 60000);
-      this.current.perHero.push(
-        closeHero(this.current.currentHero, this.current.currentRole, this.current.heroStart, this.current.lastCum, minutes),
-      );
+      const closed = closeHero(this.current.currentHero, this.current.currentRole, this.current.heroStart, this.current.lastCum, minutes);
+      if (isPlayedSegment(closed)) this.current.perHero.push(closed);
     }
-    // Collapse same-hero swap segments (Tracer → Genji → Tracer) into one line each.
-    if (this.current.perHero.length) rec.perHero = mergeHeroStats(this.current.perHero);
+    // Collapse same-hero swap segments (Tracer → Genji → Tracer) into one line each,
+    // then derive heroes[] from what survived, in the first-seen order mergeHeroStats
+    // preserves — heroes[] and perHero[] can never drift apart (spawn-only swaps were
+    // already dropped above, so a match with none left keeps its default empty heroes[]).
+    if (this.current.perHero.length) {
+      rec.perHero = mergeHeroStats(this.current.perHero);
+      rec.heroes = rec.perHero.map((h) => h.hero);
+    }
 
     if (this.current.rosterAll.size) {
       rec.roster = [...this.current.rosterAll.entries()]
@@ -251,6 +263,8 @@ interface MutableMatch {
   roundLosses: number;
   // per-hero tracking
   perHero: HeroStat[];
+  /** Count of closed hero segments, qualifying or not — see its use in {@link MatchAggregator.trackHero}. */
+  segmentsClosed: number;
   currentHero?: string;
   currentRole?: string;
   /** Wall-clock ms the current hero segment began (match start for the first hero). */
@@ -273,7 +287,7 @@ function zeroSnap(): Snap {
 }
 
 function newMutable(): MutableMatch {
-  return { record: emptyMatch(''), rosterLocal: {}, rosterAll: new Map(), roundWins: 0, roundLosses: 0, perHero: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+  return { record: emptyMatch(''), rosterLocal: {}, rosterAll: new Map(), roundWins: 0, roundLosses: 0, perHero: [], segmentsClosed: 0, heroStart: zeroSnap(), lastCum: zeroSnap() };
 }
 
 /**

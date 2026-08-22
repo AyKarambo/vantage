@@ -139,6 +139,79 @@ describe('MatchAggregator per-hero stats', () => {
     expect(ph.Tracer).toMatchObject({ eliminations: 17, deaths: 3, assists: 5, damage: 7000, minutes: 8 });
     expect(ph.Genji).toMatchObject({ eliminations: 8, deaths: 2, assists: 2, damage: 5000, minutes: 2 });
   });
+
+  it('drops a spawn-only hero swap (short, all-zero segment) from heroes and perHero', () => {
+    let t = 0;
+    const agg = new MatchAggregator(() => t);
+    const at = (ms: number, m: GepMessage) => {
+      t = ms;
+      return agg.handle(m);
+    };
+    at(0, event('match_start'));
+    agg.handle(info('game_info', 'battle_tag', 'P#1'));
+    agg.handle(info('match_info', 'pseudo_match_id', 'm-spawn'));
+    // Ana picked in spawn, untouched, swapped off 15s later with zero stats.
+    at(0, info('roster', 'roster_0', { name: 'P#1', hero: 'Ana', role: 'support', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    at(15_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    // Tracer actually plays: real stats accrue over the next 5 minutes.
+    at(315_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', kills: 12, deaths: 3, assists: 4, damage: 8000 }));
+    agg.handle(info('match_info', 'match_outcome', 'Victory'));
+    const rec = at(315_000, event('match_end'));
+
+    expect(rec?.heroes).toEqual(['Tracer']); // Ana never counted as played
+    expect(rec?.perHero).toHaveLength(1);
+    const ph = Object.fromEntries((rec!.perHero ?? []).map((h) => [h.hero, h]));
+    expect(ph.Ana).toBeUndefined();
+    // Tracer's clock is anchored to the swap at 15s, NOT match start (0) — the
+    // excluded Ana segment must not inflate Tracer's minutes.
+    expect(ph.Tracer).toMatchObject({ eliminations: 12, deaths: 3, assists: 4, damage: 8000 });
+    expect(ph.Tracer.minutes).toBeCloseTo(5, 5); // (315_000 - 15_000) / 60_000
+  });
+
+  it('keeps a short hero swap when it shows any evidence of real activity', () => {
+    let t = 0;
+    const agg = new MatchAggregator(() => t);
+    const at = (ms: number, m: GepMessage) => {
+      t = ms;
+      return agg.handle(m);
+    };
+    at(0, event('match_start'));
+    agg.handle(info('game_info', 'battle_tag', 'P#1'));
+    agg.handle(info('match_info', 'pseudo_match_id', 'm-brief-active'));
+    at(0, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    // Died 10s in, still on Tracer — a real (if brief) engagement.
+    at(10_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', deaths: 1 }));
+    // Swapped off 15s in, having done nothing more — the trailing stub (Genji) stays excluded.
+    at(15_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', role: 'damage' }));
+    agg.handle(info('match_info', 'match_outcome', 'Defeat'));
+    const rec = at(15_000, event('match_end'));
+
+    expect(rec?.heroes).toEqual(['Tracer']);
+    expect(rec?.perHero).toHaveLength(1);
+    expect(rec!.perHero![0]).toMatchObject({ hero: 'Tracer', deaths: 1 });
+    expect(rec!.perHero![0].minutes).toBeCloseTo(0.25, 5); // 15s tracked, kept despite being under 60s
+  });
+
+  it('keeps the match record with an empty heroes list when every segment is spawn-only', () => {
+    let t = 0;
+    const agg = new MatchAggregator(() => t);
+    const at = (ms: number, m: GepMessage) => {
+      t = ms;
+      return agg.handle(m);
+    };
+    at(0, event('match_start'));
+    agg.handle(info('game_info', 'battle_tag', 'P#1'));
+    agg.handle(info('match_info', 'pseudo_match_id', 'm-all-spawn'));
+    at(0, info('roster', 'roster_0', { name: 'P#1', hero: 'Ana', role: 'support', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    at(5_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Mercy', role: 'support', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    agg.handle(info('match_info', 'match_outcome', 'Defeat'));
+    const rec = at(8_000, event('match_end'));
+
+    expect(rec).not.toBeNull();
+    expect(rec?.heroes).toEqual([]);
+    expect(rec?.perHero).toBeUndefined();
+    expect(rec?.outcome).toBe('Defeat'); // the match itself is still recorded
+  });
 });
 
 describe('MatchAggregator roster retention', () => {
