@@ -9,7 +9,7 @@
  * normalized messages in (guardrail #1: GEP is the only live data source).
  */
 import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from '../model';
-import { mergeHeroStats } from '../perHero';
+import { isPlayedSegment, mergeHeroStats } from '../perHero';
 import { K } from './keys';
 import { asNumber, asString, parseRoster } from './gepValues';
 import { resolveMapId } from '../resolvers/mapId';
@@ -110,8 +110,9 @@ export class MatchAggregator {
     const isLocalPlayer = rec.battleTag ? isLocal(player.battleTag, rec.battleTag) : Boolean(player.isLocal);
     if (!isLocalPlayer) return;
 
-    if (player.heroName && !rec.heroes.includes(player.heroName)) rec.heroes.push(player.heroName);
-    if (player.heroRole) rec.heroRole = player.heroRole;
+    // heroes[]/heroRole are derived from the surviving perHero segments in
+    // finalize() — a spawn-only swap must never appear in either (guardrail
+    // against the eager, unfiltered writes this replaced).
 
     const r = this.current.rosterLocal;
     this.current.rosterLocal = {
@@ -136,15 +137,18 @@ export class MatchAggregator {
     const c = this.current;
     if (player.heroName && player.heroName !== c.currentHero) {
       const nowMs = this.now();
-      if (c.currentHero) {
-        const minutes = Math.max(0, (nowMs - (c.currentHeroStartMs ?? nowMs)) / 60000);
-        c.perHero.push(closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum, minutes));
-      }
+      // Must read before closeCurrentHeroSegment (it never touches currentHeroStartMs,
+      // but this keeps the "is this the very first hero" check explicit and ordered).
+      // undefined here means no hero has ever been current — true regardless of
+      // whether earlier segments qualified as played, unlike a perHero.length check
+      // would be (that would wrongly re-anchor to match start after any exclusion).
+      const isFirstHero = c.currentHeroStartMs === undefined;
+      this.closeCurrentHeroSegment(nowMs);
       c.currentHero = player.heroName;
       c.currentRole = player.heroRole ?? c.currentRole;
       c.heroStart = { ...c.lastCum }; // new hero starts at the swap-point cumulative
       // First hero's clock starts at match start; later heroes at the swap moment.
-      c.currentHeroStartMs = c.perHero.length === 0 && c.record.startedAt != null ? c.record.startedAt : nowMs;
+      c.currentHeroStartMs = isFirstHero && c.record.startedAt != null ? c.record.startedAt : nowMs;
     } else if (player.heroRole) {
       c.currentRole = player.heroRole;
     }
@@ -156,6 +160,20 @@ export class MatchAggregator {
       healing: player.healing ?? c.lastCum.healing,
       mitigation: player.mitigation ?? c.lastCum.mitigation,
     };
+  }
+
+  /**
+   * Close the currently active hero segment, if any, keeping it only when
+   * {@link isPlayedSegment} confirms real evidence of play. Shared by the
+   * mid-match swap branch ({@link trackHero}) and the final-hero close
+   * ({@link finalize}) so the two can never drift apart.
+   */
+  private closeCurrentHeroSegment(endMs: number): void {
+    const c = this.current;
+    if (!c.currentHero) return;
+    const minutes = Math.max(0, (endMs - (c.currentHeroStartMs ?? endMs)) / 60000);
+    const closed = closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum, minutes);
+    if (isPlayedSegment(closed)) c.perHero.push(closed);
   }
 
   private tallyRound(outcome: string | undefined): void {
@@ -186,15 +204,19 @@ export class MatchAggregator {
       rec.finalScore = `${this.current.roundWins}–${this.current.roundLosses}`;
     }
 
-    if (this.current.currentHero) {
-      const endMs = rec.endedAt ?? this.now();
-      const minutes = Math.max(0, (endMs - (this.current.currentHeroStartMs ?? endMs)) / 60000);
-      this.current.perHero.push(
-        closeHero(this.current.currentHero, this.current.currentRole, this.current.heroStart, this.current.lastCum, minutes),
-      );
+    this.closeCurrentHeroSegment(rec.endedAt ?? this.now());
+    // Collapse same-hero swap segments (Tracer → Genji → Tracer) into one line each,
+    // then derive heroes[]/heroRole from what survived, in the first-seen order
+    // mergeHeroStats preserves — heroes[]/perHero[]/heroRole can never drift apart
+    // (spawn-only swaps were already dropped above, so a match with none left keeps
+    // its default empty heroes[] and an unset heroRole).
+    if (this.current.perHero.length) {
+      rec.perHero = mergeHeroStats(this.current.perHero);
+      rec.heroes = rec.perHero.map((h) => h.hero);
+      // Last QUALIFYING segment, not the merged/first-seen order — heroRole means
+      // "the hero the player actually ended the match on".
+      rec.heroRole = this.current.perHero[this.current.perHero.length - 1].role;
     }
-    // Collapse same-hero swap segments (Tracer → Genji → Tracer) into one line each.
-    if (this.current.perHero.length) rec.perHero = mergeHeroStats(this.current.perHero);
 
     if (this.current.rosterAll.size) {
       rec.roster = [...this.current.rosterAll.entries()]
