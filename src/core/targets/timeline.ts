@@ -7,6 +7,7 @@ import type { GameRecord, TargetGrade } from '../analytics';
 import type { Result } from '../model';
 import type { AuthoredTarget } from './types';
 import { DEFAULT_PARTIAL_MARGIN, evaluateMeasured } from './measured';
+import { matchInTargetScope } from './scope';
 
 /** One in-scope game for a target, ascending by timestamp. */
 export interface OrderedAttempt {
@@ -24,7 +25,7 @@ export interface OrderedAttempt {
 
 /**
  * The games that count toward a target, ascending by timestamp.
- *  - self-rated: every game; `grade` is set only where the user graded it on Review.
+ *  - self-rated: every in-scope game; `grade` is set only where the user graded it on Review.
  *  - measured:  only games where {@link evaluateMeasured} resolves — the bound stat
  *    is present AND the game is inside the target's role/hero scope — so an off-hero
  *    or unmeasurable game never pollutes the series.
@@ -40,9 +41,11 @@ export function targetTimeline(games: GameRecord[], t: AuthoredTarget, margin: n
     }
     return out;
   }
-  return ordered.map((g) => ({
-    timestamp: g.timestamp,
-    result: g.result,
-    grade: g.review?.grades[t.id],
-  }));
+  return ordered
+    .filter((g) => matchInTargetScope(g, t))
+    .map((g) => ({
+      timestamp: g.timestamp,
+      result: g.result,
+      grade: g.review?.grades[t.id],
+    }));
 }

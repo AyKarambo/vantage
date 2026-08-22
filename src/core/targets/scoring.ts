@@ -3,6 +3,7 @@ import { sampleTargets } from './sampleTargets';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
 import { DEFAULT_PARTIAL_MARGIN, evaluateMeasured } from './measured';
 import { targetLearningCurve } from './learningCurve';
+import { matchInTargetScope } from './scope';
 import type { AuthoredTarget, TargetSummary } from './types';
 
 /**
@@ -41,8 +42,10 @@ export function buildTargets(games: GameRecord[], demo: boolean, authored?: Auth
  * baseline while a side has no games.
  */
 function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number, margin: number = DEFAULT_PARTIAL_MARGIN): TargetSummary {
+  // Scope only narrows what counts as an "attempt" here — a stored grade on a
+  // now-out-of-scope game is left untouched on the GameRecord itself.
   const graded = games
-    .filter((g) => g.review?.grades[t.id] !== undefined)
+    .filter((g) => g.review?.grades[t.id] !== undefined && matchInTargetScope(g, t))
     .sort((a, b) => a.timestamp - b.timestamp);
   const grades = graded.map((g) => g.review!.grades[t.id]);
   const hits = grades.filter((g) => g === 'hit').length;
