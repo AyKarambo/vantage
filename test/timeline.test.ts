@@ -21,7 +21,7 @@ describe('targetTimeline', () => {
 
   it('measured: only games where evaluateMeasured resolves (inside the hero scope)', () => {
     const t: AuthoredTarget = {
-      id: 'M', name: '', mode: 'measured', rule: 'Eliminations ≥ 10', heroScope: 'Tracer',
+      id: 'M', name: '', mode: 'measured', rule: 'Eliminations ≥ 10', heroScope: ['Tracer'],
       createdAt: 0, isActive: true,
     };
     const g = (ts: number, hero: string, elim: number): GameRecord => ({
