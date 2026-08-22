@@ -124,9 +124,11 @@ never shows stale data as "current."
   points grouped by **Mechanics · Macro · Strategy · Training**, each entry showing a one-line
   coaching blurb and role tag — pick one and it prefills the builder. A measured stat within a
   **configurable partial-credit margin** of its threshold (default 20%, in Settings → General →
-  Coaching) scores **Partial** rather than Missed. Measured (⚡) targets can be **scoped to a
-  specific role and/or hero** so a target only grades the games it actually applies to, and
-  each target carries a small **goal-flag** icon for at-a-glance identification. Measured
+  Coaching) scores **Partial** rather than Missed. Any target — self-rated or measured — can be
+  **scoped to a role and/or one or more heroes**, so it only applies to games it's actually
+  relevant to: a scoped-out match skips a measured target's auto-grade and hides a self-rated
+  target from Review entirely, for both auto-tracked and hand-logged games alike. Each target
+  carries a small **goal-flag** icon for at-a-glance identification. Measured
   thresholds take **scroll-to-adjust** (per-stat steps, hold Shift for bigger jumps). The
   **Targets list** shows each target in plain language — name, grading mode, hit-rate, and one status
   sentence (e.g. "Paying off — you win more when you hit it.") — with an **Active** toggle;
