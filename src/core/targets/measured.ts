@@ -95,7 +95,8 @@ function statOver(rows: readonly HeroStat[], stat: string, minutes: number): num
  *
  * With a `scope` (D), the value is computed over only the in-scope hero rows:
  * `roleScope` keeps rows of that role (and skips open-queue matches entirely),
- * `heroScope` keeps a single hero (matched via {@link ../heroes heroMatchKey}).
+ * `heroScope` keeps rows for any of one or more heroes (matched via
+ * {@link ../heroes heroMatchKey}).
  * When no row is in scope the match is skipped (`null`) — never a miss; this also
  * makes a contradictory role+hero combo permanently skip, and skips a role-scoped
  * target on rows whose role GEP never reported. Both scope fields absent keeps the

@@ -65,7 +65,9 @@ export class ManualStore {
     t.rule = patch.rule;
     if (patch.roleScope != null) t.roleScope = patch.roleScope;
     else delete t.roleScope;
-    if (patch.heroScope != null) t.heroScope = patch.heroScope;
+    // An explicit [] means the same thing as absent — normalize so "scoped?"
+    // checks elsewhere can rely on a plain presence check, not a length check.
+    if (patch.heroScope != null && patch.heroScope.length > 0) t.heroScope = patch.heroScope;
     else delete t.heroScope;
     this.save();
   }

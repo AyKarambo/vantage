@@ -7,7 +7,6 @@
 import { h, render } from '../../dom';
 import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
 import { stepFor, parseMeasuredRule, MEASURED_STATS } from '../../../../src/core/targets';
-import { roleOfHero } from '../../../../src/core/heroes';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
 import { attachStepper } from '../../components/wheelStepper';
@@ -265,12 +264,15 @@ function scopeBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => vo
         state.roleScope = opt.value;
         // A specific role some of the scoped heroes don't belong to would make
         // an unsatisfiable role AND hero filter for those heroes — drop only
-        // the now-off-role heroes, keep the rest gradable.
+        // the now-off-role heroes, keep the rest gradable. Checked against the
+        // effective master-data role (not the static built-in table), so a
+        // hero whose role was overridden in Settings is judged correctly.
         if (state.roleScope) {
-          state.heroScope = state.heroScope?.filter((h) => roleOfHero(h) === state.roleScope);
+          const roleOf = (name: string): Role | undefined => heroes.find((entry) => entry.name === name)?.role;
+          state.heroScope = state.heroScope?.filter((name) => roleOf(name) === state.roleScope);
           if (state.heroScope && state.heroScope.length === 0) state.heroScope = undefined;
           heroSelected.clear();
-          state.heroScope?.forEach((h) => heroSelected.add(h));
+          state.heroScope?.forEach((name) => heroSelected.add(name));
         }
         paintRoles();
         paintHeroes(); // the hero grid re-filters to the newly chosen role

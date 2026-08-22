@@ -2,6 +2,7 @@
 import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
 import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
+import { matchInTargetScope } from '../../../src/core/targets';
 import { relTime, roleLabel, signed } from '../format';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
@@ -204,7 +205,12 @@ function gradePills(m: MatchRow, ctx: ViewContext): HTMLElement | null {
       if (mg && mg !== 'no-stat') entries.push([id, mg.grade]);
     } else {
       const sg = m.targetGrades?.[id];
-      if (sg) entries.push([id, sg]);
+      const t = targetsById.get(id);
+      // A self grade stored before the target picked up a scope that now
+      // excludes this match no longer counts — mirrors the Review screen.
+      // A since-deleted target (t undefined) has no scope to check, so its
+      // grade still shows, same as before.
+      if (sg && (!t || matchInTargetScope(m, t))) entries.push([id, sg]);
     }
   }
   if (!entries.length) return null;
