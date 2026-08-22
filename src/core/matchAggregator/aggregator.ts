@@ -303,11 +303,21 @@ function newMutable(): MutableMatch {
  * hero, or any stat. A slot cleared to `{}` at match teardown has none of these,
  * so it is skipped rather than overwriting the previous rich snapshot. `team`
  * alone doesn't count: it never arrives without the rest of a real row.
+ *
+ * GEP's "not revealed" sentinel — `hero_name`/`hero_role: "UNKNOWN"`, observed
+ * resetting every roster slot (including the local player's) on a real
+ * teardown broadcast — doesn't count as content either. `heroName` is already
+ * normalized to undefined for this by {@link resolveHeroName}; `heroRole` is
+ * raw text here, so it needs the same check inline.
  */
 function hasRosterContent(p: RosterPlayer): boolean {
-  return Boolean(p.battleTag || p.heroName || p.heroRole) ||
+  return Boolean(p.battleTag || p.heroName || (p.heroRole && !isUnknownToken(p.heroRole))) ||
     p.kills != null || p.deaths != null || p.assists != null ||
     p.damage != null || p.healing != null || p.mitigation != null;
+}
+
+function isUnknownToken(value: string): boolean {
+  return value.trim().toUpperCase() === 'UNKNOWN';
 }
 
 /** Numeric slot of a `roster_N` key, for stable scoreboard ordering. */

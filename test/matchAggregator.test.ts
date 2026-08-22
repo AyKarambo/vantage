@@ -360,6 +360,45 @@ describe('MatchAggregator roster teardown (slots cleared to {} before match_end)
     expect(rec!.eliminations).toBe(16);
     expect(rec!.deaths).toBe(4);
   });
+
+  it('retains the last rich snapshot per slot when GEP masks the roster with "UNKNOWN" instead of {}', () => {
+    // A real live capture: 10 roster rows stream in normally, then every slot
+    // (including the local player's own) gets reset to hero_name "UNKNOWN" /
+    // no battle_tag / no stats before match_end fires — a richer teardown shape
+    // than the bare `{}` covered above, which slipped past hasRosterContent and
+    // blanked the whole scoreboard to 10 "Unknown" rows with no isLocal player.
+    const agg = new MatchAggregator(() => 1000);
+    const seq: GepMessage[] = [
+      event('match_start'),
+      info('match_info', 'pseudo_match_id', 'mask-1'),
+      info('match_info', 'map', 1207),
+      info('roster', 'roster_9', { player_name: 'KARAMBO', battlenet_tag: 'Karambo#21442', is_local: true, hero_name: 'Shion', hero_role: 'DAMAGE', kills: 16, deaths: 4, assists: 2, damage: 8433, team: 1 }),
+      info('roster', 'roster_1', { player_name: 'ADMONI', battlenet_tag: 'Admoni#1955', is_local: false, hero_name: 'Cassidy', hero_role: 'DAMAGE', kills: 16, deaths: 3, damage: 11334, team: 1 }),
+      info('roster', 'roster_4', { player_name: 'ENEMY', battlenet_tag: 'Kittens#2693', is_local: false, hero_name: 'Roadhog', hero_role: 'TANK', kills: 11, deaths: 6, damage: 7895, team: 0 }),
+      info('match_info', 'match_outcome', 'victory'),
+      // Match teardown: every slot masked BEFORE match_end (the bug trigger).
+      info('roster', 'roster_1', { hero_name: 'UNKNOWN', team: 1 }),
+      info('roster', 'roster_4', { hero_name: 'UNKNOWN', team: 1 }),
+      info('roster', 'roster_9', { hero_name: 'UNKNOWN', team: 1, is_local: false }),
+    ];
+    let rec = null;
+    for (const m of seq) rec = agg.handle(m) ?? rec;
+    rec = agg.handle(event('match_end'));
+    expect(rec).not.toBeNull();
+
+    // The full scoreboard survived the masking — one rich row per slot.
+    expect(rec!.roster).toHaveLength(3);
+    const bySlot = Object.fromEntries((rec!.roster ?? []).map((p) => [p.battleTag, p]));
+    expect(bySlot['Karambo#21442']).toMatchObject({ heroName: 'Shion', kills: 16, isLocal: true });
+    expect(bySlot['Admoni#1955']).toMatchObject({ heroName: 'Cassidy', kills: 16, team: 1 });
+    expect(bySlot['Kittens#2693']).toMatchObject({ heroName: 'Roadhog', team: 0 });
+    expect(bySlot['Kittens#2693'].isLocal).toBeFalsy();
+
+    // The local player's own aggregated line is intact too.
+    expect(rec!.battleTag).toBe('Karambo#21442');
+    expect(rec!.heroes).toEqual(['Shion']);
+    expect(rec!.eliminations).toBe(16);
+  });
 });
 
 describe('parseRoster', () => {

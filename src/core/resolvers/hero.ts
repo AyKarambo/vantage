@@ -36,10 +36,16 @@ function titleCase(raw: string): string {
  * Resolve a GEP hero name to its canonical spelling. Nullish/empty -> undefined;
  * a known hero (any casing/punctuation) -> its canonical name; anything else ->
  * Title Case, so an unlisted hero still reads well instead of shouting.
+ *
+ * GEP's own "not revealed" sentinel (`hero_name: "UNKNOWN"`, seen on a real
+ * teardown/masked-roster capture) is treated the same as nullish -> undefined,
+ * not title-cased into a fake hero literally named "Unknown".
  */
 export function resolveHeroName(value: string | undefined | null): string | undefined {
   if (value === undefined || value === null) return undefined;
   const s = value.trim();
   if (s === '') return undefined;
-  return CANONICAL_BY_KEY[heroKey(s)] ?? titleCase(s);
+  const key = heroKey(s);
+  if (key === 'UNKNOWN') return undefined;
+  return CANONICAL_BY_KEY[key] ?? titleCase(s);
 }

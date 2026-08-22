@@ -40,6 +40,14 @@ describe('resolveHeroName', () => {
     expect(resolveHeroName('   ')).toBeUndefined();
   });
 
+  it("returns undefined for GEP's \"not revealed\" sentinel instead of a fake hero named Unknown", () => {
+    // Seen on a real teardown broadcast that reset every roster slot's hero_name
+    // to this literal value — must not be treated as a picked hero.
+    expect(resolveHeroName('UNKNOWN')).toBeUndefined();
+    expect(resolveHeroName('Unknown')).toBeUndefined();
+    expect(resolveHeroName('  unknown  ')).toBeUndefined();
+  });
+
   it('round-trips every canonical hero through its own uppercasing (spelling guard)', () => {
     for (const hero of ALL_HEROES) {
       expect(resolveHeroName(hero.toUpperCase()), `"${hero}" did not round-trip`).toBe(hero);
