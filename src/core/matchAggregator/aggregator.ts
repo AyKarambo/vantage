@@ -137,18 +137,17 @@ export class MatchAggregator {
     const c = this.current;
     if (player.heroName && player.heroName !== c.currentHero) {
       const nowMs = this.now();
-      // Must read before closeCurrentHeroSegment (it never touches currentHeroStartMs,
-      // but this keeps the "is this the very first hero" check explicit and ordered).
-      // undefined here means no hero has ever been current — true regardless of
-      // whether earlier segments qualified as played, unlike a perHero.length check
-      // would be (that would wrongly re-anchor to match start after any exclusion).
-      const isFirstHero = c.currentHeroStartMs === undefined;
       this.closeCurrentHeroSegment(nowMs);
       c.currentHero = player.heroName;
       c.currentRole = player.heroRole ?? c.currentRole;
       c.heroStart = { ...c.lastCum }; // new hero starts at the swap-point cumulative
-      // First hero's clock starts at match start; later heroes at the swap moment.
-      c.currentHeroStartMs = isFirstHero && c.record.startedAt != null ? c.record.startedAt : nowMs;
+      // Anchor every hero's clock — first included — to the moment its roster row
+      // was actually observed, not `match_start`. A real capture shows `match_start`
+      // firing ~35-40s before the local player's first roster tick (loading screen /
+      // spawn room), and longer still before real play; crediting that dead time to
+      // hero #1 systematically dilutes per-10 rates versus the game's own stat,
+      // independent of and in addition to the round-swap gap on multi-round maps.
+      c.currentHeroStartMs = nowMs;
     } else if (player.heroRole) {
       c.currentRole = player.heroRole;
     }
@@ -275,7 +274,7 @@ interface MutableMatch {
   perHero: HeroStat[];
   currentHero?: string;
   currentRole?: string;
-  /** Wall-clock ms the current hero segment began (match start for the first hero). */
+  /** Wall-clock ms the current hero segment began (its first observed roster tick). */
   currentHeroStartMs?: number;
   heroStart: Snap;
   lastCum: Snap;
