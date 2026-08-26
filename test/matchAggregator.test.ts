@@ -135,8 +135,9 @@ describe('MatchAggregator per-hero stats', () => {
 
     expect(rec?.perHero).toHaveLength(2); // Tracer collapsed from two segments
     const ph = Object.fromEntries((rec!.perHero ?? []).map((h) => [h.hero, h]));
-    // First hero clock starts at match start (0): Tracer 0→3min + 5→10min = 8 min.
-    expect(ph.Tracer).toMatchObject({ eliminations: 17, deaths: 3, assists: 5, damage: 7000, minutes: 8 });
+    // Every hero's clock starts at its first observed roster tick, not match
+    // start: Tracer's first tick lands at 60s, so 1→3min + 5→10min = 7 min.
+    expect(ph.Tracer).toMatchObject({ eliminations: 17, deaths: 3, assists: 5, damage: 7000, minutes: 7 });
     expect(ph.Genji).toMatchObject({ eliminations: 8, deaths: 2, assists: 2, damage: 5000, minutes: 2 });
   });
 
