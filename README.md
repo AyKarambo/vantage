@@ -630,9 +630,10 @@ store approval:
   (`ow config`, one-time) and GEP attaches live during `npm start`/`npm run dev`, exactly
   as it would for an approved app. See
   [docs/onboarding/01-getting-started.md](docs/onboarding/01-getting-started.md) for setup.
-  Requires the GA `@overwolf/ow-electron@39.8.12` / `@overwolf/ow-electron-builder@26.9.2`
-  versions this repo is pinned to — Dev Mode reached stable on 2026-07-16 and the older
-  betas stopped loading the gaming packages on 2026-08-06. Alternatively, use `npm run start:dev`
+  Requires the `@overwolf/ow-electron@42.7.1` / `@overwolf/ow-electron-builder@26.9.2`
+  versions this repo is pinned to (any GA release satisfies this — Dev Mode reached stable
+  on 2026-07-16 and the older betas stopped loading the gaming packages on 2026-08-06).
+  Alternatively, use `npm run start:dev`
   to force Dev Mode on for just this launch, bypassing the in-app Settings toggle — useful
   for smoke-testing your dev credentials without changing Settings. A successful authentication
   shows a green **Dev mode** badge in the status bar; a failed one shows red **Dev mode failed**
