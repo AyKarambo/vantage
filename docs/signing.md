@@ -22,9 +22,10 @@ Two independent reasons:
    missing still leaves GEP refusing to load. Vantage without GEP is not Vantage.
    (Local dev has a Dev Mode carve-out; the requirement is for *distributed* builds.)
 
-   **All three packages are pinned to the mandated GA versions** (`@overwolf/ow-electron@39.8.12`,
-   `@overwolf/ow-electron-builder@26.9.2`, `@overwolf/ow-electron-packages-types@1.1.6-1`),
-   bumped 2026-08-03. Overwolf shipped Dev Mode + App Signing to GA on **2026-07-16** and
+   **All three packages are pinned at or above the mandated GA versions** (currently
+   `@overwolf/ow-electron@42.7.1`, `@overwolf/ow-electron-builder@26.9.2`,
+   `@overwolf/ow-electron-packages-types@1.1.10`; the GA floor was `@overwolf/ow-electron@39.8.12`,
+   first reached 2026-08-03). Overwolf shipped Dev Mode + App Signing to GA on **2026-07-16** and
    ended the grace period on **2026-08-06**: past that date the gaming packages stop
    loading for anyone not on the new runtime *and* signed. This is not an optional bump.
 

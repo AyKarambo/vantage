@@ -68,8 +68,8 @@ for local development: it loads the gaming packages (GEP, Overlay, Recorder) aga
 unsigned, unpackaged build, as long as the process can authenticate with an Overwolf
 Developer Console identity. Dev Mode went GA on 2026-07-16, and since 2026-08-06 the
 gaming packages only load on the new runtime — so this repo's devDependencies are pinned
-to `@overwolf/ow-electron@39.8.12`, `@overwolf/ow-electron-builder@26.9.2` and
-`@overwolf/ow-electron-packages-types@1.1.6-1`. Older betas no longer work; keep these
+to `@overwolf/ow-electron@42.7.1`, `@overwolf/ow-electron-builder@26.9.2` and
+`@overwolf/ow-electron-packages-types@1.1.10`. Older betas no longer work; keep these
 three in step when you bump them.
 
 One-time setup:
