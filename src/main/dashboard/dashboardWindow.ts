@@ -4,6 +4,7 @@ import type { WindowBounds } from '../config';
 import type { DataProvider } from './provider';
 import { registerDashboardIpc, registerWindowControls } from './ipcHandlers';
 import { hardenWebContents } from './webContentsSecurity';
+import { shouldEnableDevTools } from '../../core/devMode';
 
 /**
  * The dashboard BrowserWindow lifecycle: a frameless, CSP-friendly window
@@ -73,6 +74,8 @@ export class DashboardWindow {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        // Overwolf QA blocker: packaged builds must not expose DevTools.
+        devTools: shouldEnableDevTools(app.isPackaged),
       },
     });
     // Lock the renderer to its own bundle: deny popups and any navigation away

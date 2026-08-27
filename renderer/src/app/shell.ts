@@ -174,7 +174,7 @@ export class App {
   private readonly gepBanner = h('div', { class: 'gep-banner hidden' });
   private readonly filterHost = h('div', { class: 'filterbar-wrap hidden' });
   private readonly contentHost = h('main', { class: 'content' });
-  private readonly statusLabel = h('span', null, 'Loading…');
+  private readonly statusLabel = h('span', { class: 'status-label' }, 'Loading…');
   private readonly busySpin = h('span', { class: 'busy-indicator hidden', title: 'Refreshing…' });
   private readonly staleLink = h('button', {
     class: 'stale-link hidden',
