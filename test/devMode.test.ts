@@ -4,6 +4,7 @@ import {
   computeDevModeAttempted,
   decideDevModeAuthStrategy,
   classifyDevModeBadge,
+  shouldEnableDevTools,
 } from '../src/core/devMode';
 
 describe('hasDevCredentials', () => {
@@ -101,5 +102,15 @@ describe('classifyDevModeBadge', () => {
 
   it('never shows authenticated (green) while pending — stays hidden until confirmed', () => {
     expect(classifyDevModeBadge({ attempted: true, outcome: 'pending' })).toBe('hidden');
+  });
+});
+
+describe('shouldEnableDevTools', () => {
+  it('is false for a packaged build', () => {
+    expect(shouldEnableDevTools(true)).toBe(false);
+  });
+
+  it('is true for an unpackaged/dev build', () => {
+    expect(shouldEnableDevTools(false)).toBe(true);
   });
 });

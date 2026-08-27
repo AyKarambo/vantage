@@ -117,3 +117,12 @@ export function classifyDevModeBadge(input: { attempted: boolean; outcome: DevMo
   if (input.outcome === 'failed') return 'failed';
   return 'hidden';
 }
+
+/**
+ * Whether DevTools should be reachable at all — false for a packaged build
+ * (Overwolf QA blocker: end users must never be able to open DevTools),
+ * true otherwise so `npm start`/`npm run dev` keep normal debugging.
+ */
+export function shouldEnableDevTools(packaged: boolean): boolean {
+  return !packaged;
+}
