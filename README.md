@@ -23,6 +23,18 @@ never shows stale data as "current."
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a top-priority callout, an activity heatmap
   (games/day, click a day to open its matches), and a mental snapshot.
+- **Live** — the match you're in right now, updated as it plays: the scoreboard the game
+  is showing (heroes, K/A/D, damage, healing, mitigation, split into your team and theirs),
+  and **players you've met** — everyone on this roster you've shared a game with before,
+  with your record **`with`** them when they're on your team this match and **`vs`** them
+  when they're not. A green dot appears on the nav item while a match is running; the
+  screen returns to an idle state the moment it ends, or if the game closes.
+  There is deliberately **no score line**: Overwatch's event feed reports no objective
+  score of any kind (its `match_info` updates are map, match id, outcome, and a
+  Stadium-only round outcome), so Vantage shows an **elimination count** derived from the
+  kill feed and says so, rather than inventing a scoreline. The kill feed and its count can
+  be switched off in **Settings → General** — off means it isn't sent to the window at all,
+  not merely hidden; the scoreboard and the with/vs records are unaffected.
 - **Matches** — the recent game log; click any row for a full **match detail page**
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
   support ×2, per-hero tabs, competitive progress, a read-only **Grades card** with

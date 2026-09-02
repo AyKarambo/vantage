@@ -206,6 +206,24 @@
   align-items: center;
   justify-content: center;
 }
+/* Live-match indicator on the Live nav item — present only while a match is
+   actually in progress, so it never becomes decoration you stop reading. */
+.nav-live-dot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--win-text, #6fcf97);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--win-text, #6fcf97) 22%, transparent);
+  animation: nav-live-pulse 2s ease-in-out infinite;
+}
+@keyframes nav-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-live-dot { animation: none; }
+}
 .sidebar-session {
   margin-top: auto;
   padding: 11px 12px;

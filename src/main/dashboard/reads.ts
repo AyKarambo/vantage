@@ -1,13 +1,13 @@
 import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
 import { activeMeasuredTargets } from '../../core/targets';
-import { playerMatchHistory } from '../../core/playerIndex';
+import { playerMatchHistory, playerRecords } from '../../core/playerIndex';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { suppressedMatchIds } from '../../core/placements';
 import type {
-  DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerMatchHistory,
+  DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerMatchHistory, PlayerRecord,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 
@@ -155,4 +155,19 @@ export function playerHistoryRead(
 ): PlayerMatchHistory | null {
   const master = provider.effectiveMasterData();
   return playerMatchHistory(competitiveOnly(provider.games()), name, makeMapMode(master.maps));
+}
+
+/**
+ * Your record with and against a whole roster at once — the live-match screen's
+ * known-players section.
+ *
+ * Deliberately its own read rather than N calls to {@link playerHistoryRead}:
+ * that one walks the entire history per name, and this is asked for up to nine
+ * players every time the live roster ticks.
+ */
+export function playerRecordsRead(
+  provider: DataProvider,
+  names: string[],
+): PlayerRecord[] {
+  return playerRecords(competitiveOnly(provider.games()), names);
 }

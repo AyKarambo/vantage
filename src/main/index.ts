@@ -40,8 +40,9 @@ import { createDataProvider } from './dataProvider';
 import { createMcpBridge } from './mcp';
 import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
+import { createLiveMatchMonitor } from './liveMatchMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload, type DevModeAuthStatusPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload, type DevModeAuthStatusPayload, type LiveMatchPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -353,6 +354,16 @@ function main(): void {
     onPendingChanged: () => pushPendingChanged(),
   });
 
+  // The in-progress match: the same GEP stream the pipeline consumes, folded
+  // for READING rather than writing (the pipeline emits only at match end).
+  // Publishes through the placeholder until the window exists, like the others.
+  let pushLiveMatch: (p: LiveMatchPayload) => void = () => {};
+  const liveMatchMonitor = createLiveMatchMonitor({
+    publish: (p) => pushLiveMatch(p),
+    // Read per publish, never captured, so the Settings toggle applies at once.
+    killFeedEnabled: () => config.ui.liveKillFeed,
+  });
+
   // Truthful connection indicator: folds GEP signals into the four-state
   // health model and fans changes out to the window, tray, and log.
   let publishStatus: (p: GepStatusPayload) => void = () => {};
@@ -417,6 +428,7 @@ function main(): void {
         demoPreference: config.ui.demoPreference,
         devMode: config.ui.devMode,
         gepNotifications: config.ui.gepNotifications,
+        liveKillFeed: config.ui.liveKillFeed,
         lastSeenVersion: config.ui.lastSeenVersion,
         mcpEnabled: config.ui.mcpEnabled,
       }),
@@ -445,6 +457,13 @@ function main(): void {
           saveLocalUiConfig({ gepNotifications: patch.gepNotifications });
           config = loadConfig();
         }
+        // The live-match monitor reads this on every publish, so switching the
+        // kill feed off stops it crossing the bridge from the next push on —
+        // no restart, and nothing to filter out on the renderer side.
+        if (patch.liveKillFeed !== undefined) {
+          saveLocalUiConfig({ liveKillFeed: patch.liveKillFeed });
+          config = loadConfig();
+        }
         if (patch.lastSeenVersion !== undefined) {
           saveLocalUiConfig({ lastSeenVersion: patch.lastSeenVersion });
           config = loadConfig();
@@ -463,6 +482,7 @@ function main(): void {
           demoPreference: config.ui.demoPreference,
           devMode: config.ui.devMode,
           gepNotifications: config.ui.gepNotifications,
+          liveKillFeed: config.ui.liveKillFeed,
           lastSeenVersion: config.ui.lastSeenVersion,
           mcpEnabled: config.ui.mcpEnabled,
         };
@@ -602,6 +622,7 @@ function main(): void {
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
   pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
+  pushLiveMatch = (p) => dashboard.push(EVENT_CHANNELS.onLiveMatch, p);
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
@@ -612,12 +633,18 @@ function main(): void {
     const gep = new GepService(config.overwatchGameId);
     gep.on('message', pipeline.feed);
     gep.on('message', (msg: GepMessage) => statusMonitor.message(msg));
+    gep.on('message', (msg: GepMessage) => liveMatchMonitor.message(msg));
     gep.on('status', (s: GepStatus) => {
       tray.setState({ status: statusText(s, history.count(), config.ui.demoPreference === 'on') });
       statusMonitor.setLastError(s.lastError);
       statusMonitor.setAttached(s.gameRunning && s.enabled);
       statusMonitor.setGepPackageVersion(s.gepVersion);
       statusMonitor.setUpdateStaged(Boolean(s.updateStaged));
+      // Teed off the SAME signal the status indicator uses, so the live board
+      // and the "match in progress" dot can never disagree. A game that
+      // crashes or is alt-F4'd emits no match_end, so without this the board
+      // would keep presenting a finished match as current.
+      liveMatchMonitor.setAttached(s.gameRunning && s.enabled);
     });
     gep.on('log', log.adapter('gep'));
 

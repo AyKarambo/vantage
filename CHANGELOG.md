@@ -17,6 +17,21 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Added
+
+- **A Live screen** for the match you're in right now. It shows the scoreboard the game is
+  showing — heroes, eliminations, assists, deaths, damage, healing and mitigation, split into
+  your team and theirs — updated as the match plays. A dot on the nav item tells you a match
+  is running; the screen empties again the moment it ends, or if Overwatch closes.
+- **"Players you've met", live.** Everyone on the current roster you've shared a game with
+  before, with your record **with** them when they're on your team this match and **vs** them
+  when they're against you. Click a name for the full history, same as anywhere else.
+- **A live elimination count**, from the kill feed. Be aware of what this is and isn't:
+  Overwatch's event feed reports **no objective score**, so Vantage counts eliminations and
+  labels them as such rather than inventing a scoreline. If a running kill count while you're
+  still in the game isn't for you, switch it off in **Settings → General** — that stops it
+  being sent to the window at all, and leaves the scoreboard and with/vs records untouched.
+
 ### Changed
 
 - **Targets list and detail page.** The Targets list now shows each target in plain language —
