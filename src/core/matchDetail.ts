@@ -125,7 +125,7 @@ function roleRank(role: Role | undefined): number {
  * within each team Tank → DPS → DPS → Support → Support (unresolved roles last),
  * tie-broken local-first then original slot. Rows are never moved across teams.
  */
-function orderScoreboard(entries: ScoreboardEntry[]): ScoreboardEntry[] {
+export function orderScoreboard(entries: ScoreboardEntry[]): ScoreboardEntry[] {
   const localTeam = entries.find((e) => e.isLocal)?.team;
   return entries
     .map((entry, slot) => ({ entry, slot }))

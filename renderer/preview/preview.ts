@@ -24,7 +24,8 @@ import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/
 import { isCompetitive } from '../../src/core/matchFilter';
 import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
-import { matchDetail } from '../../src/core/matchDetail';
+import { roleOfHero } from '../../src/core/heroes';
+import { matchDetail, orderScoreboard } from '../../src/core/matchDetail';
 import { playerMatchHistory, playerRecords } from '../../src/core/playerIndex';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
@@ -1188,18 +1189,27 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
       healing: 6400 + tick * 220, mitigation: 0,
     },
     ...known.map((name, i) => ({
-      name, isLocal: false, hero: heroes[i % heroes.length], team: i < 4 ? 0 : 1,
+      name, isLocal: false, hero: heroes[i % heroes.length],
+      role: roleOfHero(heroes[i % heroes.length]), team: i < 4 ? 0 : 1,
       eliminations: (i * 2 + tick) % 14, deaths: (i + tick) % 9, assists: (i * 3) % 11,
       damage: 1500 + i * 400 + tick * 60, healing: i % 3 === 0 ? 3000 + tick * 100 : 0,
       mitigation: i % 4 === 0 ? 2000 + tick * 80 : 0,
     })),
   ];
+  // Summed the same way the real monitor sums the live roster, so the harness
+  // exercises the damage/healing rows rather than faking plausible numbers.
+  const side = (t: number): { damage: number; healing: number } => roster
+    .filter((r) => r.team === t)
+    .reduce((a, r) => ({ damage: a.damage + (r.damage ?? 0), healing: a.healing + (r.healing ?? 0) }), { damage: 0, healing: 0 });
   return {
     live: true,
     startedAt: Date.now() - tick * 1000,
     map: 'Ilios',
+    totals: { yours: side(0), theirs: side(1), known: true },
     gameType: 'competitive',
-    roster,
+    // Through the same ordering the real monitor applies, so the harness shows
+    // the 5v5 layout rather than whatever order this file happens to build in.
+    roster: orderScoreboard(roster),
     kills: appSettings.liveKillFeed
       ? { yours: 4 + tick, theirs: 3 + Math.floor(tick / 2), known: true }
       : { yours: 0, theirs: 0, known: false },
@@ -1231,7 +1241,9 @@ let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
     clearInterval(previewLiveTimer);
     previewLiveTimer = undefined;
     for (const cb of liveMatchListeners) {
-      cb({ live: false, endedAt: Date.now(), roster: [], kills: { yours: 0, theirs: 0, known: false }, feed: [], teamsKnown: false });
+      cb({ live: false, endedAt: Date.now(), roster: [], kills: { yours: 0, theirs: 0, known: false },
+        totals: { yours: { damage: 0, healing: 0 }, theirs: { damage: 0, healing: 0 }, known: false },
+        feed: [], teamsKnown: false });
     }
   },
 };

@@ -1,10 +1,11 @@
 import type { GepMessage, RosterPlayer, Role } from '../core/model';
 import {
-  INITIAL_LIVE_MATCH, liveMatchDetached, liveRoster, localTeam, reduceLiveMatch,
+  INITIAL_LIVE_MATCH, liveMatchDetached, liveRoster, liveTeamTotals, localTeam, reduceLiveMatch,
   type LiveMatchState,
 } from '../core/liveMatch';
 import { resolveRole } from '../core/resolvers/role';
 import { roleOfHero } from '../core/heroes';
+import { orderScoreboard } from '../core/matchDetail';
 import type { LiveMatchPayload, ScoreboardEntry } from '../shared/contract';
 
 /**
@@ -95,7 +96,11 @@ export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): Live
     ...(state.endedAt !== undefined ? { endedAt: state.endedAt } : {}),
     ...(state.mapName !== undefined ? { map: state.mapName } : {}),
     ...(state.gameType !== undefined ? { gameType: state.gameType } : {}),
-    roster: roster.map(toScoreboardEntry),
+    // Ordered by the SAME function the stored match detail uses — your team
+    // first, then Tank → DPS → DPS → Support → Support — so the live board and
+    // the one you open afterwards can't read differently for the same match.
+    roster: orderScoreboard(roster.map(toScoreboardEntry)),
+    totals: liveTeamTotals(roster),
     // With the kill feed off, NOTHING kill-derived crosses the bridge — not the
     // per-kill strip and not the elimination count, which is only a sum of the
     // same events. Leaving a running kill count on screen would defeat the point

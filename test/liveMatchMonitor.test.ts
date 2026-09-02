@@ -195,3 +195,49 @@ describe('toPayload', () => {
     expect(toPayload(s, true)).toMatchObject({ live: false, endedAt: 4000 });
   });
 });
+
+describe('liveMatchMonitor — 5v5 ordering and team totals', () => {
+  const build = (opts: { killFeed?: boolean } = {}) => {
+    const h = harness(opts);
+    h.monitor.message(event('match_start', null));
+    // Deliberately out of role order and out of team order in the SLOTS, so the
+    // ordering below is the function's doing rather than the feed's.
+    h.monitor.message(roster(0, { battle_tag: 'FoeSup#1', hero_name: 'ANA', hero_role: 'SUPPORT', team: 1, damage: 500, healed: 4000 }));
+    h.monitor.message(roster(1, { battle_tag: 'MySup#1', hero_name: 'KIRIKO', hero_role: 'SUPPORT', team: 0, damage: 900, healed: 6000 }));
+    h.monitor.message(roster(2, { battle_tag: 'MyDps#1', hero_name: 'GENJI', hero_role: 'DAMAGE', team: 0, damage: 5000, healed: 0 }));
+    h.monitor.message(roster(3, { battle_tag: 'Me#1', hero_name: 'ORISA', hero_role: 'TANK', team: 0, is_local: true, damage: 4000, healed: 0 }));
+    h.monitor.message(roster(4, { battle_tag: 'FoeTank#1', hero_name: 'SIGMA', hero_role: 'TANK', team: 1, damage: 3000, healed: 0 }));
+    return h;
+  };
+
+  it('orders your team first, then tank → damage → support', () => {
+    const p = build().monitor.snapshot();
+    expect(p.roster.map((r) => r.name)).toEqual(['Me#1', 'MyDps#1', 'MySup#1', 'FoeTank#1', 'FoeSup#1']);
+  });
+
+  it('sums damage and healing per side', () => {
+    const p = build().monitor.snapshot();
+    expect(p.totals).toEqual({
+      yours: { damage: 9900, healing: 6000 },
+      theirs: { damage: 3500, healing: 4000 },
+      known: true,
+    });
+  });
+
+  it('keeps the totals when the kill feed is switched off', () => {
+    // The whole point of reading them off the roster: they are the game's own
+    // scoreboard numbers, not anything derived from kill events.
+    const p = build({ killFeed: false }).monitor.snapshot();
+    expect(p.kills).toEqual({ yours: 0, theirs: 0, known: false });
+    expect(p.totals.known).toBe(true);
+    expect(p.totals.yours.damage).toBe(9900);
+  });
+
+  it('reports totals unknown when the feed gave no teams', () => {
+    const { monitor } = harness();
+    monitor.message(event('match_start', null));
+    monitor.message(roster(0, { battle_tag: 'Me#1', is_local: true, damage: 1000 }));
+    monitor.message(roster(1, { battle_tag: 'Foe#2', damage: 900 }));
+    expect(monitor.snapshot().totals.known).toBe(false);
+  });
+});

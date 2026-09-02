@@ -293,3 +293,44 @@ function shallowEqual(a: RosterPlayer, b: RosterPlayer): boolean {
   for (const k of keys) if (a[k] !== b[k]) return false;
   return true;
 }
+
+/** One side's summed scoreboard output for the live match. */
+export interface LiveTeamTotals {
+  damage: number;
+  healing: number;
+}
+
+/**
+ * Damage and healing summed per side, so the board can answer "who is out-
+ * damaging whom" at a glance.
+ *
+ * Read off the ROSTER, not the kill feed — which matters twice over. It means
+ * these survive the kill feed being switched off (they are TAB-screen numbers
+ * the game itself is showing, not derived from kill events), and it means they
+ * are available on any feed that reports teams, even one that never emits a
+ * single `kill_feed`.
+ *
+ * `known` is false unless the feed named the local player's team AND at least
+ * one other player's. Without both there is no "your side" to sum against, and
+ * a pair of totals with nothing to compare them to would invite exactly the
+ * misreading this exists to prevent.
+ */
+export function liveTeamTotals(roster: RosterPlayer[]): {
+  yours: LiveTeamTotals;
+  theirs: LiveTeamTotals;
+  known: boolean;
+} {
+  const mine = localTeam(roster);
+  const yours: LiveTeamTotals = { damage: 0, healing: 0 };
+  const theirs: LiveTeamTotals = { damage: 0, healing: 0 };
+  let sawOther = false;
+  for (const p of roster) {
+    if (p.team === undefined) continue;
+    if (mine === undefined) continue;
+    const side = p.team === mine ? yours : theirs;
+    if (p.team !== mine) sawOther = true;
+    side.damage += p.damage ?? 0;
+    side.healing += p.healing ?? 0;
+  }
+  return { yours, theirs, known: mine !== undefined && sawOther };
+}

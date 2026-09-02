@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   INITIAL_LIVE_MATCH, LIVE_FEED_CAP, reduceLiveMatch, liveMatchDetached,
-  liveRoster, liveOpponentNames, localTeam, type LiveMatchState,
+  liveRoster, liveOpponentNames, liveTeamTotals, localTeam, type LiveMatchState,
 } from '../src/core/liveMatch';
 import type { GepMessage } from '../src/core/model';
 
@@ -243,5 +243,70 @@ describe('reduceLiveMatch — kill feed payload shapes', () => {
     const s = reduceLiveMatch(live(), event('kill_feed', JSON.stringify(payload)), 1001);
     expect(s.feed[0].revive).toBeUndefined();
     expect(s.kills.theirs).toBe(1);
+  });
+});
+
+describe('liveTeamTotals', () => {
+  const p = (over: Record<string, unknown>) => over as never;
+
+  it('sums damage and healing per side', () => {
+    const roster = [
+      p({ isLocal: true, team: 0, damage: 2000, healing: 6000 }),
+      p({ team: 0, damage: 3000, healing: 500 }),
+      p({ team: 1, damage: 4000, healing: 100 }),
+      p({ team: 1, damage: 1000, healing: 2000 }),
+    ];
+    expect(liveTeamTotals(roster)).toEqual({
+      yours: { damage: 5000, healing: 6500 },
+      theirs: { damage: 5000, healing: 2100 },
+      known: true,
+    });
+  });
+
+  it('treats a missing stat as zero rather than dropping the player', () => {
+    const roster = [
+      p({ isLocal: true, team: 0, damage: 1000 }),
+      p({ team: 1, healing: 700 }),
+    ];
+    expect(liveTeamTotals(roster)).toMatchObject({
+      yours: { damage: 1000, healing: 0 },
+      theirs: { damage: 0, healing: 700 },
+    });
+  });
+
+  it('is unknown when the feed never named the local player\'s team', () => {
+    // With no "your side" the two numbers have nothing to compare against.
+    const roster = [p({ damage: 1000, team: 0 }), p({ damage: 2000, team: 1 })];
+    expect(liveTeamTotals(roster).known).toBe(false);
+  });
+
+  it('is unknown when only YOUR side was reported', () => {
+    // One-sided totals invite exactly the "we're ahead" misreading this guards.
+    const roster = [p({ isLocal: true, team: 0, damage: 1000 })];
+    expect(liveTeamTotals(roster).known).toBe(false);
+  });
+
+  it('ignores players the feed gave no team for', () => {
+    const roster = [
+      p({ isLocal: true, team: 0, damage: 1000 }),
+      p({ team: 1, damage: 500 }),
+      p({ damage: 9999 }), // no team — belongs to neither total
+    ];
+    const t = liveTeamTotals(roster);
+    expect(t.yours.damage).toBe(1000);
+    expect(t.theirs.damage).toBe(500);
+  });
+
+  it('reads off the roster, so it stands with no kill feed at all', () => {
+    // Damage and healing are TAB-screen numbers, not kill-derived — which is why
+    // they survive the kill feed being switched off.
+    let s = live();
+    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, damage: 1200, healed: 3400 }), 1001);
+    s = reduceLiveMatch(s, roster(1, { battle_tag: 'Foe#2', team: 1, damage: 800, healed: 100 }), 1002);
+    expect(liveTeamTotals(liveRoster(s))).toEqual({
+      yours: { damage: 1200, healing: 3400 },
+      theirs: { damage: 800, healing: 100 },
+      known: true,
+    });
   });
 });
