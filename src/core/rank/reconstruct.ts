@@ -21,6 +21,7 @@ function sumSr(
   account: string,
   role: Role,
   inRange: (ts: number) => boolean,
+  suppressed?: ReadonlySet<string>,
 ): number {
   return games
     .filter(
@@ -30,7 +31,10 @@ function sumSr(
         classifyGameType(g.gameType) === 'competitive' &&
         inRange(g.timestamp),
     )
-    .reduce((sum, g) => sum + (g.srDelta ?? 0), 0);
+    // A suppressed match contributes 0, exactly as it does walking FORWARD
+    // (see ../rank/timeline competitiveComps): a delta that never moved the
+    // ladder must not be subtracted back out of it either.
+    .reduce((sum, g) => sum + (suppressed?.has(g.matchId) ? 0 : g.srDelta ?? 0), 0);
 }
 
 /** The latest (account, role) competitive match strictly before `beforeTs`, if any. */
@@ -86,7 +90,8 @@ export function rankAfterMatch(
   if (matchTs >= anchor.setAt) return currentRank(games, anchors, account, role, matchTs, suppressed);
   // Backward: subtract every comp match strictly after the target, up to the
   // anchor reading, from the anchor's scalar.
-  const points = rankToPoints(anchor) - sumSr(games, account, role, (ts) => ts > matchTs && ts <= anchor.setAt);
+  const points = rankToPoints(anchor)
+    - sumSr(games, account, role, (ts) => ts > matchTs && ts <= anchor.setAt, suppressed);
   return { ...pointsToRank(points), protected: false };
 }
 

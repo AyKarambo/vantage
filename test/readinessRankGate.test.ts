@@ -133,3 +133,59 @@ describe('rankTrendFor — evidence discipline', () => {
     expect(rankTrendFor(games, dayOrdinal(ts(27, 20)), anchors)).toBe('climbing');
   });
 });
+
+describe('rank-gated undertraining nudge — placement suppression', () => {
+  /**
+   * A match inside an OPEN placement run carries a stored ±% that every rank
+   * surface in the app deliberately ignores: Overwatch shows no rank at all
+   * during placements, so the track reads `Placements N/10`, not a position.
+   *
+   * Readiness reading those same deltas is the disagreement this covers. The
+   * stakes are not cosmetic: `stagnant` is the ONLY state that lets the
+   * undertraining nudge fire, so an unsuppressed read would tell a player who is
+   * visibly mid-placements to play more, on the strength of numbers the rest of
+   * the app is holding back.
+   */
+  const flat = (i: number): number => (i % 2 === 0 ? 20 : -20);
+  const allIds = (games: GameRecord[]): Set<string> => new Set(games.map((g) => g.matchId));
+
+  it('suppressed deltas are not evidence — a stagnant read becomes unknown', () => {
+    const games = weekender(flat);
+    expect(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS)).toBe('stagnant');
+    expect(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS, allIds(games))).toBe('unknown');
+  });
+
+  it('a suppressed climb no longer reads as climbing either — the mask cuts both ways', () => {
+    // Not a nudge-safety case (climbing already silences it) but the same
+    // invariant: a suppressed delta moves nothing, in either direction.
+    const games = weekender(() => 5);
+    expect(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS)).toBe('climbing');
+    expect(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS, allIds(games))).toBe('unknown');
+  });
+
+  it('suppressing only SOME matches leaves the rest as evidence', () => {
+    const games = weekender(flat);
+    // Mask a single match: plenty of logged deltas remain above the evidence bar.
+    const one = new Set([games[0].matchId]);
+    expect(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS, one)).toBe('stagnant');
+  });
+
+  it('an empty suppressed set behaves exactly as no set at all', () => {
+    const games = weekender(flat);
+    expect(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS, new Set()))
+      .toBe(rankTrendFor(games, dayOrdinal(EVAL), ANCHORS));
+  });
+
+  it('end to end: the nudge stays silent for a track whose matches are all suppressed', () => {
+    const games = weekender(flat);
+    const fired = computeReadiness(games, EVAL, { targets: [], rankAnchors: ANCHORS });
+    expect(fired.signals.some((s) => s.key === 'low-frequency')).toBe(true);
+
+    const silent = computeReadiness(games, EVAL, {
+      targets: [], rankAnchors: ANCHORS, suppressed: allIds(games),
+    });
+    expect(silent.signals.some((s) => s.key === 'low-frequency')).toBe(false);
+    // And no invisible score dip either — the capped freqPen goes with it.
+    expect(silent.score).toBe(75);
+  });
+});

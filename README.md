@@ -103,7 +103,8 @@ never shows stale data as "current."
   while output holds). A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
   not an alarm); a thin weekly rhythm gets a consistency nudge **only on proven rank stagnation**
   (~2 weeks of logged SR changes with no account climbing) — the coach never encourages volume
-  for its own sake. Deliberately conservative and
+  for its own sake, and matches inside an open **placement run** count as no evidence either way,
+  since the game shows no rank at all while you're placing. Deliberately conservative and
   framed as an evidence-informed **wellness nudge, not a diagnosis**. The screen itself stays
   data-first; all the explanation — a progressive-disclosure **help wiki** (plain → how it works
   → the real formulas), a personalized *"your readiness right now"* score walkthrough, and a

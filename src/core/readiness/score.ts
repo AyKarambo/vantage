@@ -182,7 +182,7 @@ export function computeStateAt(
     (s) => s.endOrdinal === lastActiveOrdinal && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
   );
 
-  const rankTrend = rankTrendFor(upTo, refOrdinal, ctx.rankAnchors);
+  const rankTrend = rankTrendFor(upTo, refOrdinal, ctx.rankAnchors, ctx.suppressed);
   const lp = loadParts(load, restDays, perf.blend, rankTrend);
   const driver: ReadinessDriver =
     restDays >= T.rustSignalDays ? 'rust' : restDays === 0 && lp.overloadPen >= T.driverBar ? 'overload' : 'neutral';

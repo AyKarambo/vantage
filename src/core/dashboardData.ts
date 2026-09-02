@@ -201,9 +201,15 @@ export function computeDashboard(
     // (but now competitive-only, plan D1) history, like reviewInbox/recap.
     // The target context feeds the target-focus dampener (active targets are
     // not derivable from GameRecord alone); the rank anchors feed the
-    // rank-gated undertraining nudge. safeReadiness never throws, so a
-    // readiness bug can never blank the whole dashboard.
-    readiness: safeReadiness(all, Date.now(), { targets: manual?.targets ?? [], rankAnchors: manual?.rankAnchors }),
+    // rank-gated undertraining nudge, masked by the same `suppressed` set every
+    // other rank surface uses so a track mid-placements can't read as stagnant.
+    // safeReadiness never throws, so a readiness bug can never blank the whole
+    // dashboard.
+    readiness: safeReadiness(all, Date.now(), {
+      targets: manual?.targets ?? [],
+      rankAnchors: manual?.rankAnchors,
+      suppressed,
+    }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     sessionSettings,
     gradingSettings: grading,

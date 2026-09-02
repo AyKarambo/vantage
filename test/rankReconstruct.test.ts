@@ -98,3 +98,33 @@ describe('srDeltaForSetRank — back-compute the SR % from an entered rank', () 
     expect(srDeltaForSetRank(games, {}, 'Main', 'damage', 200, pos('Gold', 2, 20))).toBe(0);
   });
 });
+
+describe('rankAfterMatch — suppression applies walking BACKWARD too', () => {
+  /**
+   * The forward branch has always honoured `suppressed`; the backward
+   * reconstruction quietly did not, so the function's own doc — "threads through
+   * to the same read-time mask every other rank surface applies" — was only half
+   * true. A suppressed delta never moved the ladder forward, so subtracting it
+   * back out walking backward invents a position the player never held.
+   */
+  it('does not subtract a suppressed delta from the anchor', () => {
+    const a = anchors(); // Gold 3 · 40% at ts=100
+    // m2 (-10) sits between the target and the anchor, so the unmasked walk
+    // adds its 10 back: 40 - (-10) = 50.
+    expect(rankAfterMatch(games, a, 'Main', 'damage', 50)!.progressPct).toBe(50);
+    // Masked, m2 contributes nothing and the reading is the anchor itself.
+    expect(rankAfterMatch(games, a, 'Main', 'damage', 50, undefined, new Set(['m2']))!.progressPct).toBe(40);
+  });
+
+  it('an empty suppressed set changes nothing', () => {
+    const a = anchors();
+    expect(rankAfterMatch(games, a, 'Main', 'damage', 50, undefined, new Set())!.progressPct)
+      .toBe(rankAfterMatch(games, a, 'Main', 'damage', 50)!.progressPct);
+  });
+
+  it('still masks on the forward branch, unchanged', () => {
+    const a = anchors();
+    expect(rankAfterMatch(games, a, 'Main', 'damage', 200)!.progressPct).toBe(80); // 40 + 20 + 20
+    expect(rankAfterMatch(games, a, 'Main', 'damage', 200, undefined, new Set(['m3']))!.progressPct).toBe(60);
+  });
+});

@@ -20,8 +20,24 @@ import { dayOrdinal } from './day';
 /** What the rank evidence says over the stagnation window ending at the reference day. */
 export type RankTrend = 'climbing' | 'stagnant' | 'unknown';
 
-/** The rank-moving competitive inputs for one track, from the anchor instant up to a day ordinal. */
-function comps(games: GameRecord[], account: string, role: string, sinceTs: number, maxOrdinal: number): RankMatchInput[] {
+/**
+ * The rank-moving competitive inputs for one track, from the anchor instant up to a day ordinal.
+ *
+ * `suppressed` applies the same read-time mask every other rank surface uses
+ * ({@link ../placements/engine suppressedMatchIds}): a match inside an OPEN
+ * placement run has no settled ±% — Overwatch shows none during placements — so
+ * its stored value must not move the ladder here either. Reading it as
+ * `undefined` (not dropping the match) mirrors {@link ../rank/timeline
+ * competitiveComps} exactly: the game still happened, it just moves nothing.
+ */
+function comps(
+  games: GameRecord[],
+  account: string,
+  role: string,
+  sinceTs: number,
+  maxOrdinal: number,
+  suppressed?: ReadonlySet<string>,
+): RankMatchInput[] {
   return games
     .filter(
       (g) =>
@@ -32,7 +48,7 @@ function comps(games: GameRecord[], account: string, role: string, sinceTs: numb
         dayOrdinal(g.timestamp) <= maxOrdinal,
     )
     .sort((a, b) => a.timestamp - b.timestamp)
-    .map((g) => ({ result: g.result, srDelta: g.srDelta }));
+    .map((g) => ({ result: g.result, srDelta: suppressed?.has(g.matchId) ? undefined : g.srDelta }));
 }
 
 /**
@@ -40,7 +56,12 @@ function comps(games: GameRecord[], account: string, role: string, sinceTs: numb
  * (the caller passes the same slice the rest of the state evaluation uses). Anchor map
  * keys follow `rankKey` (`account::role`); the role is the segment after the last `::`.
  */
-export function rankTrendFor(games: GameRecord[], refOrdinal: number, anchors: RankAnchorMap | undefined): RankTrend {
+export function rankTrendFor(
+  games: GameRecord[],
+  refOrdinal: number,
+  anchors: RankAnchorMap | undefined,
+  suppressed?: ReadonlySet<string>,
+): RankTrend {
   if (!anchors) return 'unknown';
   const windowStart = refOrdinal - T.rankStagnationWindowDays + 1;
 
@@ -59,6 +80,14 @@ export function rankTrendFor(games: GameRecord[], refOrdinal: number, anchors: R
 
     // Evidence: the engine moves by srDelta, so stagnation needs logged deltas inside the
     // measurable sub-window — a delta-free window is unlogged, not flat.
+    //
+    // A SUPPRESSED delta is not evidence either. A match inside an open placement
+    // run carries a stored ±% the rank engine deliberately ignores, so counting it
+    // here would let a track that is provably placing — the app shows it as
+    // `Placements N/10`, with no rank at all — clear the evidence bar and read as
+    // `stagnant`. That is the one state that lets the undertraining nudge fire, so
+    // the effect would be telling a player mid-placements to play more on the
+    // strength of numbers the rest of the app is holding back.
     const measurableDeltas = games.filter(
       (g) =>
         g.account === account &&
@@ -66,13 +95,14 @@ export function rankTrendFor(games: GameRecord[], refOrdinal: number, anchors: R
         classifyGameType(g.gameType) === 'competitive' &&
         g.timestamp > anchor.setAt &&
         typeof g.srDelta === 'number' &&
+        !suppressed?.has(g.matchId) &&
         dayOrdinal(g.timestamp) >= measurableStart &&
         dayOrdinal(g.timestamp) <= refOrdinal,
     ).length;
     if (measurableDeltas === 0) continue; // nothing measurable on this track at all
 
-    const start = computeRank(anchor, comps(games, account, role, anchor.setAt, measurableStart - 1));
-    const end = computeRank(anchor, comps(games, account, role, anchor.setAt, refOrdinal));
+    const start = computeRank(anchor, comps(games, account, role, anchor.setAt, measurableStart - 1, suppressed));
+    const end = computeRank(anchor, comps(games, account, role, anchor.setAt, refOrdinal, suppressed));
 
     // ASYMMETRIC bars (err toward silence): CLIMBING silences on any net-positive movement,
     // however thin the sample — nagging a provably-climbing player is the one outcome the
