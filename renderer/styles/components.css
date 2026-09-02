@@ -1534,3 +1534,30 @@ table.data tbody tr:hover {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* Live-match team tally — your team | stat | enemy team, one row per stat.
+   A three-column grid so the numbers line up on the centre labels regardless of
+   how wide they get; `fmt` keeps damage/healing to a compact 12.4k form. */
+.live-tally {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 4px;
+  justify-items: center;
+}
+.live-tally-head {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding-bottom: 2px;
+}
+.live-tally-value {
+  font-size: 22px;
+  line-height: 1.25;
+}
+.live-tally-label {
+  font-size: 11px;
+  min-width: 84px;
+  text-align: center;
+}

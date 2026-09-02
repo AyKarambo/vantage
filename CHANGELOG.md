@@ -38,6 +38,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **"Players you've met", live.** Everyone on the current roster you've shared a game with
   before, with your record **with** them when they're on your team this match and **vs** them
   when they're against you. Click a name for the full history, same as anywhere else.
+- **Damage and healing totals per team on the Live screen**, next to the elimination count, so
+  you can see at a glance which side is out-damaging or out-healing the other. The side that's
+  ahead on each line is the brighter one. These come from the game's own scoreboard rather than
+  the kill feed, so they stay even with the kill feed switched off. The live scoreboard is also
+  ordered like the game's: your team first, then tank, both DPS, both supports.
 - **A live elimination count**, from the kill feed. Be aware of what this is and isn't:
   Overwatch's event feed reports **no objective score**, so Vantage counts eliminations and
   labels them as such rather than inventing a scoreline. If a running kill count while you're

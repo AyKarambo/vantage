@@ -35,10 +35,15 @@ switcher and session card staying put either side of it.
   with your record **`with`** them when they're on your team this match and **`vs`** them
   when they're not. A green dot appears on the nav item while a match is running; the
   screen returns to an idle state the moment it ends, or if the game closes.
+  Above it, **eliminations, damage and healing totalled per team** — the side ahead on each line
+  is the brighter one. Damage and healing are read off the game's own scoreboard, so they remain
+  when the kill feed is off. Rows are ordered the way the game orders them: your team first,
+  then tank, both DPS, both supports (the same ordering the stored match detail uses).
   There is deliberately **no score line**: Overwatch's event feed reports no objective
   score of any kind (its `match_info` updates are map, match id, outcome, and a
-  Stadium-only round outcome), so Vantage shows an **elimination count** derived from the
-  kill feed and says so, rather than inventing a scoreline. The kill feed and its count can
+  Stadium-only round outcome), so Vantage counts **eliminations** from the kill feed and
+  labels them as such (the card's tooltip spells this out) rather than inventing a
+  scoreline. The kill feed and its count can
   be switched off in **Settings → General** — off means it isn't sent to the window at all,
   not merely hidden; the scoreboard and the with/vs records are unaffected.
 - **Matches** — the recent game log; click any row for a full **match detail page**

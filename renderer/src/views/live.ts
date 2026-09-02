@@ -20,7 +20,7 @@ import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { scoreboard } from '../components/scoreboard';
 import { card, emptyState, pill } from '../components/primitives';
-import { relTime } from '../format';
+import { fmt, relTime } from '../format';
 import { viewHead, type ViewContext } from './view';
 
 export function live(ctx: ViewContext): HTMLElement {
@@ -147,21 +147,52 @@ function idleCard(p: LiveMatchPayload | null): HTMLElement {
  * as "nobody has died yet", which is a different (and wrong) claim.
  */
 function tallyCard(p: LiveMatchPayload): HTMLElement | null {
-  if (!p.kills.known) return null;
-  const side = (label: string, n: number, tone: string): HTMLElement =>
-    h('div', { style: { textAlign: 'center', minWidth: '90px' } },
-      h('div', { class: 'mono', style: { fontSize: '26px', fontWeight: '600', color: tone } }, String(n)),
-      h('div', { class: 'u-dim', style: { fontSize: '11px' } }, label),
-    );
+  // Eliminations come from the kill feed; damage and healing from the roster —
+  // so the two halves appear independently. With the kill feed switched off the
+  // damage and healing rows stay, because they are TAB-screen numbers the game
+  // is showing, not anything derived from kill events.
+  const rows: Array<{ label: string; yours: number; theirs: number; compact: boolean }> = [];
+  if (p.kills.known) rows.push({ label: 'eliminations', yours: p.kills.yours, theirs: p.kills.theirs, compact: false });
+  if (p.totals.known) {
+    rows.push({ label: 'damage', yours: p.totals.yours.damage, theirs: p.totals.theirs.damage, compact: true });
+    rows.push({ label: 'healing', yours: p.totals.yours.healing, theirs: p.totals.theirs.healing, compact: true });
+  }
+  if (!rows.length) return null;
+
   return card({ variant: 'raised' },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '18px', justifyContent: 'center' } },
-      side('your team', p.kills.yours, 'var(--win-text)'),
-      h('span', { class: 'u-dim', style: { fontSize: '12px' } }, 'eliminations'),
-      side('enemy team', p.kills.theirs, 'var(--loss-text)'),
+    // The "this is not the score" caveat is a tooltip rather than a line of body
+    // copy now: with three labelled stats side by side nothing reads as a
+    // scoreline, but Overwatch's feed reporting no objective score is still
+    // worth being able to find.
+    h('div', {
+      class: 'live-tally',
+      title: 'Totals from the game’s own scoreboard. Overwatch’s event feed reports no objective score, so this is not one.',
+    },
+      h('div', { class: 'u-dim live-tally-head' }, 'your team'),
+      h('span', null),
+      h('div', { class: 'u-dim live-tally-head' }, 'enemy team'),
+      ...rows.flatMap((r) => tallyRow(r)),
     ),
-    h('div', { class: 'hint', style: { textAlign: 'center', marginTop: '6px' } },
-      'Eliminations from the kill feed — Overwatch’s event feed doesn’t report the objective score.'),
   );
+}
+
+/**
+ * One `yours · label · theirs` row. Both sides keep their team colour; the side
+ * that is AHEAD keeps full weight and the other is dimmed, so "who has more"
+ * reads without adding a second colour language on top of the team one.
+ */
+function tallyRow(r: { label: string; yours: number; theirs: number; compact: boolean }): Node[] {
+  const text = (n: number): string => (r.compact ? fmt(n) : String(n));
+  const value = (n: number, tone: string, leads: boolean): HTMLElement =>
+    h('div', {
+      class: 'mono live-tally-value',
+      style: { color: tone, opacity: leads ? '1' : '0.5', fontWeight: leads ? '600' : '500' },
+    }, text(n));
+  return [
+    value(r.yours, 'var(--win-text)', r.yours >= r.theirs),
+    h('div', { class: 'u-dim live-tally-label' }, r.label),
+    value(r.theirs, 'var(--loss-text)', r.theirs >= r.yours),
+  ];
 }
 
 /**

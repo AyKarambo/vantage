@@ -50,6 +50,16 @@ export interface LiveMatchPayload {
    * the UI shows nothing rather than a zero.
    */
   kills: { yours: number; theirs: number; known: boolean };
+  /**
+   * Damage and healing summed per side — "who is out-damaging whom" at a glance.
+   *
+   * From the ROSTER, not the kill feed, so unlike {@link kills} these survive the
+   * kill feed being switched off: they are TAB-screen numbers the game itself is
+   * showing. `known` is false when the feed didn't report enough teams to have a
+   * "your side" at all, in which case the UI shows nothing rather than a pair of
+   * totals with nothing to compare them to.
+   */
+  totals: { yours: { damage: number; healing: number }; theirs: { damage: number; healing: number }; known: boolean };
   /** Recent kill-feed entries, newest first. Empty when the user turned it off. */
   feed: LiveKillEntry[];
   /**
