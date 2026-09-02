@@ -29,7 +29,7 @@ export type MatchFieldMode = 'hidden' | 'inline' | 'column';
 
 /** The subset of `MatchRow` fields the "Customize view" control can toggle. */
 export type MatchColumnKey =
-  | 'role' | 'heroes' | 'account' | 'srDelta' | 'duration' | 'finalScore'
+  | 'role' | 'heroes' | 'account' | 'srDelta' | 'rankAtStart' | 'duration' | 'finalScore'
   | 'performance' | 'measuredGrades' | 'flags';
 
 export type MatchColumnsPref = Record<MatchColumnKey, MatchFieldMode>;
@@ -42,7 +42,7 @@ export type MatchColumnsPref = Record<MatchColumnKey, MatchFieldMode>;
  */
 export const MATCH_COLUMNS_DEFAULT: MatchColumnsPref = {
   heroes: 'inline', account: 'inline', srDelta: 'inline',
-  role: 'hidden', duration: 'hidden', finalScore: 'hidden',
+  role: 'hidden', rankAtStart: 'hidden', duration: 'hidden', finalScore: 'hidden',
   performance: 'hidden', measuredGrades: 'hidden', flags: 'hidden',
 };
 

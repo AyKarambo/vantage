@@ -3,7 +3,7 @@ import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
 import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
-import { relTime, roleLabel, signed } from '../format';
+import { rankLabel, relTime, roleLabel, signed } from '../format';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
 import { wrHsl } from '../theme';
@@ -25,7 +25,7 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
 
 /** Canonical field order — both the "Customize view" popover and rendering follow this (spec F1). */
 const FIELD_ORDER: MatchColumnKey[] = [
-  'role', 'heroes', 'account', 'srDelta', 'duration', 'finalScore',
+  'role', 'heroes', 'account', 'srDelta', 'rankAtStart', 'duration', 'finalScore',
   'performance', 'measuredGrades', 'flags',
 ];
 
@@ -34,6 +34,7 @@ const FIELD_LABELS: Record<MatchColumnKey, string> = {
   heroes: 'Heroes',
   account: 'Account',
   srDelta: 'SR delta',
+  rankAtStart: 'Rank at start',
   duration: 'Duration',
   finalScore: 'Final score',
   performance: 'Performance',
@@ -158,6 +159,17 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext): Node | n
     case 'srDelta':
       return m.srDelta != null
         ? h('span', { class: 'mono', style: { color: m.srDelta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' } }, signed(m.srDelta))
+        : null;
+    case 'rankAtStart':
+      // The rank you were sitting at going INTO this match — a stored snapshot,
+      // so a later correction to an older game never restates it. Only present
+      // when the match records a ±%; blank otherwise, rather than repeating the
+      // previous match's rank as if it were evidence.
+      return m.rankAtStart
+        ? h('span', {
+            class: 'mono u-dim',
+            title: 'The rank you had when this match started',
+          }, `${rankLabel(m.rankAtStart.tier, m.rankAtStart.division)} · ${Math.round(m.rankAtStart.progressPct)}%`)
         : null;
     case 'duration':
       return m.durationMinutes != null ? document.createTextNode(`${m.durationMinutes}m`) : null;

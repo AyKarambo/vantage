@@ -8,7 +8,7 @@
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, relTime, roleLabel, signed } from '../format';
+import { fmt, rankLabel, relTime, roleLabel, signed } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -105,7 +105,7 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
     header(d, ctx),
     scoreboardSection(d, ctx),
     perHeroSection(d.perHero, d.durationMinutes),
-    competitiveSection(d.competitive, d.srDelta),
+    competitiveSection(d.competitive, d.srDelta, d.rankAtStart),
     gradesSection(d, ctx),
     playerHistorySection(d, ctx),
   ].filter((n): n is HTMLElement => n != null);
@@ -245,7 +245,11 @@ const NOTE_SUB: Record<string, string> = {
   reported: 'reported by the game feed',
 };
 
-function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HTMLElement | null {
+function competitiveSection(
+  c: MatchDetail['competitive'],
+  srDelta?: number,
+  rankAtStart?: MatchDetail['rankAtStart'],
+): HTMLElement | null {
   if (!c) return null;
   const withinDivision = c.progressPct != null ? c.progressPct / 100 : null;
   // Shared rank parts (no movement arrow on match detail). A reconstructed
@@ -292,6 +296,13 @@ function competitiveSection(c: MatchDetail['competitive'], srDelta?: number): HT
             }, `${signed(Math.round(c.delta))}% over the range`)
           : null,
     ),
+    // Where the track stood going INTO this match — the STORED snapshot, not a
+    // recomputed one, so it keeps saying what you actually saw at the time even
+    // after an older match's ±% is corrected. Only ever present alongside a ±%.
+    rankAtStart
+      ? h('div', { class: 'hint', style: { marginTop: '6px' } },
+          `Started this match at ${rankLabel(rankAtStart.tier, rankAtStart.division)} · ${Math.round(rankAtStart.progressPct)}%.`)
+      : null,
   );
 }
 

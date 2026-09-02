@@ -95,11 +95,35 @@ function harness(games: GameRecord[], initialAnchor?: ReturnType<typeof anchor>)
     suppressedMatchIds(history, Object.values(runs)),
   );
   const anchorNow = () => anchors[rankKey(ACCOUNT, ROLE)];
-  return { provider, rankNow, rankShown, anchorNow, runs, history, recorded: () => recordedGames };
+  const runNow = (): PlacementRun | undefined => runs[rankKey(ACCOUNT, ROLE)];
+  return { provider, rankNow, rankShown, anchorNow, runNow, runs, history, recorded: () => recordedGames };
 }
 
 /** Ten placement matches, each carrying a delta that must stay dormant while the run is open. */
 const tenMatches = () => Array.from({ length: 10 }, (_, i) => g(i + 1, { srDelta: 20 }));
+
+/**
+ * `n` competitive matches on the tracked (account, role) inside the CURRENT
+ * season, one minute apart. The new-track offer counts only matches since the
+ * season start, so the `T0`-based `g()` fixtures above (Nov 2023, before every
+ * shipped season) are all "last season" to it and raise nothing.
+ *
+ * Derived from the same table the provider reads rather than hard-coded, so
+ * these keep working as the calendar moves — the defensive style the reset
+ * test above already uses.
+ */
+const currentSeasonStart = (): number => {
+  const seasons = [...DEFAULT_MASTER_DATA.seasons].sort((a, b) => a.start - b.start);
+  return seasons.filter((s) => s.start <= Date.now()).pop()!.start;
+};
+const thisSeason = (n: number): GameRecord[] => {
+  const base = currentSeasonStart() + MINUTE;
+  return Array.from({ length: n }, (_, i) => g(0, {
+    matchId: `s-${i}`,
+    timestamp: base + i * MINUTE,
+    srDelta: 20,
+  }));
+};
 
 const track = { account: ACCOUNT, role: ROLE };
 
@@ -336,8 +360,68 @@ describe('placement runs — the offer', () => {
     expect(provider.placementOffer(track)).toBeNull();
   });
 
-  it('never offers on a track with no anchor — there is no rank to place from', () => {
+  it('does not offer a new-track run over matches from a previous season', () => {
+    // The harness's T0 (Nov 2023) predates every shipped season start, so these
+    // ten matches are all "last season" as far as the offer is concerned. The
+    // new-track rule counts only matches inside the CURRENT season, which keeps
+    // a run's startedAt in the same season that raised it — an unbounded
+    // backdate would reach months back, suppress that old ±% out of every rank
+    // surface, and let completion re-anchor over historical rank.
     const { provider } = harness(tenMatches());
+    expect(provider.placementOffer(track)).toBeNull();
+  });
+
+  it('offers a brand-new track a run, backdated to its first match this season', () => {
+    const { provider } = harness(thisSeason(3));
+    expect(provider.placementOffer(track)).toMatchObject({
+      account: ACCOUNT, role: ROLE, reason: 'new-track', fromMatchId: 's-0', backdatedCount: 3,
+    });
+  });
+
+  it('accepting a new-track offer counts the matches already played (issue #200: 3/10, not 2/10)', () => {
+    // THE regression test for the reported symptom. Before the fix the offer
+    // carried no fromMatchId, `startPlacementRun` stamped Date.now(), and
+    // `countedMatches` (timestamp >= startedAt) excluded every match that had
+    // already happened — including the one that raised the prompt.
+    const { provider } = harness(thisSeason(4));
+    const offer = provider.placementOffer(track);
+    expect(offer).not.toBeNull();
+    provider.startPlacementRun({ ...track, ...(offer!.fromMatchId ? { fromMatchId: offer!.fromMatchId } : {}) });
+    expect(provider.getPlacements()[0]).toMatchObject({ counted: 4 });
+  });
+
+  it('starts now, with no backdate, once more than a full run has been played', () => {
+    // Past ten claimable matches there is no honest backdate: starting eleven
+    // back would count only the first ten and quietly drop the very match that
+    // raised the offer. Still offered — just without the backdate, and the
+    // prompt says so via backdatedCount: 0.
+    const { provider } = harness(thisSeason(12));
+    expect(provider.placementOffer(track)).toMatchObject({ reason: 'new-track', backdatedCount: 0 });
+    expect(provider.placementOffer(track)?.fromMatchId).toBeUndefined();
+  });
+
+  it('never offers a new-track run for the Unknown bucket', () => {
+    // A match with no captured or mapped BattleTag lands there; asking
+    // "placements for Tank on Unknown?" keys a run to a label about to be
+    // replaced.
+    const games = thisSeason(3).map((m) => ({ ...m, account: 'Unknown' }));
+    const { provider } = harness(games);
+    expect(provider.placementOffer({ account: 'Unknown', role: ROLE })).toBeNull();
+  });
+
+  it('a decline silences the new-track offer for the season', () => {
+    // The season-keyed ledger covers the new-track case with no schema change.
+    const { provider } = harness(thisSeason(2));
+    const offer = provider.placementOffer(track);
+    expect(offer).not.toBeNull();
+    provider.declinePlacementRun({ ...track, seasonStart: offer!.seasonStart });
+    expect(provider.placementOffer(track)).toBeNull();
+  });
+
+  it('stops offering once the track has an anchor, however it got one', () => {
+    const { provider } = harness(thisSeason(2));
+    expect(provider.placementOffer(track)).not.toBeNull();
+    provider.setRankAnchor({ ...track, tier: 'Gold', division: 3, progressPct: 40 });
     expect(provider.placementOffer(track)).toBeNull();
   });
 });
@@ -442,5 +526,34 @@ describe('placement runs — awaiting rank', () => {
     expect(first).toMatchObject({ completed: false, awaitingRank: true });
     expect(second).toMatchObject({ completed: false, awaitingRank: true });
     expect(anchorNow()).toEqual(anchorBefore);
+  });
+});
+
+describe('placement runs — moving where a run starts', () => {
+  it('re-pointing an open run at an earlier match keeps its predictions and its pre-run anchor', () => {
+    // "Change start match…" is a correction to WHERE the run begins (started
+    // late, or on the wrong game) — not a decision to throw away the predicted
+    // ranks already entered, and not a second chance to snapshot the anchor.
+    // `resetPlacementRun` is the action that means "replay from scratch".
+    const games = tenMatches();
+    const { provider, runNow } = harness(games, anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-5' });
+    provider.setPlacementPrediction({ ...track, matchId: 'm-6', prediction: { tier: 'Platinum', division: 2 } });
+    const before = runNow()!;
+
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-2' });
+
+    const after = runNow()!;
+    expect(after.startedAt).toBe(games.find((m) => m.matchId === 'm-2')!.timestamp);
+    expect(after.predictions).toEqual(before.predictions);
+    expect(after.preRunAnchor).toEqual(before.preRunAnchor);
+  });
+
+  it('resetting a run still clears its predictions', () => {
+    const { provider, runNow } = harness(tenMatches(), anchor());
+    provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
+    provider.setPlacementPrediction({ ...track, matchId: 'm-2', prediction: { tier: 'Platinum', division: 2 } });
+    provider.resetPlacementRun(track);
+    expect(runNow()!.predictions).toEqual({});
   });
 });

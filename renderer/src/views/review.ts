@@ -5,8 +5,18 @@
  * facts are read-only; you only add what the app can't see.
  *
  * The inbox renders from `d.reviewInbox` — always unfiltered, so narrowing the
- * global range never hides an ungraded game. Saves go through the bridge and only
- * re-render locally (no refetch); `gradedThisSession` keeps the list honest.
+ * global range never hides an ungraded game. Saves go through the bridge and
+ * re-render locally FIRST (so the card responds instantly), then refetch:
+ * `gradedThisSession` keeps the list honest across that gap.
+ *
+ * The refetch is not optional. A review used to be grades + flags only, which
+ * nothing outside this screen derived from — so the original design deliberately
+ * skipped it to keep the snapshot stable while grading a stack. A review now also
+ * records ±SR, the first rank anchor on an unanchored track, and a placement
+ * prediction, all of which feed `primaryRank` — the top-left rank chip. Skipping
+ * the refetch left that chip showing a pre-save rank until something unrelated
+ * happened to refetch (a filter change, a window re-focus, the next tracked
+ * match), which is exactly the "rank is always delayed" report.
  */
 import { h, render } from '../dom';
 import type { MatchMental, MatchRow, PendingMatch, PlacementRunSummary, RankEntryPreview, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
@@ -24,6 +34,7 @@ import { registerShortcut } from '../shortcuts';
 import { gradedThisSession } from '../reviews';
 import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
+import { maybeOfferPlacements } from '../app/placementOffer';
 import { srEntryMode } from '../../../src/core/placements';
 import { viewHead, type ViewContext } from './view';
 
@@ -184,7 +195,7 @@ function item(
   let open = startOpen;
   const draw = (): void => {
     render(host, open
-      ? expanded(m, active, () => store.rerender(), () => { open = false; draw(); }, placements)
+      ? expanded(m, active, () => { store.rerender(); void store.refresh(); }, () => { open = false; draw(); }, placements)
       : collapsed(m, () => { open = true; draw(); }));
   };
   draw();
@@ -335,24 +346,28 @@ function expanded(
       if (Number.isFinite(n)) srDelta = n;
     }
     const anchoring = mode === 'full' && isComp && srMode === 'set-current' && rankPreview?.anchored === false;
-    if (anchoring) {
-      void bridge.setRankAnchor({
-        account: m.account, role: m.role,
-        tier: rankTier, division: rankDivision, progressPct: Number(rankPct) || 0,
-      });
-    }
+    // AWAITED, not fire-and-forget: the refetch that follows the save reads
+    // `primaryRank`, which only exists once this anchor has landed. Left
+    // unawaited, a refetch could resolve first and paint the pre-anchor rank —
+    // the same staleness the refetch was added to fix, just harder to see.
+    const anchored = anchoring
+      ? bridge.setRankAnchor({
+          account: m.account, role: m.role,
+          tier: rankTier, division: rankDivision, progressPct: Number(rankPct) || 0,
+        })
+      : Promise.resolve();
     const reviewed = bridge.saveReview({
       matchId: m.matchId, grades, flags,
       ...(performance != null ? { performance } : {}),
       ...(srDelta !== undefined ? { srDelta } : {}),
     });
-    void (mode === 'placement'
+    void Promise.all([anchored, mode === 'placement'
       ? reviewed.then(() => bridge.setPlacementPrediction({
           account: m.account, role: m.role, matchId: m.matchId,
           prediction: { tier: predTier, division: predDivision },
         }))
-      : reviewed
-    ).then(() => {
+      : reviewed,
+    ]).then(() => {
       gradedThisSession.add(m.matchId);
       kbHook = null;
       onSaved();
@@ -363,6 +378,7 @@ function expanded(
           run: () => void bridge.clearReview(m.matchId).then(() => {
             gradedThisSession.delete(m.matchId);
             store.rerender();
+            void store.refresh();
           }),
         },
       });
@@ -371,7 +387,24 @@ function expanded(
       // place (#184). Only a match on a track with an open run can possibly
       // have finished one; a non-placement review has nothing to confirm.
       if (run) {
-        void maybeConfirmPlacementRank({ account: m.account, role: m.role, onDone: () => store.rerender() });
+        // Refetch, not just rerender: confirming the revealed rank writes a real
+        // rank anchor (completePlacementRun), so the chip must stop saying
+        // "Placements N/10" and start showing that rank.
+        void maybeConfirmPlacementRank({
+          account: m.account, role: m.role,
+          onDone: () => { store.rerender(); void store.refresh(); },
+        });
+      } else if (isComp) {
+        // No run on this track: the same "should one start?" question the log
+        // form asks after a manual save. This is the belt-and-braces catch-up
+        // for an auto-tracked match whose `onGameLogged` push was dropped
+        // because no window was open (`DashboardWindow.push` is a silent no-op
+        // then) — grading it is the next time the track is in front of us.
+        //
+        // Refetches for the same reason the confirm above does: STARTING a run
+        // replaces the track's rank with `Placements N/10`, so the chip has to
+        // be told rather than left on the pre-offer snapshot.
+        void maybeOfferPlacements(m.account, m.role, () => { store.rerender(); void store.refresh(); });
       }
     });
   };
