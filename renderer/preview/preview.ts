@@ -899,6 +899,19 @@ const mock: OwStatsApi = {
       previewEdits[input.matchId] = { ...previewEdits[input.matchId], performance: input.performance };
       save(EDITS_KEY, previewEdits);
     }
+    // The ±% a review records, exactly as the real provider stores it
+    // (`history.editManual(matchId, { srDelta })`). Dropping it here made the
+    // harness unable to show a review MOVING the rank — the one thing you'd
+    // open the harness to check after touching the review→rank path.
+    // `null` clears the stored ±%, `undefined` leaves it alone — the same
+    // three-way contract `editManual` honours in the real store.
+    if (input.srDelta !== undefined) {
+      const edit = { ...previewEdits[input.matchId] };
+      if (input.srDelta === null) delete edit.srDelta;
+      else edit.srDelta = input.srDelta;
+      previewEdits[input.matchId] = edit;
+      save(EDITS_KEY, previewEdits);
+    }
   },
   importReviews: async (inputs: ReviewInput[]) => {
     const known = new Set(dataset().map((g) => g.matchId));
@@ -1024,6 +1037,10 @@ const mock: OwStatsApi = {
     return () => gameLoggedListeners.delete(cb);
   },
   onPendingChanged: (_cb: () => void) => () => {},
+  // The harness writes straight into its own in-memory stores rather than
+  // through a provider, so there is nothing to announce — the views' own
+  // `store.refresh()` already re-reads them.
+  onDataChanged: (_cb: () => void) => () => {},
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {
     appSettings = { ...appSettings, ...patch };

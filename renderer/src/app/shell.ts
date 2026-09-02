@@ -222,6 +222,12 @@ export class App {
     // A no-outcome match held (or resolved) refetches so the Review "Needs
     // result" section stays in step with the pending store.
     bridge.onPendingChanged(() => void store.refresh());
+    // Any write that moves the dashboard — a review's ±SR, a rank anchor, a
+    // placement run, an import — refetches, so the top-left rank chip can never
+    // sit on a pre-write value. Covers writes this window didn't make itself
+    // (the MCP server acting for the user), which is why it's a push and not a
+    // rule each view has to remember.
+    bridge.onDataChanged(() => void store.refresh());
     // Keep "updated Xm" honest while the app idles.
     setInterval(() => {
       const s = store.get();
