@@ -17,14 +17,6 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
-### Fixed
-
-- **Readiness no longer nudges you to play more while you're in placements.** Every other screen
-  ignores the SR change recorded against a placement match — the game shows no rank at all until
-  the run finishes — but Readiness was still reading those numbers, and a flat-looking run could
-  therefore be counted as "proven rank stagnation" and fire the play-more nudge, with a small
-  score dip behind it. Placement matches now count as no evidence either way, which is what the
-  rest of the app has always said about them.
 ### Added
 
 - **Every match remembers the rank you went into it with.** Your history now shows where you
@@ -47,7 +39,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   labels them as such rather than inventing a scoreline. If a running kill count while you're
   still in the game isn't for you, switch it off in **Settings → General** — that stops it
   being sent to the window at all, and leaves the scoreboard and with/vs records untouched.
+
 ### Fixed
+
+- **Readiness no longer nudges you to play more while you're in placements.** Every other screen
+  ignores the SR change recorded against a placement match — the game shows no rank at all until
+  the run finishes — but Readiness was still reading those numbers, and a flat-looking run could
+  therefore be counted as "proven rank stagnation" and fire the play-more nudge, with a small
+  score dip behind it. Placement matches now count as no evidence either way, which is what the
+  rest of the app has always said about them.
 
 - **New accounts are offered a placement run.** Vantage only ever offered one at a season reset,
   and only for a role it already knew your rank for — so a fresh account, or a role you'd never
