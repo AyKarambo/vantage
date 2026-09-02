@@ -12,6 +12,7 @@ import { prefs } from './prefs';
 
 export type ViewId =
   | 'overview'
+  | 'live'
   | 'review'
   | 'matches'
   | 'matchDetail'
@@ -104,7 +105,7 @@ const DETAIL_PARENT: Partial<Record<ViewId, ViewId>> = {
 /** The last visited top-level view, restored on launch (never a detail page). */
 function initialView(): ViewId {
   const saved = prefs.get('view');
-  const valid: ViewId[] = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about', 'faq'];
+  const valid: ViewId[] = ['overview', 'live', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about', 'faq'];
   return valid.includes(saved as ViewId) ? (saved as ViewId) : 'overview';
 }
 

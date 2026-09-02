@@ -11,6 +11,7 @@ import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
+import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
 import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
@@ -26,6 +27,7 @@ import { classifyGameType } from '../../../src/core/matchFilter';
 import { maybeOfferPlacements } from './placementOffer';
 import { roleStatus } from '../roleStatus';
 import { overview } from '../views/overview';
+import { live } from '../views/live';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
 import { playerHistory } from '../views/playerHistory';
@@ -56,14 +58,14 @@ import { CHANGELOG } from '../generated/changelog';
 
 // matchDetail, playerHistory and targetDetail are parameterized views: registered
 // here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
+const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
  *  unaffected by it, so showing the bar would imply a control that does nothing.
  *  playerHistory is a cross-history drill-down over the full local index. faq
  *  is static help copy, unaffected by any filter. */
-const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq']);
+const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq', 'live']);
 
 /** Display order for the account switcher's per-role expansion. */
 const SWITCHER_ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
@@ -105,6 +107,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: 'Workspace',
     items: [
       { id: 'overview', label: 'Overview', icon: '◈' },
+      { id: 'live', label: 'Live', icon: '◉' },
       { id: 'review', label: 'Review', icon: '⚑' },
       { id: 'matches', label: 'Matches', icon: '▤' },
       { id: 'maps', label: 'Maps', icon: '◇' },
@@ -213,6 +216,12 @@ export class App {
     subscribeGepStatus(() => { this.renderGepIndicator(); this.renderGepBanner(); });
     this.renderGepIndicator();
     this.renderGepBanner();
+    // The live-match feed. The nav dot is mutated in place (never rebuilt), so
+    // a push landing mid-click can't swallow the click — the same discipline
+    // the rest of the sidebar follows.
+    initLiveMatch();
+    subscribeLiveMatch(() => this.renderLiveNav());
+    this.renderLiveNav();
     initDevModeAuthStatus();
     subscribeDevModeAuthStatus(() => this.renderDevBadge());
     this.renderDevBadge();
@@ -571,6 +580,24 @@ export class App {
 
   /** Reflect the pending-review count on the Review nav item in place, so the
    *  button (a live click target) is never rebuilt. */
+  /**
+   * A live dot on the Live nav item while a match is running, so the screen
+   * advertises itself without stealing focus. Mutated in place for the same
+   * reason every other sidebar update is: a rebuilt button between mousedown
+   * and mouseup swallows the click.
+   */
+  private renderLiveNav(): void {
+    const btn = this.navButtons.get('live');
+    if (!btn) return;
+    const isLive = getLiveMatch()?.live === true;
+    const existing = btn.querySelector('.nav-live-dot');
+    if (isLive && !existing) {
+      btn.append(h('span', { class: 'nav-live-dot', title: 'A match is in progress' }));
+    } else if (!isLive) {
+      existing?.remove();
+    }
+  }
+
   private updateReviewBadge(pending: number): void {
     const btn = this.navButtons.get('review');
     if (!btn) return;

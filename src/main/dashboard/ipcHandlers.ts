@@ -15,7 +15,7 @@ import type {
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
 import {
-  dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead, filteredCompetitiveGames,
+  dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead, playerRecordsRead, filteredCompetitiveGames,
 } from './reads';
 
 /**
@@ -73,6 +73,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
     matchDetailRead(provider, matchId, filters),
   );
   handle(ch.playerHistory, (_e, name: string) => playerHistoryRead(provider, name));
+  handle(ch.playerRecords, (_e, names: string[]) => playerRecordsRead(provider, names));
 
   // Notion sync screen.
   handle(ch.notionStatus, () => provider.notionStatus());

@@ -21,6 +21,15 @@ export interface AppUiSettings {
   /** OS notifications when GEP events go down / come back (default on). */
   gepNotifications: boolean;
   /**
+   * Whether the live-match screen shows the kill feed and its elimination
+   * tally (default on). Off leaves the live scoreboard and the known-players
+   * section intact — a running kill count while you are still in the game is
+   * exactly the sort of thing some players would rather not see. Read live in
+   * main, so switching it off stops the feed crossing the bridge at once
+   * rather than merely hiding it once it has arrived.
+   */
+  liveKillFeed: boolean;
+  /**
    * Whether the local MCP endpoint listens, letting an MCP client (an LLM
    * coach) read your stats and write the manual layer. Default **off** — it is
    * reachable by any process running as this user, so enabling it is a

@@ -127,6 +127,14 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
           'Notify me when Overwatch game events go down (an Overwolf outage) and when they recover. The in-app banner shows either way.'),
       ),
       h('div', null,
+        chip(s.liveKillFeed ? 'Live kill feed: on' : 'Live kill feed: off', s.liveKillFeed,
+          () => apply({ liveKillFeed: !s.liveKillFeed })),
+        h('div', { class: 'hint', style: { marginTop: '6px' } },
+          'Show the kill feed and its elimination count on the Live screen. Turning it off leaves the live '
+          + 'scoreboard and the players-you’ve-met section exactly as they are — and stops the feed being sent '
+          + 'to the window at all, rather than just hiding it.'),
+      ),
+      h('div', null,
         chip(s.mcpEnabled ? 'MCP endpoint: on' : 'MCP endpoint: off', s.mcpEnabled,
           () => apply({ mcpEnabled: !s.mcpEnabled })),
         // Say plainly what turning this on exposes. It is off by default

@@ -1,7 +1,7 @@
 import type { GameRecord } from './analytics';
 import { battleTagName, type RosterPlayer } from './model';
 import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
-import type { PlayerEncounter, PlayerMatchHistory, PlayerSharedMatch } from '../shared/contract';
+import type { PlayerEncounter, PlayerMatchHistory, PlayerRecord, PlayerSharedMatch } from '../shared/contract';
 
 /**
  * Player-encounter index, derived at query time from the rosters stored on the
@@ -115,4 +115,69 @@ function nameKey(player: RosterPlayer): string {
 
 function displayName(player: RosterPlayer, fallback = 'Unknown'): string {
   return player.battleTag?.trim() || fallback;
+}
+
+/**
+ * Your record WITH and AGAINST each of `names`, in one pass over history.
+ *
+ * The live-match screen asks this for a whole roster at once — up to nine
+ * players, on every roster tick. {@link playerMatchHistory} answers the same
+ * question for one name but walks the entire history to do it, so nine of them
+ * is nine full walks per tick; this walks once for all of them.
+ *
+ * Deliberately a leaner shape than {@link playerMatchHistory}: no per-match
+ * list. A live board shows "3W–1L with · 0W–2L vs", and shipping every shared
+ * match for nine players just to render two counters would be the bulk of the
+ * payload. Clicking a name still opens the full history through the existing
+ * per-player read.
+ *
+ * Names with no shared match are simply absent from the result, so a caller can
+ * tell "never met" from "met, no decided games" (the latter returns a record
+ * with zeroes — a draw counts as an encounter but moves no W/L).
+ */
+export function playerRecords(all: GameRecord[], names: readonly string[]): PlayerRecord[] {
+  const wanted = new Map<string, PlayerRecord>();
+  for (const raw of names) {
+    const key = battleTagName(raw ?? '');
+    if (!key || wanted.has(key)) continue;
+    wanted.set(key, {
+      key,
+      name: (raw ?? '').trim() || 'Unknown',
+      encounters: 0,
+      lastSeen: 0,
+      sameTeam: { wins: 0, losses: 0 },
+      enemyTeam: { wins: 0, losses: 0 },
+    });
+  }
+  if (!wanted.size) return [];
+
+  for (const game of all) {
+    if (!game.roster?.length) continue;
+    const local = game.roster.find((p) => p.isLocal);
+    // Count each shared match once per player, even if the feed reported them
+    // in two slots (mirrors playerHistory's per-game `seen` guard).
+    const counted = new Set<string>();
+    for (const other of game.roster) {
+      if (other.isLocal) continue;
+      const key = nameKey(other);
+      const rec = key ? wanted.get(key) : undefined;
+      if (!rec || counted.has(key)) continue;
+      counted.add(key);
+      rec.encounters += 1;
+      rec.lastSeen = Math.max(rec.lastSeen, game.timestamp);
+      // Prefer a full battleTag over a bare name, wherever one turns up.
+      if (!rec.name.includes('#') && other.battleTag?.includes('#')) rec.name = other.battleTag.trim();
+      // Team relation only when the feed reported a team for BOTH rows —
+      // otherwise "with" and "vs" would be a guess, and this whole feature is
+      // about telling those two apart.
+      if (local?.team == null || other.team == null) continue;
+      const side = other.team === local.team ? rec.sameTeam : rec.enemyTeam;
+      if (game.result === 'Win') side.wins += 1;
+      else if (game.result === 'Loss') side.losses += 1;
+    }
+  }
+
+  return [...wanted.values()]
+    .filter((r) => r.encounters > 0)
+    .sort((a, b) => b.encounters - a.encounters || b.lastSeen - a.lastSeen);
 }
