@@ -1,4 +1,5 @@
 import type { GameRecord } from '../analytics';
+import type { Role } from '../model';
 import type { RankAnchor } from '../rank';
 import { classifyGameType } from '../matchFilter';
 import { PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank } from './types';
@@ -39,13 +40,30 @@ export function countedMatches(games: GameRecord[], run: PlacementRun): GameReco
  * "no settled rank yet" window. See {@link suppressedMatchIds}.
  */
 export function trackMatchesFrom(games: GameRecord[], run: PlacementRun): GameRecord[] {
+  return trackMatches(games, run.account, run.role, run.startedAt);
+}
+
+/**
+ * The competitive matches on one (account, role) track from `since` onward,
+ * ascending — {@link trackMatchesFrom} without needing a run to ask.
+ *
+ * Deliberately `>=`, for the same reason {@link countedMatches} is: a run's
+ * `startedAt` is set to a match's OWN timestamp, and that match must count.
+ * This is what lets an offer be backdated to the match that raised it.
+ */
+export function trackMatches(
+  games: GameRecord[],
+  account: string,
+  role: Role,
+  since = Number.NEGATIVE_INFINITY,
+): GameRecord[] {
   return games
     .filter(
       (g) =>
-        g.account === run.account &&
-        g.role === run.role &&
+        g.account === account &&
+        g.role === role &&
         classifyGameType(g.gameType) === 'competitive' &&
-        g.timestamp >= run.startedAt,
+        g.timestamp >= since,
     )
     .sort((a, b) => a.timestamp - b.timestamp);
 }
@@ -172,8 +190,10 @@ export function suppressedMatchIds(
  *    season boundary the player has just crossed (not just "any season").
  *  - no `existingRun` for the track yet — don't re-prompt mid-run.
  *  - `seasonStart` isn't in `declinedSeasonStarts` — respect a past "not now".
- *  - the track has an anchor at all (`anchor !== null`) — a track with no
- *    rank history yet has nothing to place *from* and isn't offered a run.
+ *  - the track has an anchor at all (`anchor !== null`) — this rule is about a
+ *    reset moving a rank the track ALREADY has. A track with no anchor is not
+ *    "nothing to place from", it is the other case entirely; see
+ *    {@link shouldOfferNewTrackRun}.
  *  - `anchor.setAt < seasonStart` — the anchor predates the reset. An anchor
  *    set inside the new season already means the player has re-anchored
  *    (e.g. manually entered their placement result), so asking again would
@@ -192,4 +212,53 @@ export function shouldOfferRun(opts: {
   if (declinedSeasonStarts.includes(seasonStart)) return false;
   if (anchor === null) return false;
   return anchor.setAt < seasonStart;
+}
+
+/**
+ * Whether to offer a placement run for a track Vantage has NO rank for — a
+ * brand-new account, or a role never queued before. The second of the two
+ * offer rules, alongside {@link shouldOfferRun}'s season-reset rule.
+ *
+ * This is the gap behind issue #200: `shouldOfferRun` requires both a ladder
+ * reset AND an existing anchor, so a fresh (account, role) could never be
+ * offered a run automatically — the player had to know to click "Start
+ * placements" before their first ranked game, and every one they played first
+ * was silently left out of the run.
+ *
+ * All of the following must hold:
+ *  - `anchor === null` — Vantage has no rank for this track. This is the whole
+ *    signal, and it is deliberately the ONLY thing consulted about rank state.
+ *    An earlier design keyed on `anchor.setAt < firstMatchTs` ("anchored before
+ *    you played" ⇒ not placing), which is unsound: both sides are independently
+ *    mutable, so logging a backdated match, importing older matches from Notion,
+ *    or deleting a track's oldest games all silently invert it and offer
+ *    placements to an established track. `anchor === null` cannot be inverted by
+ *    any edit — the anchor either exists or it does not.
+ *  - no `existingRun` — don't re-offer mid-run, or after one finished.
+ *  - `seasonStart` isn't in `declinedSeasonStarts` — respect a past "not now".
+ *    Shared with the reset rule's ledger, so one decline quiets the track for
+ *    the season either way; it re-raises next season, when the question is
+ *    genuinely live again.
+ *  - `trackMatchCount > 0` — only ever asked in response to a real match on the
+ *    track, never speculatively.
+ *
+ * Note what is NOT here: a ceiling on how many matches the track has played.
+ * Overwatch's own placement run is exactly ten matches, so any ceiling of ten
+ * would fire only for a player whose eleventh game hadn't happened yet — the
+ * reported user played their placements with Vantage in the background and
+ * would have sailed past it. A track with no rank at all is worth asking about
+ * whenever it is played; the decline ledger is what stops the asking.
+ */
+export function shouldOfferNewTrackRun(opts: {
+  seasonStart: number;
+  anchor: RankAnchor | null;
+  existingRun: PlacementRun | undefined;
+  declinedSeasonStarts: readonly number[];
+  trackMatchCount: number;
+}): boolean {
+  const { seasonStart, anchor, existingRun, declinedSeasonStarts, trackMatchCount } = opts;
+  if (anchor !== null) return false;
+  if (existingRun) return false;
+  if (declinedSeasonStarts.includes(seasonStart)) return false;
+  return trackMatchCount > 0;
 }

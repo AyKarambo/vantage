@@ -24,6 +24,7 @@ import { registerShortcut } from '../shortcuts';
 import { gradedThisSession } from '../reviews';
 import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
+import { maybeOfferPlacements } from '../app/placementOffer';
 import { srEntryMode } from '../../../src/core/placements';
 import { viewHead, type ViewContext } from './view';
 
@@ -372,6 +373,13 @@ function expanded(
       // have finished one; a non-placement review has nothing to confirm.
       if (run) {
         void maybeConfirmPlacementRank({ account: m.account, role: m.role, onDone: () => store.rerender() });
+      } else if (isComp) {
+        // No run on this track: the same "should one start?" question the log
+        // form asks after a manual save. This is the belt-and-braces catch-up
+        // for an auto-tracked match whose `onGameLogged` push was dropped
+        // because no window was open (`DashboardWindow.push` is a silent no-op
+        // then) — grading it is the next time the track is in front of us.
+        void maybeOfferPlacements(m.account, m.role, () => store.rerender());
       }
     });
   };

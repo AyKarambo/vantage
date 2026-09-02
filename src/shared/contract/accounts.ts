@@ -26,12 +26,21 @@ export interface AccountSummary {
  * newly recorded (live or hand-logged). Carries the account it landed on and
  * whether that account maps to a configured/known account, so the renderer can
  * auto-switch the dashboard's account filter onto it.
+ *
+ * `role` and `source` let the renderer raise the placement offer for the track
+ * just played — the only route an auto-tracked match has to that prompt, since
+ * a GEP capture never passes through the log form (issue #200). A manual log is
+ * excluded by `source` because the form asks for itself.
  */
 export interface GameLoggedPayload {
   matchId: string;
   account: string;
   /** True when {@link account} maps to a configured/known account. */
   configured: boolean;
+  /** The track the match landed on, alongside {@link account}. */
+  role: Role;
+  /** Where the match came from — `'manual'` for a hand-logged one. */
+  source: 'manual' | 'gep';
 }
 
 /** Create or edit an account. `previousBattleTag` renames the key (removes the old entry). */
