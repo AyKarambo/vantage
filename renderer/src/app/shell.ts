@@ -47,6 +47,7 @@ import { about } from '../views/about';
 import { faq } from '../views/faq';
 import { filterBar, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
+import { prefs } from '../prefs';
 import { openLogMatch } from './log-match';
 import { openPalette } from './palette';
 import { openOnboarding, shouldOnboard } from './onboarding';
@@ -125,15 +126,14 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     ],
   },
   {
-    group: 'Data',
+    // Data and App were separate groups until the nav outgrew the sidebar. They
+    // were a thin distinction to begin with — "your data lives here" vs "the app
+    // lives here" is not a split anyone navigates by — and merging them buys back
+    // a whole group header without hiding anything.
+    group: 'App',
     items: [
       { id: 'notion', label: 'Notion sync', icon: '⟳' },
       { id: 'logs', label: 'Logs', icon: '≡' },
-    ],
-  },
-  {
-    group: 'App',
-    items: [
       { id: 'settings', label: 'Settings', icon: '⚙' },
       { id: 'about', label: 'About', icon: 'ⓘ' },
       { id: 'faq', label: 'FAQ', icon: '?' },
@@ -175,6 +175,11 @@ export class App {
     h('div', { class: 'nav-group' }, 'Current session'),
     this.sessionBody,
   );
+  /** Collapse/expand the rail. Pinned below the session card so it never scrolls away. */
+  private readonly collapseToggle = h('button', {
+    class: 'sidebar-collapse',
+    on: { click: () => this.toggleCollapsed() },
+  }, '«') as HTMLButtonElement;
   private sidebarBuilt = false;
   private readonly gepBanner = h('div', { class: 'gep-banner hidden' });
   private readonly filterHost = h('div', { class: 'filterbar-wrap hidden' });
@@ -568,19 +573,54 @@ export class App {
       for (const item of section.items) {
         const btn = h('button', {
           class: 'nav-item',
+          // Always set, not only while collapsed: the rail hides the label, and
+          // a title that appears and disappears with the rail is a title nobody
+          // learns to expect.
+          title: item.label,
           on: { click: () => store.setView(item.id) },
         },
           // icon is a text glyph or a prebuilt SVG node; h() appends a Node as-is
           // and stringifies a glyph, so both render correctly.
           h('span', { class: 'nav-icon' }, item.icon),
-          item.label,
+          // Wrapped rather than a bare text node so the rail can hide the words
+          // without hiding the icon beside them.
+          h('span', { class: 'nav-label' }, item.label),
         );
         this.navButtons.set(item.id, btn);
         navChildren.push(btn);
       }
     }
-    render(this.sidebarHost, this.accountChip, h('nav', { class: 'sidebar-nav' }, ...navChildren), this.sessionCardEl);
+    render(
+      this.sidebarHost,
+      this.accountChip,
+      h('nav', { class: 'sidebar-nav' }, ...navChildren),
+      this.sessionCardEl,
+      this.collapseToggle,
+    );
+    this.applyCollapsed();
     this.sidebarBuilt = true;
+  }
+
+  /**
+   * Collapse the sidebar to an icon-only rail, and back.
+   *
+   * The scroll box below already guarantees the nav can never push anything out
+   * of the sidebar, so this is not a second fix for that — it is for the case
+   * scrolling handles correctly but unpleasantly: a short window where the nav
+   * is technically fine and practically a keyhole. Collapsed, all of it fits.
+   */
+  private toggleCollapsed(): void {
+    prefs.set('sidebarCollapsed', !(prefs.get('sidebarCollapsed') ?? false));
+    this.applyCollapsed();
+  }
+
+  private applyCollapsed(): void {
+    const collapsed = prefs.get('sidebarCollapsed') ?? false;
+    this.sidebarHost.classList.toggle('is-collapsed', collapsed);
+    this.collapseToggle.textContent = collapsed ? '»' : '«';
+    this.collapseToggle.title = collapsed ? 'Expand the sidebar (Ctrl B)' : 'Collapse the sidebar (Ctrl B)';
+    this.collapseToggle.setAttribute('aria-label', this.collapseToggle.title);
+    this.collapseToggle.setAttribute('aria-expanded', String(!collapsed));
   }
 
   /** Reflect the pending-review count on the Review nav item in place, so the
@@ -868,6 +908,10 @@ export class App {
       allowInInput: true, run: () => this.openPalette(),
     });
     registerShortcut({ combo: '?', description: 'This cheatsheet', group: 'Global', run: () => this.openCheatsheet() });
+    registerShortcut({
+      combo: 'ctrl+b', description: 'Collapse / expand the sidebar', group: 'Global',
+      allowInInput: true, run: () => this.toggleCollapsed(),
+    });
     NAV.flatMap((g) => g.items).forEach((item, i) => {
       if (i >= 9) return;
       registerShortcut({

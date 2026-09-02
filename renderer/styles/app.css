@@ -107,8 +107,85 @@
   display: flex;
   flex-direction: column;
   padding: 14px 12px;
-  gap: 3px;
+  gap: 2px;
   background: rgba(9, 9, 13, 0.4);
+  transition: width var(--dur) var(--ease), flex-basis var(--dur) var(--ease);
+}
+
+/* Collapsed: an icon-only rail. The scroll box below already stops the nav
+   pushing anything out of the sidebar, so this is not a second fix for that —
+   it is for the case scrolling handles correctly but unpleasantly, a short
+   window where the nav is technically fine and practically a keyhole. Every
+   item's `title` carries its label, so nothing is unreachable or unnamed. */
+.sidebar.is-collapsed {
+  width: 60px;
+  flex: 0 0 60px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.sidebar.is-collapsed .nav-label,
+.sidebar.is-collapsed .nav-group,
+.sidebar.is-collapsed .sidebar-account .row-main,
+.sidebar.is-collapsed .sidebar-account > .u-dim,
+/* The session card is a sentence, not a glyph — there is no honest 60px form of
+   it, so the rail drops it rather than truncating it into something misread. */
+.sidebar.is-collapsed .sidebar-session {
+  display: none;
+}
+.sidebar.is-collapsed .nav-item,
+.sidebar.is-collapsed .sidebar-account {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* The unread-review count still has to reach you on the rail, but a three-digit
+   pill on a 44px icon swamps the icon and can't be read at that size anyway.
+   It becomes a dot: presence, not quantity — the number is one Ctrl B away.
+   `font-size: 0` hides the digits without removing them, so a screen reader
+   still announces the count. */
+.sidebar.is-collapsed .nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 7px;
+  margin-left: 0;
+  min-width: 0;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+}
+.sidebar.is-collapsed .nav-item {
+  position: relative;
+}
+.sidebar.is-collapsed .nav-live-dot {
+  margin-left: 0;
+  position: absolute;
+  top: 5px;
+  right: 8px;
+}
+
+/* Pinned under the session card so it never scrolls out of reach. */
+.sidebar-collapse {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  padding: 5px 0;
+  border: none;
+  background: transparent;
+  color: var(--dim-2);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.sidebar-collapse:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
 }
 /* The nav scrolls; the account chip above and the session card below stay put.
    `min-height: 0` is the load-bearing declaration — a flex item defaults to
@@ -124,7 +201,7 @@
   display: flex;
   flex-direction: column;
   /* Matches the sidebar's own gap, so wrapping the items changed no spacing. */
-  gap: 3px;
+  gap: 2px;
   /* Don't hand a scroll the nav can't use on to the view behind it. */
   overscroll-behavior: contain;
 }
@@ -171,13 +248,16 @@
   color: var(--dim-2);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  padding: 10px 10px 4px;
+  /* Tightened along with .nav-item below so the whole nav fits the app's own
+     1300×840 spec size without scrolling. The scroll box stays as the guarantee;
+     this is what keeps it from engaging in the ordinary case. */
+  padding: 7px 10px 3px;
 }
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 11px;
+  padding: 5px 11px;
   border-radius: var(--r-sm);
   font-size: 13px;
   color: var(--muted);

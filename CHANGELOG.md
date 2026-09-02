@@ -19,6 +19,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **The sidebar collapses to an icon rail** — the `«` control under the session card, or
+  **Ctrl B**. It sticks between launches. Each icon keeps its name as a tooltip, and the Review
+  count becomes a dot. Handy on a small screen, or whenever you'd rather have the room.
+
 - **Every match remembers the rank you went into it with.** Your history now shows where you
   stood when each game started, so you can read a session back and see the climb (or the slide)
   match by match rather than only today's number. It appears on the match detail page, and as a
@@ -42,6 +46,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **The whole navigation fits again.** **Data** and **App** are now one **App** group (Notion
+  sync, Logs, Settings, About and FAQ together — the split was never something you navigated
+  by), and the rows are a little tighter, so every screen is reachable without scrolling at the
+  default window size.
 - **The "Current session" card no longer sits on top of the status bar.** With every screen the
   sidebar now lists, the navigation was taller than the space it had — so the card at the bottom
   was pushed straight out of the sidebar and over the status bar underneath it. The navigation

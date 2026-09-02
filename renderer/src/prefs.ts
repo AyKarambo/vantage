@@ -72,6 +72,12 @@ interface PrefsShape {
   matchColumns: MatchColumnsPref;
   /** How many "most played" heroes the Log Match hero picker shortlists (default 6, clamped 3-15). */
   suggestedHeroCount: number;
+  /**
+   * Sidebar collapsed to an icon-only rail. Persisted because it is a lasting
+   * preference about how much chrome you want — a small screen or a short
+   * window is a reason to keep it collapsed, not a per-session accident.
+   */
+  sidebarCollapsed: boolean;
 }
 
 const PREFIX = 'vantagePref.';

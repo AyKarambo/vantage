@@ -20,6 +20,12 @@ configurable gap since your last game (default 3h; adjustable in Settings → Ge
 Coaching), so a late-night session spanning past midnight still reads as one, and the card
 never shows stale data as "current."
 
+The sidebar **collapses to an icon-only rail** (the `«` control under the session card, or
+**Ctrl B**), which sticks between launches — useful on a small screen, or whenever you want the
+chrome out of the way. Collapsed, each icon keeps its name as a tooltip and the Review count
+shows as a dot. If the navigation ever does run out of room it scrolls, with the account
+switcher and session card staying put either side of it.
+
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a top-priority callout, an activity heatmap
   (games/day, click a day to open its matches), and a mental snapshot.
@@ -642,7 +648,7 @@ lands as a staged package that needs a restart, the banner offers a **one-click 
 Every build — including releases — writes a structured log to `%APPDATA%/Vantage/logs/`
 (`vantage.log`, rotating at 2 MB × 5 files): app lifecycle, GEP attach/detach, match-pipeline
 milestones, Notion sync results, and uncaught errors from both processes. Notion tokens are
-redacted before anything is written. The **Logs** screen (sidebar → Data) live-tails the last
+redacted before anything is written. The **Logs** screen (sidebar → App) live-tails the last
 1000 entries with level filtering, and its **Debug detail** toggle raises verbosity to the full
 GEP event stream for the current session (resets to `info` on restart). Logs never leave the
 device.
