@@ -14,7 +14,7 @@ import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
 import { redactForExport } from '../core/logRedaction';
 import { formatDiagnostics } from '../core/about';
-import { currentRank, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
+import { currentRank, rankEnteringMatch, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
@@ -211,7 +211,12 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
       // GEP can't report SR, so the player may set it here (competitive only);
       // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
-      if (input.srDelta !== undefined) deps.history.editManual(input.matchId, { srDelta: input.srDelta });
+      if (input.srDelta !== undefined) {
+        deps.history.editManual(input.matchId, { srDelta: input.srDelta });
+        // Snapshot (or clear) the rank this match was entered at, now that the
+        // ±% it hangs off has actually landed.
+        syncRankAtStart(deps, input.matchId);
+      }
     },
     importReviews: (inputs) =>
       deps.history.setReviews(inputs.map((i) => ({
@@ -248,6 +253,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         // same shape the Review screen writes — so they score identically.
         ...(grades ? { review: { at: Date.now(), grades, flags: input.mental ?? {} } } : {}),
       });
+      // Logged WITH a ±% (the quick-log card's usual case) — snapshot where the
+      // track stood going in, straight away. Logged without one, there is
+      // nothing to snapshot until a ±% is added on Review.
+      if (input.srDelta != null) syncRankAtStart(deps, matchId);
       deps.notify('Match logged', `${input.result} · ${input.map}`);
       return { matchId };
     },
@@ -303,6 +312,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         };
       }
       deps.history.editManual(input.matchId, patch);
+      // The editor can add a ±% to a match that had none, change it, or clear
+      // it — and can move the match's role/timestamp, which changes which track
+      // and which neighbour the snapshot comes from. Re-syncing here covers all
+      // of those; it is a no-op when a snapshot already stands.
+      if (patch.srDelta !== undefined || input.role !== undefined) syncRankAtStart(deps, input.matchId);
     },
     deleteMatch: (matchId) => {
       // Gated behind a renderer confirm: drop the history row outright — the
@@ -1009,6 +1023,52 @@ function rankSummaries(deps: DataProviderDeps): RankSummary[] {
       protected: s?.protected ?? false,
     };
   });
+}
+
+/**
+ * Keep a match's {@link GameRecord.rankAtStart} snapshot in step with its ±%.
+ *
+ * The rule is deliberately one-way and simple: a match that records a rank
+ * change gets a snapshot of where the player stood going into it; a match with
+ * no ±% gets none. Without a ±% the rank did not move at that point, so any
+ * value would just repeat the previous match's and imply a progression Vantage
+ * cannot vouch for — better a blank than a number that looks like evidence.
+ *
+ * Called AFTER the ±% has been written, so `deps.history.all()` already reflects
+ * it — and the snapshot is taken with that match excluded (it is the rank
+ * BEFORE), which `rankEnteringMatch` handles by reading the previous match on
+ * the track.
+ *
+ * Suppression is threaded through for the same reason every other rank surface
+ * threads it: a match inside an open placement run has no settled rank, so its
+ * ±% must not move the reconstruction.
+ */
+function syncRankAtStart(deps: DataProviderDeps, matchId: string): void {
+  const games = deps.history.all();
+  const game = games.find((g) => g.matchId === matchId);
+  if (!game) return;
+  if (classifyGameType(game.gameType) !== 'competitive' || game.srDelta === undefined) {
+    // Clears on `null` (editManual deletes the key) — the "no ±% means no
+    // snapshot" half of the rule, including when a ±% is REMOVED again.
+    if (game.rankAtStart !== undefined) deps.history.editManual(matchId, { rankAtStart: null });
+    return;
+  }
+  const suppressed = suppressedMatchIds(games, deps.placements.allRuns());
+  const state = rankEnteringMatch(
+    games, deps.rankAnchors.map(), game.account, game.role, game.timestamp, suppressed,
+  );
+  const next = state
+    ? { tier: state.tier, division: state.division, progressPct: state.progressPct }
+    : null;
+  if (next === null) {
+    if (game.rankAtStart !== undefined) deps.history.editManual(matchId, { rankAtStart: null });
+    return;
+  }
+  // Written once and left alone afterwards: re-snapshotting on every unrelated
+  // edit would turn the stored value back into a derived one, which is exactly
+  // what it exists not to be.
+  if (game.rankAtStart) return;
+  deps.history.editManual(matchId, { rankAtStart: next });
 }
 
 /**

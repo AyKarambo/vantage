@@ -7,4 +7,4 @@ export { rankKey } from './types';
 export { TIERS, applyMatch, computeRank, stateFromAnchor, ladderPoints } from './engine';
 export { competitiveComps, currentRank } from './timeline';
 export { rankToPoints, pointsToRank } from './scalar';
-export { rankAfterMatch, srDeltaForSetRank } from './reconstruct';
+export { rankAfterMatch, rankEnteringMatch, srDeltaForSetRank } from './reconstruct';

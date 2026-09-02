@@ -137,3 +137,38 @@ export function srDeltaForSetRank(
   const before = rankBeforeMatch(games, anchors, account, role, matchTs);
   return Math.round(rankToPoints(enteredAfter) - rankToPoints(before));
 }
+
+/**
+ * The rank the player was sitting at going INTO the match at `matchTs` — i.e.
+ * where they stood after the previous competitive match on that track.
+ *
+ * Exported so the store can take a SNAPSHOT of it at the moment a match's ±% is
+ * recorded. That snapshot is the point: everything else here is derived fresh on
+ * every read, which is right for "what is my rank now" but wrong for "what did I
+ * see when I queued into this game" — a later correction to an older match would
+ * silently rewrite history that already happened. A stored value keeps saying
+ * what it said.
+ *
+ * `null` when the track has no anchor at all: with no reading to reconstruct
+ * from there is no rank to report, and a fabricated Bronze 5 would be worse than
+ * an honest blank.
+ *
+ * Best-effort by the same terms as {@link rankAfterMatch}: matches with no
+ * logged ±% contribute 0, and rank protection can't be reversed walking
+ * backward. Forward of the anchor the engine's own replay is authoritative.
+ */
+export function rankEnteringMatch(
+  games: GameRecord[],
+  anchors: RankAnchorMap,
+  account: string,
+  role: Role,
+  matchTs: number,
+  suppressed?: ReadonlySet<string>,
+): RankState | null {
+  if (!anchors[rankKey(account, role)]) return null;
+  const prev = prevCompTs(games, account, role, matchTs);
+  // The previous match on this track IS the position we entered on.
+  if (prev !== undefined) return rankAfterMatch(games, anchors, account, role, prev, undefined, suppressed);
+  const position = rankBeforeMatch(games, anchors, account, role, matchTs);
+  return { ...position, protected: false };
+}

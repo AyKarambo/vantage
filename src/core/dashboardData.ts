@@ -305,6 +305,10 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     // deliberately not using. Masked at read time, never erased: cancel the run
     // and the stored value is back.
     ...(g.srDelta !== undefined && !suppressed?.has(g.matchId) ? { srDelta: g.srDelta } : {}),
+    // Masked by the same set, and for the same reason: `rankAtStart` only ever
+    // exists alongside a ±%, so showing the snapshot while hiding the change it
+    // belongs to would leave the row asserting half a story.
+    ...(g.rankAtStart !== undefined && !suppressed?.has(g.matchId) ? { rankAtStart: g.rankAtStart } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),

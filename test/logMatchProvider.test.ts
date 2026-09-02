@@ -343,6 +343,10 @@ describe('saveReview — performance', () => {
           reviews.push({ matchId, ...review });
         },
         editManual: (matchId: string, patch: Partial<GameRecord>) => { patches.push({ matchId, patch }); },
+        // Empty history: saving a ±% also snapshots `rankAtStart`, which reads
+        // the match back out to find its track. With no match to find that is a
+        // no-op, which is exactly what these SR-persistence cases want.
+        all: () => [],
       },
       getConfig: () => ({ accounts: { main: 'Main' } }),
     } as unknown as DataProviderDeps;
@@ -377,7 +381,14 @@ describe('saveReview — SR %', () => {
             else if (v !== undefined) target[k] = v;
           }
         },
+        all: () => [game],
       },
+      // Saving a ±% also snapshots `rankAtStart`. With no rank anchor on the
+      // track there is nothing to snapshot from, so it stays absent — leaving
+      // these cases free to assert srDelta alone. That "no anchor, no snapshot"
+      // rule has its own coverage in test/rankAtStart.test.ts.
+      rankAnchors: { map: () => ({}) },
+      placements: { allRuns: () => [] },
       getConfig: () => ({ accounts: { main: 'Main' } }),
     } as unknown as DataProviderDeps;
     return { provider: createDataProvider(deps), game };

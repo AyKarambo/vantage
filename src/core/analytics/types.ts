@@ -5,6 +5,10 @@
  * reusable in the renderer.
  */
 import type { Result, Role, HeroStat, RosterPlayer } from '../model';
+// From `rank/types` rather than the `rank` barrel: that module imports only
+// `../model`, so this stays a leaf type import with no cycle back through the
+// rank engine (which itself reads `GameRecord` from here).
+import type { RankPosition } from '../rank/types';
 
 export type { HeroStat } from '../model';
 
@@ -90,6 +94,22 @@ export interface GameRecord {
    * competitive-only; feeds the calculated-rank engine ({@link ../rank}).
    */
   srDelta?: number;
+  /**
+   * The rank held going INTO this match — a SNAPSHOT, written when {@link srDelta}
+   * is recorded and cleared when it is cleared.
+   *
+   * Stored rather than derived on read, deliberately. Every other rank figure in
+   * the app is recomputed from the anchor and the ±% chain, which is right for
+   * "what is my rank now" and wrong for "what did I have when I queued into this
+   * game": correcting an older match's ±% would silently rewrite the answer for
+   * every match after it. A stored snapshot keeps saying what it said.
+   *
+   * Absent when the match has no ±% at all. Without one the rank did not move
+   * here, so a value would only repeat the previous match's and imply a
+   * progression Vantage cannot actually vouch for. Also absent when the track had
+   * no rank anchor at the time — nothing to snapshot from.
+   */
+  rankAtStart?: RankPosition;
   durationMinutes?: number;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;

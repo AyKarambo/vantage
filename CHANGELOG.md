@@ -19,6 +19,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **Every match remembers the rank you went into it with.** Your history now shows where you
+  stood when each game started, so you can read a session back and see the climb (or the slide)
+  match by match rather than only today's number. It appears on the match detail page, and as a
+  **Rank at start** field you can turn on in **Matches → Customize view**.
+  It's a snapshot, taken when you record that match's ±% — so correcting an older game later
+  never rewrites what a newer one says you had at the time. Matches with no ±% recorded show
+  nothing: without one your rank didn't move there, and repeating the previous match's number
+  would look like evidence Vantage doesn't actually have.
 - **A Live screen** for the match you're in right now. It shows the scoreboard the game is
   showing — heroes, eliminations, assists, deaths, damage, healing and mitigation, split into
   your team and theirs — updated as the match plays. A dot on the nav item tells you a match
