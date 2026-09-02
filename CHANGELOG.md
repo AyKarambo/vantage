@@ -42,6 +42,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **The "Current session" card no longer sits on top of the status bar.** With every screen the
+  sidebar now lists, the navigation was taller than the space it had — so the card at the bottom
+  was pushed straight out of the sidebar and over the status bar underneath it. The navigation
+  scrolls when it doesn't fit; the account switcher above it and the session card below it stay
+  where they are.
 - **Readiness no longer nudges you to play more while you're in placements.** Every other screen
   ignores the SR change recorded against a placement match — the game shows no rank at all until
   the run finishes — but Readiness was still reading those numbers, and a flat-looking run could

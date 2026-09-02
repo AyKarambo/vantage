@@ -110,7 +110,26 @@
   gap: 3px;
   background: rgba(9, 9, 13, 0.4);
 }
+/* The nav scrolls; the account chip above and the session card below stay put.
+   `min-height: 0` is the load-bearing declaration — a flex item defaults to
+   `min-height: auto`, which refuses to shrink below its content, so without it
+   the nav pushes the session card out through the bottom of the sidebar and
+   over the status bar. That is not hypothetical: at the app's own 1300×840 spec
+   size the nav is already taller than the space available, and every nav item
+   added since has widened the gap. */
+.sidebar-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  /* Matches the sidebar's own gap, so wrapping the items changed no spacing. */
+  gap: 3px;
+  /* Don't hand a scroll the nav can't use on to the view behind it. */
+  overscroll-behavior: contain;
+}
 .sidebar-account {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -225,7 +244,11 @@
   .nav-live-dot { animation: none; }
 }
 .sidebar-session {
-  margin-top: auto;
+  /* Pinned to the bottom by `.sidebar-nav`'s flex-grow, not by `margin-top:auto`
+     as it used to be: auto-margin only pushes while there IS free space, so the
+     moment the nav overflowed it stopped pinning anything and the card rode the
+     overflow down over the status bar. */
+  flex: 0 0 auto;
   padding: 11px 12px;
   border-radius: var(--r-lg);
   background: var(--surface-2);

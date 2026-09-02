@@ -556,9 +556,15 @@ export class App {
    * refresh can't destroy a nav button under an in-progress click.
    */
   private buildSidebar(): void {
-    const children: Array<Node> = [this.accountChip];
+    // The nav lives in its own scrollable box between the account chip and the
+    // session card, both of which stay pinned. Without it the sidebar's flex
+    // children simply overflow their container — at the app's own 1300×840 spec
+    // size the nav is already taller than the space it has, so the session card
+    // was being pushed straight down over the status bar. Every nav item added
+    // since made that worse, and would again.
+    const navChildren: Array<Node> = [];
     for (const section of NAV) {
-      children.push(h('div', { class: 'nav-group' }, section.group));
+      navChildren.push(h('div', { class: 'nav-group' }, section.group));
       for (const item of section.items) {
         const btn = h('button', {
           class: 'nav-item',
@@ -570,11 +576,10 @@ export class App {
           item.label,
         );
         this.navButtons.set(item.id, btn);
-        children.push(btn);
+        navChildren.push(btn);
       }
     }
-    children.push(this.sessionCardEl);
-    render(this.sidebarHost, ...children);
+    render(this.sidebarHost, this.accountChip, h('nav', { class: 'sidebar-nav' }, ...navChildren), this.sessionCardEl);
     this.sidebarBuilt = true;
   }
 
