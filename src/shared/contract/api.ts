@@ -281,6 +281,14 @@ export interface OwStatsApi {
   onGameLogged(cb: (p: GameLoggedPayload) => void): () => void;
   /** Subscribe to "the pending (needs-result) set changed" (a match was held or resolved); returns an unsubscribe function. */
   onPendingChanged(cb: () => void): () => void;
+  /**
+   * Subscribe to "a write changed what the dashboard would return" — a review,
+   * ±SR edit, rank anchor, placement-run change, account relabel or import.
+   * Fires regardless of WHO wrote (a renderer view, or the MCP server writing on
+   * the user's behalf), so an open window can never keep showing a pre-write
+   * rank. Returns an unsubscribe function.
+   */
+  onDataChanged(cb: () => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -301,6 +309,7 @@ export const EVENT_CHANNELS = {
   onSyncProgress: 'push:sync-progress',
   onGameLogged: 'push:game-logged',
   onPendingChanged: 'push:pending-changed',
+  onDataChanged: 'push:data-changed',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**

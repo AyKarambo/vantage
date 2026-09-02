@@ -119,6 +119,12 @@ export interface DataProviderDeps {
   dismissPending(matchId: string): boolean;
   /** Surface a user-facing notification (the tray balloon in production). */
   notify(title: string, body: string): void;
+  /**
+   * Announce that a write changed what the dashboard would return, so open
+   * windows refetch (see {@link DASHBOARD_WRITES}). Optional: tests and headless
+   * paths omit it and the provider behaves exactly as it did before.
+   */
+  announceChange?(): void;
   /** Demo dataset shown until the first real game is tracked. */
   sampleGames(): GameRecord[];
   /** The release log: viewer ring, session level, renderer error sink. */
@@ -179,7 +185,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
   // long session of cleanup can't accumulate records without limit.
   const deletedUndo = new Map<string, GameRecord>();
   const UNDO_BUFFER = 20;
-  return {
+  const provider: DataProvider = {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
     games: () => (deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : []),
@@ -774,6 +780,56 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return effectiveMasterData();
     },
   };
+  return deps.announceChange ? announcing(provider, deps.announceChange) : provider;
+}
+
+/**
+ * The provider writes that change what {@link computeDashboard} would return —
+ * history rows, reviews and ±SR, rank anchors, placement runs, account
+ * attribution, and the bulk import/delete paths. Each one announces, so every
+ * open surface refetches no matter who called it: a renderer view, or the MCP
+ * server writing on the user's behalf.
+ *
+ * Writes that ALREADY push are deliberately absent, so a single user action
+ * never costs two refetches: `logMatch` pushes `onGameLogged` from the match
+ * pipeline (`matchPipeline.recordGame`), and `resolvePendingMatch` /
+ * `dismissPendingMatch` push `onPendingChanged` from the same place.
+ *
+ * Kept as one explicit list rather than "everything that isn't a read": the set
+ * of methods that move the RANK is much smaller than the set that mutates
+ * something, and pushing a refetch after `setLogLevel` or `logRendererError`
+ * would be noise. {@link ../../test/dataChangedPush.test.ts} pins the list
+ * against the real provider so a renamed method can't silently fall out of it.
+ */
+export const DASHBOARD_WRITES = [
+  'saveReview', 'clearReview', 'importReviews',
+  'editMatch', 'deleteMatch', 'undoDeleteMatch',
+  'setRankAnchor',
+  'startPlacementRun', 'setPlacementPrediction', 'completePlacementRun',
+  'resetPlacementRun', 'cancelPlacementRun', 'recountPlacementRun', 'declinePlacementRun',
+  'saveAccount', 'deleteAccount', 'deleteDetectedAccount',
+  'importNotion', 'deleteImportedMatches', 'importFromFile', 'deleteFileImports',
+  'cleanupNotionDuplicates',
+] as const satisfies readonly (keyof DataProvider)[];
+
+/**
+ * Wrap each {@link DASHBOARD_WRITES} method so it announces after it has
+ * actually written — after the promise settles for the async ones, so a
+ * refetch triggered by the announcement can never read pre-write state.
+ * A throwing write announces nothing: nothing changed.
+ */
+function announcing(provider: DataProvider, announce: () => void): DataProvider {
+  const out: DataProvider = { ...provider };
+  for (const name of DASHBOARD_WRITES) {
+    const fn = provider[name] as (...args: unknown[]) => unknown;
+    (out as unknown as Record<string, unknown>)[name] = (...args: unknown[]): unknown => {
+      const result = fn.call(provider, ...args);
+      if (result instanceof Promise) return result.then((value) => { announce(); return value; });
+      announce();
+      return result;
+    };
+  }
+  return out;
 }
 
 /**

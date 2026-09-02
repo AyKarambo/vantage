@@ -4,8 +4,12 @@
  * source of truth. What remains here:
  *
  * 1. `gradedThisSession` — the match ids graded since the last data refetch.
- *    Saving a review deliberately does NOT refetch (the current snapshot stays
- *    stable), so the inbox and sidebar badge subtract this set instead.
+ *    Saving a review re-renders immediately and refetches right after, so this
+ *    set covers the gap between the two: the inbox and sidebar badge subtract it
+ *    so a just-graded match doesn't flash back into the list while the refetch
+ *    is in flight. (It used to cover a permanent gap — saving deliberately never
+ *    refetched — which went wrong once reviews started recording ±SR and rank
+ *    anchors; see the note in views/review.ts.)
  * 2. `migrateLegacyReviews` — a one-time import of the legacy `vantageReviews`
  *    localStorage payload into the main store.
  */
