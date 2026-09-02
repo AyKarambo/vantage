@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { playerHistory, playerMatchHistory } from '../src/core/playerIndex';
+import { playerHistory, playerMatchHistory, playerRecords } from '../src/core/playerIndex';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, RosterPlayer } from '../src/core/model';
 
@@ -135,5 +135,94 @@ describe('playerMatchHistory', () => {
     expect(h.sameTeam).toEqual({ wins: 0, losses: 0 });
     expect(h.enemyTeam).toEqual({ wins: 0, losses: 0 });
     expect(h.results).toEqual({ wins: 1, losses: 0 }); // still counts your result
+  });
+});
+
+describe('playerRecords', () => {
+  // Team relation is only known when BOTH rows carry a team — that is the whole
+  // point of the with/vs split, so these fixtures always set one.
+  const meT = (team: number): RosterPlayer => ({ ...me, team });
+  const themT = (battleTag: string, team: number): RosterPlayer => ({ battleTag, heroName: 'Ana', team });
+
+  it('splits your record into games WITH them and AGAINST them', () => {
+    const all = [
+      game({ result: 'Win', roster: [meT(0), themT('Nova#1', 0)] }),
+      game({ result: 'Win', roster: [meT(0), themT('Nova#1', 0)] }),
+      game({ result: 'Loss', roster: [meT(0), themT('Nova#1', 0)] }),
+      game({ result: 'Loss', roster: [meT(0), themT('Nova#1', 1)] }),
+    ];
+    const [nova] = playerRecords(all, ['Nova#1']);
+    expect(nova).toMatchObject({
+      name: 'Nova#1',
+      encounters: 4,
+      sameTeam: { wins: 2, losses: 1 },
+      enemyTeam: { wins: 0, losses: 1 },
+    });
+  });
+
+  it('answers for a whole roster in one call', () => {
+    const all = [
+      game({ result: 'Win', roster: [meT(0), themT('A#1', 0), themT('B#2', 1)] }),
+      game({ result: 'Loss', roster: [meT(0), themT('B#2', 0)] }),
+    ];
+    const rows = playerRecords(all, ['A#1', 'B#2', 'C#3']);
+    expect(rows.map((r) => r.name)).toEqual(['B#2', 'A#1']); // most encounters first
+    expect(rows.find((r) => r.name === 'B#2')).toMatchObject({
+      encounters: 2, sameTeam: { wins: 0, losses: 1 }, enemyTeam: { wins: 1, losses: 0 },
+    });
+  });
+
+  it('omits players you have never shared a match with', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), themT('A#1', 0)] })];
+    expect(playerRecords(all, ['Stranger#9']).map((r) => r.name)).toEqual([]);
+  });
+
+  it('matches on the name before the #, like every other player lookup', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), themT('Nova#11214', 0)] })];
+    // A different discriminator, and different casing — same person.
+    expect(playerRecords(all, ['nova#99999'])[0]).toMatchObject({ encounters: 1 });
+  });
+
+  it('counts a shared match once even if the feed listed them twice', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), themT('A#1', 0), themT('A#1', 0)] })];
+    expect(playerRecords(all, ['A#1'])[0].encounters).toBe(1);
+  });
+
+  it('counts the encounter but no W/L when the feed reported no teams', () => {
+    // Without both teams "with" and "vs" would be a guess, and telling those
+    // apart is the entire feature.
+    const all = [game({ result: 'Win', roster: [me, { battleTag: 'A#1', heroName: 'Ana' }] })];
+    expect(playerRecords(all, ['A#1'])[0]).toMatchObject({
+      encounters: 1, sameTeam: { wins: 0, losses: 0 }, enemyTeam: { wins: 0, losses: 0 },
+    });
+  });
+
+  it('never counts a draw as a win or a loss', () => {
+    const all = [game({ result: 'Draw', roster: [meT(0), themT('A#1', 0)] })];
+    expect(playerRecords(all, ['A#1'])[0]).toMatchObject({
+      encounters: 1, sameTeam: { wins: 0, losses: 0 },
+    });
+  });
+
+  it('ignores the local player and unidentified rows', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), { heroName: 'Ana', team: 1 }] })];
+    expect(playerRecords(all, ['Karambo#21234', ''])).toEqual([]);
+  });
+
+  it('returns nothing for an empty name list, without walking history', () => {
+    expect(playerRecords([game({ result: 'Win', roster: [meT(0), themT('A#1', 0)] })], [])).toEqual([]);
+  });
+
+  it('agrees with playerMatchHistory on the same split', () => {
+    // The two answer the same question at different weights; they must not drift.
+    const all = [
+      game({ result: 'Win', roster: [meT(0), themT('Nova#1', 0)] }),
+      game({ result: 'Loss', roster: [meT(0), themT('Nova#1', 1)] }),
+    ];
+    const batched = playerRecords(all, ['Nova#1'])[0];
+    const single = playerMatchHistory(all, 'Nova#1')!;
+    expect(batched.sameTeam).toEqual(single.sameTeam);
+    expect(batched.enemyTeam).toEqual(single.enemyTeam);
+    expect(batched.encounters).toBe(single.encounters);
   });
 });

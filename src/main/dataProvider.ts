@@ -19,7 +19,7 @@ import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
-import { mergeAccountList } from '../core/accountsManage';
+import { mergeAccountList, UNKNOWN_ACCOUNT } from '../core/accountsManage';
 import { resolveRole } from '../core/resolvers/role';
 import { resolveAccount } from '../core/resolvers/account';
 import { resolveMapId } from '../core/resolvers/mapId';
@@ -33,15 +33,15 @@ import {
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import {
-  PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, hasDrifted, isAwaitingRank, runProgress,
-  shouldOfferRun, suppressedMatchIds,
+  PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, trackMatches, hasDrifted, isAwaitingRank,
+  runProgress, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds,
   type PlacementRun,
 } from '../core/placements';
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
   DevModeAuthStatusPayload, GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
-  PlacementRunSummary,
+  PlacementRunSummary, PlacementOffer, PlacementTrackInput,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
 
@@ -119,6 +119,12 @@ export interface DataProviderDeps {
   dismissPending(matchId: string): boolean;
   /** Surface a user-facing notification (the tray balloon in production). */
   notify(title: string, body: string): void;
+  /**
+   * Announce that a write changed what the dashboard would return, so open
+   * windows refetch (see {@link DASHBOARD_WRITES}). Optional: tests and headless
+   * paths omit it and the provider behaves exactly as it did before.
+   */
+  announceChange?(): void;
   /** Demo dataset shown until the first real game is tracked. */
   sampleGames(): GameRecord[];
   /** The release log: viewer ring, session level, renderer error sink. */
@@ -179,7 +185,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
   // long session of cleanup can't accumulate records without limit.
   const deletedUndo = new Map<string, GameRecord>();
   const UNDO_BUFFER = 20;
-  return {
+  const provider: DataProvider = {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
     games: () => (deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : []),
@@ -375,6 +381,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (oldLabel && oldLabel !== newLabel) {
         deps.history.relabelAccount(oldLabel, newLabel);
         deps.rankAnchors.relabel(oldLabel, newLabel);
+        // Placement runs are keyed by the same (account, role) as anchors, so a
+        // relabel that moves one must move the other or the run is orphaned
+        // under a name nothing reads any more. Newly load-bearing now that a run
+        // can be started automatically on a raw, not-yet-labelled BattleTag.
+        deps.placements.relabel(oldLabel, newLabel);
       } else if (!oldLabel && input.battleTag !== newLabel) {
         // Labelling a detected raw-tag account: its history rows + anchors are
         // keyed by the raw BattleTag, so adopt the new label — the raw-tag entry
@@ -382,6 +393,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         // for a brand-new account with no matching history.)
         deps.history.relabelAccount(input.battleTag, newLabel);
         deps.rankAnchors.relabel(input.battleTag, newLabel);
+        deps.placements.relabel(input.battleTag, newLabel);
       }
       accounts[input.battleTag] = newLabel;
       deps.persistAccounts(accounts);
@@ -402,6 +414,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // Touches no config — a detected account was never a configured label.
       deps.history.deleteByAccount(account);
       deps.rankAnchors.removeAccount(account);
+      deps.placements.removeAccount(account);
       return accountList();
     },
     getRanks: () => rankSummaries(deps),
@@ -453,7 +466,15 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         preRunAnchor: existing
           ? existing.preRunAnchor
           : deps.rankAnchors.get(input.account, input.role) ?? null,
-        predictions: {},
+        // Carried, not cleared. Re-pointing an existing run at an earlier match
+        // ("Change start match…", for a run started late) is a correction to
+        // WHERE the run begins, not a decision to throw away the predicted
+        // ranks already entered. They are keyed by matchId and only ever read
+        // for the counted matches, so one that falls outside the new window is
+        // simply not read — and is there again if the window moves back.
+        // `resetPlacementRun` is the action that means "replay from scratch",
+        // and it still clears them.
+        predictions: existing?.predictions ?? {},
         ...(existing?.seasonStart !== undefined ? { seasonStart: existing.seasonStart } : {}),
       });
       return placementSummaries(deps);
@@ -513,25 +534,34 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return placementSummaries(deps);
     },
     placementOffer: (input) => {
-      // The season the player is currently in, from the EFFECTIVE table, so a
-      // reset the user flagged themselves counts exactly like a shipped one.
-      const now = Date.now();
-      const seasons = [...effectiveMasterData().seasons].sort((a, b) => a.start - b.start);
-      let current: { start: number; label: string; isReset?: boolean } | undefined;
-      for (const s of seasons) {
-        if (s.start <= now) current = s;
-        else break;
-      }
+      const current = currentSeason(effectiveMasterData());
       if (!current) return null;
-      const offered = shouldOfferRun({
+      const anchor = deps.rankAnchors.get(input.account, input.role) ?? null;
+      const existingRun = deps.placements.getRun(input.account, input.role);
+      const declinedSeasonStarts = deps.placements.declinedFor(input.account, input.role);
+      const games = deps.history.all();
+      // Rule 1: the ladder reset moved a rank this track already had.
+      if (shouldOfferRun({
         seasonStart: current.start,
         isResetSeason: current.isReset === true,
-        anchor: deps.rankAnchors.get(input.account, input.role) ?? null,
-        existingRun: deps.placements.getRun(input.account, input.role),
-        declinedSeasonStarts: deps.placements.declinedFor(input.account, input.role),
-      });
-      if (!offered) return null;
-      return { account: input.account, role: input.role, seasonStart: current.start, seasonLabel: current.label };
+        anchor, existingRun, declinedSeasonStarts,
+      })) {
+        return offerFrom(games, input, current, 'season-reset');
+      }
+      // Rule 2: Vantage has no rank for this track at all (issue #200). Skipped
+      // for the Unknown bucket — a match with no captured or mapped BattleTag
+      // lands there, and "Placements for Damage on Unknown?" asks about a label
+      // the player is about to replace, keying the run to a name that won't last.
+      if (input.account === UNKNOWN_ACCOUNT) return null;
+      const played = trackMatches(games, input.account, input.role, current.start);
+      if (shouldOfferNewTrackRun({
+        seasonStart: current.start,
+        anchor, existingRun, declinedSeasonStarts,
+        trackMatchCount: played.length,
+      })) {
+        return offerFrom(games, input, current, 'new-track');
+      }
+      return null;
     },
     declinePlacementRun: (input) => {
       deps.placements.addDeclined(input.account, input.role, input.seasonStart);
@@ -788,6 +818,56 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return effectiveMasterData();
     },
   };
+  return deps.announceChange ? announcing(provider, deps.announceChange) : provider;
+}
+
+/**
+ * The provider writes that change what {@link computeDashboard} would return —
+ * history rows, reviews and ±SR, rank anchors, placement runs, account
+ * attribution, and the bulk import/delete paths. Each one announces, so every
+ * open surface refetches no matter who called it: a renderer view, or the MCP
+ * server writing on the user's behalf.
+ *
+ * Writes that ALREADY push are deliberately absent, so a single user action
+ * never costs two refetches: `logMatch` pushes `onGameLogged` from the match
+ * pipeline (`matchPipeline.recordGame`), and `resolvePendingMatch` /
+ * `dismissPendingMatch` push `onPendingChanged` from the same place.
+ *
+ * Kept as one explicit list rather than "everything that isn't a read": the set
+ * of methods that move the RANK is much smaller than the set that mutates
+ * something, and pushing a refetch after `setLogLevel` or `logRendererError`
+ * would be noise. {@link ../../test/dataChangedPush.test.ts} pins the list
+ * against the real provider so a renamed method can't silently fall out of it.
+ */
+export const DASHBOARD_WRITES = [
+  'saveReview', 'clearReview', 'importReviews',
+  'editMatch', 'deleteMatch', 'undoDeleteMatch',
+  'setRankAnchor',
+  'startPlacementRun', 'setPlacementPrediction', 'completePlacementRun',
+  'resetPlacementRun', 'cancelPlacementRun', 'recountPlacementRun', 'declinePlacementRun',
+  'saveAccount', 'deleteAccount', 'deleteDetectedAccount',
+  'importNotion', 'deleteImportedMatches', 'importFromFile', 'deleteFileImports',
+  'cleanupNotionDuplicates',
+] as const satisfies readonly (keyof DataProvider)[];
+
+/**
+ * Wrap each {@link DASHBOARD_WRITES} method so it announces after it has
+ * actually written — after the promise settles for the async ones, so a
+ * refetch triggered by the announcement can never read pre-write state.
+ * A throwing write announces nothing: nothing changed.
+ */
+function announcing(provider: DataProvider, announce: () => void): DataProvider {
+  const out: DataProvider = { ...provider };
+  for (const name of DASHBOARD_WRITES) {
+    const fn = provider[name] as (...args: unknown[]) => unknown;
+    (out as unknown as Record<string, unknown>)[name] = (...args: unknown[]): unknown => {
+      const result = fn.call(provider, ...args);
+      if (result instanceof Promise) return result.then((value) => { announce(); return value; });
+      announce();
+      return result;
+    };
+  }
+  return out;
 }
 
 /**
@@ -989,4 +1069,56 @@ function syncRankAtStart(deps: DataProviderDeps, matchId: string): void {
   // what it exists not to be.
   if (game.rankAtStart) return;
   deps.history.editManual(matchId, { rankAtStart: next });
+}
+
+/**
+ * The season the player is currently in, from the EFFECTIVE table, so a reset
+ * the user flagged themselves counts exactly like a shipped one. `undefined`
+ * when the table has no season that has started yet.
+ */
+function currentSeason(masterData: MasterData): { start: number; label: string; isReset?: boolean } | undefined {
+  const now = Date.now();
+  const seasons = [...masterData.seasons].sort((a, b) => a.start - b.start);
+  let current: { start: number; label: string; isReset?: boolean } | undefined;
+  for (const s of seasons) {
+    if (s.start <= now) current = s;
+    else break;
+  }
+  return current;
+}
+
+/**
+ * Build the offer, working out what accepting it would CLAIM.
+ *
+ * Both rules backdate from the current season start, never from the track's
+ * whole history. An unbounded backdate would let a returning player's offer
+ * reach months-old matches: the run's `startedAt` would land in a previous
+ * season, `suppressedMatchIds` would mask that old ±% out of every rank
+ * surface, and `completePlacementRun` would re-anchor at the newest match in
+ * the window — silently rewriting historical rank. The season boundary keeps a
+ * run inside the season that raised it, by construction.
+ *
+ * Past a full run's worth of claimable matches there is no honest backdate —
+ * a run is ten matches, and starting eleven-plus matches back would count only
+ * the first ten and quietly exclude the very match that raised the offer. Those
+ * offers start NOW instead, with `backdatedCount: 0` so the prompt can say so
+ * rather than leaving the difference invisible.
+ */
+function offerFrom(
+  games: GameRecord[],
+  input: PlacementTrackInput,
+  season: { start: number; label: string },
+  reason: PlacementOffer['reason'],
+): PlacementOffer {
+  const claimed = trackMatches(games, input.account, input.role, season.start);
+  const backdates = claimed.length > 0 && claimed.length <= PLACEMENT_RUN_LENGTH;
+  return {
+    account: input.account,
+    role: input.role,
+    seasonStart: season.start,
+    seasonLabel: season.label,
+    reason,
+    backdatedCount: backdates ? claimed.length : 0,
+    ...(backdates ? { fromMatchId: claimed[0].matchId } : {}),
+  };
 }

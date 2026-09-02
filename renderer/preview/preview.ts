@@ -12,6 +12,7 @@ import type {
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
+  PlacementOffer, LiveMatchPayload,
   GradingSettings, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
@@ -21,10 +22,10 @@ import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreferenc
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
-import { mergeAccountList, isConfiguredAccount } from '../../src/core/accountsManage';
+import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
-import { playerMatchHistory } from '../../src/core/playerIndex';
+import { playerMatchHistory, playerRecords } from '../../src/core/playerIndex';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -38,7 +39,7 @@ import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness'
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, shouldOfferNewTrackRun, trackMatches, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -114,6 +115,8 @@ const previewDeleted: Record<string, true> = loadMap<true>(DELETED_KEY);
 // Mirrors the main process's in-memory undo buffer — deliberately not persisted,
 // so a reload ends the undo window here exactly as a restart does in the app.
 const deletedUndo = new Map<string, GameRecord>();
+// Subscribers to the synthetic live match (see `previewLive` at the bottom).
+const liveMatchListeners = new Set<(p: LiveMatchPayload) => void>();
 // Accounts (battleTag → label). Seeded from the sample season's accounts.
 type AnchorRecord = RankAnchor & { account: string; role: Role };
 const seededAccounts = (): Record<string, string> => {
@@ -271,6 +274,7 @@ let appSettings: AppUiSettings = {
   demoPreference: 'on',
   devMode: true,
   gepNotifications: true,
+  liveKillFeed: true,
   // Off, like the real default: the preview harness has no main process to
   // host the pipe, so the toggle is only ever cosmetic here.
   mcpEnabled: false,
@@ -433,6 +437,11 @@ const mock: OwStatsApi = {
   },
   playerHistory: async (name: string) =>
     playerMatchHistory(dataset(), name, makeMapMode(effectiveMasterData().maps)),
+  playerRecords: async (names: string[]) => playerRecords(dataset(), names),
+  onLiveMatch: (cb: (p: LiveMatchPayload) => void) => {
+    liveMatchListeners.add(cb);
+    return () => liveMatchListeners.delete(cb);
+  },
   exportNotion: async () => {
     if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
     // Simulate per-game progress so the sync card's live counter is testable.
@@ -557,7 +566,18 @@ const mock: OwStatsApi = {
       save(REVIEWS_KEY, previewReviews);
     }
     // Mirror the app's onGameLogged push so the auto-switch (F4) is exercisable here.
-    for (const cb of gameLoggedListeners) cb({ matchId, account, configured: isConfiguredAccount(account, previewAccounts) });
+    for (const cb of gameLoggedListeners) {
+      cb({
+        matchId, account,
+        configured: isConfiguredAccount(account, previewAccounts),
+        role: input.role,
+        // The harness only ever logs by hand, and the shell raises the placement
+        // offer for `'gep'` only — so a preview log deliberately does NOT stand
+        // in for a live capture here. Exercise that path with `npm start` and
+        // OW_SYNC_SIMULATE=1 (see CLAUDE.md), not in the browser.
+        source: 'manual',
+      });
+    }
     return { matchId };
   },
   editMatch: async (input: MatchEditInput) => {
@@ -793,15 +813,38 @@ const mock: OwStatsApi = {
     }
     if (!current) return null;
     const anchor = previewAnchors[rankKey(input.account, input.role)];
-    const offered = shouldOfferRun({
+    const existingRun = previewPlacementRuns.get(placementRunKey(input.account, input.role));
+    const declinedSeasonStarts = previewDeclined[rankKey(input.account, input.role)] ?? [];
+    const season = { start: current.start, label: current.label };
+    // Both rules, in the provider's order, backdated the same way — see
+    // `offerFrom` in src/main/dataProvider.ts.
+    const offer = (reason: PlacementOffer['reason']): PlacementOffer => {
+      const claimed = trackMatches(dataset(), input.account, input.role, season.start);
+      const backdates = claimed.length > 0 && claimed.length <= PLACEMENT_RUN_LENGTH;
+      return {
+        account: input.account, role: input.role,
+        seasonStart: season.start, seasonLabel: season.label,
+        reason,
+        backdatedCount: backdates ? claimed.length : 0,
+        ...(backdates ? { fromMatchId: claimed[0].matchId } : {}),
+      };
+    };
+    if (shouldOfferRun({
       seasonStart: current.start,
       isResetSeason: current.isReset === true,
       anchor: anchor ?? null,
-      existingRun: previewPlacementRuns.get(placementRunKey(input.account, input.role)),
-      declinedSeasonStarts: previewDeclined[rankKey(input.account, input.role)] ?? [],
-    });
-    if (!offered) return null;
-    return { account: input.account, role: input.role, seasonStart: current.start, seasonLabel: current.label };
+      existingRun,
+      declinedSeasonStarts,
+    })) return offer('season-reset');
+    if (input.account === UNKNOWN_ACCOUNT) return null;
+    if (shouldOfferNewTrackRun({
+      seasonStart: current.start,
+      anchor: anchor ?? null,
+      existingRun,
+      declinedSeasonStarts,
+      trackMatchCount: trackMatches(dataset(), input.account, input.role, current.start).length,
+    })) return offer('new-track');
+    return null;
   },
   declinePlacementRun: async (input: PlacementDeclineInput) => {
     const key = rankKey(input.account, input.role);
@@ -1020,6 +1063,10 @@ const mock: OwStatsApi = {
     return () => gameLoggedListeners.delete(cb);
   },
   onPendingChanged: (_cb: () => void) => () => {},
+  // The harness writes straight into its own in-memory stores rather than
+  // through a provider, so there is nothing to announce — the views' own
+  // `store.refresh()` already re-reads them.
+  onDataChanged: (_cb: () => void) => () => {},
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {
     appSettings = { ...appSettings, ...patch };
@@ -1112,3 +1159,79 @@ const mock: OwStatsApi = {
 
 window.owstats = mock;
 new App(must('#app'));
+
+/**
+ * Live-match simulation for the browser harness.
+ *
+ * The real live board is fed by GEP, which the harness has no access to — so
+ * without this the Live screen could only ever be seen in its idle state, and
+ * the one screen that most needs eyeballs would be the one screen the harness
+ * couldn't show. This synthesizes a plausible match from the sample season's own
+ * players, so the scoreboard, the elimination tally and (crucially) the
+ * with/vs records all render against real history.
+ *
+ * Drive it from the browser console:
+ *   previewLive.start()   — begin a synthetic match that ticks
+ *   previewLive.stop()    — end it
+ */
+function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
+  // Prefer players the sample history actually knows, so "Players you've met"
+  // has something real to show.
+  const known = [...new Set(
+    dataset().flatMap((g) => (g.roster ?? []).filter((p) => !p.isLocal && p.battleTag).map((p) => p.battleTag!)),
+  )].slice(0, 9);
+  const heroes = ['Ana', 'Genji', 'Reinhardt', 'Lúcio', 'Tracer', 'Sigma', 'Kiriko', 'Sojourn', 'Orisa'];
+  const roster = [
+    {
+      name: 'You#1234', isLocal: true, hero: 'Ana', role: 'support' as const, team: 0,
+      eliminations: 3 + tick, deaths: 2, assists: 9 + tick, damage: 2100 + tick * 90,
+      healing: 6400 + tick * 220, mitigation: 0,
+    },
+    ...known.map((name, i) => ({
+      name, isLocal: false, hero: heroes[i % heroes.length], team: i < 4 ? 0 : 1,
+      eliminations: (i * 2 + tick) % 14, deaths: (i + tick) % 9, assists: (i * 3) % 11,
+      damage: 1500 + i * 400 + tick * 60, healing: i % 3 === 0 ? 3000 + tick * 100 : 0,
+      mitigation: i % 4 === 0 ? 2000 + tick * 80 : 0,
+    })),
+  ];
+  return {
+    live: true,
+    startedAt: Date.now() - tick * 1000,
+    map: 'Ilios',
+    gameType: 'competitive',
+    roster,
+    kills: appSettings.liveKillFeed
+      ? { yours: 4 + tick, theirs: 3 + Math.floor(tick / 2), known: true }
+      : { yours: 0, theirs: 0, known: false },
+    // Mirrors what the real monitor does: the feed is withheld at the source
+    // when the setting is off, not filtered out in the view. Without this the
+    // Settings toggle would be untestable in the harness.
+    feed: appSettings.liveKillFeed ? Array.from({ length: Math.min(6, tick + 1) }, (_, i) => ({
+      at: Date.now() - i * 4000,
+      attacker: i % 2 ? 'You#1234' : known[0] ?? 'Enemy#1',
+      victim: i % 2 ? known[4] ?? 'Enemy#2' : 'You#1234',
+      attackerHero: i % 2 ? 'Ana' : 'Genji',
+      victimHero: i % 2 ? 'Sigma' : 'Ana',
+      attackerFriendly: i % 2 === 1,
+    })) : [],
+    teamsKnown: true,
+  };
+}
+
+let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
+(window as unknown as { previewLive: { start(): void; stop(): void } }).previewLive = {
+  start: () => {
+    let tick = 0;
+    const emit = (p: LiveMatchPayload): void => { for (const cb of liveMatchListeners) cb(p); };
+    emit(buildPreviewLiveMatch(tick));
+    clearInterval(previewLiveTimer);
+    previewLiveTimer = setInterval(() => emit(buildPreviewLiveMatch(++tick)), 1000);
+  },
+  stop: () => {
+    clearInterval(previewLiveTimer);
+    previewLiveTimer = undefined;
+    for (const cb of liveMatchListeners) {
+      cb({ live: false, endedAt: Date.now(), roster: [], kills: { yours: 0, theirs: 0, known: false }, feed: [], teamsKnown: false });
+    }
+  },
+};

@@ -11,6 +11,7 @@ import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
+import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
 import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
@@ -22,8 +23,11 @@ import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, roleLabel, signed } from '../format';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
+import { classifyGameType } from '../../../src/core/matchFilter';
+import { maybeOfferPlacements } from './placementOffer';
 import { roleStatus } from '../roleStatus';
 import { overview } from '../views/overview';
+import { live } from '../views/live';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
 import { playerHistory } from '../views/playerHistory';
@@ -54,14 +58,14 @@ import { CHANGELOG } from '../generated/changelog';
 
 // matchDetail, playerHistory and targetDetail are parameterized views: registered
 // here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
-const VIEWS: Record<ViewId, ViewRender> = { overview, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
+const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
  *  unaffected by it, so showing the bar would imply a control that does nothing.
  *  playerHistory is a cross-history drill-down over the full local index. faq
  *  is static help copy, unaffected by any filter. */
-const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq']);
+const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq', 'live']);
 
 /** Display order for the account switcher's per-role expansion. */
 const SWITCHER_ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
@@ -103,6 +107,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: 'Workspace',
     items: [
       { id: 'overview', label: 'Overview', icon: '◈' },
+      { id: 'live', label: 'Live', icon: '◉' },
       { id: 'review', label: 'Review', icon: '⚑' },
       { id: 'matches', label: 'Matches', icon: '▤' },
       { id: 'maps', label: 'Maps', icon: '◇' },
@@ -211,6 +216,12 @@ export class App {
     subscribeGepStatus(() => { this.renderGepIndicator(); this.renderGepBanner(); });
     this.renderGepIndicator();
     this.renderGepBanner();
+    // The live-match feed. The nav dot is mutated in place (never rebuilt), so
+    // a push landing mid-click can't swallow the click — the same discipline
+    // the rest of the sidebar follows.
+    initLiveMatch();
+    subscribeLiveMatch(() => this.renderLiveNav());
+    this.renderLiveNav();
     initDevModeAuthStatus();
     subscribeDevModeAuthStatus(() => this.renderDevBadge());
     this.renderDevBadge();
@@ -220,6 +231,12 @@ export class App {
     // A no-outcome match held (or resolved) refetches so the Review "Needs
     // result" section stays in step with the pending store.
     bridge.onPendingChanged(() => void store.refresh());
+    // Any write that moves the dashboard — a review's ±SR, a rank anchor, a
+    // placement run, an import — refetches, so the top-left rank chip can never
+    // sit on a pre-write value. Covers writes this window didn't make itself
+    // (the MCP server acting for the user), which is why it's a push and not a
+    // rule each view has to remember.
+    bridge.onDataChanged(() => void store.refresh());
     // Keep "updated Xm" honest while the app idles.
     setInterval(() => {
       const s = store.get();
@@ -246,6 +263,32 @@ export class App {
     } else {
       void store.refresh();
     }
+    // An auto-tracked match never passes through the log form, which is the only
+    // place that used to ask about placements — so a player who queued into
+    // their first ranked game on a fresh account was never offered a run
+    // (issue #200). Manual logs are excluded: the form asks for itself.
+    //
+    // Deliberately NOT gated on `document.hasFocus()`. This fires the moment a
+    // live match ends, when the player is still in Overwatch and Vantage is
+    // behind it by definition — a focus gate would skip exactly the case this
+    // exists for. The modal simply waits until they alt-tab back.
+    if (payload.source === 'gep') {
+      void maybeOfferPlacements(payload.account, payload.role, () => void store.refresh());
+    }
+  }
+
+  /**
+   * Catch-up for offers whose push never arrived: `DashboardWindow.push`
+   * silently drops when no window is open, so a match tracked while Vantage was
+   * closed (or minimized to tray) reaches no `onGameLogged` handler at all.
+   * Asking again for the most recently played track on focus costs one IPC call
+   * that answers `null` almost every time, and is what keeps the fix from
+   * depending on the player happening to open Review.
+   */
+  private catchUpPlacementOffer(): void {
+    const latest = store.get().data?.matches?.find((m) => classifyGameType(m.gameType) === 'competitive');
+    if (!latest) return;
+    void maybeOfferPlacements(latest.account, latest.role, () => void store.refresh());
   }
 
   private build(): HTMLElement {
@@ -537,6 +580,24 @@ export class App {
 
   /** Reflect the pending-review count on the Review nav item in place, so the
    *  button (a live click target) is never rebuilt. */
+  /**
+   * A live dot on the Live nav item while a match is running, so the screen
+   * advertises itself without stealing focus. Mutated in place for the same
+   * reason every other sidebar update is: a rebuilt button between mousedown
+   * and mouseup swallows the click.
+   */
+  private renderLiveNav(): void {
+    const btn = this.navButtons.get('live');
+    if (!btn) return;
+    const isLive = getLiveMatch()?.live === true;
+    const existing = btn.querySelector('.nav-live-dot');
+    if (isLive && !existing) {
+      btn.append(h('span', { class: 'nav-live-dot', title: 'A match is in progress' }));
+    } else if (!isLive) {
+      existing?.remove();
+    }
+  }
+
   private updateReviewBadge(pending: number): void {
     const btn = this.navButtons.get('review');
     if (!btn) return;
@@ -845,7 +906,7 @@ export class App {
       run: () => this.scrollContent('page-down'),
     });
     // Window focus re-pulls newly tracked games (stale-while-revalidate).
-    window.addEventListener('focus', () => void store.refresh());
+    window.addEventListener('focus', () => void store.refresh().then(() => this.catchUpPlacementOffer()));
     // Track a press inside the content host so renderContent can hold back a
     // refresh that would otherwise tear the pressed element out mid-click. All
     // three use the capture phase so a child's stopPropagation can't leave the

@@ -6,6 +6,7 @@ import { matchToGame } from '../core/gameRecord';
 import { streak, type GameRecord } from '../core/analytics';
 import { classifyGameType, isCompetitive } from '../core/matchFilter';
 import { isConfiguredAccount } from '../core/accountsManage';
+import { sourceOf } from '../core/source';
 import type { GameLoggedPayload } from '../shared/contract';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
@@ -106,6 +107,11 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
       matchId: game.matchId,
       account: game.account,
       configured: isConfiguredAccount(game.account, deps.getConfig().accounts),
+      // The track, and where the match came from — the renderer raises the
+      // placement offer off these for auto-tracked matches, which never pass
+      // through the log form that would otherwise ask (issue #200).
+      role: game.role,
+      source: sourceOf(game),
     });
     const s = streak(deps.history.all());
     const { fire, state } = nextBreakReminder(s, deps.getConfig().breakReminder, reminderState);

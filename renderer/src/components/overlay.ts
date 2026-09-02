@@ -9,6 +9,21 @@ export interface OverlayHandle {
   close: () => void;
 }
 
+/**
+ * Whether an overlay is currently mounted. Both {@link openModal} and
+ * {@link openDrawer} append a `.overlay` to `document.body` and remove it on
+ * close, so this is the honest answer for "is the user already looking at
+ * something modal?".
+ *
+ * Used by prompts that can be raised by several independent triggers (the
+ * placement offer fires from the log form, a live match landing, and a Review
+ * save) to stay out of the way rather than stacking a second card on top of the
+ * first — the offer is re-raised on the next match anyway.
+ */
+export function overlayOpen(): boolean {
+  return document.querySelector('.overlay') !== null;
+}
+
 function mountOverlay(overlay: HTMLElement, panel: HTMLElement, onClose?: () => void): OverlayHandle {
   const close = () => {
     window.removeEventListener('keydown', onKey);

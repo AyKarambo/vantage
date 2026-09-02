@@ -208,13 +208,13 @@ describe('createMatchPipeline — onGameLogged (F4)', () => {
   it('fires once per newly recorded match with the account and its configured status', () => {
     const { pipeline, logged } = harness(); // config maps Player#1234 → Main
     pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Main' }));
-    expect(logged).toEqual([{ matchId: 'c-1', account: 'Main', configured: true }]);
+    expect(logged).toEqual([{ matchId: 'c-1', account: 'Main', configured: true, role: 'damage', source: 'gep' }]);
   });
 
   it('marks an unmapped account as not configured', () => {
     const { pipeline, logged } = harness();
     pipeline.recordGame(game({ matchId: 'c-1', result: 'Win', account: 'Rando#4521' }));
-    expect(logged).toEqual([{ matchId: 'c-1', account: 'Rando#4521', configured: false }]);
+    expect(logged).toEqual([{ matchId: 'c-1', account: 'Rando#4521', configured: false, role: 'damage', source: 'gep' }]);
   });
 
   it('does not fire for a dropped (non-competitive) match or a duplicate', () => {
@@ -228,7 +228,18 @@ describe('createMatchPipeline — onGameLogged (F4)', () => {
   it('resolves a captured live match through addMatch and announces it', () => {
     const { pipeline, logged } = harness();
     pipeline.addMatch(capturedMatch('gep-1')); // battleTag Player#1234 → Main
-    expect(logged).toEqual([{ matchId: 'gep-1', account: 'Main', configured: true }]);
+    expect(logged).toEqual([{ matchId: 'gep-1', account: 'Main', configured: true, role: 'damage', source: 'gep' }]);
+  });
+
+  it('reports the track and the source, so the renderer can raise the placement offer', () => {
+    // The shell only raises the offer for `source: 'gep'` — the log form asks
+    // for its own manual saves — so the manual/gep split is load-bearing, not
+    // decoration. `sourceOf` falls back to the `manual`-prefixed matchId.
+    const { pipeline, logged } = harness();
+    pipeline.recordGame(game({ matchId: 'manual-9', result: 'Win', account: 'Main', role: 'tank' }));
+    expect(logged).toEqual([
+      { matchId: 'manual-9', account: 'Main', configured: true, role: 'tank', source: 'manual' },
+    ]);
   });
 });
 

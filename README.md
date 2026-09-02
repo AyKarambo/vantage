@@ -23,6 +23,18 @@ never shows stale data as "current."
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a top-priority callout, an activity heatmap
   (games/day, click a day to open its matches), and a mental snapshot.
+- **Live** — the match you're in right now, updated as it plays: the scoreboard the game
+  is showing (heroes, K/A/D, damage, healing, mitigation, split into your team and theirs),
+  and **players you've met** — everyone on this roster you've shared a game with before,
+  with your record **`with`** them when they're on your team this match and **`vs`** them
+  when they're not. A green dot appears on the nav item while a match is running; the
+  screen returns to an idle state the moment it ends, or if the game closes.
+  There is deliberately **no score line**: Overwatch's event feed reports no objective
+  score of any kind (its `match_info` updates are map, match id, outcome, and a
+  Stadium-only round outcome), so Vantage shows an **elimination count** derived from the
+  kill feed and says so, rather than inventing a scoreline. The kill feed and its count can
+  be switched off in **Settings → General** — off means it isn't sent to the window at all,
+  not merely hidden; the scoreboard and the with/vs records are unaffected.
 - **Matches** — the recent game log; click any row for a full **match detail page**
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
   support ×2, per-hero tabs, competitive progress, a read-only **Grades card** with
@@ -320,11 +332,18 @@ a network port, and Vantage sends nothing outward through it; see
   value read from the game. **Rank protection** (a loss that would drop below 0% holds the
   division and carries the true negative, matching the game's own display) and the resulting
   **SR movement** are shown **consistently everywhere rank appears** — Overview, match rows,
-  match detail, Log match, and Settings → Accounts. When a season is marked as a **ladder reset**
-  (flagged per-season in Settings → Master data → Seasons), Vantage **offers** a placement run
-  when that (account × role) logs its first competitive match after the reset boundary — lazily
-  per role, never unsolicited. Placement runs can also be **started manually** at any time (new
-  account, role never queued, or a long layoff). For each of the **ten counted matches** the ±%
+  match detail, Log match, and Settings → Accounts. Vantage **offers** a placement run in two
+  situations, both lazily per role and never unsolicited — the offer is raised only *after* a
+  competitive match on that (account × role), whether it was tracked live or logged by hand:
+  when a season is marked as a **ladder reset** (flagged per-season in Settings → Master data →
+  Seasons) and the track's rank predates the boundary; and when Vantage has **no rank for that
+  track at all** — a brand-new account, or a role never queued. Accepting an offer **counts the
+  matches you have already played this season** on that track (up to a full run's worth), so a
+  run started after the games it should cover isn't left reading short. Declining silences that
+  track for the season. Placement runs can also be **started manually** at any time from
+  Settings → Accounts, either from now or **from an earlier match** — and an open run's start can
+  be **moved to a different match** later, for a run that was begun too late. For each of the
+  **ten counted matches** the ±%
   input becomes a **predicted-rank picker** (tier and division only; entering a prediction is
   optional), and rank surfaces show **`Placements N/10`** plus your latest prediction instead of an
   absolute rank. Once the run has counted its ten matches a **confirmation dialog** prefilled from

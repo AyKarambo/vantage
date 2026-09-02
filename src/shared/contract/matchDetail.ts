@@ -80,6 +80,29 @@ export interface PlayerMatchHistory {
   matches: PlayerSharedMatch[];
 }
 
+/**
+ * Your record with and against ONE other player, without the per-match list —
+ * the lean shape the live-match screen asks for a whole roster at once.
+ *
+ * A live board renders "3W–1L with · 0W–2L vs" per player; shipping every shared
+ * match for nine of them just to draw two counters would be most of the payload.
+ * Clicking a name still opens the full {@link PlayerMatchHistory}.
+ */
+export interface PlayerRecord {
+  /** Normalized identity (the part before `#`, lowercased) this was keyed on. */
+  key: string;
+  /** Best display name (prefers the #-tagged battleTag). */
+  name: string;
+  /** Number of shared matches, decided or not. */
+  encounters: number;
+  /** ms epoch of the most recent shared match. */
+  lastSeen: number;
+  /** W/L for matches where they were on YOUR team (team relation known). */
+  sameTeam: { wins: number; losses: number };
+  /** W/L for matches where they were on the ENEMY team (team relation known). */
+  enemyTeam: { wins: number; losses: number };
+}
+
 /** Full match drill-down payload. Optional sections degrade per data tier. */
 export interface MatchDetail {
   matchId: string;

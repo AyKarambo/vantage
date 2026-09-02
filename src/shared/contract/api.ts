@@ -10,7 +10,8 @@ import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
-import type { MatchDetail, PlayerMatchHistory } from './matchDetail';
+import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
+import type { LiveMatchPayload } from './liveMatch';
 import type {
   ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress,
   CleanupDuplicatesResult,
@@ -43,6 +44,12 @@ export interface OwStatsApi {
   matchDetail(matchId: string, filters: DashboardFilters): Promise<MatchDetail | null>;
   /** Every stored match shared with a player (local index); null for an empty/unknown name. */
   playerHistory(name: string): Promise<PlayerMatchHistory | null>;
+  /**
+   * Your record with and against each of `names`, in ONE pass over history —
+   * what the live-match screen asks for a whole roster at once. Names with no
+   * shared match are absent from the result.
+   */
+  playerRecords(names: string[]): Promise<PlayerRecord[]>;
   exportNotion(filters: DashboardFilters): Promise<ExportResult>;
   notionStatus(): Promise<NotionStatus>;
   setNotionToken(token: string): Promise<NotionStatus>;
@@ -281,6 +288,21 @@ export interface OwStatsApi {
   onGameLogged(cb: (p: GameLoggedPayload) => void): () => void;
   /** Subscribe to "the pending (needs-result) set changed" (a match was held or resolved); returns an unsubscribe function. */
   onPendingChanged(cb: () => void): () => void;
+  /**
+   * Subscribe to the in-progress match — roster, elimination tally and kill
+   * feed, pushed while a match runs and cleared when it ends (or when GEP
+   * detaches, since a crash or alt-F4 emits no match-end). Returns an
+   * unsubscribe function.
+   */
+  onLiveMatch(cb: (p: LiveMatchPayload) => void): () => void;
+  /**
+   * Subscribe to "a write changed what the dashboard would return" — a review,
+   * ±SR edit, rank anchor, placement-run change, account relabel or import.
+   * Fires regardless of WHO wrote (a renderer view, or the MCP server writing on
+   * the user's behalf), so an open window can never keep showing a pre-write
+   * rank. Returns an unsubscribe function.
+   */
+  onDataChanged(cb: () => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -301,6 +323,8 @@ export const EVENT_CHANNELS = {
   onSyncProgress: 'push:sync-progress',
   onGameLogged: 'push:game-logged',
   onPendingChanged: 'push:pending-changed',
+  onLiveMatch: 'push:live-match',
+  onDataChanged: 'push:data-changed',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**
@@ -314,6 +338,7 @@ export const IPC_CHANNELS = {
   heroDetail: 'dashboard:hero-detail',
   matchDetail: 'dashboard:match-detail',
   playerHistory: 'dashboard:player-history',
+  playerRecords: 'dashboard:player-records',
   exportNotion: 'dashboard:export-notion',
   notionStatus: 'notion:status',
   setNotionToken: 'notion:set-token',
