@@ -341,6 +341,10 @@ function main(): void {
   // Fires when the pending ("needs result") set changes, so an open Review
   // screen re-fetches (placeholder until the window exists, like pushGameLogged).
   let pushPendingChanged: () => void = () => {};
+  // Fires after any write that moves the dashboard (a review, ±SR, a rank
+  // anchor, a placement run, an import) — including writes the MCP server makes
+  // on the user's behalf, which reach no renderer callback of their own.
+  let pushDataChanged: () => void = () => {};
   const pipeline = createMatchPipeline({
     history,
     aggregator,
@@ -398,6 +402,7 @@ function main(): void {
     resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),
     dismissPending: (matchId) => pipeline.dismissPending(matchId),
     notify: (title, body) => tray.notify(title, body),
+    announceChange: () => pushDataChanged(),
     // Demo season draws only from the active competitive pool (spec AC 24).
     sampleGames: () => generateSampleGames(180, 42, activeMapNames()),
     logger: log,
@@ -602,6 +607,7 @@ function main(): void {
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
   pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
+  pushDataChanged = () => dashboard.push(EVENT_CHANNELS.onDataChanged, undefined);
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock

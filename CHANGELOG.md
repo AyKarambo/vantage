@@ -17,6 +17,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Fixed
+
+- **Your rank updates the moment you record it.** Entering a skill-rating change — or setting
+  your current rank — while grading a match on **Review** left the rank in the top-left corner
+  showing the old number until something unrelated happened to reload it (changing a filter,
+  alt-tabbing back in, or playing another game). It now updates immediately, along with
+  everything else derived from it. Confirming your rank at the end of a placement run does the
+  same, instead of leaving the corner stuck on "Placements 10/10".
+
 ### Changed
 
 - **Targets list and detail page.** The Targets list now shows each target in plain language —

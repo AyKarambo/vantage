@@ -122,6 +122,8 @@ class Store {
     renderEpoch: 0,
   };
   private readonly listeners = new Set<Listener>();
+  /** Monotonic id of the newest in-flight {@link refresh}; older ones can't commit. */
+  private fetchSeq = 0;
 
   get(): AppState {
     return this.state;
@@ -155,12 +157,21 @@ class Store {
    * Fetch a fresh snapshot. Cold start (no data yet) shows the loading state;
    * afterwards the previous snapshot stays rendered while `refreshing` — a
    * failed background refresh keeps it and only marks it `stale`.
+   *
+   * Concurrent refreshes are real and routine — a write's own `refresh()` races
+   * the `onGameLogged` push, and a filter change races either — so every fetch
+   * carries a sequence number and only the NEWEST may commit. Without that, a
+   * slower earlier read can resolve last and repaint the snapshot it superseded,
+   * which looks exactly like the staleness this refetch exists to prevent. The
+   * `seq` idiom mirrors `components/srControls.ts`.
    */
   async refresh(): Promise<void> {
+    const mine = ++this.fetchSeq;
     const cold = !this.state.data;
     this.patch(cold ? { loading: true } : { refreshing: true });
     try {
       let data = await bridge.getDashboard(this.state.filters);
+      if (mine !== this.fetchSeq) return;
       // First payload only: an unlistable persisted season id falls back to the
       // default window now that `options.seasons` is finally known (spec D2).
       // A background refresh never re-runs this — the user could be actively
@@ -174,10 +185,14 @@ class Store {
           // season filter — refetch under the reconciled filters so the
           // rendered data actually matches `state.filters`.
           data = await bridge.getDashboard(this.state.filters);
+          if (mine !== this.fetchSeq) return;
         }
       }
       this.patch({ data, loading: false, refreshing: false, stale: false, error: null, status: statusText(data) });
     } catch (err) {
+      // A superseded fetch's failure is not this snapshot's problem — the newer
+      // one owns the outcome, so don't flag `stale` on its behalf.
+      if (mine !== this.fetchSeq) return;
       if (this.state.data) {
         this.patch({ refreshing: false, stale: true, status: 'Refresh failed — showing last data' });
       } else {
