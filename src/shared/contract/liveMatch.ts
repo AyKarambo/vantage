@@ -28,6 +28,13 @@ export interface LiveKillEntry {
   attackerFriendly?: boolean;
   /** A revive rather than a kill — never counted as an elimination. */
   revive?: boolean;
+  /**
+   * The victim was a hero's DEPLOYABLE (turret, pylon, trap), not a player.
+   * Overwatch reports destroying one as an ordinary kill event, so without this
+   * the elimination tally is inflated in every match. Shown in the feed — it did
+   * happen — but never counted.
+   */
+  deployable?: { hero: string; label: string };
 }
 
 export interface LiveMatchPayload {

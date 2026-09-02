@@ -39,6 +39,8 @@ switcher and session card staying put either side of it.
   is the brighter one. Damage and healing are read off the game's own scoreboard, so they remain
   when the kill feed is off. Rows are ordered the way the game orders them: your team first,
   then tank, both DPS, both supports (the same ordering the stored match detail uses).
+  Destroying a turret or pylon is **not** counted: Overwatch reports it as an ordinary kill, so
+  those are shown as a destroy in the feed and left out of the tally.
   There is deliberately **no score line**: Overwatch's event feed reports no objective
   score of any kind (its `match_info` updates are map, match id, outcome, and a
   Stadium-only round outcome), so Vantage counts **eliminations** from the kill feed and

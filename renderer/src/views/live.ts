@@ -283,7 +283,9 @@ function feedCard(p: LiveMatchPayload): HTMLElement {
             color: k.attackerFriendly === undefined ? 'var(--text-2)'
               : k.attackerFriendly ? 'var(--win-text)' : 'var(--loss-text)',
           },
-        }, k.revive ? '✚' : '▸'),
+        // A distinct glyph per kind, so a destroyed turret never reads as a kill
+        // at a glance any more than it counts as one.
+        }, k.revive ? '✚' : k.deployable ? '⨯' : '▸'),
         h('span', null, killLine(k)),
       )),
     ),
@@ -293,6 +295,12 @@ function feedCard(p: LiveMatchPayload): HTMLElement {
 function killLine(k: LiveMatchPayload['feed'][number]): string {
   const who = (name?: string, hero?: string): string =>
     name && hero ? `${name} (${hero})` : name ?? hero ?? 'someone';
-  if (k.revive) return `${who(k.attacker, k.attackerHero)} revived a teammate`;
+  if (k.revive) return `${who(k.attacker, k.attackerHero)} revived ${who(k.victim, k.victimHero)}`;
+  // A destroyed deployable belongs to its owner, and reads as a possessive
+  // rather than as one player killing another — because nobody died.
+  if (k.deployable) {
+    const owner = k.victim ? `${k.victim}’s ` : '';
+    return `${who(k.attacker, k.attackerHero)} destroyed ${owner}${k.deployable.label}`;
+  }
   return `${who(k.attacker, k.attackerHero)} → ${who(k.victim, k.victimHero)}`;
 }
