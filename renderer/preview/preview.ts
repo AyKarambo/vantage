@@ -1216,14 +1216,21 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
     // Mirrors what the real monitor does: the feed is withheld at the source
     // when the setting is off, not filtered out in the view. Without this the
     // Settings toggle would be untestable in the harness.
-    feed: appSettings.liveKillFeed ? Array.from({ length: Math.min(6, tick + 1) }, (_, i) => ({
+    feed: appSettings.liveKillFeed ? ([
+      // A destroyed deployable and a revive, so the harness shows both of the
+      // non-elimination shapes the real feed produces alongside ordinary kills.
+      { at: Date.now(), attacker: 'Kirito', victim: 'Takigano', attackerHero: 'Pharah',
+        attackerFriendly: true, deployable: { hero: 'Illari', label: 'Healing Pylon' } },
+      { at: Date.now() - 2000, attacker: 'Kiriko', victim: 'Karambo', attackerHero: 'Kiriko',
+        victimHero: 'Reinhardt', attackerFriendly: true, revive: true },
+    ] as LiveMatchPayload['feed']).concat(Array.from({ length: Math.min(4, tick + 1) }, (_, i) => ({
       at: Date.now() - i * 4000,
       attacker: i % 2 ? 'You#1234' : known[0] ?? 'Enemy#1',
       victim: i % 2 ? known[4] ?? 'Enemy#2' : 'You#1234',
       attackerHero: i % 2 ? 'Ana' : 'Genji',
       victimHero: i % 2 ? 'Sigma' : 'Ana',
       attackerFriendly: i % 2 === 1,
-    })) : [],
+    }))) : [],
     teamsKnown: true,
   };
 }

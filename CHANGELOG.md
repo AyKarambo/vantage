@@ -51,6 +51,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **Destroying a turret or pylon no longer counts as an elimination.** Overwatch reports it as an
+  ordinary kill — victim "Takigano", hero "Illari Healing Pylon" — so the live elimination count
+  was inflated in every match. Those now read as *"Kirito destroyed Takigano's Healing Pylon"* in
+  the feed, with their own marker, and don't count. Nobody died.
+- **Revives name both players.** The feed said "someone revived a teammate" because a revive
+  carries the supporter and the revived rather than an attacker and a victim; it now reads
+  *"Kiriko revived Karambo (Reinhardt)"*.
+
 - **The whole navigation fits again.** **Data** and **App** are now one **App** group (Notion
   sync, Logs, Settings, About and FAQ together — the split was never something you navigated
   by), and the rows are a little tighter, so every screen is reachable without scrolling at the

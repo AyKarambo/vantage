@@ -310,3 +310,76 @@ describe('liveTeamTotals', () => {
     });
   });
 });
+
+describe('reduceLiveMatch — deployables are not eliminations', () => {
+  /**
+   * Overwatch reports destroying a turret or pylon as an ordinary kill event —
+   * victim `Takigano`, victim hero `Illari Healing Pylon`. Counting those
+   * inflates the elimination tally in every single match, and nobody died.
+   */
+  const destroy = (victimHero: string, over: Record<string, unknown> = {}) =>
+    event('kill_feed', JSON.stringify({
+      attacker: 'Kirito', victim: 'Takigano', is_attacker_teammate: true,
+      attacker_hero_name: 'PHARAH', victim_hero_name: victimHero, ...over,
+    }));
+
+  it('does not count a destroyed Healing Pylon as an elimination', () => {
+    const s = reduceLiveMatch(live(), destroy('Illari Healing Pylon'), 1001);
+    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
+  });
+
+  it('still records it in the feed, tagged with its owner and what it was', () => {
+    // It did happen — it just isn't a kill. Hiding it would lose real information.
+    const s = reduceLiveMatch(live(), destroy('Illari Healing Pylon'), 1001);
+    expect(s.feed[0]).toMatchObject({
+      attacker: 'Kirito', victim: 'Takigano',
+      deployable: { hero: 'Illari', label: 'Healing Pylon' },
+    });
+  });
+
+  it('still counts a kill on the HERO of the same name', () => {
+    // The discriminator must not swallow Illari herself.
+    const s = reduceLiveMatch(live(), destroy('ILLARI'), 1001);
+    expect(s.kills).toEqual({ yours: 1, theirs: 0 });
+    expect(s.feed[0].deployable).toBeUndefined();
+  });
+
+  it('handles other heroes\' deployables the same way, with no hard-coded list', () => {
+    let s = live();
+    s = reduceLiveMatch(s, destroy('Torbjörn Turret'), 1001);
+    s = reduceLiveMatch(s, destroy('Symmetra Teleporter'), 1002);
+    s = reduceLiveMatch(s, destroy('Wrecking Ball Minefield'), 1003);
+    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
+    expect(s.feed.map((k) => k.deployable?.hero)).toEqual(['Wrecking Ball', 'Symmetra', 'Torbjörn']);
+  });
+
+  it('counts an UNKNOWN hero as a player kill, not a deployable', () => {
+    // A brand-new hero GEP knows before this build does should still have their
+    // deaths counted. The safe failure is a real elimination counted as one.
+    const s = reduceLiveMatch(live(), destroy('SOMENEWHERO'), 1001);
+    expect(s.kills).toEqual({ yours: 1, theirs: 0 });
+    expect(s.feed[0].deployable).toBeUndefined();
+  });
+
+  it('counts an enemy destroying YOUR deployable as neither side\'s elimination', () => {
+    const s = reduceLiveMatch(live(), destroy('Illari Healing Pylon', { is_attacker_teammate: false }), 1001);
+    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
+  });
+});
+
+describe('reduceLiveMatch — revives name the supporter and the revived', () => {
+  it('reads the supporter/revived fields rather than the kill fields', () => {
+    // A revive carries `supporter`/`revived`, not `attacker`/`victim`; reading
+    // the wrong pair rendered "someone revived a teammate".
+    const s = reduceLiveMatch(live(), event('kill_feed', JSON.stringify({
+      attacker: '', victim: '', supporter: 'Kiriko', revived: 'Karambo',
+      supporter_hero_name: 'KIRIKO', revived_hero_name: 'REINHARDT',
+      is_attacker_teammate: true,
+    })), 1001);
+    expect(s.feed[0]).toMatchObject({
+      revive: true, attacker: 'Kiriko', victim: 'Karambo',
+      attackerHero: 'Kiriko', victimHero: 'Reinhardt',
+    });
+    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
+  });
+});

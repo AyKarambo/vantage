@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveHeroName } from '../src/core/resolvers/hero';
+import { deployableOf, resolveHeroName } from '../src/core/resolvers/hero';
 import { ALL_HEROES } from '../src/core/heroes';
 
 describe('resolveHeroName', () => {
@@ -52,5 +52,40 @@ describe('resolveHeroName', () => {
     for (const hero of ALL_HEROES) {
       expect(resolveHeroName(hero.toUpperCase()), `"${hero}" did not round-trip`).toBe(hero);
     }
+  });
+});
+
+describe('deployableOf', () => {
+  it('recognises a hero\'s deployable and names both parts', () => {
+    expect(deployableOf('Illari Healing Pylon')).toEqual({ hero: 'Illari', label: 'Healing Pylon' });
+  });
+
+  it('is case- and punctuation-insensitive, like every other hero lookup', () => {
+    expect(deployableOf('TORBJÖRN TURRET')).toEqual({ hero: 'Torbjörn', label: 'Turret' });
+    expect(deployableOf('torbjorn turret')?.hero).toBe('Torbjörn');
+  });
+
+  it('handles multi-word hero names', () => {
+    expect(deployableOf('Wrecking Ball Minefield')).toEqual({ hero: 'Wrecking Ball', label: 'Minefield' });
+  });
+
+  it('is undefined for the hero themselves', () => {
+    // The whole point: Illari the player must stay a player.
+    expect(deployableOf('Illari')).toBeUndefined();
+    expect(deployableOf('ILLARI')).toBeUndefined();
+    expect(deployableOf('Wrecking Ball')).toBeUndefined();
+  });
+
+  it('is undefined for a name matching no hero at all', () => {
+    // A brand-new hero this build doesn't know is a PLAYER, not a deployable —
+    // counting their deaths is the safer failure than silently dropping them.
+    expect(deployableOf('Somenewhero')).toBeUndefined();
+    expect(deployableOf('418')).toBeUndefined();
+  });
+
+  it('is undefined for nullish and empty input', () => {
+    expect(deployableOf(undefined)).toBeUndefined();
+    expect(deployableOf(null)).toBeUndefined();
+    expect(deployableOf('   ')).toBeUndefined();
   });
 });

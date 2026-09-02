@@ -2,7 +2,7 @@ import { battleTagName, type GepMessage, type RosterPlayer } from './model';
 import { isMatchEndMessage, isMatchStartMessage } from './matchAggregator';
 import { K } from './matchAggregator/keys';
 import { asNumber, asObject, asString, asBool, parseRoster } from './matchAggregator/gepValues';
-import { resolveHeroName } from './resolvers/hero';
+import { deployableOf, resolveHeroName } from './resolvers/hero';
 import { resolveMapId } from './resolvers/mapId';
 
 /**
@@ -41,6 +41,13 @@ export interface LiveKill {
   attackerFriendly?: boolean;
   /** A revive rather than a kill — counted separately, never as an elimination. */
   revive?: boolean;
+  /**
+   * The victim was a hero's DEPLOYABLE (a turret, a pylon, a trap), not a
+   * player. Overwatch reports destroying one as an ordinary kill event, so
+   * without this every match's elimination tally is inflated by them. Kept in
+   * the feed — it did happen — but never counted as an elimination.
+   */
+  deployable?: { hero: string; label: string };
 }
 
 /** How many kill-feed entries to retain for the "recent" strip. */
@@ -194,21 +201,32 @@ function applyKillFeed(state: LiveMatchState, value: unknown, now: number): Live
     for (const k of keys) if (obj[k] !== undefined) return obj[k];
     return undefined;
   };
-  const revivedName = asString(pick('revived'));
-  const revive = Boolean(revivedName && revivedName.trim());
+  const revivedName = asString(pick('revived'))?.trim();
+  const revive = Boolean(revivedName);
   const attackerFriendly = asBool(pick('is_attacker_teammate', 'isAttackerTeammate'));
+  const rawVictimHero = asString(pick('victim_hero_name', 'victimHeroName'));
+  // A revive names the SUPPORTER and the REVIVED, not an attacker and a victim
+  // — reading the kill fields for one produced "someone revived a teammate".
+  const actor = revive ? asString(pick('supporter')) : asString(pick('attacker'));
+  const actorHero = revive
+    ? asString(pick('supporter_hero_name', 'supporterHeroName'))
+    : asString(pick('attacker_hero_name', 'attackerHeroName'));
+  const subject = revive ? revivedName : asString(pick('victim'));
+  const subjectHero = revive ? asString(pick('revived_hero_name', 'revivedHeroName')) : rawVictimHero;
+  const deployable = revive ? undefined : deployableOf(rawVictimHero);
   const entry: LiveKill = {
     at: now,
-    ...(asString(pick('attacker')) ? { attacker: asString(pick('attacker')) } : {}),
-    ...(asString(pick('victim')) ? { victim: asString(pick('victim')) } : {}),
-    ...(resolveHeroName(asString(pick('attacker_hero_name', 'attackerHeroName')))
-      ? { attackerHero: resolveHeroName(asString(pick('attacker_hero_name', 'attackerHeroName'))) } : {}),
-    ...(resolveHeroName(asString(pick('victim_hero_name', 'victimHeroName')))
-      ? { victimHero: resolveHeroName(asString(pick('victim_hero_name', 'victimHeroName'))) } : {}),
+    ...(actor ? { attacker: actor } : {}),
+    ...(subject ? { victim: subject } : {}),
+    ...(resolveHeroName(actorHero) ? { attackerHero: resolveHeroName(actorHero) } : {}),
+    ...(resolveHeroName(subjectHero) ? { victimHero: resolveHeroName(subjectHero) } : {}),
     ...(attackerFriendly !== undefined ? { attackerFriendly } : {}),
     ...(revive ? { revive: true } : {}),
+    ...(deployable ? { deployable } : {}),
   };
-  const kills = revive || attackerFriendly === undefined
+  // Neither a revive nor a destroyed deployable is an elimination: in both
+  // cases no player died.
+  const kills = revive || deployable || attackerFriendly === undefined
     ? state.kills
     : attackerFriendly
       ? { ...state.kills, yours: state.kills.yours + 1 }
