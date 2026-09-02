@@ -51,7 +51,13 @@ never shows stale data as "current."
   progress shows the rank you held **after that specific match**: forward-calculated for
   matches at/after your anchor, and **reconstructed backward** (best-effort) for older
   ones, so a past game no longer just echoes today's rank.
-  A **Customize view** popover lets you set role, heroes, account, SR delta, duration,
+  Each match also stores the **rank you went into it with** — shown on the detail page and
+  available as a **Rank at start** field in the Matches list, so a session reads back as the
+  climb it was rather than as one number repeated. It is a **snapshot**, written when that
+  match's ±% is recorded, so correcting an older game later never rewrites what a newer one
+  says you held at the time; matches with no ±% show nothing, since without one the rank did
+  not move there.
+  A **Customize view** popover lets you set role, heroes, account, SR delta, rank at start, duration,
   final score, performance rating, target grades and leaver/mental flags each to hidden,
   inline (folded into the row's meta line), or its own aligned column — the choice
   persists across sessions. The grades-oriented fields start hidden and render compactly

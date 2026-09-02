@@ -299,6 +299,7 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     heroes: g.heroes,
     durationMinutes: g.durationMinutes,
     ...(g.srDelta !== undefined ? { srDelta: g.srDelta } : {}),
+    ...(g.rankAtStart !== undefined ? { rankAtStart: g.rankAtStart } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),

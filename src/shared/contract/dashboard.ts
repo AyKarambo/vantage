@@ -4,6 +4,7 @@
  * renderer bundle can all share it.
  */
 import type { Role, Result } from '../../core/model';
+import type { RankPosition } from '../../core/rank/types';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
@@ -64,6 +65,12 @@ export interface MatchRow {
   durationMinutes?: number;
   /** Signed SR change for this match, when known. */
   srDelta?: number;
+  /**
+   * The rank held going INTO this match — a stored snapshot, present only when
+   * the match records a ±%. See `GameRecord.rankAtStart` for why it is stored
+   * rather than derived.
+   */
+  rankAtStart?: RankPosition;
   /** Final score as recorded (e.g. '3–1'), when known. */
   finalScore?: string;
   /**

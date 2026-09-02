@@ -29,12 +29,16 @@ afterEach(() => {
 });
 
 describe('prefs.ts — matchColumns defaults and merge (issue #68)', () => {
-  it('MATCH_COLUMNS_DEFAULT keeps the six legacy defaults and adds the three grades fields as hidden', async () => {
+  it('MATCH_COLUMNS_DEFAULT keeps the six legacy defaults and adds every later field as hidden', async () => {
+    // The three grades fields (#68) and `rankAtStart` all default to hidden, so
+    // rows are unchanged until the user opts in — and a stored pref written
+    // before any of them existed merges over this and reads them as hidden too.
     const { MATCH_COLUMNS_DEFAULT } = await import('../renderer/src/prefs');
     expect(MATCH_COLUMNS_DEFAULT).toEqual({
       heroes: 'inline', account: 'inline', srDelta: 'inline',
       role: 'hidden', duration: 'hidden', finalScore: 'hidden',
       performance: 'hidden', measuredGrades: 'hidden', flags: 'hidden',
+      rankAtStart: 'hidden',
     });
   });
 

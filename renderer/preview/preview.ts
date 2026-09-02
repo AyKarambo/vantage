@@ -32,7 +32,7 @@ import {
   type MasterDataOverrides, type FetchedCatalog,
 } from '../../src/core/masterData';
 import { sourceOf } from '../../src/core/source';
-import { currentRank, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
+import { currentRank, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
@@ -543,6 +543,15 @@ const mock: OwStatsApi = {
       ...(input.performance != null ? { performance: input.performance } : {}),
     });
     save(LOGGED_KEY, logged);
+    // Same snapshot the real provider takes on a log that carries its own ±%.
+    if (input.srDelta != null) {
+      const game = logged[logged.length - 1];
+      const state = rankEnteringMatch(dataset(), anchorMap(), game.account, game.role, game.timestamp);
+      if (state) {
+        game.rankAtStart = { tier: state.tier, division: state.division, progressPct: state.progressPct };
+        save(LOGGED_KEY, logged);
+      }
+    }
     if (grades) {
       previewReviews[matchId] = { at: Date.now(), grades, flags: input.mental ?? {} };
       save(REVIEWS_KEY, previewReviews);
@@ -863,6 +872,27 @@ const mock: OwStatsApi = {
     save(REVIEWS_KEY, previewReviews);
     if (input.performance !== undefined) {
       previewEdits[input.matchId] = { ...previewEdits[input.matchId], performance: input.performance };
+      save(EDITS_KEY, previewEdits);
+    }
+    // The ±%, and with it the `rankAtStart` snapshot — mirroring what
+    // `syncRankAtStart` does in the real provider, so the harness can actually
+    // show the feature rather than only ever rendering its empty state.
+    // `null` clears both; `undefined` leaves them alone.
+    if (input.srDelta !== undefined) {
+      const edit = { ...previewEdits[input.matchId] };
+      if (input.srDelta === null) {
+        delete edit.srDelta;
+        delete edit.rankAtStart;
+      } else {
+        edit.srDelta = input.srDelta;
+        const game = dataset().find((g) => g.matchId === input.matchId);
+        // Written once, like the real one: an existing snapshot is left alone.
+        if (game && !game.rankAtStart) {
+          const state = rankEnteringMatch(dataset(), anchorMap(), game.account, game.role, game.timestamp);
+          if (state) edit.rankAtStart = { tier: state.tier, division: state.division, progressPct: state.progressPct };
+        }
+      }
+      previewEdits[input.matchId] = edit;
       save(EDITS_KEY, previewEdits);
     }
   },

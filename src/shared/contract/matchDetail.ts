@@ -4,6 +4,7 @@
  * and the renderer bundle can all share it.
  */
 import type { Role, Result, HeroStat } from '../../core/model';
+import type { RankPosition } from '../../core/rank/types';
 import type { MatchMental, MatchReview, TargetGrade } from '../../core/analytics';
 
 /**
@@ -99,6 +100,12 @@ export interface MatchDetail {
   factsEditedAt?: number;
   /** Logged skill-rating change for this competitive match, in %-points. */
   srDelta?: number;
+  /**
+   * The rank held going INTO this match — a stored snapshot, present only when
+   * the match records a ±%. See `GameRecord.rankAtStart` for why it is stored
+   * rather than derived.
+   */
+  rankAtStart?: RankPosition;
   durationMinutes?: number;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
