@@ -142,6 +142,67 @@ describe('dashboard — awaiting rank', () => {
   });
 });
 
+describe('dashboard — an open run also masks the readiness rank trend', () => {
+  /**
+   * The wiring test for the mask. `rankTrendFor` treats a logged ±% as evidence
+   * of movement, and `stagnant` is the ONLY state that lets the undertraining
+   * nudge fire — so without the suppressed set threaded into readiness, a track
+   * the app is showing as `Placements N/10` (no rank at all) could still be told
+   * to play more on the strength of deltas every rank surface is ignoring.
+   *
+   * Timestamps are relative to NOW because `computeDashboard` evaluates
+   * readiness at `Date.now()`; the T0-based fixtures above are years stale to it.
+   */
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  /** Weekend-shaped low-volume history with net-flat logged SR — the stagnant shape. */
+  const recentGames = (): GameRecord[] => {
+    const out: GameRecord[] = [];
+    let n = 0;
+    for (const daysAgo of [23, 22, 16, 15, 9, 8, 2, 1]) {
+      for (let i = 0; i < 5; i++) {
+        out.push(g(0, {
+          matchId: `r-${n}`,
+          timestamp: now - daysAgo * DAY + i * 60_000,
+          srDelta: n % 2 === 0 ? 20 : -20,
+        }));
+        n++;
+      }
+    }
+    return out;
+  };
+  const recentAnchors = { 'Main::tank': { tier: 'Gold', division: 3, progressPct: 50, setAt: now - 30 * DAY } };
+  const lowFrequency = (d: ReturnType<typeof computeDashboard>): boolean =>
+    d.readiness.signals.some((s) => s.key === 'low-frequency');
+
+  it('fires the rank-gated nudge on logged deltas with no run open', () => {
+    const d = computeDashboard(recentGames(), { days: 'all' }, demo, { rankAnchors: recentAnchors });
+    expect(lowFrequency(d)).toBe(true);
+  });
+
+  it('and goes silent once those same matches sit inside an OPEN placement run', () => {
+    const games = recentGames();
+    const d = computeDashboard(games, { days: 'all' }, demo, {
+      rankAnchors: recentAnchors,
+      placementRuns: [run({ startedAt: games[0].timestamp })],
+    });
+    expect(lowFrequency(d)).toBe(false);
+  });
+
+  it('a COMPLETED run stops masking — its matches are real evidence again', () => {
+    const games = recentGames();
+    const d = computeDashboard(games, { days: 'all' }, demo, {
+      rankAnchors: recentAnchors,
+      placementRuns: [run({
+        startedAt: games[0].timestamp,
+        completedAt: now,
+        completedMatchIds: games.slice(0, 10).map((x) => x.matchId),
+      })],
+    });
+    expect(lowFrequency(d)).toBe(true);
+  });
+});
+
 describe('dashboard — an open run masks the stored ±% in the match rows', () => {
   it('hides srDelta on matches inside an open run, and shows it again once cancelled', () => {
     // The rank engine already ignores these deltas (suppressedMatchIds). Leaving
@@ -167,6 +228,20 @@ describe('dashboard — an open run masks the stored ±% in the match rows', () 
     expect(byId['m-3']).toBeUndefined();
     expect(byId['m-1']).toBe(20);
     expect(byId['m-2']).toBe(20);
+  });
+
+  it('masks the rankAtStart snapshot alongside the ±% it belongs to', () => {
+    // `rankAtStart` only ever exists next to a ±%, so showing the snapshot while
+    // hiding the change it describes would leave the row asserting half a story.
+    const entered = { tier: 'Gold', division: 3, progressPct: 40 };
+    const games = [g(1, { rankAtStart: entered }), g(2, { rankAtStart: entered })];
+    const open = run({ startedAt: T0 });
+
+    const during = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors, placementRuns: [open] });
+    expect(during.matches.map((m) => m.rankAtStart)).toEqual([undefined, undefined]);
+
+    const after = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors });
+    expect(after.matches.map((m) => m.rankAtStart)).toEqual([entered, entered]);
   });
 
   it('a COMPLETED run stops masking — its matches are folded into the anchor by then', () => {

@@ -41,6 +41,13 @@ export interface ReadinessContext {
    * nudge (spec §7b). Absent ⇒ trend `unknown` ⇒ the nudge stays silent.
    */
   rankAnchors?: RankAnchorMap;
+  /**
+   * Match ids whose stored ±% must be ignored — the same read-time mask every
+   * rank surface applies (see {@link ../placements/engine suppressedMatchIds}).
+   * A match inside an OPEN placement run has no settled rank yet, so its delta
+   * is neither movement nor evidence of stagnation. Absent ⇒ nothing masked.
+   */
+  suppressed?: ReadonlySet<string>;
 }
 
 export const EMPTY_CONTEXT: ReadinessContext = { targets: [] };
