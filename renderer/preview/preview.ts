@@ -11,7 +11,7 @@ import type {
   AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
-  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
+  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput, PlacementOffer,
   GradingSettings, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
@@ -21,7 +21,7 @@ import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreferenc
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
-import { mergeAccountList, isConfiguredAccount } from '../../src/core/accountsManage';
+import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { matchDetail } from '../../src/core/matchDetail';
 import { playerMatchHistory } from '../../src/core/playerIndex';
@@ -38,7 +38,7 @@ import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness'
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, type PlacementRun } from '../../src/core/placements';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, shouldOfferNewTrackRun, trackMatches, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -548,7 +548,18 @@ const mock: OwStatsApi = {
       save(REVIEWS_KEY, previewReviews);
     }
     // Mirror the app's onGameLogged push so the auto-switch (F4) is exercisable here.
-    for (const cb of gameLoggedListeners) cb({ matchId, account, configured: isConfiguredAccount(account, previewAccounts) });
+    for (const cb of gameLoggedListeners) {
+      cb({
+        matchId, account,
+        configured: isConfiguredAccount(account, previewAccounts),
+        role: input.role,
+        // The harness only ever logs by hand, and the shell raises the placement
+        // offer for `'gep'` only — so a preview log deliberately does NOT stand
+        // in for a live capture here. Exercise that path with `npm start` and
+        // OW_SYNC_SIMULATE=1 (see CLAUDE.md), not in the browser.
+        source: 'manual',
+      });
+    }
     return { matchId };
   },
   editMatch: async (input: MatchEditInput) => {
@@ -784,15 +795,38 @@ const mock: OwStatsApi = {
     }
     if (!current) return null;
     const anchor = previewAnchors[rankKey(input.account, input.role)];
-    const offered = shouldOfferRun({
+    const existingRun = previewPlacementRuns.get(placementRunKey(input.account, input.role));
+    const declinedSeasonStarts = previewDeclined[rankKey(input.account, input.role)] ?? [];
+    const season = { start: current.start, label: current.label };
+    // Both rules, in the provider's order, backdated the same way — see
+    // `offerFrom` in src/main/dataProvider.ts.
+    const offer = (reason: PlacementOffer['reason']): PlacementOffer => {
+      const claimed = trackMatches(dataset(), input.account, input.role, season.start);
+      const backdates = claimed.length > 0 && claimed.length <= PLACEMENT_RUN_LENGTH;
+      return {
+        account: input.account, role: input.role,
+        seasonStart: season.start, seasonLabel: season.label,
+        reason,
+        backdatedCount: backdates ? claimed.length : 0,
+        ...(backdates ? { fromMatchId: claimed[0].matchId } : {}),
+      };
+    };
+    if (shouldOfferRun({
       seasonStart: current.start,
       isResetSeason: current.isReset === true,
       anchor: anchor ?? null,
-      existingRun: previewPlacementRuns.get(placementRunKey(input.account, input.role)),
-      declinedSeasonStarts: previewDeclined[rankKey(input.account, input.role)] ?? [],
-    });
-    if (!offered) return null;
-    return { account: input.account, role: input.role, seasonStart: current.start, seasonLabel: current.label };
+      existingRun,
+      declinedSeasonStarts,
+    })) return offer('season-reset');
+    if (input.account === UNKNOWN_ACCOUNT) return null;
+    if (shouldOfferNewTrackRun({
+      seasonStart: current.start,
+      anchor: anchor ?? null,
+      existingRun,
+      declinedSeasonStarts,
+      trackMatchCount: trackMatches(dataset(), input.account, input.role, current.start).length,
+    })) return offer('new-track');
+    return null;
   },
   declinePlacementRun: async (input: PlacementDeclineInput) => {
     const key = rankKey(input.account, input.role);

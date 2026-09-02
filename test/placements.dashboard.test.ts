@@ -141,3 +141,38 @@ describe('dashboard — awaiting rank', () => {
     expect(second.primaryRank).toEqual(first.primaryRank);
   });
 });
+
+describe('dashboard — an open run masks the stored ±% in the match rows', () => {
+  it('hides srDelta on matches inside an open run, and shows it again once cancelled', () => {
+    // The rank engine already ignores these deltas (suppressedMatchIds). Leaving
+    // them visible in the Matches list made the app contradict itself: a row
+    // asserting "+20" while every rank surface deliberately ignored it — and it
+    // is what tempted the issue #200 reporter to clear the value by hand.
+    const games = [g(1), g(2), g(3)];
+    const open = run({ startedAt: T0 });
+
+    const during = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors, placementRuns: [open] });
+    expect(during.matches.map((m) => m.srDelta)).toEqual([undefined, undefined, undefined]);
+
+    // Masked at read time, never erased — cancelling the run brings it back.
+    const after = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors });
+    expect(after.matches.map((m) => m.srDelta)).toEqual([20, 20, 20]);
+  });
+
+  it('leaves matches outside the run window alone', () => {
+    const games = [g(1), g(2), g(3)];
+    const open = run({ startedAt: games[2].timestamp }); // only m-3 is in the window
+    const d = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors, placementRuns: [open] });
+    const byId = Object.fromEntries(d.matches.map((m) => [m.matchId, m.srDelta]));
+    expect(byId['m-3']).toBeUndefined();
+    expect(byId['m-1']).toBe(20);
+    expect(byId['m-2']).toBe(20);
+  });
+
+  it('a COMPLETED run stops masking — its matches are folded into the anchor by then', () => {
+    const games = [g(1), g(2), g(3)];
+    const done = run({ startedAt: T0, completedAt: T0 + 10 * MINUTE, completedMatchIds: ['m-1', 'm-2', 'm-3'] });
+    const d = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors, placementRuns: [done] });
+    expect(d.matches.map((m) => m.srDelta)).toEqual([20, 20, 20]);
+  });
+});

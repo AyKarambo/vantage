@@ -34,6 +34,7 @@ import { registerShortcut } from '../shortcuts';
 import { gradedThisSession } from '../reviews';
 import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
+import { maybeOfferPlacements } from '../app/placementOffer';
 import { srEntryMode } from '../../../src/core/placements';
 import { viewHead, type ViewContext } from './view';
 
@@ -393,6 +394,17 @@ function expanded(
           account: m.account, role: m.role,
           onDone: () => { store.rerender(); void store.refresh(); },
         });
+      } else if (isComp) {
+        // No run on this track: the same "should one start?" question the log
+        // form asks after a manual save. This is the belt-and-braces catch-up
+        // for an auto-tracked match whose `onGameLogged` push was dropped
+        // because no window was open (`DashboardWindow.push` is a silent no-op
+        // then) — grading it is the next time the track is in front of us.
+        //
+        // Refetches for the same reason the confirm above does: STARTING a run
+        // replaces the track's rank with `Placements N/10`, so the chip has to
+        // be told rather than left on the pre-offer snapshot.
+        void maybeOfferPlacements(m.account, m.role, () => { store.rerender(); void store.refresh(); });
       }
     });
   };

@@ -19,6 +19,26 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **New accounts are offered a placement run.** Vantage only ever offered one at a season reset,
+  and only for a role it already knew your rank for — so a fresh account, or a role you'd never
+  queued, was never asked. You had to know to press **Start placements** before your first ranked
+  game, and every game you played before that was quietly left out of the run. It now asks after
+  the first ranked match on any track it has no rank for, live-tracked games included (previously
+  only hand-logged ones could raise the question at all).
+- **Accepting a placement offer counts the games you already played.** The run used to start at
+  the moment you answered, so the very match that prompted it fell outside its own run — you'd
+  answer after your fourth placement and the dashboard would say 3/10. The prompt now says how
+  many matches it will count before you accept.
+- **Placements are reachable for a role with no rank.** Settings → Accounts only showed a row for
+  roles it already tracked, and the Start buttons live on that row — so a role you'd never
+  queued had no way in. There's now a **Start placements…** entry for those, and an open run's
+  start can be **moved to a different match** if it was begun too late.
+- **A ±% is no longer shown for matches inside an open run.** Overwatch shows no rank change
+  during placements, and Vantage already ignored the stored value everywhere rank appears — but
+  the Matches list still displayed it. The value is only hidden, not erased: cancel the run and
+  it's back.
+- **Renaming an account keeps its placement runs.** They used to be left behind under the old
+  name, along with any declines.
 - **Your rank updates the moment you record it.** Entering a skill-rating change — or setting
   your current rank — while grading a match on **Review** left the rank in the top-left corner
   showing the old number until something unrelated happened to reload it (changing a filter,

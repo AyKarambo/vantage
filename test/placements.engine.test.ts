@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   countedMatches, trackMatchesFrom, runProgress, isRunComplete, isAwaitingRank, hasDrifted,
-  suppressedMatchIds, shouldOfferRun,
+  suppressedMatchIds, shouldOfferRun, shouldOfferNewTrackRun, trackMatches,
   PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank,
 } from '../src/core/placements';
 import type { GameRecord } from '../src/core/analytics';
@@ -250,12 +250,100 @@ describe('shouldOfferRun', () => {
     expect(shouldOfferRun({ ...baseOpts(), declinedSeasonStarts: [1000] })).toBe(false);
   });
 
-  it('false when the track has no anchor at all', () => {
+  it('false when the track has no anchor — the RESET rule is about moving a rank you already have', () => {
+    // Still correct for this rule, and deliberately kept: a track with no anchor
+    // is not "nothing to place from", it is the other rule's case entirely
+    // (shouldOfferNewTrackRun, below).
     expect(shouldOfferRun({ ...baseOpts(), anchor: null })).toBe(false);
   });
 
   it('false when the anchor was already set inside (or after) the new season', () => {
     expect(shouldOfferRun({ ...baseOpts(), anchor: anchorAt(1000) })).toBe(false); // equal boundary
     expect(shouldOfferRun({ ...baseOpts(), anchor: anchorAt(1500) })).toBe(false); // after
+  });
+});
+
+describe('trackMatches', () => {
+  const track = (over: Partial<GameRecord>) => g({ account: 'Main', role: 'damage', ...over });
+
+  it('includes a match whose timestamp EQUALS `since` — the boundary backdating rides on', () => {
+    // `>=`, not `>`: an offer is backdated to a match's OWN timestamp, so that
+    // match has to count or the run reads one short (issue #200's 3/10).
+    const games = [track({ matchId: 'a', timestamp: 500 })];
+    expect(trackMatches(games, 'Main', 'damage', 500).map((m) => m.matchId)).toEqual(['a']);
+  });
+
+  it('excludes other accounts, other roles, and non-competitive games', () => {
+    const games = [
+      track({ matchId: 'keep', timestamp: 10 }),
+      track({ matchId: 'other-account', timestamp: 10, account: 'Alt' }),
+      track({ matchId: 'other-role', timestamp: 10, role: 'tank' }),
+      track({ matchId: 'quickplay', timestamp: 10, gameType: 'Unranked' }),
+    ];
+    expect(trackMatches(games, 'Main', 'damage').map((m) => m.matchId)).toEqual(['keep']);
+  });
+
+  it('returns ascending order, and the whole track when `since` is omitted', () => {
+    const games = [
+      track({ matchId: 'late', timestamp: 300 }),
+      track({ matchId: 'early', timestamp: 100 }),
+      track({ matchId: 'mid', timestamp: 200 }),
+    ];
+    expect(trackMatches(games, 'Main', 'damage').map((m) => m.matchId)).toEqual(['early', 'mid', 'late']);
+  });
+
+  it('agrees with trackMatchesFrom for the same window', () => {
+    const games = Array.from({ length: 5 }, (_, i) => track({ matchId: `m${i}`, timestamp: 100 + i }));
+    const run = runAt({ startedAt: 102 });
+    expect(trackMatchesFrom(games, run)).toEqual(trackMatches(games, run.account, run.role, run.startedAt));
+  });
+});
+
+describe('shouldOfferNewTrackRun', () => {
+  const baseOpts = () => ({
+    seasonStart: 1000,
+    anchor: null as RankAnchor | null,
+    existingRun: undefined as PlacementRun | undefined,
+    declinedSeasonStarts: [] as number[],
+    trackMatchCount: 1,
+  });
+
+  it('true for a track with no rank and a match played', () => {
+    expect(shouldOfferNewTrackRun(baseOpts())).toBe(true);
+  });
+
+  it('false as soon as the track has ANY anchor', () => {
+    // The whole rule. Deliberately not a timestamp comparison against the
+    // track's first match: both sides of that are independently mutable, so
+    // logging a backdated match, importing older ones, or deleting the oldest
+    // would each silently flip an established track back into "new".
+    expect(shouldOfferNewTrackRun({ ...baseOpts(), anchor: anchorAt(500) })).toBe(false);
+    expect(shouldOfferNewTrackRun({ ...baseOpts(), anchor: anchorAt(5000) })).toBe(false);
+  });
+
+  it('false when a run already exists for the track', () => {
+    expect(shouldOfferNewTrackRun({ ...baseOpts(), existingRun: runAt() })).toBe(false);
+  });
+
+  it('false when this season was already declined', () => {
+    expect(shouldOfferNewTrackRun({ ...baseOpts(), declinedSeasonStarts: [1000] })).toBe(false);
+  });
+
+  it('false before anything has been played on the track', () => {
+    // Only ever asked in response to a real match, never speculatively.
+    expect(shouldOfferNewTrackRun({ ...baseOpts(), trackMatchCount: 0 })).toBe(false);
+  });
+
+  it('still true past ten matches — Overwatch places in exactly ten', () => {
+    // A ceiling of ten would fire only for a player whose eleventh game hadn't
+    // happened yet. The reported user played their placements with Vantage in
+    // the background and would have sailed straight past it.
+    expect(shouldOfferNewTrackRun({ ...baseOpts(), trackMatchCount: 25 })).toBe(true);
+  });
+
+  it('does not require a reset season, unlike the reset rule', () => {
+    // A new account is created mid-season far more often than on a reset — that
+    // is precisely the case issue #200 reports.
+    expect(shouldOfferNewTrackRun(baseOpts())).toBe(true);
   });
 });
