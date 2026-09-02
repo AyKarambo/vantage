@@ -161,7 +161,25 @@ export function accountsCard(): HTMLElement {
     const roles = ROLE_OPTIONS
       .map((o) => o.value)
       .filter((role) => accRanks.some((r) => r.role === role) || accPlacements.some((p) => p.role === role));
-    if (!roles.length) return h('div', { class: 'hint', style: { marginTop: '6px' } }, 'No rank set yet.');
+    // Every role this account does NOT yet track. Until this existed, a track
+    // with neither a rank nor a run had no way into placements at all: it never
+    // got a row, and the Start / backdate buttons live on the row (issue #200).
+    // Deliberately one button rather than four empty rows — an account with one
+    // anchored role is the common case, and padding it with three "no rank yet"
+    // rows would cost more than it explains.
+    const untracked = ROLE_OPTIONS.map((o) => o.value).filter((role) => !roles.includes(role));
+    const startOther = untracked.length
+      ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '5px 0', borderTop: roles.length ? '1px solid var(--border)' : undefined } },
+          h('span', { class: 'hint', style: { fontSize: '11.5px' } },
+            roles.length ? 'Another role to place?' : 'No rank set yet.'),
+          button('Start placements…', {
+            variant: 'ghost',
+            title: 'Pick a role to place — for a role you have never queued, or a brand-new account.',
+            onClick: () => openRoleStart(account, untracked, onDone),
+          }),
+        )
+      : null;
+    if (!roles.length && !startOther) return h('div', { class: 'hint', style: { marginTop: '6px' } }, 'No rank set yet.');
     return h('div', { class: 'stack', style: { gap: '0px', marginTop: '4px' } },
       ...roles.map((role) => roleRow(
         account, role,
@@ -169,6 +187,7 @@ export function accountsCard(): HTMLElement {
         accPlacements.find((p) => p.role === role),
         onDone,
       )),
+      startOther,
     );
   }
 
@@ -238,7 +257,20 @@ export function accountsCard(): HTMLElement {
       onConfirm: (reset) => void bridge.cancelPlacementRun({ account, role }).then(refresh).catch(() => reset()),
     });
 
-    const actions: Node[] = [resetBtn, cancelBtn];
+    // Re-pick where the run starts. "Reset to begin" rewinds to the run's OWN
+    // startedAt, which is no help when that instant is the mistake — a run
+    // started a few matches late, or after the placements had already begun.
+    // Same picker the not-yet-started track offers, so "I forgot to start it"
+    // and "I started it in the wrong place" have the same answer.
+    const restartBtn = button('Change start match…', {
+      variant: 'ghost',
+      title: 'Move this run to start at an earlier match — for when it was started late, or on the wrong game.',
+      // Always `true` here: this branch only renders when a run exists, so the
+      // picker is always REPLACING one rather than opening a first.
+      onClick: () => openBackdateStart(account, role, refresh, true),
+    });
+
+    const actions: Node[] = [restartBtn, resetBtn, cancelBtn];
     if (!run.completed) {
       // Same reveal-rank confirmation the 10th placement match opens from
       // log-match.ts — one dialog for "the game just showed me a rank",
@@ -359,17 +391,23 @@ function openSetRank(account: string, ranks: RankSummary[], onDone: () => void):
  * screen already holds it, and a run can only start from a match recent enough
  * to be in view anyway.
  */
-function openBackdateStart(account: string, role: Role, onDone: () => void): void {
+function openBackdateStart(account: string, role: Role, onDone: () => void, replacesRun = false): void {
   const rows = (store.get().data?.matches ?? [])
     .filter((m) => m.account === account && m.role === role)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 15);
 
   openModal((close) => h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw' } },
-    h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Start placements from — ${roleLabel(role)} on ${account}`),
+    h('div', { style: { fontSize: '15px', fontWeight: '600' } },
+      `${replacesRun ? 'Move placements to start from' : 'Start placements from'} — ${roleLabel(role)} on ${account}`),
     h('div', { class: 'hint' },
       'Pick the match that was your first placement. It and every later competitive match on this track count '
       + 'toward the run; their logged ±% stays in your data but is ignored while the run is open.'),
+    ...(replacesRun
+      ? [h('div', { class: 'hint' },
+          'This replaces where the current run starts — the run itself, and the rank it had before, are kept. '
+          + 'Predicted ranks you already entered stay on their matches.')]
+      : []),
     h('div', { class: 'hint u-dim' },
       'Shows this track’s matches within your current dashboard filter — widen the time range if the one you want isn’t listed.'),
     ...(rows.length
@@ -402,4 +440,45 @@ function numField(value: string, onChange: (v: string) => void): HTMLInputElemen
     class: 'vt-input mono', type: 'number', step: '1', value, placeholder: '0–100, or -19 if protected',
     on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
   }) as HTMLInputElement;
+}
+
+/**
+ * Pick which role to place, for an account whose roles Vantage tracks no rank
+ * or run for. Those tracks get no row of their own (a row is built from a rank
+ * or a run), so without this there was no way to start a run on them at all —
+ * the manual half of issue #200.
+ *
+ * Offers the same two starts the role row does: start now, or pick the match
+ * the placements actually began at.
+ */
+function openRoleStart(account: string, roles: Role[], onDone: () => void): void {
+  const refresh = (): void => { onDone(); void store.refresh(); };
+  openModal((close) => h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '420px', maxWidth: '92vw' } },
+    h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Start placements — ${account}`),
+    h('div', { class: 'hint' },
+      'Which role are you placing? Vantage tracks no rank for these yet, so a run counts the next 10 competitive '
+      + 'matches on that role and takes the rank the game reveals at the end.'),
+    h('div', { class: 'stack', style: { gap: '6px' } },
+      ...roles.map((role) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+        h('span', { class: 'u-dim', style: { fontSize: '11.5px', width: '56px', flex: '0 0 auto' } }, roleLabel(role)),
+        button('Start now', {
+          variant: 'ghost',
+          onClick: () => void bridge.startPlacementRun({ account, role }).then(() => {
+            close();
+            refresh();
+            void maybeConfirmPlacementRank({ account, role, onDone: refresh });
+          }),
+        }),
+        button('From an earlier match…', {
+          variant: 'ghost',
+          // Closed first: the picker is its own modal, and stacking one overlay
+          // inside another is what the rest of this file carefully avoids.
+          onClick: () => { close(); openBackdateStart(account, role, refresh); },
+        }),
+      )),
+    ),
+    h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
+      button('Cancel', { variant: 'ghost', onClick: close }),
+    ),
+  ));
 }

@@ -23,6 +23,8 @@ import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, rankLabel, relTime, roleLabel, signed } from '../format';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
+import { classifyGameType } from '../../../src/core/matchFilter';
+import { maybeOfferPlacements } from './placementOffer';
 import { roleStatus } from '../roleStatus';
 import { overview } from '../views/overview';
 import { live } from '../views/live';
@@ -229,6 +231,12 @@ export class App {
     // A no-outcome match held (or resolved) refetches so the Review "Needs
     // result" section stays in step with the pending store.
     bridge.onPendingChanged(() => void store.refresh());
+    // Any write that moves the dashboard — a review's ±SR, a rank anchor, a
+    // placement run, an import — refetches, so the top-left rank chip can never
+    // sit on a pre-write value. Covers writes this window didn't make itself
+    // (the MCP server acting for the user), which is why it's a push and not a
+    // rule each view has to remember.
+    bridge.onDataChanged(() => void store.refresh());
     // Keep "updated Xm" honest while the app idles.
     setInterval(() => {
       const s = store.get();
@@ -255,6 +263,32 @@ export class App {
     } else {
       void store.refresh();
     }
+    // An auto-tracked match never passes through the log form, which is the only
+    // place that used to ask about placements — so a player who queued into
+    // their first ranked game on a fresh account was never offered a run
+    // (issue #200). Manual logs are excluded: the form asks for itself.
+    //
+    // Deliberately NOT gated on `document.hasFocus()`. This fires the moment a
+    // live match ends, when the player is still in Overwatch and Vantage is
+    // behind it by definition — a focus gate would skip exactly the case this
+    // exists for. The modal simply waits until they alt-tab back.
+    if (payload.source === 'gep') {
+      void maybeOfferPlacements(payload.account, payload.role, () => void store.refresh());
+    }
+  }
+
+  /**
+   * Catch-up for offers whose push never arrived: `DashboardWindow.push`
+   * silently drops when no window is open, so a match tracked while Vantage was
+   * closed (or minimized to tray) reaches no `onGameLogged` handler at all.
+   * Asking again for the most recently played track on focus costs one IPC call
+   * that answers `null` almost every time, and is what keeps the fix from
+   * depending on the player happening to open Review.
+   */
+  private catchUpPlacementOffer(): void {
+    const latest = store.get().data?.matches?.find((m) => classifyGameType(m.gameType) === 'competitive');
+    if (!latest) return;
+    void maybeOfferPlacements(latest.account, latest.role, () => void store.refresh());
   }
 
   private build(): HTMLElement {
@@ -872,7 +906,7 @@ export class App {
       run: () => this.scrollContent('page-down'),
     });
     // Window focus re-pulls newly tracked games (stale-while-revalidate).
-    window.addEventListener('focus', () => void store.refresh());
+    window.addEventListener('focus', () => void store.refresh().then(() => this.catchUpPlacementOffer()));
     // Track a press inside the content host so renderContent can hold back a
     // refresh that would otherwise tear the pressed element out mid-click. All
     // three use the capture phase so a child's stopPropagation can't leave the

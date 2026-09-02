@@ -183,7 +183,7 @@ export function computeDashboard(
     // it is about the target's lifetime, not the current filter).
     focusItems: linkFocusTargets(focusEntries(games), authoredTargets, all),
     heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
-    matches: recentMatches(games, mapModeOf, activeMeasured, margin),
+    matches: recentMatches(games, mapModeOf, activeMeasured, margin, suppressed),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),
     tiltTrend: tiltTrend(games),
@@ -192,7 +192,7 @@ export function computeDashboard(
     tiltBySession: tiltBySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all),
-    reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin)),
+    reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)),
     pendingReviews: pending.length,
     pendingMatches,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
@@ -273,14 +273,14 @@ export function pendingReviewMatches(
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
 const ROW_CAP = 150;
 
-function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number): MatchRow[] {
+function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow[] {
   return [...games]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, ROW_CAP)
-    .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin));
+    .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }
 
-function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number): MatchRow {
+function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow {
   const flags = rowFlags(g);
   const measuredGrades = activeMeasured.length ? measuredGradesForMatch(g, activeMeasured, margin) : undefined;
   // The player's stored self-grades stay with the match (unlike the live-computed
@@ -298,7 +298,13 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     gameType: g.gameType,
     heroes: g.heroes,
     durationMinutes: g.durationMinutes,
-    ...(g.srDelta !== undefined ? { srDelta: g.srDelta } : {}),
+    // A match inside an OPEN placement run has no settled ±% — Overwatch shows
+    // none during placements, and the rank engine already ignores whatever is
+    // stored (see ../placements/engine suppressedMatchIds). Masking it here too
+    // stops the Matches list asserting a number every rank surface is
+    // deliberately not using. Masked at read time, never erased: cancel the run
+    // and the stored value is back.
+    ...(g.srDelta !== undefined && !suppressed?.has(g.matchId) ? { srDelta: g.srDelta } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(flags ? { flags } : {}),

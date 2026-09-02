@@ -295,6 +295,14 @@ export interface OwStatsApi {
    * unsubscribe function.
    */
   onLiveMatch(cb: (p: LiveMatchPayload) => void): () => void;
+  /**
+   * Subscribe to "a write changed what the dashboard would return" — a review,
+   * ±SR edit, rank anchor, placement-run change, account relabel or import.
+   * Fires regardless of WHO wrote (a renderer view, or the MCP server writing on
+   * the user's behalf), so an open window can never keep showing a pre-write
+   * rank. Returns an unsubscribe function.
+   */
+  onDataChanged(cb: () => void): () => void;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -316,6 +324,7 @@ export const EVENT_CHANNELS = {
   onGameLogged: 'push:game-logged',
   onPendingChanged: 'push:pending-changed',
   onLiveMatch: 'push:live-match',
+  onDataChanged: 'push:data-changed',
 } as const satisfies Partial<Record<keyof OwStatsApi, string>>;
 
 /**

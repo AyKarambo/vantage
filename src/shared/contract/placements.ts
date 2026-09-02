@@ -85,10 +85,33 @@ export interface PlacementTrackInput {
 export interface PlacementOffer {
   account: string;
   role: Role;
-  /** Start instant of the reset season that raised this offer. */
+  /** Start instant of the season that raised this offer (also the decline key). */
   seasonStart: number;
   /** That season's label, for the prompt copy (e.g. `2026 Season 4`). */
   seasonLabel: string;
+  /**
+   * Which of the two rules raised this — the prompt asks a different question
+   * for each. `season-reset`: the ladder reset and this track's existing rank
+   * predates it. `new-track`: Vantage has no rank for this track at all (a new
+   * account, or a role never queued).
+   */
+  reason: 'season-reset' | 'new-track';
+  /**
+   * The already-logged match the run must start at, when accepting would claim
+   * matches the player has ALREADY played. Passed straight back through
+   * {@link PlacementStartInput.fromMatchId}.
+   *
+   * Absent when there is nothing to backdate to, in which case the run starts
+   * now. Without this the run stamps `Date.now()` while `countedMatches` filters
+   * `timestamp >= startedAt`, so the very match that raised the offer falls
+   * outside its own run — the reported "3/10 instead of 4/10" (issue #200).
+   */
+  fromMatchId?: string;
+  /**
+   * How many already-played matches accepting would claim (0 when the run would
+   * simply start now). Shown in the prompt so the choice is never a surprise.
+   */
+  backdatedCount: number;
 }
 
 /** Decline the offer for a track and season, so it is not raised again that season. */
