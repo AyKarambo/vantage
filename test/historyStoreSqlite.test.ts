@@ -104,8 +104,9 @@ describe('HistoryStore (SQLite) — core interface', () => {
     const rich: GameRecord = {
       matchId: 'rich', timestamp: 1_700_000_000_000, account: 'Main', role: 'support',
       map: 'Nepal', result: 'Loss', gameType: 'Competitive', source: 'gep', srDelta: -19,
-      durationMinutes: 12.5, heroes: ['Ana', 'Kiriko'],
-      perHero: [{ hero: 'Ana', role: 'support', eliminations: 10, deaths: 3, assists: 20, damage: 5000, healing: 9000, mitigation: 0 }],
+      durationMinutes: 12.5, playedMinutes: 10.8, heroes: ['Ana', 'Kiriko'],
+      rounds: [{ startedAt: 1_699_999_300_000, endedAt: 1_699_999_600_000 }, { startedAt: 1_699_999_601_000, endedAt: 1_699_999_960_000 }],
+      perHero: [{ hero: 'Ana', role: 'support', eliminations: 10, deaths: 3, assists: 20, damage: 5000, healing: 9000, mitigation: 0, minutes: 10.8 }],
       roster: [{ battleTag: 'Me#1', heroName: 'Ana', isLocal: true }],
       finalScore: '2-1',
       mental: { tilt: true, positiveComms: true },

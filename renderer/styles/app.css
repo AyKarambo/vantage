@@ -165,11 +165,16 @@
   right: 8px;
 }
 
-/* Pinned under the session card so it never scrolls out of reach. */
+/* The rail toggle: a fixed 24×24 icon button beside the account chip in the
+   sidebar's top row (Ctrl B does the same), which is what lets the session
+   card be the bottom-most thing in the sidebar. */
 .sidebar-collapse {
-  flex: 0 0 auto;
-  margin-top: 6px;
-  padding: 5px 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   color: var(--dim-2);
@@ -205,8 +210,20 @@
   /* Don't hand a scroll the nav can't use on to the view behind it. */
   overscroll-behavior: contain;
 }
-.sidebar-account {
+/* The rail toggle's own row, above the account chip and the scrolling nav (the
+   session card is pinned below them). Its own row rather than a column beside
+   the chip: the chip's rank line needs the sidebar's full 188px, and a 24px
+   button plus a gap would take a quarter of it. */
+.sidebar-top {
   flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+}
+.sidebar.is-collapsed .sidebar-top {
+  justify-content: center;
+}
+.sidebar-account {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -214,7 +231,6 @@
   border-radius: var(--r-md);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  margin-bottom: 8px;
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease;
 }
@@ -235,13 +251,32 @@
   color: #fff;
   flex: 0 0 auto;
 }
+/* The unpinned ("All accounts") glyph is a symbol, not a letter — a touch
+   larger so it reads as one at avatar size. */
+.avatar.is-all {
+  font-size: 17px;
+}
+/* One line, ellipsised: a long account label would otherwise paint over the
+   chip's caret and out through its border. */
 .account-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12.5px;
   font-weight: 600;
 }
 .account-sub {
   font-size: 10.5px;
   color: var(--muted-2);
+  /* Two lines at most. The short labels (`Dmg · GM 4 · 16%`) fit the 108px
+     column outright; the attributed form ("Karambo · Dmg · GM 4 · 16%") takes
+     two, which is what this line always used to take. Anything longer — a
+     placement run with a predicted rank — clips, and the full text is the
+     element's title. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .nav-group {
   font-size: 10px;

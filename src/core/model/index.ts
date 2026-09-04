@@ -12,7 +12,7 @@ export type { Role, Result } from './enums';
 export type { GepMessage } from './gep';
 
 // Match record trio
-export type { RosterPlayer, MatchRecord, HeroStat } from './match';
+export type { RosterPlayer, MatchRecord, HeroStat, RoundSpan } from './match';
 export { emptyMatch } from './match';
 
 // BattleTag identity

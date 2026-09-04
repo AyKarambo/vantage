@@ -109,7 +109,10 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 /**
  * Confidence now reflects the coverage of the OBJECTIVE inputs first — a
  * stats-rich GEP history reaches high confidence without any mental logging;
- * a heavily account-mixed acute window caps it at medium.
+ * a heavily account-mixed acute window caps it at medium. `maxAccountShare` is
+ * the RAW acute share on purpose — how mixed the window is does not depend on
+ * what each game is worth. `statCoverage` is the weighted comparability ratio,
+ * so an alt whose buckets are thin still lowers confidence, as it should.
  */
 function confidenceFor(state: StateAt): ReadinessConfidence {
   const statCoverage = state.perf.statCoverage;
@@ -252,10 +255,24 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
       severity: 'ok',
     });
   }
+  // Several accounts, one player. Both notes are gated on there being a real main account AND
+  // real alt games in the window, so neither can claim a weighting that was not applied (with
+  // altShare 0 the damper is exactly 1). A materially MIXED window — raw share below the bar —
+  // gets the confidence-lowering note; otherwise a quieter one names the main account.
+  const main = perf.mainAccount;
+  const weighted = loadCurrent && main !== null && perf.altShare > 0;
   if (loadCurrent && perf.maxAccountShare < T.accountMixBar) {
     out.push({
       key: 'mixed-accounts',
-      label: 'recent games span multiple accounts — the read is less precise',
+      label: weighted
+        ? `recent games span multiple accounts — ${main} carries the read, the rest count for less`
+        : 'recent games span multiple accounts — the read is less precise',
+      severity: 'ok',
+    });
+  } else if (weighted) {
+    out.push({
+      key: 'alt-weighted',
+      label: `${main} is your main account — games on your other accounts move this read less`,
       severity: 'ok',
     });
   }

@@ -88,18 +88,21 @@ const kdaOf = (s: { eliminations: number; assists: number; deaths: number }): nu
 
 /**
  * Effective on-hero minutes for the per-10 divisor: the recorded minutes when
- * present and positive, otherwise an equal split of the match duration across the
- * hero lines. Null when the match duration is unknown or rounds to 0 — in which
- * case the counting stats show a dash (KDA still renders).
+ * present and positive, otherwise an equal split of `playedMinutes` — the
+ * match's PLAYED time (see {@link ./playedTime}), never the wall clock — across
+ * the hero lines. Null when the played time is unknown or is 0 — in which case
+ * the counting stats show a dash (KDA still renders). Callers pass hero rows
+ * whose `minutes` are already on the same played-time basis (the aggregator
+ * writes them that way; `matchDetail` normalizes older records).
  */
 export function effectiveHeroMinutes(
   hero: HeroStat,
   heroCount: number,
-  matchMinutes: number | undefined,
+  playedMinutes: number | undefined,
 ): number | null {
-  if (matchMinutes == null || matchMinutes <= 0 || heroCount <= 0) return null;
+  if (playedMinutes == null || playedMinutes <= 0 || heroCount <= 0) return null;
   if (hero.minutes != null && hero.minutes > 0) return hero.minutes;
-  return matchMinutes / heroCount;
+  return playedMinutes / heroCount;
 }
 
 function per10Of(hero: HeroStat, minutes: number | null): PerTen | null {
@@ -117,13 +120,14 @@ function per10Of(hero: HeroStat, minutes: number | null): PerTen | null {
 
 /**
  * Merge same-hero segments, then compute each hero's presentation line: raw
- * totals, KDA ratio, effective on-hero minutes and per-10 rates. The renderer
- * only formats the numbers this returns.
+ * totals, KDA ratio, effective on-hero minutes and per-10 rates. `playedMinutes`
+ * is the match's played time (the per-10 divisor), which the equal-split
+ * fallback divides. The renderer only formats the numbers this returns.
  */
-export function heroLines(perHero: HeroStat[], matchMinutes: number | undefined): HeroLine[] {
+export function heroLines(perHero: HeroStat[], playedMinutes: number | undefined): HeroLine[] {
   const merged = mergeHeroStats(perHero);
   return merged.map((s) => {
-    const minutes = effectiveHeroMinutes(s, merged.length, matchMinutes);
+    const minutes = effectiveHeroMinutes(s, merged.length, playedMinutes);
     return {
       hero: s.hero,
       role: s.role,
@@ -144,12 +148,12 @@ export function heroLines(perHero: HeroStat[], matchMinutes: number | undefined)
 
 /**
  * The whole-match aggregate line for the "All" tab: every hero's counting stats
- * summed, KDA over the combined totals, and per-10 over the full match duration
- * (all heroes together span the match). Its `hero` label is `'All'`. Returns
- * `null` when there are no hero lines. Reuses {@link heroLines} so the per-10
- * math and dash behaviour stay identical to the per-hero tabs.
+ * summed, KDA over the combined totals, and per-10 over the match's full
+ * played time (all heroes together span it). Its `hero` label is `'All'`.
+ * Returns `null` when there are no hero lines. Reuses {@link heroLines} so the
+ * per-10 math and dash behaviour stay identical to the per-hero tabs.
  */
-export function combinedHeroLine(perHero: HeroStat[], matchMinutes: number | undefined): HeroLine | null {
+export function combinedHeroLine(perHero: HeroStat[], playedMinutes: number | undefined): HeroLine | null {
   if (!perHero.length) return null;
   const total = mergeHeroStats(perHero).reduce<HeroStat>(
     (a, s) => {
@@ -163,6 +167,6 @@ export function combinedHeroLine(perHero: HeroStat[], matchMinutes: number | und
     },
     { hero: 'All', eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 },
   );
-  // One synthetic hero spanning the whole match → per-10 divides by matchMinutes.
-  return heroLines([total], matchMinutes)[0];
+  // One synthetic hero spanning the whole match → per-10 divides by playedMinutes.
+  return heroLines([total], playedMinutes)[0];
 }

@@ -125,7 +125,7 @@ Vantage turns your Overwatch match history into a coaching dashboard that tells 
 - **Priority maps** — every map ranked by *net losses × how often you play it*, so you
   fix the maps that are quietly costing you the most SR first.
 - **Exact hero stats** — a per-hero table (K/D/A, damage, healing, mitigation per 10
-  min, winrate) with a click-through drill-down per hero.
+  min played, winrate) with a click-through drill-down per hero.
 - **Winrate × volume** — the flagship scatter that separates "bad and rare" from
   "bad and frequent" at a glance.
 - **Mental tracking** — log tilt, comms and toxicity, and see the real tax they put

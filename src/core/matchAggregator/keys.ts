@@ -21,6 +21,9 @@ export const K = {
   matchId: 'match_id',
   outcome: 'match_outcome',
   roundOutcome: 'round_outcome',
+  /** `match_info.round_start` / `round_end` events — delimit the GEP rounds the played time is measured from. */
+  roundStart: 'round_start',
+  roundEnd: 'round_end',
   eliminations: 'eliminations',
   deaths: 'deaths',
   assists: 'assists',

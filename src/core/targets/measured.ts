@@ -7,11 +7,15 @@
  * equals the one exported.
  *
  * Pure and Electron-free. Per-10 math mirrors {@link ../analytics/heroStats}: rate
- * stats are `total × 10 / durationMinutes`, rounded to integers for damage/healing/
- * mitigation and one decimal for the count rates; KDA is the ratio, not a rate.
+ * stats are `total × 10 / playedMinutes` — the match's PLAYED time (hero select,
+ * setup locks and the scoreboard excluded; measured from the GEP rounds, or
+ * estimated for older captures — see {@link ../playedTime}) — rounded to
+ * integers for damage/healing/mitigation and one decimal for the count rates;
+ * KDA is the ratio, not a rate.
  */
 import type { GameRecord, HeroStat, TargetGrade } from '../analytics';
-import { effectiveHeroMinutes, mergeHeroStats } from '../perHero';
+import { mergeHeroStats } from '../perHero';
+import { heroCredits, heroPlayedMinutes, playedTimeOf } from '../playedTime';
 import { heroMatchKey } from '../heroes';
 import { aggregateImprovementGrade } from './aggregateGrade';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
@@ -108,31 +112,27 @@ export function matchStatValue(game: GameRecord, stat: string, scope?: MeasuredS
 
   const roleScope = scope?.roleScope;
   const heroScope = scope?.heroScope;
+  const played = playedTimeOf(game);
 
-  // Unscoped: sum every row over the whole match duration (legacy behavior).
+  // Unscoped: sum every row over the whole match's played time.
   if (roleScope == null && (heroScope == null || heroScope.length === 0)) {
-    return statOver(rows, stat, game.durationMinutes ?? 0);
+    return statOver(rows, stat, played?.minutes ?? 0);
   }
 
   // A role-scoped target can't apply to an open-queue match.
   if (roleScope != null && game.role === 'openQ') return null;
 
   const heroKeys = heroScope && heroScope.length > 0 ? new Set(heroScope.map(heroMatchKey)) : null;
-  const merged = mergeHeroStats(rows);
-  const scoped = merged.filter(
-    (r) =>
-      (roleScope == null || r.role === roleScope) &&
-      (heroKeys == null || heroKeys.has(heroMatchKey(r.hero))),
+  const scoped = heroCredits(game).filter(
+    ({ stats }) =>
+      (roleScope == null || stats.role === roleScope) &&
+      (heroKeys == null || heroKeys.has(heroMatchKey(stats.hero))),
   );
   if (scoped.length === 0) return null;
 
-  // Effective minutes are the real (or equal-split) minutes of the in-scope
-  // heroes; the equal split still divides by the full merged roster size.
-  const minutes = scoped.reduce(
-    (m, r) => m + (effectiveHeroMinutes(r, merged.length, game.durationMinutes) ?? 0),
-    0,
-  );
-  return statOver(scoped, stat, minutes);
+  // Effective minutes are the in-scope heroes' shares of the match's played time.
+  const minutes = scoped.reduce((m, c) => m + (heroPlayedMinutes(c.share, played) ?? 0), 0);
+  return statOver(scoped.map((c) => c.stats), stat, minutes);
 }
 
 /**

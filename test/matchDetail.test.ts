@@ -4,6 +4,7 @@ import { generateSampleGames } from '../src/core/sampleData';
 import { rankKey, type RankAnchorMap } from '../src/core/rank';
 import type { GameRecord } from '../src/core/analytics';
 import type { AuthoredTarget } from '../src/core/targets';
+import { setupMinutes } from '../src/core/playedTime';
 
 /** The bare minimum a legacy history.json record can contain. */
 const minimal = (p: Partial<GameRecord> = {}): GameRecord => ({
@@ -27,6 +28,7 @@ const full = (): GameRecord => ({
   result: 'Loss',
   gameType: 'Competitive',
   durationMinutes: 14,
+  playedMinutes: 14, // measured → the per-10 divisor; the header Duration stays the wall clock
   heroes: ['Tracer', 'Genji'],
   perHero: [
     { hero: 'Tracer', role: 'damage', eliminations: 12, deaths: 4, assists: 3, damage: 6000, healing: 0, mitigation: 0 },
@@ -63,6 +65,8 @@ describe('matchDetail degradation contract', () => {
     });
     // Optional sections are absent/empty, not faked.
     expect(d!.durationMinutes).toBeUndefined();
+    expect(d!.playedMinutes).toBeUndefined();
+    expect(d!.playedSource).toBeUndefined();
     expect(d!.finalScore).toBeUndefined();
     expect(d!.perHero).toEqual([]);
     expect(d!.scoreboard).toBeUndefined();
@@ -235,7 +239,7 @@ describe('matchDetail degradation contract', () => {
 
   it('merges duplicate same-hero perHero segments at read time (panel + local scoreboard)', () => {
     const dup = minimal({
-      matchId: 'dup-1', durationMinutes: 10, heroes: ['Tracer', 'Genji'],
+      matchId: 'dup-1', durationMinutes: 10, playedMinutes: 10, heroes: ['Tracer', 'Genji'],
       perHero: [
         { hero: 'Tracer', role: 'damage', eliminations: 5, deaths: 1, assists: 2, damage: 2000, healing: 0, mitigation: 0, minutes: 3 },
         { hero: 'Genji', role: 'damage', eliminations: 4, deaths: 2, assists: 1, damage: 1500, healing: 0, mitigation: 0, minutes: 2 },
@@ -247,6 +251,45 @@ describe('matchDetail degradation contract', () => {
     expect(d.perHero.find((s) => s.hero === 'Tracer')).toMatchObject({ eliminations: 12, damage: 5000, minutes: 8 });
     // No roster → local-only scoreboard fallback, which merges too.
     expect(d.scoreboard).toHaveLength(2);
+  });
+
+  it('carries the played time (the per-10 divisor) next to the wall-clock duration', () => {
+    const d = matchDetail([full()], 'full-1')!;
+    expect(d.durationMinutes).toBe(14);
+    expect(d.playedMinutes).toBe(14);
+    expect(d.playedSource).toBe('measured');
+  });
+
+  it('ESTIMATE PATH: a legacy 10-minute Ilios capture without playedMinutes is flagged and its hero minutes rescaled', () => {
+    // An older GEP capture (no rounds): the divisor is the wall clock minus the
+    // hero select (28 s), the scoreboard (40 s) and the Control setup locks for
+    // a typical best-of-three (2.5 rounds → 1.5 × 15 s). Swap-timed hero minutes
+    // were measured against the wall clock, so they shrink by the same factor.
+    const legacy = minimal({
+      matchId: 'legacy-ilios', map: 'Ilios', durationMinutes: 10, heroes: ['Tracer', 'Genji'],
+      perHero: [
+        { hero: 'Tracer', role: 'damage', eliminations: 12, deaths: 2, assists: 5, damage: 5000, healing: 0, mitigation: 0, minutes: 8 },
+        { hero: 'Genji', role: 'damage', eliminations: 4, deaths: 2, assists: 1, damage: 1500, healing: 0, mitigation: 0, minutes: 2 },
+      ],
+    });
+    const d = matchDetail([legacy], 'legacy-ilios')!;
+    const played = 10 - 68 / 60 - setupMinutes('Control', 2.5);
+    expect(d.durationMinutes).toBe(10); // the header's Duration is untouched
+    expect(d.playedSource).toBe('estimated');
+    expect(d.playedMinutes).toBeCloseTo(played, 9);
+    expect(d.perHero.find((s) => s.hero === 'Tracer')!.minutes).toBeCloseTo(8 * (played / 10), 9);
+    expect(d.perHero.find((s) => s.hero === 'Genji')!.minutes).toBeCloseTo(2 * (played / 10), 9);
+    // The measured-target grade uses the same divisor: 16 elims over the estimated played time.
+    const t: AuthoredTarget = { id: 't', name: 't', mode: 'measured', rule: 'Eliminations ≥ 10', createdAt: 0, isActive: true };
+    const graded = matchDetail([legacy], 'legacy-ilios', [legacy], {}, undefined, [t])!;
+    expect((graded.measuredGrades!.t as { value: number }).value).toBe(Math.round(16 * 10 / played * 10) / 10);
+  });
+
+  it('a hand-logged match takes its typed duration as played time ("reported")', () => {
+    const manual = minimal({ matchId: 'manual-7', source: 'manual', durationMinutes: 12, heroes: ['Ana'] });
+    const d = matchDetail([manual], 'manual-7')!;
+    expect(d.playedMinutes).toBe(12);
+    expect(d.playedSource).toBe('reported');
   });
 
   it('falls back to local-only scoreboard rows from perHero when no roster exists', () => {

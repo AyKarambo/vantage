@@ -8,20 +8,33 @@
  * Pure and Electron-free — the GEP edge in `src/main` owns the I/O and feeds
  * normalized messages in (guardrail #1: GEP is the only live data source).
  */
-import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer } from '../model';
+import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer, type RoundSpan } from '../model';
 import { isPlayedSegment, mergeHeroStats } from '../perHero';
 import { K } from './keys';
 import { asNumber, asString, parseRoster } from './gepValues';
 import { resolveMapId } from '../resolvers/mapId';
+import { mapMode as staticMapMode } from '../maps';
+import { overlapMinutes, playWindowsOf, windowMinutes, type MapModeResolver } from '../playedTime';
+
+export interface MatchAggregatorOptions {
+  /**
+   * Map name → mode, for the per-mode setup lock removed from each round's
+   * play window. Defaults to the built-in table; callers holding the user's
+   * map catalog pass its resolver so edited/added maps resolve too.
+   */
+  mapModeOf?: MapModeResolver;
+}
 
 /** The stateful accumulator: feed messages to `handle`, receive a finished record on match end. */
 export class MatchAggregator {
   private now: () => number;
+  private mapModeOf: MapModeResolver;
   private synthetic = 0;
   private current: MutableMatch = newMutable();
 
-  constructor(now: () => number = () => Date.now()) {
+  constructor(now: () => number = () => Date.now(), options: MatchAggregatorOptions = {}) {
     this.now = now;
+    this.mapModeOf = options.mapModeOf ?? staticMapMode;
   }
 
   reset(): void {
@@ -33,6 +46,23 @@ export class MatchAggregator {
     if (isMatchStartMessage(msg)) {
       this.current = newMutable();
       this.current.record.startedAt = this.now();
+      return null;
+    }
+
+    // Round boundaries. Real captures: `round_start` fires ~28 s after
+    // `match_start` (after hero select) and `round_end` → next `round_start` is
+    // ~1 s, so the between-round setup lives INSIDE the next round; the mode's
+    // setup lock is removed from each round by `playWindowsOf` downstream.
+    if (isRoundStartMessage(msg)) {
+      const now = this.now();
+      const open = openRound(this.current.rounds);
+      if (open) open.endedAt = now; // a missed round_end: close it as the next round begins
+      this.current.rounds.push({ startedAt: now });
+      return null;
+    }
+    if (isRoundEndMessage(msg)) {
+      const open = openRound(this.current.rounds);
+      if (open) open.endedAt = this.now(); // no open round → stray event, ignored
       return null;
     }
 
@@ -73,7 +103,15 @@ export class MatchAggregator {
       if (key === K.map) rec.mapName = resolveMapId(asString(msg.value)) ?? rec.mapName;
       else if (key === K.pseudoMatchId || key === K.matchId)
         rec.matchId = asString(msg.value) ?? rec.matchId;
-      else if (key === K.outcome) rec.outcome = asString(msg.value) ?? rec.outcome;
+      else if (key === K.outcome) {
+        const outcome = asString(msg.value);
+        if (outcome !== undefined) {
+          rec.outcome = outcome;
+          // Captures show the outcome 2–5 ms BEFORE the final round_end — the
+          // best stand-in for a round_end the feed never delivered.
+          this.current.outcomeAt = this.now();
+        }
+      }
       else if (key === K.score) rec.finalScore = asString(msg.value) ?? rec.finalScore;
       else if (key === K.roundOutcome) this.tallyRound(asString(msg.value));
       else if (key === K.eliminations) this.current.matchElims = asNumber(msg.value);
@@ -171,9 +209,40 @@ export class MatchAggregator {
   private closeCurrentHeroSegment(endMs: number): void {
     const c = this.current;
     if (!c.currentHero) return;
-    const minutes = Math.max(0, (endMs - (c.currentHeroStartMs ?? endMs)) / 60000);
-    const closed = closeHero(c.currentHero, c.currentRole, c.heroStart, c.lastCum, minutes);
-    if (isPlayedSegment(closed)) c.perHero.push(closed);
+    // Only the raw span and the stat delta are banked here. Minutes are timed
+    // once, in finalize(), against the COMPLETE round list — a segment that
+    // closed before the first round_start would otherwise be timed on the wall
+    // clock while its siblings were clipped to the play windows, leaving one
+    // record with hero minutes on two different bases.
+    c.segments.push({
+      hero: c.currentHero,
+      role: c.currentRole,
+      startMs: c.currentHeroStartMs ?? endMs,
+      endMs,
+      start: c.heroStart,
+      end: { ...c.lastCum },
+    });
+  }
+
+  /**
+   * Time every banked segment and keep the ones {@link isPlayedSegment} confirms
+   * as real play. With round events a hero's minutes are PLAYED minutes — the
+   * segment clipped to the rounds' play windows, so hero select, the setup locks
+   * and the post-match scoreboard fall outside them. Without them (older feeds)
+   * the wall-clock span is kept exactly as before. Note the sped-up dev
+   * simulation DOES emit rounds, but they are shorter than a real setup lock, so
+   * its segments clip to zero — `OW_SYNC_SIM_SPEED=1` to exercise this.
+   */
+  private closeSegments(rounds: RoundSpan[]): HeroStat[] {
+    const windows = rounds.length ? playWindowsOf(rounds, this.mapModeOf(this.current.record.mapName ?? '')) : [];
+    return this.current.segments
+      .map((s) => {
+        const minutes = rounds.length
+          ? overlapMinutes(s.startMs, s.endMs, windows)
+          : Math.max(0, (s.endMs - s.startMs) / 60000);
+        return closeHero(s.hero, s.role, s.start, s.end, minutes);
+      })
+      .filter(isPlayedSegment);
   }
 
   private tallyRound(outcome: string | undefined): void {
@@ -186,9 +255,11 @@ export class MatchAggregator {
 
   private finalize(): MatchRecord | null {
     const rec = this.current.record;
-    rec.endedAt = this.now();
-    if (rec.startedAt) {
-      rec.durationMinutes = Math.max(0, Math.round((rec.endedAt - rec.startedAt) / 60000));
+    const endedAt = this.now();
+    rec.endedAt = endedAt;
+    if (rec.startedAt != null) {
+      // Wall clock, rounded — the displayed match length, NOT the per-10 divisor.
+      rec.durationMinutes = Math.max(0, Math.round((endedAt - rec.startedAt) / 60000));
     }
 
     // Prefer roster-derived local stats; fall back to match-level counters.
@@ -204,18 +275,34 @@ export class MatchAggregator {
       rec.finalScore = `${this.current.roundWins}–${this.current.roundLosses}`;
     }
 
-    this.closeCurrentHeroSegment(rec.endedAt ?? this.now());
-    // Collapse same-hero swap segments (Tracer → Genji → Tracer) into one line each,
-    // then derive heroes[]/heroRole from what survived, in the first-seen order
-    // mergeHeroStats preserves — heroes[]/perHero[]/heroRole can never drift apart
-    // (spawn-only swaps were already dropped above, so a match with none left keeps
-    // its default empty heroes[] and an unset heroRole).
-    if (this.current.perHero.length) {
-      rec.perHero = mergeHeroStats(this.current.perHero);
+    // Rounds → played time. A round still open at match end (its round_end was
+    // never delivered) closes at the outcome, which arrives a few ms before the
+    // final round_end in real captures — else at match end. Closed BEFORE the
+    // final hero segment so its minutes are clipped against every round.
+    let rounds: RoundSpan[] = [];
+    if (this.current.rounds.length) {
+      const open = openRound(this.current.rounds);
+      if (open) open.endedAt = this.current.outcomeAt ?? endedAt;
+      rounds = this.current.rounds.map((r) => ({ startedAt: r.startedAt, endedAt: r.endedAt ?? endedAt }));
+      rec.rounds = rounds;
+      const played = windowMinutes(playWindowsOf(rounds, this.mapModeOf(rec.mapName ?? '')));
+      if (played > 0) rec.playedMinutes = played;
+    }
+
+    this.closeCurrentHeroSegment(endedAt);
+    // Time every segment against the finished round list, then collapse same-hero
+    // swaps (Tracer → Genji → Tracer) into one line each and derive
+    // heroes[]/heroRole from what survived, in the first-seen order mergeHeroStats
+    // preserves — heroes[]/perHero[]/heroRole can never drift apart (spawn-only
+    // swaps are dropped here, so a match with none left keeps its default empty
+    // heroes[] and an unset heroRole).
+    const played = this.closeSegments(rounds);
+    if (played.length) {
+      rec.perHero = mergeHeroStats(played);
       rec.heroes = rec.perHero.map((h) => h.hero);
       // Last QUALIFYING segment, not the merged/first-seen order — heroRole means
       // "the hero the player actually ended the match on".
-      rec.heroRole = this.current.perHero[this.current.perHero.length - 1].role;
+      rec.heroRole = played[played.length - 1].role;
     }
 
     if (this.current.rosterAll.size) {
@@ -245,6 +332,16 @@ export function isMatchStartMessage(msg: GepMessage): boolean {
   return msg.kind === 'event' && nameMatches(msg, 'match_start');
 }
 
+/** True when the message marks a GEP round beginning (`match_info.round_start`). */
+export function isRoundStartMessage(msg: GepMessage): boolean {
+  return msg.kind === 'event' && nameMatches(msg, K.roundStart);
+}
+
+/** True when the message marks a GEP round ending (`match_info.round_end`). */
+export function isRoundEndMessage(msg: GepMessage): boolean {
+  return msg.kind === 'event' && nameMatches(msg, K.roundEnd);
+}
+
 /** True when the message marks a match ending (event or game_state fallback). */
 export function isMatchEndMessage(msg: GepMessage): boolean {
   if (msg.kind === 'event' && nameMatches(msg, 'match_end')) return true;
@@ -271,8 +368,13 @@ interface MutableMatch {
   matchAssists?: number;
   roundWins: number;
   roundLosses: number;
+  /** Every GEP round observed (`round_start` → `round_end`), in order; the last may still be open. */
+  rounds: Array<{ startedAt: number; endedAt?: number }>;
+  /** When `match_outcome` arrived — closes a round whose `round_end` never came. */
+  outcomeAt?: number;
   // per-hero tracking
-  perHero: HeroStat[];
+  /** Raw hero spans, banked as they close and timed once in finalize() against the finished round list. */
+  segments: Array<{ hero: string; role?: string; startMs: number; endMs: number; start: Snap; end: Snap }>;
   currentHero?: string;
   currentRole?: string;
   /** Wall-clock ms the current hero segment began (match start for the first hero). */
@@ -295,7 +397,13 @@ function zeroSnap(): Snap {
 }
 
 function newMutable(): MutableMatch {
-  return { record: emptyMatch(''), rosterLocal: {}, rosterAll: new Map(), roundWins: 0, roundLosses: 0, perHero: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+  return { record: emptyMatch(''), rosterLocal: {}, rosterAll: new Map(), roundWins: 0, roundLosses: 0, rounds: [], segments: [], heroStart: zeroSnap(), lastCum: zeroSnap() };
+}
+
+/** The round still running (no `endedAt` yet), if any — always the last one pushed. */
+function openRound(rounds: MutableMatch['rounds']): MutableMatch['rounds'][number] | undefined {
+  const last = rounds[rounds.length - 1];
+  return last && last.endedAt === undefined ? last : undefined;
 }
 
 /**

@@ -104,7 +104,7 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
   return [
     header(d, ctx),
     scoreboardSection(d, ctx),
-    perHeroSection(d.perHero, d.durationMinutes),
+    perHeroSection(d.perHero, d.playedMinutes, d.playedSource),
     competitiveSection(d.competitive, d.srDelta, d.rankAtStart),
     gradesSection(d, ctx),
     playerHistorySection(d, ctx),
@@ -143,7 +143,10 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
     ),
     h('div', { class: 'detail-head-side' },
       d.finalScore ? statBox(h('span', { class: 'mono' }, d.finalScore), 'Round score') : null,
+      // Duration is the wall clock (match start → end); Played is the time the
+      // player could actually fight — the divisor behind every per-10 stat.
       d.durationMinutes != null ? statBox(`${d.durationMinutes}m`, 'Duration') : null,
+      d.playedMinutes != null ? statBox(`${d.playedMinutes.toFixed(1)}m`, d.playedSource === 'estimated' ? 'Played (est.)' : 'Played') : null,
       d.heroes.length
         ? h('div', { class: 'detail-heroes' },
             h('div', { class: 'stat-box-label' }, 'Heroes played'),
@@ -193,15 +196,21 @@ function scoreboardSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null
 
 // --- per-hero tabs ------------------------------------------------------------
 
-function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined): HTMLElement | null {
+function perHeroSection(
+  perHero: HeroStat[],
+  playedMinutes: number | undefined,
+  playedSource: MatchDetail['playedSource'],
+): HTMLElement | null {
   if (!perHero.length) return null;
-  // Counting stats are per-10-minutes on that hero (real swap-timed minutes when
-  // available, else an equal split of the match); KDA stays a raw ratio. A match
-  // with no usable duration dashes the per-10 stats but still shows KDA.
-  const lines = heroLines(perHero, durationMinutes);
+  // Counting stats are per-10 minutes PLAYED on that hero (real swap-timed
+  // minutes when available, else an equal split of the match's played time);
+  // KDA stays a raw ratio. A match with no usable played time dashes the per-10
+  // stats but still shows KDA. The rows arrive with their minutes already on the
+  // played-time basis, so this stays presentation-only.
+  const lines = heroLines(perHero, playedMinutes);
   // With more than one hero, lead with an "All" tab combining every hero's stats
-  // (per-10 over the whole match); a single-hero match already IS its own total.
-  const all = combinedHeroLine(perHero, durationMinutes);
+  // (per-10 over the whole played time); a single-hero match already IS its own total.
+  const all = combinedHeroLine(perHero, playedMinutes);
   const tabLines = all && lines.length > 1 ? [all, ...lines] : lines;
   const body = h('div', { class: 'stat-grid stat-grid--wide' });
   const draw = (hero: string): void => {
@@ -225,7 +234,10 @@ function perHeroSection(perHero: HeroStat[], durationMinutes: number | undefined
         onChange: draw,
       })
     : null;
-  return card({ title: 'Per hero', sub: 'per 10 minutes on hero · KDA is a ratio', actions: tabs }, body);
+  // An older capture without round events had its played time estimated from
+  // the wall clock — say so, quietly, next to the numbers it scales.
+  const basis = playedSource === 'estimated' ? 'per 10 minutes played (est.)' : 'per 10 minutes played';
+  return card({ title: 'Per hero', sub: `${basis} · KDA is a ratio`, actions: tabs }, body);
 }
 
 /** Per-10 for the E/D/A stats: one decimal, or a dash when minutes are unknown. */

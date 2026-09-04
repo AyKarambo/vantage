@@ -19,6 +19,7 @@ export function matchToGame(
   const result = resolveResult(record.outcome);
   if (!result) return null; // no win/loss → not useful for stats
   const role = resolveRole(record.queueType, record.heroRole) ?? 'openQ';
+  const heroMinutes = record.playedMinutes ?? record.durationMinutes;
   const perHero = record.perHero?.length
     ? record.perHero
     : record.heroes.length === 1 && record.eliminations != null
@@ -26,8 +27,9 @@ export function matchToGame(
           hero: record.heroes[0], role,
           eliminations: record.eliminations ?? 0, deaths: record.deaths ?? 0, assists: record.assists ?? 0,
           damage: record.damage ?? 0, healing: record.healing ?? 0, mitigation: record.mitigation ?? 0,
-          // Single hero → the whole match was spent on it.
-          ...(record.durationMinutes != null ? { minutes: record.durationMinutes } : {}),
+          // Single hero → all of the match's played time was spent on it (the
+          // wall clock only when the capture recorded no rounds).
+          ...(heroMinutes != null ? { minutes: heroMinutes } : {}),
         }]
       : undefined;
   return {
@@ -39,6 +41,10 @@ export function matchToGame(
     result,
     gameType: record.gameType ?? 'Unknown',
     durationMinutes: record.durationMinutes,
+    // Played time (the per-10 divisor) and the rounds it was measured from —
+    // absent on captures without round events, where read-time estimates it.
+    ...(record.playedMinutes != null ? { playedMinutes: record.playedMinutes } : {}),
+    ...(record.rounds?.length ? { rounds: record.rounds } : {}),
     heroes: record.heroes,
     perHero,
     finalScore: record.finalScore,

@@ -22,7 +22,7 @@ The flexible improvement-target system: define a personal focus in the player's 
 
 ## Grading
 
-- **Measured (⚡) targets auto-grade from stats,** read-only — no human read. A measured target's grade is computed per match from its bound stat: Damage/Healing/Mitigation/Eliminations/Assists/Deaths as **per-10-minute** rates, KDA as the match ratio, against the rule's operator/threshold with a 10% partial band. Its **scope** (role and/or hero) restricts which matches it evaluates. Matches missing the stat are skipped (not attempts). Scoring lives in `src/core/targets/measured.ts` + `scoring.ts`; stored `review.grades` for a measured target are ignored (no double-count).
+- **Measured (⚡) targets auto-grade from stats,** read-only — no human read. A measured target's grade is computed per match from its bound stat: Damage/Healing/Mitigation/Eliminations/Assists/Deaths as **per-10-minutes-played** rates (played time from `src/core/playedTime.ts`; a hero-scoped target divides by that hero's played minutes), KDA as the match ratio, against the rule's operator/threshold with a 10% partial band. Its **scope** (role and/or hero) restricts which matches it evaluates. Matches missing the stat are skipped (not attempts). Scoring lives in `src/core/targets/measured.ts` + `scoring.ts`; stored `review.grades` for a measured target are ignored (no double-count).
 - **Self-rated (◎) targets are hand-graded on Review** (and optionally in the log-match modal); keyboard grading cycles the self-rated rows only. (See `screen-review.spec.md`.)
 
 ## Out-of-Scope

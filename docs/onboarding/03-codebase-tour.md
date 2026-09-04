@@ -28,10 +28,11 @@ unit-testable and shared with the browser preview.
 | Module | Purpose |
 |--------|---------|
 | [`model/`](../../src/core/model) | The vocabulary: `MatchRecord`, `HeroStat`, `RosterPlayer` ([match.ts](../../src/core/model/match.ts)), `Role`/`Result`/`LogFilter` enums, `GepMessage`, BattleTag helpers. |
-| [`matchAggregator/`](../../src/core/matchAggregator) | `MatchAggregator` — stateful fold of the GEP stream into a finished `MatchRecord`; `keys.ts` names the GEP fields it listens to; `gepValues.ts` is the tolerant value-coercion toolkit (`parseRoster`, `asNumber`, …). |
+| [`matchAggregator/`](../../src/core/matchAggregator) | `MatchAggregator` — stateful fold of the GEP stream into a finished `MatchRecord` (including the `round_start`/`round_end` spans and the played minutes derived from them); `keys.ts` names the GEP fields it listens to; `gepValues.ts` is the tolerant value-coercion toolkit (`parseRoster`, `asNumber`, …). |
 | [`gameRecord.ts`](../../src/core/gameRecord.ts) | `matchToGame()` — `MatchRecord` → `GameRecord` via the resolvers. |
 | [`resolvers/`](../../src/core/resolvers) | Raw GEP value → display value: account (BattleTag matching), result (victory/defeat/…), role (queue-aware), map (alias + normalized-name lookup). |
-| [`analytics/`](../../src/core/analytics) | The stats engine: `grouping.ts` (winrate buckets — byMap/byRole/byHero/focusBy/trend), `heroStats.ts` (per-10-min hero table), `session.ts` (streaks, day recaps, calendar heatmap, hero drill-down), `types.ts` (`GameRecord`, `MatchMental`, `MatchReview`). |
+| [`analytics/`](../../src/core/analytics) | The stats engine: `grouping.ts` (winrate buckets — byMap/byRole/byHero/focusBy/trend; byHero is time-share weighted), `heroStats.ts` (the per-10-minutes-played hero table, games/wins credited by time share), `session.ts` (streaks, day recaps, calendar heatmap, hero drill-down), `types.ts` (`GameRecord`, `MatchMental`, `MatchReview`). |
+| [`playedTime.ts`](../../src/core/playedTime.ts) | **Played time** — the divisor behind every per-10 stat: `playedTimeOf()` (measured from a record's round spans; estimated from the wall clock via `PLAYED_TIME_ESTIMATE` + `ROUND_SETUP_SECONDS` on older captures; taken as typed on manual logs), `heroPlayedMinutes()` / `heroTimeShares()` for per-hero rates and fractional hero credit. Shared by analytics, readiness, measured targets and match detail. |
 | [`dashboardData.ts`](../../src/core/dashboardData.ts) | `computeDashboard()` — applies filters and assembles *everything* into the single `DashboardData` payload the renderer receives. |
 | [`matchDetail.ts`](../../src/core/matchDetail.ts) | The per-match drill-down (scoreboard, rank estimate, player history, saved review); degrades section-by-section when GEP data is missing. |
 | [`matchFilter.ts`](../../src/core/matchFilter.ts) | Game-type classification + `shouldLog()` (which matches get tracked). |
@@ -70,7 +71,7 @@ The only code imported by **both** processes, barreled through
 | [`counterwatch.ts`](../../src/main/counterwatch.ts) | `CounterwatchReader` — alternative sensor; watches Counterwatch's IndexedDB. |
 | [`notionRuntime.ts`](../../src/main/notionRuntime.ts) | Notion lifecycle: token → client stack → export/status/admin. Stays inert without a token. |
 | [`tray.ts`](../../src/main/tray.ts) | Tray icon, context menu, toast notifications. |
-| [`simulate.ts`](../../src/main/simulate.ts) / [`recorder.ts`](../../src/main/recorder.ts) | Dev tooling: synthetic match feed; GEP record/replay (`.jsonl`). |
+| [`simulate.ts`](../../src/main/simulate.ts) / [`recorder.ts`](../../src/main/recorder.ts) | Dev tooling: synthetic, timed match feed (round events included; 60× real time by default, `OW_SYNC_SIM_SPEED=1` for real pacing); GEP record/replay (`.jsonl`). |
 | [`autolaunch.ts`](../../src/main/autolaunch.ts) | Run-at-login wiring. |
 
 ## `src/store/` — persistence (the user's data folder — default or chosen)

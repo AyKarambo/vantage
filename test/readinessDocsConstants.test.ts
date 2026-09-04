@@ -28,6 +28,7 @@ describe('deep-tier constants — numeric-literal pins (AC4a)', () => {
     cusumSlack: 0.25,
     evidenceMinGames: 8,
     heroLearnGames: 12,
+    altAccountWeight: 0.35,
     tiltPenCap: 10,
     tiltPenCapManual: 16,
     dampFactor: 0.5,
@@ -62,6 +63,8 @@ describe('deep-tier constants — still derived from READINESS_TUNING (AC4b)', (
     expect(dc.dampFactor).toBe(T.dampFactor);
     expect(dc.wrPenaltyCap).toBe(T.wrPenaltyCap);
     expect(dc.cusumThreshold).toBe(T.cusumThreshold);
+    expect(dc.heroLearnGames).toBe(T.heroLearnGames);
+    expect(dc.altAccountWeight).toBe(T.altAccountWeight);
     expect(dc.restRecoveryCap).toBe(T.restRecoveryCap);
     expect(dc.rustFloor).toBe(T.baseScore - T.rustPenaltyCap);
     expect(dc.rankStagnationWindowDays).toBe(T.rankStagnationWindowDays);
@@ -73,6 +76,7 @@ describe('deep-tier copy — prose contains the interpolated constants (AC4c)', 
     ['anchorAndCaps', deepCopy.anchorAndCaps, ['anchor', 'loadCapDown', 'loadCapUp', 'perfCapDown', 'perfCapUp', 'subjCapDown', 'subjCapUp', 'subjCapDownManual']],
     ['loadRatio', deepCopy.loadRatio, ['ratioFreshMax', 'ratioElevated', 'ratioHigh']],
     ['declineDetection', deepCopy.declineDetection, ['cusumSlack', 'cusumThreshold', 'evidenceMinGames', 'heroLearnGames']],
+    ['accountWeighting', deepCopy.accountWeighting, ['altAccountWeight']],
     ['tiltCaps', deepCopy.tiltCaps, ['tiltPenCap', 'tiltPenCapManual']],
     ['dampenerAndOutcomeCap', deepCopy.dampenerAndOutcomeCap, ['dampFactor', 'wrPenaltyCap']],
     ['restAndRust', deepCopy.restAndRust, ['restRecoveryCap', 'rustDecayPerDay', 'rustDays', 'rustFloor']],
@@ -84,4 +88,13 @@ describe('deep-tier copy — prose contains the interpolated constants (AC4c)', 
       for (const k of keys) expect(text).toContain(String(dc[k]));
     });
   }
+
+  it('the account-weighting copy renders the weight as a multiplier and says the learning window pools accounts', () => {
+    const copy = deepCopy.accountWeighting();
+    expect(copy).toContain('×0.35');
+    expect(copy).toContain('played most'); // names how the main account is picked
+    // It must describe the damper honestly — the checks themselves are account-blind.
+    expect(copy).toContain('neutral');
+    expect(deepCopy.declineDetection()).toContain('ALL your accounts');
+  });
 });

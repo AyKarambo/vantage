@@ -166,10 +166,12 @@ export const READINESS_TUNING = {
 
   // --- objective-performance subscore (perfDelta ∈ [−45, +8]) ---
 
-  /** Games below this duration are excluded from per-10 rates (a 4-minute stomp explodes the denominator). */
-  minPer10Minutes: 6,
-  /** A hero with fewer lifetime games (per account) is "still learning" — excluded from decline detection. */
+  /** Games below this PLAYED time — minutes the player could actually fight, measured or estimated (see `../playedTime`) — are excluded from per-10 rates (a 4-minute stomp explodes the denominator). On the PLAYED basis, not the wall clock: 6 wall minutes used to be the bar, and the same match now reads ~4.5 played once hero select, the mode's setup locks and the scoreboard come off, so the bar moved with it rather than quietly dropping every short game out of the baselines. It is one bar over played time, so what it means in wall-clock terms varies by mode (~6 min on Control, ~7.5 on Escort/Hybrid, where the setup locks are longer) — that is the point: the same 4.5 minutes of fighting either way. A hand-logged duration is taken as typed, so it is compared as-is. */
+  minPer10Minutes: 4.5,
+  /** A hero with fewer lifetime games — counted ACROSS ALL the player's accounts (experience is the player's, not the account's) — is "still learning" and excluded from decline detection. */
   heroLearnGames: 12,
+  /** What an all-alt week is worth: the objective subscore lerps toward neutral with the share of the acute window played away from the MAIN account (see `mainAccountOf`), keeping this fraction at share 1. The player experiments on alts, so that evidence moves the verdict less — in both directions, and never by making the detectors themselves twitchier (the damper is applied once, to the finished delta). A single-account window has share 0 ⇒ factor 1 ⇒ bit-identical. */
+  altAccountWeight: 0.35,
   /** Minimum baseline games before a stat bucket is trusted at all. */
   statMinGames: 15,
   /** Trust ramps linearly from statMinGames to statMinGames + this (no on/off cliff). */

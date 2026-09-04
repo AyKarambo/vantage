@@ -306,17 +306,23 @@ interface StatOpts extends SpanOpts {
   deaths?: number;
   elims?: number;
   healing?: number;
-  /** durationMinutes; default 10 so per-game totals read directly as per-10 rates. */
+  /** durationMinutes AND playedMinutes; default 10 so per-game totals read directly as per-10 rates. */
   duration?: number;
 }
 
-/** Like span(), but each game is single-hero with real perHero stats + duration. */
+/**
+ * Like span(), but each game is single-hero with real perHero stats + a MEASURED
+ * played time (the per-10 divisor). `playedMinutes` is set explicitly: the
+ * fixture ids look like GEP ids, so without it the engine would take the
+ * wall-clock ESTIMATE path (`playedTimeOf`) and every per-10 rate would shift.
+ */
 function statSpan(fromDay: number, toDay: number, o: StatOpts): GameRecord[] {
   const { hero = 'Tracer', damage = 8000, deaths = 5, elims = 20, healing = 0, duration = 10 } = o;
   return span(fromDay, toDay, o).map((g) => ({
     ...g,
     heroes: [hero],
     durationMinutes: duration,
+    playedMinutes: duration,
     perHero: [{ hero, role: g.role, eliminations: elims, deaths, assists: 5, damage, healing, mitigation: 0 }],
   }));
 }

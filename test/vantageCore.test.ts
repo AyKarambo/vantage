@@ -480,7 +480,9 @@ describe('computeDashboard', () => {
 
   it('populates measuredGrades on match-list rows for active measured targets and omits it otherwise (#68)', () => {
     const line: HeroStat = { hero: 'Tracer', role: 'damage', eliminations: 0, deaths: 0, assists: 0, damage: 11000, healing: 0, mitigation: 0 };
-    const measurable = game({ result: 'Win', map: 'Ilios', role: 'damage', durationMinutes: 10, perHero: [line] });
+    // playedMinutes is the per-10 divisor (measured); without it the 10-minute
+    // wall clock would be shortened by the estimate and 11000 would read higher.
+    const measurable = game({ result: 'Win', map: 'Ilios', role: 'damage', durationMinutes: 10, playedMinutes: 10, perHero: [line] });
     const bare = game({ result: 'Loss', map: 'Ilios', role: 'damage' }); // no stats → 'no-stat'
     const measured: AuthoredTarget = { id: 'dmg', name: 'Damage focus', mode: 'measured', rule: 'Damage ≥ 10,000', createdAt: 0, isActive: true };
     const demo = { active: false, preference: 'off' as const, hasRealHistory: true };

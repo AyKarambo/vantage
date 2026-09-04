@@ -4,7 +4,7 @@
  * insights are built from. Pure and I/O-free so it is fully unit-testable and
  * reusable in the renderer.
  */
-import type { Result, Role, HeroStat, RosterPlayer } from '../model';
+import type { Result, Role, HeroStat, RosterPlayer, RoundSpan } from '../model';
 // From `rank/types` rather than the `rank` barrel: that module imports only
 // `../model`, so this stays a leaf type import with no cycle back through the
 // rank engine (which itself reads `GameRecord` from here).
@@ -110,7 +110,17 @@ export interface GameRecord {
    * no rank anchor at the time — nothing to snapshot from.
    */
   rankAtStart?: RankPosition;
+  /** Wall-clock match length in whole minutes (the displayed "Duration"). Not a per-10 divisor — see {@link playedMinutes}. */
   durationMinutes?: number;
+  /**
+   * Minutes the player could actually fight — the per-10-minute divisor.
+   * Measured from GEP round events on newer captures (see {@link ../playedTime});
+   * absent on older captures and manual logs, where `playedTimeOf` estimates
+   * it from the wall-clock duration at read time.
+   */
+  playedMinutes?: number;
+  /** The GEP rounds behind {@link playedMinutes}, when the feed reported them. */
+  rounds?: RoundSpan[];
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   heroes: string[];
@@ -201,12 +211,24 @@ export interface FocusEntry extends FocusItem {
   progress?: FocusProgress;
 }
 
-/** Per-hero rollup: winrate plus exact stat totals and per-10-minute averages. */
+/**
+ * Per-hero rollup: winrate plus exact stat totals and per-10-minute averages.
+ * `games`/`wins`/`losses`/`draws` are the career-profile style TIME-SHARE
+ * credit (a hero played for a quarter of a won game earns 0.25 of a win),
+ * rounded to whole numbers for display; `winrate` is computed from the
+ * unrounded credit, which the `credited*` fields expose.
+ */
 export interface HeroSummary extends WinLoss {
   hero: string;
   role?: Role;
+  /** Unrounded fractional credit behind `games` (sum of the hero's time shares). */
+  creditedGames?: number;
+  /** Unrounded fractional credit behind `wins`. */
+  creditedWins?: number;
+  /** Unrounded fractional credit behind `losses`. */
+  creditedLosses?: number;
   totals: Omit<HeroStat, 'hero' | 'role' | 'minutes'>;
-  /** Per-10-minute averages (null when no duration data). */
+  /** Per-10-PLAYED-minute averages (null when no usable time data). */
   per10: Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'> | null;
   kda: number; // (elims + assists) / max(deaths, 1)
 }

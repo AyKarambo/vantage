@@ -66,13 +66,17 @@ describe('mergeHeroStats', () => {
 });
 
 describe('effectiveHeroMinutes', () => {
+  // The third argument is the match's PLAYED minutes (the per-10 divisor from
+  // core/playedTime), never the wall-clock duration.
   it('prefers real recorded minutes', () => {
     expect(effectiveHeroMinutes(stat({ hero: 'Tracer', minutes: 5 }), 2, 12)).toBe(5);
   });
-  it('falls back to an equal split of the match duration', () => {
+  it('falls back to an equal split of the played minutes', () => {
     expect(effectiveHeroMinutes(stat({ hero: 'Tracer' }), 4, 20)).toBe(5);
+    // A shorter played time (the same match, hero select + scoreboard removed) splits smaller.
+    expect(effectiveHeroMinutes(stat({ hero: 'Tracer' }), 4, 18)).toBe(4.5);
   });
-  it('is null (→ dash) when the match duration is unknown or rounds to 0', () => {
+  it('is null (→ dash) when the played time is unknown or 0', () => {
     expect(effectiveHeroMinutes(stat({ hero: 'Tracer', minutes: 5 }), 1, undefined)).toBeNull();
     expect(effectiveHeroMinutes(stat({ hero: 'Tracer', minutes: 5 }), 1, 0)).toBeNull();
   });
@@ -87,16 +91,16 @@ describe('heroLines', () => {
     expect(line.minutes).toBe(5);
   });
 
-  it('equal-splits the match duration when no per-hero minutes are recorded', () => {
+  it('equal-splits the played minutes when no per-hero minutes are recorded', () => {
     const lines = heroLines([
       stat({ hero: 'Tracer', damage: 100 }),
       stat({ hero: 'Genji', damage: 100 }),
-    ], 20); // 10 min each
+    ], 20); // 10 played min each
     expect(lines[0].minutes).toBe(10);
     expect(lines[0].per10?.damage).toBe(100); // 100 * 10 / 10
   });
 
-  it('dashes per-10 counting stats but still yields KDA when duration is 0/undefined', () => {
+  it('dashes per-10 counting stats but still yields KDA when the played time is 0/undefined', () => {
     const [zero] = heroLines([stat({ hero: 'Tracer', eliminations: 6, assists: 2, deaths: 2, minutes: 3 })], 0);
     expect(zero.per10).toBeNull();
     expect(zero.kda).toBeCloseTo((6 + 2) / 2);
@@ -117,18 +121,18 @@ describe('heroLines', () => {
 });
 
 describe('combinedHeroLine ("All" tab)', () => {
-  it('sums every hero and computes per-10 over the whole match', () => {
+  it('sums every hero and computes per-10 over the whole played time', () => {
     const line = combinedHeroLine([
       stat({ hero: 'Tracer', eliminations: 12, assists: 4, deaths: 3, damage: 300, minutes: 5 }),
       stat({ hero: 'Genji', eliminations: 8, assists: 2, deaths: 1, damage: 500, minutes: 5 }),
     ], 10)!;
     expect(line.hero).toBe('All');
     expect(line.totals.damage).toBe(800);
-    expect(line.per10?.damage).toBe(800); // 800 * 10 / 10 (whole match)
+    expect(line.per10?.damage).toBe(800); // 800 * 10 / 10 played minutes (whole match)
     expect(line.kda).toBeCloseTo((20 + 6) / 4); // combined (elim + assist) / deaths
   });
 
-  it('dashes per-10 without a duration, still shows KDA, and is null with no heroes', () => {
+  it('dashes per-10 without a played time, still shows KDA, and is null with no heroes', () => {
     const noDur = combinedHeroLine([stat({ hero: 'Tracer', eliminations: 6, assists: 2, deaths: 2 })], undefined)!;
     expect(noDur.per10).toBeNull();
     expect(noDur.kda).toBeCloseTo((6 + 2) / 2);

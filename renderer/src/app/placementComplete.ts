@@ -26,8 +26,10 @@ export function openPlacementComplete(opts: {
   suggestion?: { tier: string; division: number };
   /** Runs after a successful confirm, once the dialog has already closed — the caller refreshes. */
   onDone: () => void;
+  /** Runs when the player walks away (Escape / backdrop) — nothing was written; the run stays awaiting. */
+  onDismiss?: () => void;
 }): void {
-  const { account, role, suggestion, onDone } = opts;
+  const { account, role, suggestion, onDone, onDismiss } = opts;
 
   openModal((close) => {
     const state = {
@@ -74,10 +76,12 @@ export function openPlacementComplete(opts: {
       field(optionalLabel('% into division', '— optional, straight out of placements it’s usually 0 or blank'), pctInput),
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
         button('Confirm', { variant: 'primary', onClick: confirm }),
-        button('Cancel', { variant: 'ghost', onClick: close }),
+        // Cancel is a dismissal too: nothing is written either way, and the
+        // caller's "come back to where I was" hook applies to both exits.
+        button('Cancel', { variant: 'ghost', onClick: () => { close(); onDismiss?.(); } }),
       ),
     );
-  });
+  }, { onDismiss });
 }
 
 /**
@@ -111,8 +115,10 @@ export async function maybeConfirmPlacementRank(opts: {
   role?: Role;
   /** Runs after a successful confirm, once the dialog has already closed. */
   onDone: () => void;
+  /** Runs when the dialog was shown but dismissed without a confirm. */
+  onDismiss?: () => void;
 }): Promise<boolean> {
-  const { account, role, onDone } = opts;
+  const { account, role, onDone, onDismiss } = opts;
   let awaiting: PlacementRunSummary[];
   try {
     awaiting = (await bridge.getPlacements()).filter((p) => p.awaitingRank);
@@ -132,6 +138,7 @@ export async function maybeConfirmPlacementRank(opts: {
     role: run.role,
     ...(run.latestPrediction ? { suggestion: run.latestPrediction } : {}),
     onDone,
+    ...(onDismiss ? { onDismiss } : {}),
   });
   return true;
 }

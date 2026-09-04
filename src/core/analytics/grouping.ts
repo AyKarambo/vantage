@@ -4,6 +4,7 @@
  * chart. Pure and I/O-free — consumed by both main and the browser preview.
  */
 import type { GameRecord, WinLoss, Group, FocusItem } from './types';
+import { heroTimeShares } from '../playedTime';
 
 // --- core aggregation -------------------------------------------------------
 
@@ -19,6 +20,88 @@ export function winLoss(games: GameRecord[]): WinLoss {
   }
   const decided = wins + losses;
   return { games: games.length, wins, losses, draws, winrate: decided ? wins / decided : 0 };
+}
+
+/** A game with the fraction of it (0..1) that a bucket is credited with. */
+export interface WeightedGame {
+  game: GameRecord;
+  weight: number;
+}
+
+/**
+ * {@link winLoss} with fractional credit: each game counts `weight` toward the
+ * tally (a hero played for a quarter of a game earns 0.25 of it and of its win
+ * or loss — the career-profile rule). `winrate` is computed from the unrounded
+ * credit; `games`/`wins`/`losses`/`draws` are rounded for display.
+ */
+export function weightedWinLoss(entries: ReadonlyArray<WeightedGame>): WinLoss {
+  let games = 0;
+  let wins = 0;
+  let losses = 0;
+  let draws = 0;
+  for (const { game, weight } of entries) {
+    games += weight;
+    if (game.result === 'Win') wins += weight;
+    else if (game.result === 'Loss') losses += weight;
+    else draws += weight;
+  }
+  const decided = wins + losses;
+  return { ...roundCredit({ games, wins, losses, draws }), winrate: decided ? wins / decided : 0 };
+}
+
+/**
+ * Round fractional credit for display so the parts still add up. `games` rounds
+ * normally; wins/losses/draws are then allocated by largest remainder to sum to
+ * exactly that. Rounding each on its own let two 0.5 credits both round to 1
+ * and show a hero more wins + losses than games played.
+ */
+export function roundCredit(c: {
+  games: number; wins: number; losses: number; draws: number;
+}): Pick<WinLoss, 'games' | 'wins' | 'losses' | 'draws'> {
+  // Any credit at all is at least one game: rounding a 0.4-game hero to 0 while
+  // its winrate still read 100% put "0 games · 100%" on the drill-down.
+  const games = c.games > 0 ? Math.max(1, Math.round(c.games)) : 0;
+  const parts = [c.wins, c.losses, c.draws];
+  const out = parts.map((v) => Math.floor(v));
+  // Hand out (or take back) whole games one at a time, largest fractional part
+  // first, so the biggest share rounds up before a smaller one does.
+  const byRemainder = parts
+    .map((v, i) => ({ i, frac: v - out[i] }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  let left = games - out.reduce((a, b) => a + b, 0);
+  for (let n = 0; left > 0 && n < byRemainder.length; n += 1, left -= 1) out[byRemainder[n].i] += 1;
+  for (let n = byRemainder.length - 1; left < 0 && n >= 0; n -= 1) {
+    if (out[byRemainder[n].i] > 0) { out[byRemainder[n].i] -= 1; left += 1; }
+  }
+  return { games, wins: out[0], losses: out[1], draws: out[2] };
+}
+
+/** Group weighted games by a key and compute the weighted win/loss per group, most credit first. */
+export function weightedGroupBy<T extends WeightedGame>(entries: ReadonlyArray<T>, keyOf: (e: T) => string): Group[] {
+  const buckets = new Map<string, T[]>();
+  for (const e of entries) {
+    const k = keyOf(e) || 'Unknown';
+    (buckets.get(k) ?? buckets.set(k, []).get(k)!).push(e);
+  }
+  return [...buckets.entries()]
+    .map(([key, es]) => ({ key, credit: es.reduce((n, e) => n + e.weight, 0), wl: weightedWinLoss(es) }))
+    // By unrounded credit, so two keys that round to the same count still order by real share.
+    .sort((a, b) => b.credit - a.credit)
+    .map(({ key, wl }) => ({ key, ...wl }));
+}
+
+/**
+ * Every game paired with `hero`'s share of the player's time in it (see
+ * {@link ../playedTime heroTimeShares}); games the hero wasn't played in are
+ * left out. The weighting behind {@link byHero} and the hero drill-down.
+ */
+export function heroWeightedGames(games: GameRecord[], hero: string): WeightedGame[] {
+  const out: WeightedGame[] = [];
+  for (const game of games) {
+    const weight = heroTimeShares(game).get(hero);
+    if (weight) out.push({ game, weight });
+  }
+  return out;
 }
 
 /** Group games by a key and compute win/loss per group, sorted by most games. */
@@ -40,17 +123,20 @@ export const byRole = (g: GameRecord[]) => groupBy(g, (x) => x.role);
 /** Winrate per tracked account. */
 export const byAccount = (g: GameRecord[]) => groupBy(g, (x) => x.account);
 
-/** Hero winrate by counting each game toward every hero the player used in it. */
+/**
+ * Hero winrate with career-profile credit: every hero the player used in a game
+ * earns the fraction of it equal to its share of the player's time (an equal
+ * split without hero minutes), so a one-minute swap no longer counts as a
+ * whole game. A game with no heroes recorded is credited to `Unknown` whole.
+ */
 export function byHero(games: GameRecord[]): Group[] {
-  const buckets = new Map<string, GameRecord[]>();
-  for (const g of games) {
-    for (const hero of g.heroes.length ? g.heroes : ['Unknown']) {
-      (buckets.get(hero) ?? buckets.set(hero, []).get(hero)!).push(g);
-    }
+  const entries: Array<WeightedGame & { hero: string }> = [];
+  for (const game of games) {
+    const shares = heroTimeShares(game);
+    if (!shares.size) entries.push({ game, weight: 1, hero: 'Unknown' });
+    for (const [hero, weight] of shares) entries.push({ game, weight, hero });
   }
-  return [...buckets.entries()]
-    .map(([key, gs]) => ({ key, ...winLoss(gs) }))
-    .sort((a, b) => b.games - a.games);
+  return weightedGroupBy(entries, (e) => e.hero);
 }
 
 /**

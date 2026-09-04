@@ -60,7 +60,8 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
 - `npm run preview` — bundle the browser harness, serve at http://localhost:5178 (no Overwolf runtime needed).
 - `npm run release` — ow-electron-builder → `release/Vantage-Setup-<ver>.exe`.
 - Dev-only env flags: `OW_SYNC_SIMULATE=1`, `OW_SYNC_SENSOR=gep|counterwatch`,
-  `OW_SYNC_RECORD=1`, `OW_SYNC_REPLAY=<file>`.
+  `OW_SYNC_RECORD=1`, `OW_SYNC_REPLAY=<file>`, `OW_SYNC_SIM_SPEED=<multiplier>` (simulation
+  pace; `1` replays the simulated match at real speed so the measured played-time path runs).
 
 ## Conventions
 - **Formatting:** 2-space indent, single quotes, semicolons. Match surrounding files.

@@ -76,6 +76,8 @@ export const ARTICLES: WikiArticle[] = [
       deep(deepCopy.anchorAndCaps()),
       wikiHeading('How a results dip is spotted'),
       deep(deepCopy.declineDetection()),
+      wikiHeading('Several accounts, one player'),
+      deep(deepCopy.accountWeighting()),
       wikiHeading('Self-report is deliberately weak'),
       deep(deepCopy.tiltCaps()),
       wikiHeading('Two fairness guardrails'),
