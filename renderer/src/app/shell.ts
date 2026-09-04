@@ -176,14 +176,17 @@ export class App {
     h('div', { class: 'nav-group' }, 'Current session'),
     this.sessionBody,
   );
-  /** Collapse/expand the rail. Sits beside the account chip in the sidebar's
-   *  top row (Ctrl B does the same), so the session card can be the bottom-most
-   *  element. Persistent like every other sidebar node — applyCollapsed mutates
-   *  it in place, it is never rebuilt per state. */
+  /** Collapse/expand the rail (Ctrl B does the same). A full-width bar of its
+   *  own, directly below the account chip, so it reads as a clear control
+   *  rather than a small corner glyph — see .sidebar-collapse in app.css.
+   *  Persistent like every other sidebar node — applyCollapsed mutates the
+   *  icon/label spans in place, the button is never rebuilt per state. */
+  private readonly collapseIcon = h('span', { class: 'sidebar-collapse-icon' }, '«');
+  private readonly collapseLabel = h('span', { class: 'sidebar-collapse-label' }, 'Collapse');
   private readonly collapseToggle = h('button', {
     class: 'sidebar-collapse',
     on: { click: () => this.toggleCollapsed() },
-  }, '«') as HTMLButtonElement;
+  }, this.collapseIcon, this.collapseLabel) as HTMLButtonElement;
   private sidebarBuilt = false;
   private readonly gepBanner = h('div', { class: 'gep-banner hidden' });
   private readonly filterHost = h('div', { class: 'filterbar-wrap hidden' });
@@ -595,11 +598,11 @@ export class App {
     }
     render(
       this.sidebarHost,
-      // The rail toggle gets its own slim row above the chip rather than a
-      // column beside it: at 212px the chip's rank line needs every pixel of
-      // its width, and 24px + a gap is a quarter of the text column.
-      h('div', { class: 'sidebar-top' }, this.collapseToggle),
       this.accountChip,
+      // Its own full-width bar between the chip and the nav — a bigger,
+      // harder-to-miss target than a small corner glyph, and it reads as the
+      // seam between "who I am" and "where I'm going" that it actually is.
+      this.collapseToggle,
       h('nav', { class: 'sidebar-nav' }, ...navChildren),
       // Last on purpose: the session card is the bottom-most thing in the sidebar.
       this.sessionCardEl,
@@ -624,7 +627,8 @@ export class App {
   private applyCollapsed(): void {
     const collapsed = prefs.get('sidebarCollapsed') ?? false;
     this.sidebarHost.classList.toggle('is-collapsed', collapsed);
-    this.collapseToggle.textContent = collapsed ? '»' : '«';
+    this.collapseIcon.textContent = collapsed ? '»' : '«';
+    this.collapseLabel.textContent = collapsed ? 'Expand' : 'Collapse';
     this.collapseToggle.title = collapsed ? 'Expand the sidebar (Ctrl B)' : 'Collapse the sidebar (Ctrl B)';
     this.collapseToggle.setAttribute('aria-label', this.collapseToggle.title);
     this.collapseToggle.setAttribute('aria-expanded', String(!collapsed));

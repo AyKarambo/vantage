@@ -1,10 +1,12 @@
-/** Winrate-over-time trend chart. */
+/** Winrate-over-time trend chart, with a rolling-average overlay. */
 import { h } from '../../dom';
 import { PALETTE } from '../../theme';
 import { pct } from '../../format';
 import { svgEl, svgRoot, svgText } from '../svg';
 import { tooltipLayer } from '../tooltip';
-import { emptyChart, type WrPoint } from './shared';
+import { emptyChart, rollingMean, type WrPoint } from './shared';
+
+const ROLLING_WINDOW = 7;
 
 /** Winrate trend over time. Returns an HTML wrapper (SVG + tooltip layer). */
 export function lineChart(points: WrPoint[]): HTMLElement {
@@ -26,15 +28,24 @@ export function lineChart(points: WrPoint[]): HTMLElement {
   const xAt = (i: number) => padL + (i / (points.length - 1)) * plotW;
   const yAt = (wr: number) => bot - wr * plotH;
 
-  // Area under the curve for a touch of depth.
+  // Area under the raw curve for a touch of depth.
   let area = `M${xAt(0)} ${bot} `;
   points.forEach((p, i) => (area += `L${xAt(i)} ${yAt(p.winrate)} `));
   area += `L${xAt(points.length - 1)} ${bot} Z`;
   s.appendChild(svgEl('path', { d: area, fill: 'rgba(124,108,245,0.10)' }));
 
+  // Raw per-bucket line (thin, semi-transparent) under the rolling average —
+  // same two-series treatment as the self-rating trend, so day-to-day noise
+  // doesn't hide the general direction.
   let path = '';
   points.forEach((p, i) => (path += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(p.winrate) + ' '));
-  s.appendChild(svgEl('path', { d: path, fill: 'none', stroke: PALETTE.accent, 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+  s.appendChild(svgEl('path', { d: path, fill: 'none', stroke: PALETTE.accent, 'stroke-width': 1.5, opacity: 0.55, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+
+  const avg = rollingMean(points.map((p) => p.winrate), ROLLING_WINDOW);
+  let smooth = '';
+  avg.forEach((v, i) => (smooth += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(v) + ' '));
+  s.appendChild(svgEl('path', { d: smooth, fill: 'none', stroke: PALETTE.accentBright, 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+
   const tips = tooltipLayer(wrap);
   points.forEach((p, i) => {
     s.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(p.winrate), r: 3, fill: PALETTE.accentBright }));

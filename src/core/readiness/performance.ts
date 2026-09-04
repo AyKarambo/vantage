@@ -5,30 +5,41 @@
  * marathon session, or several sessions — ever fires. Includes the
  * target-focus dampener (the deliberate-practice "learning dip" exemption).
  *
- * Several accounts, one player. The MAIN account (most games in the history
- * passed in — tie-break: most recent game, then lexical) carries the verdict;
- * every game on another account enters each accumulator at weight
- * w = altAccountWeight (the player experiments on alts, so alt evidence moves
- * the read less). Baselines stay strictly per account; hero EXPERIENCE (the
- * learning window) pools across accounts because it belongs to the player, not
- * the account. A single-account history has w = 1 everywhere and is
- * bit-identical to the unweighted engine (1·x = x, integer sums stay integers).
+ * Several accounts, one player. Every detector below — the CUSUM, its gates,
+ * the coverage sums, the regime blend, the pooled winrate dip — is computed
+ * ACCOUNT-BLIND: one game is one game, on the main or an alt alike, so none of
+ * these anti-false-alarm guarantees ever depend on which account played them.
+ * The MAIN account (most games among those played recently — see
+ * `mainAccountOf`) is only used at the very end, to size ONE damper
+ * (`altGameWeight` / `altDamp`) applied once to the finished delta.
+ *
+ * That damper is rank-aware, not a flat per-account discount: an alt game
+ * close to the rank the main usually plays at counts fully — a second account
+ * at your own level isn't smurfing — and only a genuine gap below that usual
+ * rank tapers it down, to a floor for a clearly mismatched account (see
+ * `rankProximityWeight`). Baselines stay strictly per account; hero EXPERIENCE
+ * (the learning window) pools across accounts because it belongs to the
+ * player, not the account. A single-account history — or one where every alt
+ * game reads as rank-close — has altDamp = 1 and is bit-identical to the
+ * unweighted engine.
  *
  * Anti-false-alarm guarantees (by construction, see constants):
- * - a single winsorized game contributes at most w·(zWinsor − cusumSlack) ≤ zWinsor − cusumSlack
- *   < cusumThreshold (w ≤ 1);
- * - the decline index needs ≥ evidenceMinGames counted games regardless of C — counted games are
- *   WEIGHTED, so alt-only evidence needs evidenceMinGames / altAccountWeight games to fire alone;
+ * - a single winsorized game contributes at most zWinsor − cusumSlack < cusumThreshold, on any
+ *   account (the CUSUM is account-blind);
+ * - the decline index needs ≥ evidenceMinGames counted games regardless of C — an unweighted,
+ *   account-blind count;
  * - buckets below statMinGames are inert; trust ramps in with no cliff;
- * - a hero-mix change never reads as decline (per-hero buckets + mix-overlap guard).
+ * - a hero-mix change never reads as decline (per-hero buckets + mix-overlap guard);
+ * - the alt damper can only pull the finished delta TOWARD neutral (0 ≤ altDamp ≤ 1), never past it.
  */
 
 import type { GameRecord, TargetGrade } from '../analytics';
 import type { AuthoredTarget } from '../targets/types';
-import type { RankAnchorMap } from '../rank/types';
+import type { RankAnchorMap, RankPosition } from '../rank/types';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 import { winLoss } from '../analytics';
 import { UNKNOWN_ACCOUNT } from '../accountsManage';
+import { rankToPoints } from '../rank/scalar';
 import { READINESS_TUNING as T } from './constants';
 import { dayOrdinal } from './day';
 import {
@@ -77,8 +88,10 @@ export interface PerfState {
   maxAccountShare: number;
   /** The main account (most games, among those played recently; tie: most recent game, then lexical). Null with no acute games. */
   mainAccount: string | null;
-  /** Share of the acute window played away from the main account — the damper's input. 0 for a single account, for unresolved captures, and when there is no main. */
+  /** RAW share of the acute window played on a different, resolved account. 0 for a single account, for unresolved captures, and when there is no main. Just "is there alt activity at all" — see `altDamp` for how much it actually costs. */
   altShare: number;
+  /** The actual multiplier applied to the subscore (1 = untouched): the mean per-game weight over the acute window, where a main-account game is always 1 and an alt game is full weight when rank-close to the main's usual rank, tapering to `altAccountWeight` for a genuine gap. */
+  altDamp: number;
   declineFired: boolean;
   /** Peak of the one-sided CUSUM accumulator over the acute window. */
   cusumMax: number;
@@ -108,7 +121,7 @@ export interface PerfState {
 }
 
 export const EMPTY_PERF: PerfState = {
-  available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, declineFired: false, cusumMax: 0,
+  available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, cusumMax: 0,
   countedGames: 0, statPenalty: 0, wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false,
   dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
@@ -126,19 +139,28 @@ const trustFor = (n: number): number => clamp((n - T.statMinGames) / T.statTrust
  *  - only accounts played since `activeFromOrdinal` are candidates, so a
  *    lifetime lead on an abandoned account cannot demote the account the
  *    player has actually moved to (all accounts compete when none qualify);
- *  - ties break to the most recent game, then lexically, so the choice is
- *    deterministic.
+ *  - the leader must be ahead by {@link READINESS_TUNING.mainAccountLeadMargin};
+ *    below it there is NO main, and every game weighs 1 (see `altGameWeight`).
  *
- * No lead margin, and none is needed: the crown feeds a damper sized by the
- * SHARE of the week played away from the main, so when two accounts are used
- * about equally that share is ~½ whichever of them wears it — the verdict
- * barely notices the swap. Null for an empty history.
+ * That margin matters more than it did for a flat per-account weight: the main
+ * doesn't just decide WHO gets damped, it supplies the RANK every alt game is
+ * measured against. Two accounts near a game-count tie but at genuinely
+ * different ranks would otherwise swap which one supplies that reference from
+ * a single game — and unlike a flat weight, that swap is not symmetric (the
+ * higher-ranked account reads as "at or above main" either way, so only the
+ * LOWER-ranked one's damping depends on which side of the tie it lands). The
+ * margin keeps that reference stable through an ordinary near-even split.
+ *
+ * A count tied exactly at the top always fails the margin regardless of which
+ * account a tie-break would have preferred, so there is deliberately no
+ * recency/lexical tie-break here — it could never change the outcome. Null for
+ * an empty history.
  */
 export function mainAccountOf(
   games: ReadonlyArray<Pick<GameRecord, 'account' | 'timestamp'>>,
   opts: { activeFromOrdinal?: number } = {},
 ): string | null {
-  const tally = new Map<string, { games: number; latest: number; active: boolean }>();
+  const tally = new Map<string, { games: number; active: boolean }>();
   for (const g of games) {
     // The Unknown bucket is captures whose BattleTag never resolved, not an
     // account someone plays — it must never win the crown and hand every real
@@ -148,10 +170,9 @@ export function mainAccountOf(
     const t = tally.get(g.account);
     if (t) {
       t.games += 1;
-      t.latest = Math.max(t.latest, g.timestamp);
       t.active = t.active || active;
     } else {
-      tally.set(g.account, { games: 1, latest: g.timestamp, active });
+      tally.set(g.account, { games: 1, active });
     }
   }
   // Only accounts still in play can be the main: an account abandoned months
@@ -159,10 +180,40 @@ export function mainAccountOf(
   // the player actually plays now to alt weight.
   const live = [...tally.entries()].filter(([, s]) => s.active);
   const pool = live.length ? live : [...tally.entries()];
-  const ranked = pool.sort(
-    ([aName, a], [bName, b]) => b.games - a.games || b.latest - a.latest || aName.localeCompare(bName),
-  );
-  return ranked.length ? ranked[0][0] : null;
+  const ranked = pool.sort(([, a], [, b]) => b.games - a.games);
+  if (!ranked.length) return null;
+  const [name, top] = ranked[0];
+  const runnerUp = ranked[1]?.[1].games ?? 0;
+  return top.games >= runnerUp * (1 + T.mainAccountLeadMargin) ? name : null;
+}
+
+/** Median rank scalar (see `../rank/scalar`) among `games`' `rankAtStart` snapshots, or null with none. */
+function medianRankPoints(games: ReadonlyArray<Pick<GameRecord, 'rankAtStart'>>): number | null {
+  const points = games
+    .map((g) => g.rankAtStart)
+    .filter((r): r is RankPosition => r != null)
+    .map(rankToPoints)
+    .sort((a, b) => a - b);
+  if (!points.length) return null;
+  const mid = Math.floor(points.length / 2);
+  return points.length % 2 === 1 ? points[mid] : (points[mid - 1] + points[mid]) / 2;
+}
+
+/**
+ * Weight for a game played on an alt account, from how far BELOW `mainPoints`
+ * (the main's usual rank scalar) `altPoints` sits. Only a gap BELOW costs
+ * anything — playing at or above your main's level on a second account isn't
+ * smurfing, whatever the reason for the second account. Full weight inside
+ * `altRankCloseGap` (mid/high Master reads as the same level as low
+ * Grandmaster); the floor at/beyond `altRankSmurfGap` (a couple of tiers down
+ * is a genuinely different game); linear in between.
+ */
+function rankProximityWeight(mainPoints: number, altPoints: number): number {
+  const gap = Math.max(0, mainPoints - altPoints);
+  if (gap <= T.altRankCloseGap) return 1;
+  if (gap >= T.altRankSmurfGap) return T.altRankFloorWeight;
+  const t = (gap - T.altRankCloseGap) / (T.altRankSmurfGap - T.altRankCloseGap);
+  return 1 - t * (1 - T.altRankFloorWeight);
 }
 
 /** Evaluate the objective-performance subscore as-of `refOrdinal` (the last active day). */
@@ -202,6 +253,36 @@ export function perfState(
   const isAlt = (account: string): boolean =>
     mainAccount !== null && account !== mainAccount && account !== UNKNOWN_ACCOUNT;
   const altShare = acuteGames.filter((g) => isAlt(g.account)).length / acuteGames.length;
+
+  // How much an alt game's evidence actually counts, per game: full weight when
+  // it was played at (or above) the rank the MAIN account usually sits at — a
+  // second account at the same level isn't smurfing — tapering down as the gap
+  // below that usual rank grows (see rankProximityWeight). "Usual" is the median
+  // rank held going into the main's own games over a trailing window
+  // (rankAtStart; a single hot or cold streak shouldn't move the goalposts), not
+  // today's number alone. Falls back to the flat altAccountWeight wherever a
+  // rank can't be read — no anchor set on one side or the other — which is
+  // exactly the number this replaces, so missing rank data degrades to the old
+  // behaviour rather than to no damping at all.
+  const rankWindowStart = refOrdinal - T.mainRankWindowDays + 1;
+  const inRankWindow = (g: Pick<GameRecord, 'timestamp'>): boolean => {
+    const ord = dayOrdinal(g.timestamp);
+    return ord >= rankWindowStart && ord <= refOrdinal;
+  };
+  const mainRankPoints = mainAccount === null
+    ? null
+    : medianRankPoints(games.filter((g) => g.account === mainAccount && inRankWindow(g)));
+  const altAccountRankPoints = new Map<string, number | null>();
+  const altGameWeight = (g: GameRecord): number => {
+    if (!isAlt(g.account)) return 1;
+    if (mainRankPoints === null) return T.altAccountWeight;
+    if (g.rankAtStart) return rankProximityWeight(mainRankPoints, rankToPoints(g.rankAtStart));
+    if (!altAccountRankPoints.has(g.account)) {
+      altAccountRankPoints.set(g.account, medianRankPoints(games.filter((x) => x.account === g.account && inRankWindow(x))));
+    }
+    const altPoints = altAccountRankPoints.get(g.account) ?? null;
+    return altPoints === null ? T.altAccountWeight : rankProximityWeight(mainRankPoints, altPoints);
+  };
 
   const baselines = buildBaselines(games);
   const acuteQualifying = baselines.qualifying.filter((q) => q.ordinal >= acuteStart && q.ordinal <= refOrdinal);
@@ -399,12 +480,14 @@ export function perfState(
   const dampened = targetEvidence && !fatigued;
 
   const penalty = (dampened ? T.dampFactor : 1) * (statPenalty + wrPenalty);
-  // MAIN-ACCOUNT DAMPER (see the note where `altShare` is derived). The whole subscore — reward
-  // and punishment alike — lerps toward neutral with the share of the week played away from the
-  // main account: all-main keeps it whole, all-alt leaves `altAccountWeight` of it. Applied to
-  // both directions on purpose, so a week on the alt can neither cost nor earn what the same week
-  // on the main would. altShare = 0 (one account, or no clear main) ⇒ factor 1 ⇒ bit-identical.
-  const altDamp = 1 - altShare * (1 - T.altAccountWeight);
+  // MAIN-ACCOUNT DAMPER (see the note where `altGameWeight` is derived). The
+  // whole subscore — reward and punishment alike — lerps toward neutral with
+  // the AVERAGE per-game weight over the acute window: every main-account game
+  // counts as 1, an alt game close in rank to the main counts close to 1 too,
+  // and only a genuine rank gap pulls its game down toward altAccountWeight.
+  // altDamp = 1 (single account, no clear main, or every alt game rank-close)
+  // ⇒ bit-identical.
+  const altDamp = acuteGames.reduce((sum, g) => sum + altGameWeight(g), 0) / acuteGames.length;
   const delta = clamp(altDamp * (bonus - penalty), T.perfDeltaMin, T.perfDeltaMax);
 
   const metricMeans: Partial<Record<MetricKey, number>> = {};
@@ -419,6 +502,7 @@ export function perfState(
     maxAccountShare,
     mainAccount,
     altShare,
+    altDamp,
     declineFired,
     cusumMax,
     countedGames,

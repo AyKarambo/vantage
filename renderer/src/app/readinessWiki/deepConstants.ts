@@ -34,8 +34,13 @@ export const deepConstants = {
   evidenceMinGames: T.evidenceMinGames, // 8
   heroLearnGames: T.heroLearnGames, // 12
 
-  // Several accounts, one player: the main account (most games) carries the verdict.
-  altAccountWeight: T.altAccountWeight, // 0.35
+  // Several accounts, one player: the main account (most games played recently) carries the
+  // verdict; an alt game's weight depends on how close its rank was to the main's usual one.
+  altRankCloseGapDivisions: T.altRankCloseGap / 100, // 2.5
+  altRankSmurfGapDivisions: T.altRankSmurfGap / 100, // 7.5
+  altRankFloorWeight: T.altRankFloorWeight, // 0.15
+  mainRankWindowDays: T.mainRankWindowDays, // 90
+  altAccountWeight: T.altAccountWeight, // 0.35 (fallback when a rank can't be read)
 
   // Self-report / tilt (both regime endpoints).
   tiltPenCap: T.tiltPenCap, // 10

@@ -127,6 +127,7 @@
 .sidebar.is-collapsed .nav-group,
 .sidebar.is-collapsed .sidebar-account .row-main,
 .sidebar.is-collapsed .sidebar-account > .u-dim,
+.sidebar.is-collapsed .sidebar-collapse-label,
 /* The session card is a sentence, not a glyph — there is no honest 60px form of
    it, so the rail drops it rather than truncating it into something misread. */
 .sidebar.is-collapsed .sidebar-session {
@@ -165,28 +166,38 @@
   right: 8px;
 }
 
-/* The rail toggle: a fixed 24×24 icon button beside the account chip in the
-   sidebar's top row (Ctrl B does the same), which is what lets the session
-   card be the bottom-most thing in the sidebar. */
+/* The rail toggle: a full-width bar directly below the account chip and above
+   the nav (Ctrl B does the same) — a deliberately bigger, harder-to-miss
+   target than a small corner glyph, and it reads as the seam it actually is
+   between "who I am" and "where I'm going". Collapsed, it stays full-width on
+   the 44px rail (still a generous click target) and drops its label. */
 .sidebar-collapse {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  display: inline-flex;
+  flex: 0 0 auto;
+  display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--dim-2);
-  border-radius: var(--r-sm);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
-}
-.sidebar-collapse:hover {
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  margin: 4px 0 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   background: var(--surface-2);
   color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.sidebar-collapse:hover {
+  background: var(--surface-3);
+  border-color: var(--border-2);
+  color: var(--text);
+}
+.sidebar-collapse-icon {
+  font-size: 13px;
+  line-height: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -209,19 +220,6 @@
   gap: 2px;
   /* Don't hand a scroll the nav can't use on to the view behind it. */
   overscroll-behavior: contain;
-}
-/* The rail toggle's own row, above the account chip and the scrolling nav (the
-   session card is pinned below them). Its own row rather than a column beside
-   the chip: the chip's rank line needs the sidebar's full 188px, and a 24px
-   button plus a gap would take a quarter of it. */
-.sidebar-top {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 2px;
-}
-.sidebar.is-collapsed .sidebar-top {
-  justify-content: center;
 }
 .sidebar-account {
   display: flex;

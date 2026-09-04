@@ -170,8 +170,18 @@ export const READINESS_TUNING = {
   minPer10Minutes: 4.5,
   /** A hero with fewer lifetime games — counted ACROSS ALL the player's accounts (experience is the player's, not the account's) — is "still learning" and excluded from decline detection. */
   heroLearnGames: 12,
-  /** What an all-alt week is worth: the objective subscore lerps toward neutral with the share of the acute window played away from the MAIN account (see `mainAccountOf`), keeping this fraction at share 1. The player experiments on alts, so that evidence moves the verdict less — in both directions, and never by making the detectors themselves twitchier (the damper is applied once, to the finished delta). A single-account window has share 0 ⇒ factor 1 ⇒ bit-identical. */
+  /** FALLBACK weight for an alt-account game when its rank can't be compared to the main's (no anchor on one side or the other — see `rankProximityWeight`). Rank-aware weighting is the normal path; this is what it degrades to without the data for it. */
   altAccountWeight: 0.35,
+  /** An alt game played up to this many rank-scalar points (see `../rank/scalar`, 100/division, 500/tier) BELOW the main account's usual rank still counts at full weight — 2.5 divisions covers "mid/high Master" reading as the same level as "low Grandmaster": a second account at your own level isn't smurfing. */
+  altRankCloseGap: 250,
+  /** An alt game at/beyond this many points below the main's usual rank bottoms out at `altRankFloorWeight` — 7.5 divisions (1.5 tiers), so a low-Master alt (≈5 divisions below a low-GM main) lands roughly mid-taper while most of Diamond and all of Emerald (well past a tier down) sit at the floor. Linear between this and `altRankCloseGap`. */
+  altRankSmurfGap: 750,
+  /** The floor `rankProximityWeight` tapers to for a badly mismatched alt — lower than the flat `altAccountWeight` fallback, because close alts now get FULL credit instead of everyone getting the same middling number; genuine smurfing has to cost more than that for the distinction to mean anything. */
+  altRankFloorWeight: 0.15,
+  /** Trailing window (days, ending at the reference day) the main account's "usual" rank is the MEDIAN of — not today's number alone, so a single hot or cold streak can't move what counts as rank-close for an alt. */
+  mainRankWindowDays: 90,
+  /** How far ahead the most-played account must be (10% more games than the runner-up) to BE the main; below it there is no main and every game weighs 1. The main supplies the RANK every alt game is compared to, so — unlike a flat per-account weight — a coin-flip crown between two accounts of genuinely different rank is not symmetric: only this margin keeps that reference from swapping on a single game between two accounts near an even split. */
+  mainAccountLeadMargin: 0.1,
   /** Minimum baseline games before a stat bucket is trusted at all. */
   statMinGames: 15,
   /** Trust ramps linearly from statMinGames to statMinGames + this (no on/off cliff). */

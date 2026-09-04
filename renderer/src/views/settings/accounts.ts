@@ -234,7 +234,15 @@ function openManageRanks(account: string, onChange: () => void): void {
     // after a write, showing the state from before it) with no way forward.
     const repaint = (): Promise<void> =>
       read().then(
-        ([r, p]) => { ranks = r; loaded = true; paint(r, p); },
+        ([r, p]) => {
+          ranks = r;
+          loaded = true;
+          // The button below is built once, before this first read can have
+          // landed — flip its disabled state live rather than waiting for a
+          // rebuild that never comes (the button isn't part of `host`).
+          setRankBtn.disabled = false;
+          paint(r, p);
+        },
         () => {
           render(host, h('div', { class: 'hint' },
             'Could not read this account’s ranks. Close and reopen this dialog to try again.'));
@@ -307,82 +315,87 @@ function openManageRanks(account: string, onChange: () => void): void {
             onClick: () => leaveFor(() => openBackdateStart(account, role, flow)),
           }),
         );
-      } else {
-        // Re-pick where the run starts. "Reset to begin" rewinds to the run's
-        // OWN startedAt, which is no help when that instant is the mistake — a
-        // run started a few matches late, or after the placements had already
-        // begun. Same picker the not-yet-started track offers, so "I forgot to
-        // start it" and "I started it in the wrong place" have the same answer.
-        // Always `true` here: this branch only renders when a run exists, so the
-        // picker is always REPLACING one rather than opening a first.
-        const repick = (): void => leaveFor(() => openBackdateStart(account, role, flow, true, run.completed));
+      } else if (!run.completed) {
+        // ACTIVE run — still counting toward 10. All three actions here change
+        // WHERE or WHETHER it counts; none of them touches a confirmed rank,
+        // because this run hasn't produced one yet.
         actions.push(
-          run.completed
-            // Re-picking the start of a FINISHED run reopens it, which throws
-            // away the rank its completion confirmed — the same loss Reset and
-            // Cancel guard, so it gets the same two-click guard and wording.
-            ? confirmButton({
-                label: 'Change start match…',
-                confirmLabel: 'Change start — reopen this run?',
-                variant: 'ghost',
-                title: 'Move this finished run to start at an earlier match. It reopens the run.',
-                confirmTitle: "Reopens the run from the match you pick and restores the pre-run rank — undoes the confirmed rank. Can't be undone.",
-                onConfirm: () => repick(),
+          button('Change start match…', {
+            variant: 'ghost',
+            // "Reset to begin" rewinds to the run's OWN startedAt, which is no
+            // help when that instant is the mistake — a run started a few
+            // matches late, or after the placements had already begun. Same
+            // picker the not-yet-started track offers, so "I forgot to start
+            // it" and "I started it in the wrong place" have the same answer.
+            title: 'Move this run to start at an earlier match — for when it was started late, or on the wrong game.',
+            onClick: () => leaveFor(() => openBackdateStart(account, role, flow, true)),
+          }),
+          confirmButton({
+            label: 'Reset to begin',
+            confirmLabel: 'Reset — replay from match 1?',
+            variant: 'ghost',
+            title: 'Rewinds this run to its own start and replays the same 10 matches from there.',
+            confirmTitle: "Restarts the run from match 1 (its own start point). Can't be undone.",
+            onConfirm: (reset) => void bridge.resetPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
+          }),
+          confirmButton({
+            label: 'Cancel run',
+            confirmLabel: 'Cancel — remove this run?',
+            variant: 'ghost',
+            title: 'Stops counting these as placements — the matches revert to normal ±% tracking, and the rank restores to what it was before the run.',
+            confirmTitle: "Removes this run and hands its matches back to normal ±% tracking, restoring the pre-run rank. Can't be undone.",
+            onConfirm: (reset) => void bridge.cancelPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
+          }),
+        );
+        // Same reveal-rank confirmation the 10th placement match opens from
+        // log-match.ts — one dialog for "the game just showed me a rank",
+        // whether that happens naturally at match 10 or the player forces it
+        // here. Seeded with the run's latest prediction, same as there.
+        const openReveal = (): void => leaveFor(() => openPlacementComplete({
+          account, role, suggestion: run.latestPrediction, onDone: () => { onChange(); reopen(); }, onDismiss: reopen,
+        }));
+        actions.push(
+          run.awaitingRank
+            // The run already counted out its ten matches — "early" would be
+            // a lie, and this is the CTA the player is actually here for.
+            ? button('Confirm revealed rank', {
+                variant: 'primary',
+                title: 'Overwatch has revealed your rank for this run — enter exactly what it showed you.',
+                onClick: openReveal,
               })
-            : button('Change start match…', {
+            : button('Finish early', {
                 variant: 'ghost',
-                title: 'Move this run to start at an earlier match — for when it was started late, or on the wrong game.',
-                onClick: repick,
+                title: 'End this run before its ten matches, using the rank Overwatch reveals now.',
+                onClick: openReveal,
               }),
         );
-        // Reset and Cancel both throw away the run's progress and, for a
-        // COMPLETED run, the confirmed rank it produced — the one thing this
-        // modal exists to make undoable. A stray click here is worse than most
-        // destructive actions in the app (it silently reverts a rank the player
-        // may have already told Notion or a teammate about), so both go through
-        // the same two-click confirmButton guard the match-delete flows use, in
-        // every run state.
-        actions.push(confirmButton({
-          label: 'Reset to begin',
-          confirmLabel: 'Reset — replay from match 1?',
-          variant: 'ghost',
-          title: 'Rewinds this run to its start and restores the rank the track had before it. The run stays open to replay.',
-          confirmTitle: "Restarts the run from match 1 and restores the pre-run rank — undoes the confirmed rank too, if this run finished. Can't be undone.",
-          onConfirm: (reset) => void bridge.resetPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
-        }));
-        actions.push(confirmButton({
-          label: 'Cancel run',
-          confirmLabel: 'Cancel — remove this run?',
-          variant: 'ghost',
-          title: 'Restores the rank the track had before this run and removes the run — its matches return to normal ±% tracking.',
-          confirmTitle: "Removes the run and hands its matches back to ±% tracking — undoes the confirmed rank too, if this run finished. Can't be undone.",
-          onConfirm: (reset) => void bridge.cancelPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
-        }));
-        if (!run.completed) {
-          // Same reveal-rank confirmation the 10th placement match opens from
-          // log-match.ts — one dialog for "the game just showed me a rank",
-          // whether that happens naturally at match 10 or the player forces it
-          // here. Seeded with the run's latest prediction, same as there.
-          const openReveal = (): void => leaveFor(() => openPlacementComplete({
-            account, role, suggestion: run.latestPrediction, onDone: () => { onChange(); reopen(); }, onDismiss: reopen,
-          }));
-          actions.push(
-            run.awaitingRank
-              // The run already counted out its ten matches — "early" would be
-              // a lie, and this is the CTA the player is actually here for.
-              ? button('Confirm revealed rank', {
-                  variant: 'primary',
-                  title: 'Overwatch has revealed your rank for this run — enter exactly what it showed you.',
-                  onClick: openReveal,
-                })
-              : button('Finish early', {
-                  variant: 'ghost',
-                  title: 'End this run before its ten matches, using the rank Overwatch reveals now.',
-                  onClick: openReveal,
-                }),
-          );
-        }
-        if (run.completed && run.drifted) {
+      } else {
+        // COMPLETED (placed) run — the rank is already confirmed. "Change start
+        // match" doesn't apply here: it exists to fix where an ACTIVE run counts
+        // from, and a finished run has nothing left to count. What's left is two
+        // genuinely different ways to undo the placement, both of which throw
+        // away the confirmed rank — the one thing this modal exists to make
+        // undoable — so both sit behind the same two-click guard the match-
+        // delete flows use.
+        actions.push(
+          confirmButton({
+            label: 'Redo placements',
+            confirmLabel: 'Redo — undo the confirmed rank?',
+            variant: 'ghost',
+            title: 'Undoes the confirmed rank and replays this run’s 10 matches from the start — for when the result was wrong.',
+            confirmTitle: "Undoes the confirmed rank and reopens this run from match 1. You'll confirm a new rank once it finishes again. Can't be undone.",
+            onConfirm: (reset) => void bridge.resetPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
+          }),
+          confirmButton({
+            label: 'Remove placement record',
+            confirmLabel: 'Remove — undo the confirmed rank?',
+            variant: 'ghost',
+            title: 'Undoes the confirmed rank and un-marks these matches as placements — for when this shouldn’t have been tracked as a run at all.',
+            confirmTitle: "Undoes the confirmed rank and removes this run — its matches return to normal ±% tracking. Can't be undone.",
+            onConfirm: (reset) => void bridge.cancelPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
+          }),
+        );
+        if (run.drifted) {
           note = h('div', { class: 'rank-modal-note' },
             h('span', { class: 'hint' }, 'The matches this run counted have changed since it finished.'),
             button('Recount', { variant: 'ghost', onClick: () => void bridge.recountPlacementRun({ account, role }).then(afterWrite) }),
@@ -398,20 +411,23 @@ function openManageRanks(account: string, onChange: () => void): void {
       );
     }
 
+    // Built once, before the first read can have landed, so it starts disabled
+    // — the picker seeds each role from `ranks`, and an empty array would look
+    // like "no rank set" and offer to overwrite one the account actually has.
+    // `repaint()`'s success branch (above) flips it live once real data is in.
+    const setRankBtn = button('Set rank…', {
+      variant: 'soft',
+      title: 'Set or replace the rank anchor for a role — the point logged matches move it from.',
+      disabled: !loaded,
+      onClick: () => leaveFor(() => openSetRank(account, ranks, flow)),
+    });
+
     void repaint();
 
     return h('div', { class: 'stack rank-modal' },
       h('div', { class: 'rank-modal-head' },
         h('div', { class: 'rank-modal-title' }, `Ranks & placements — ${account}`),
-        button('Set rank…', {
-          variant: 'soft',
-          title: 'Set or replace the rank anchor for a role — the point logged matches move it from.',
-          // Disabled until the first read lands: the picker seeds each role from
-          // `ranks`, and an empty array would look like "no rank set" and offer
-          // to overwrite one the account actually has.
-          disabled: !loaded,
-          onClick: () => leaveFor(() => openSetRank(account, ranks, flow)),
-        }),
+        setRankBtn,
       ),
       h('div', { class: 'hint' },
         'Set a rank once per role; logged competitive matches move it from there. A placement run counts the next '
@@ -484,7 +500,7 @@ function openSetRank(account: string, ranks: RankSummary[], flow: RanksFlow): vo
  * screen already holds it, and a run can only start from a match recent enough
  * to be in view anyway.
  */
-function openBackdateStart(account: string, role: Role, flow: RanksFlow, replacesRun = false, reopensRun = false): void {
+function openBackdateStart(account: string, role: Role, flow: RanksFlow, replacesRun = false): void {
   const rows = (store.get().data?.matches ?? [])
     .filter((m) => m.account === account && m.role === role)
     .sort((a, b) => b.timestamp - a.timestamp)
@@ -497,12 +513,12 @@ function openBackdateStart(account: string, role: Role, flow: RanksFlow, replace
       'Pick the match that was your first placement. It and every later competitive match on this track count '
       + 'toward the run; their logged ±% stays in your data but is ignored while the run is open.'),
     ...(replacesRun
+      // Only reachable from an ACTIVE run's "Change start match…" — a
+      // completed run offers "Redo placements" / "Remove placement record"
+      // instead, so there's no reopening case to describe here.
       ? [h('div', { class: 'hint' },
-          reopensRun
-            ? 'This run has already finished. Moving its start REOPENS it and undoes the rank you confirmed — '
-              + 'the track goes back to the rank it had before the run, and counts out its ten matches again.'
-            : 'This replaces where the current run starts — the run itself, and the rank it had before, are kept. '
-              + 'Predicted ranks you already entered stay on their matches.')]
+          'This replaces where the current run starts — the run itself, and the rank it had before, are kept. '
+          + 'Predicted ranks you already entered stay on their matches.')]
       : []),
     h('div', { class: 'hint u-dim' },
       'Shows this track’s matches within your current dashboard filter — widen the time range if the one you want isn’t listed.'),

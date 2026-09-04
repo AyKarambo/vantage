@@ -3,7 +3,7 @@ import { h } from '../../dom';
 import { PALETTE } from '../../theme';
 import { svgEl, svgRoot, svgText } from '../svg';
 import { tooltipLayer } from '../tooltip';
-import { emptyChart } from './shared';
+import { emptyChart, rollingMean } from './shared';
 
 export interface RatingPoint {
   /** YYYY-MM-DD day label. */
@@ -15,14 +15,6 @@ export interface RatingPoint {
 }
 
 const ROLLING_WINDOW = 7;
-
-/** Trailing rolling mean over up to the last `ROLLING_WINDOW` points. */
-function rolling(points: RatingPoint[]): number[] {
-  return points.map((_, i) => {
-    const slice = points.slice(Math.max(0, i - ROLLING_WINDOW + 1), i + 1);
-    return slice.reduce((a, p) => a + p.rating, 0) / slice.length;
-  });
-}
 
 /**
  * Two-series chart: per-day average dots/line plus a smoother rolling-average
@@ -53,7 +45,7 @@ export function ratingChart(points: RatingPoint[]): HTMLElement {
   points.forEach((p, i) => (daily += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(p.rating) + ' '));
   s.appendChild(svgEl('path', { d: daily, fill: 'none', stroke: PALETTE.accent, 'stroke-width': 1.5, opacity: 0.55, 'stroke-linejoin': 'round' }));
 
-  const avg = rolling(points);
+  const avg = rollingMean(points.map((p) => p.rating), ROLLING_WINDOW);
   let smooth = '';
   avg.forEach((v, i) => (smooth += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(v) + ' '));
   s.appendChild(svgEl('path', { d: smooth, fill: 'none', stroke: PALETTE.accentBright, 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));

@@ -128,24 +128,30 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   credit; the Win % comes from the exact share. This applies to the Heroes table and the hero
   drill-down — the Matches list, map and role splits and target
   scoping still count whole games.
-- **Readiness treats the account you play most as your main.** Games on your other accounts
-  count for about a third (×0.35) in the objective read, so an alt-only rough patch moves the
-  verdict much less — it takes roughly three times as many games there to say the same thing.
-  Your main has to be clearly ahead: if you split your time about evenly, or play one account,
-  nothing changes. An account you have not touched in weeks no longer counts as your main. The *"recent games span multiple accounts"* note now names your main account
-  and the weight, and a quieter *"games on your other accounts count ×0.35"* note appears
-  whenever an alt shows up in your recent games. **Help → What moves the score** explains it
-  under *Several accounts, one player*.
+- **Readiness treats the account you play most as your main — and weighs an alt by how close its
+  rank is to yours.** A second account near your usual rank counts in full; that's not smurfing,
+  it's the same skill level on another account. Only once the gap gets real does it start to
+  matter, tapering down to about a sixth (×0.15) of the read for a clearly lower-ranked alt. Your
+  "usual" rank is the typical one you've held over the last few months, not just today's number,
+  so one hot or cold streak can't move the goalposts. An account you haven't touched in weeks no
+  longer counts as your main. The *"recent games span multiple accounts"* note now names your
+  main account, and a quieter note appears whenever an alt shows up in your recent games.
+  **Help → What moves the score** explains it under *Several accounts, one player*.
 - **Settings → Accounts is a tidy list.** One row per account — name, game count and a compact
   per-role rank summary — with everything role-specific (set rank, placement runs, confirming a
-  revealed rank, reset and cancel) moved into a **Manage ranks…** dialog behind each row, instead
-  of a block of buttons under every account.
-- **The sidebar's collapse control moved to the top of the sidebar**, above the account chip,
-  and **Current session** is now the bottom card. With nothing pinned the chip says **All
-  accounts** (it used to borrow the name of whichever account you'd played most recently) and
-  its rank line names the account it belongs to — *Karambo · Dmg · GM 4 · 16%*. The
-  account switcher is wider and lines up as check · name · rank, with the active account's
-  per-role lines beneath it.
+  revealed rank) moved into a **Manage ranks…** dialog behind each row, instead of a block of
+  buttons under every account. A finished placement run now offers **"Redo placements"** and
+  **"Remove placement record"** in place of the open-run actions — "Change start match…" only
+  makes sense while a run is still counting, and re-picking a finished one's start behind a
+  confirm was more confusing than useful.
+- **The sidebar's collapse control is now its own bar directly under the account chip** — bigger
+  and harder to miss than the small corner glyph it replaces — and **Current session** is still
+  the bottom card. With nothing pinned the chip says **All accounts** (it used to borrow the name
+  of whichever account you'd played most recently) and its rank line names the account it
+  belongs to — *Karambo · Dmg · GM 4 · 16%*. The account switcher is wider and lines up as
+  check · name · rank, with the active account's per-role lines beneath it.
+- **Winrate over time gets a rolling average**, the same treatment as the self-rating trend, so
+  the general direction shows through day-to-day (or week-to-week) noise.
 - **Targets list and detail page.** The Targets list now shows each target in plain language —
   name, grading mode, hit-rate, and a one-sentence status (e.g., "Paying off — you win more when
   you hit it") — alongside an **Active** toggle, removing stats jargon from the overview. Click
