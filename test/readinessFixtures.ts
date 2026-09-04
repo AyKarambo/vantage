@@ -8,6 +8,7 @@
 import type { GameRecord, MatchMental, TargetGrade } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 import type { AuthoredTarget } from '../src/core/targets';
+import type { RankPosition } from '../src/core/rank/types';
 
 export const MIN = 60_000;
 let seq = 0;
@@ -84,6 +85,11 @@ export function statSpan(fromDay: number, toDay: number, o: StatOpts): GameRecor
 /** Attach a Review (grades + neutral flags) to a game. */
 export function graded(g: GameRecord, grades: Record<string, TargetGrade>): GameRecord {
   return { ...g, review: { at: g.timestamp + MIN, grades, flags: g.mental ?? {} } };
+}
+
+/** Attach a rank-at-start snapshot (see GameRecord.rankAtStart) to every game — the readiness main-account damper's rank-proximity input. */
+export function withRank(games: GameRecord[], pos: RankPosition): GameRecord[] {
+  return games.map((g) => ({ ...g, rankAtStart: pos }));
 }
 
 /** An authored improvement target, active by default. */

@@ -22,10 +22,10 @@ configurable gap since your last game (default 3h; adjustable in Settings → Ge
 Coaching), so a late-night session spanning past midnight still reads as one, and the card
 never shows stale data as "current."
 
-The sidebar **collapses to an icon-only rail** (the small `«` button beside the account chip at
-the top of the sidebar, or **Ctrl B**), which sticks between launches — useful on a small screen,
-or whenever you want the chrome out of the way. Collapsed, each icon keeps its name as a tooltip,
-the toggle sits under the avatar, and the Review count shows as a dot. The **Current session**
+The sidebar **collapses to an icon-only rail** (the `« Collapse` bar directly under the account
+chip, or **Ctrl B**), which sticks between launches — useful on a small screen, or whenever you
+want the chrome out of the way. Collapsed, each icon keeps its name as a tooltip, the toggle
+shrinks to just the `»` glyph, and the Review count shows as a dot. The **Current session**
 card is the bottom-most thing in the sidebar; if the navigation ever does run out of room it
 scrolls, with the account switcher and session card staying put either side of it. Opening the
 account switcher lists every account as an aligned row — ✓ · name · rank — with the active
@@ -113,7 +113,8 @@ account's per-role lines beneath it.
   with an improving/worsening read, **tilt by game # in a sitting** (the "stop after game N"
   read), flag counts with leavers split by team, and a **break-reminder setting**
   (on/off + loss threshold) that fires a tray notification after N consecutive losses.
-- **Trends** — winrate over time, splits by role/account, **when you win** (time-of-day
+- **Trends** — winrate over time (with a rolling average alongside the daily/weekly line so the
+  general direction reads through the noise), splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and
   **your self-rating over time** (the 0–100 performance slider with a
@@ -127,9 +128,12 @@ account's per-role lines beneath it.
   performance vs your own baselines** (winrate and elims/deaths/damage/healing per 10 minutes
   **played** — fight time, not the wall clock — per hero *and per account*, so an alt's lobbies
   never skew your main; the account you've played most lately is your **main** and carries the
-  verdict, and the more of a week you spent elsewhere the more this part of the score is pulled
-  back toward neutral — a week entirely on an alt keeps **×0.35** of it, credit as much as blame,
-  since that's where you experiment; a decline only counts once it's sustained — one
+  verdict, and games on another account count in full as long as they were played close to your
+  main's usual rank — a second account near your own level isn't smurfing. Only a real rank gap
+  costs anything, tapering down to **×0.15** for one that's clearly lower; the older flat **×0.35**
+  now only applies as a fallback when a rank can't be compared at all. Credit is weighed the same
+  as blame — a great or an awful week on a mismatched alt says less either way; a decline only
+  counts once it's sustained — one
   long marathon session qualifies, a single bad game never does), and
   down-weighted **self-report** (tilt + your performance rating, hard-capped so a feeling
   never outweighs the evidence). Working on your **improvement targets** softens a results dip
@@ -415,8 +419,13 @@ a network port, and Vantage sends nothing outward through it; see
   It just holds them out of the rank arithmetic until you confirm — there is no settled rank for
   them to move from yet — and the rank you then enter is taken as-is, because it already reflects
   them. **Everything is
-  reversible**: **"Reset to begin"** rewinds to 0/10 and restores the pre-run rank, **"Cancel"**
-  removes the run and hands its matches back to normal ±% arithmetic. A run can be **backdated**
+  reversible**: while a run is still open, **"Reset to begin"** rewinds to 0/10 and restores the
+  pre-run rank, **"Cancel run"** removes the run and hands its matches back to normal ±%
+  arithmetic, and **"Change start match…"** re-picks where it counts from — none of that applies
+  once a run has finished, so a **completed** run instead offers **"Redo placements"** (undo the
+  confirmed rank and replay the same ten matches) and **"Remove placement record"** (undo the
+  confirmed rank and un-mark the run entirely); both are the same two-click confirm the open-run
+  actions use. A run can be **backdated**
   to an already-logged match if you didn't catch it at the time. If a counted match is deleted or
   moved to a different role afterward, the run **flags the inconsistency** and offers **"Recount"**
   — no match history is silently altered. Matches logged before a completed run show **"before the
@@ -559,9 +568,11 @@ Electron/Overwolf/Notion plumbing kept at the edges:
 - `core/readiness/` — the pure readiness / training-load model: gap-based sessions, a local
   4am-day boundary, EWMA acute-vs-chronic load, per-account/per-hero stat **baselines** with a
   one-sided-CUSUM decline detector (`baselines.ts`, `performance.ts` — the still-learning count
-  pools a hero's games across accounts, and `mainAccountOf` picks the main so the finished
-  subscore lerps toward neutral with the share of the window played elsewhere — `altAccountWeight`,
-  0.35, at an all-alt week; the detectors themselves stay account-blind), a disagreement-gated
+  pools a hero's games across accounts, and `mainAccountOf` picks the main; the finished subscore
+  is then damped per game by how far an alt's rank (`GameRecord.rankAtStart`) sits below the
+  main's own MEDIAN rank over a trailing window — full weight when close, tapering to a floor
+  (`altRankFloorWeight`, 0.15) for a genuine gap, `altAccountWeight` (0.35) only as the no-rank-data
+  fallback; the detectors themselves stay account-blind), a disagreement-gated
   subjective read (`subjective.ts`), and the **score-first composite** — three bounded
   subscore deltas on a 75 anchor, with the band derived from (score, driver, hard gates)
   (`score.ts`), plus a continuous **stats↔manual blend** `b` (`regime.ts`, bit-identical to the

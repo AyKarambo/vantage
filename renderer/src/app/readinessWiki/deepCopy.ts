@@ -41,13 +41,16 @@ export const deepCopy = {
     );
   },
 
-  /** Performance deep tier: several accounts, one player — the main account carries the verdict. */
+  /** Performance deep tier: several accounts, one player — the main account carries the verdict, rank-aware alt weighting. */
   accountWeighting(): string {
     return (
       `Play on more than one account and the one you have played most lately is your main — it carries the verdict. ` +
-      `Every check below runs on all your games the same way; what changes is the SIZE of the result. ` +
-      `The more of the week you spent away from your main, the more this part of the score is pulled back toward neutral — a week entirely on an alt keeps ×${dc.altAccountWeight} of it. ` +
-      `That applies to credit as much as to blame: you experiment on alts, so neither a great nor an awful week there says as much about you. ` +
+      `Every check below runs on all your games the same way; what changes is how much each alt game is worth. ` +
+      `An alt game counts in FULL as long as it was played within ${dc.altRankCloseGapDivisions} divisions of the rank you've usually held over your last ${dc.mainRankWindowDays} days — that's not smurfing, it's the same level on a second account. ` +
+      `Only once the gap passes ${dc.altRankSmurfGapDivisions} divisions below your usual rank does it bottom out, at ×${dc.altRankFloorWeight}; in between, it tapers. ` +
+      `Playing at or above your usual rank on an alt is never penalised, whatever the reason. ` +
+      `That applies to credit as much as to blame: an alt week can neither cost nor earn what the same week on your main would. ` +
+      `Falls back to a flat ×${dc.altAccountWeight} wherever a rank can't be read at all — no anchor set on one side or the other. ` +
       `Stats are still compared to each account's own usual, so an alt's lobbies never skew your main's baseline.`
     );
   },

@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { perfState, EMPTY_CONTEXT, mainAccountOf } from '../src/core/readiness/performance';
 import { computeReadiness, READINESS_TUNING as T, dayOrdinal } from '../src/core/readiness';
 import type { GameRecord } from '../src/core/analytics';
+import type { RankPosition } from '../src/core/rank/types';
 import { UNKNOWN_ACCOUNT } from '../src/core/accountsManage';
-import { ts, statSpan, span } from './readinessFixtures';
+import { ts, statSpan, span, withRank } from './readinessFixtures';
 
 /** perfState at the given day, with empty target context. */
 const perfAt = (games: GameRecord[], day: number) =>
@@ -336,21 +337,28 @@ describe('mainAccountOf — the account that carries the verdict', () => {
     expect(mainAccountOf([...games].reverse())).toBe('Karambo'); // order-independent
   });
 
-  it('the crown is a plain plurality — no margin, because the damper makes a swap harmless', () => {
-    const a = span(5, 9, { perDay: 1, account: 'A' }); // 5 games, last on day 9
-    const b = span(6, 10, { perDay: 1, account: 'B' }); // 5 games, last on day 10
-    expect(mainAccountOf([...a, ...b])).toBe('B'); // tie ⇒ most recent
-    expect(mainAccountOf([...b, ...a])).toBe('B'); // order-independent
-    const aAhead = [...a, ...span(11, 11, { perDay: 1, account: 'A' })];
+  it('needs a clear lead to hold the crown — a near-tie has no main at all', () => {
+    const a = span(5, 9, { perDay: 1, account: 'A' }); // 5 games
+    const b = span(6, 10, { perDay: 1, account: 'B' }); // 5 games
+    expect(mainAccountOf([...a, ...b])).toBeNull(); // exact tie ⇒ no clear main
+    expect(mainAccountOf([...b, ...a])).toBeNull(); // order-independent — no tie-break to disagree with
+    const aAhead = [...a, ...span(11, 11, { perDay: 1, account: 'A' })]; // 6 vs 5 clears the 10% margin
     expect(mainAccountOf([...aAhead, ...b])).toBe('A');
   });
 
-  it('ties break to the most recent game, then lexically', () => {
+  it('a single account is always its own main — the margin only ever compares against a real runner-up', () => {
     expect(mainAccountOf(span(5, 9, { perDay: 1, account: 'Solo' }))).toBe('Solo');
-    const zed = span(5, 9, { perDay: 2, account: 'Zed' });
-    const amy = span(5, 9, { perDay: 2, account: 'Amy' }); // identical count AND timestamps
-    expect(mainAccountOf([...zed, ...amy])).toBe('Amy');
-    expect(mainAccountOf([...amy, ...zed])).toBe('Amy');
+  });
+
+  it('a tie among several accounts is still no main, whichever pair is tightest', () => {
+    // Two accounts tied for the lead, a third clearly behind — the tie at the
+    // top still fails the margin no matter which of the two a sort would have
+    // preferred; there is no tie-break left to disagree with that outcome.
+    const zed = span(5, 9, { perDay: 2, account: 'Zed' }); // 10
+    const amy = span(5, 9, { perDay: 2, account: 'Amy', hour: 18 }); // 10
+    const low = span(5, 6, { perDay: 1, account: 'Low', hour: 20 }); // 2
+    expect(mainAccountOf([...zed, ...amy, ...low])).toBeNull();
+    expect(mainAccountOf([...amy, ...zed, ...low])).toBeNull();
   });
 
   it('never crowns the Unknown bucket — it is unresolved captures, not an account', () => {
@@ -461,9 +469,10 @@ describe('main-account damper — an alt week moves the verdict less, both ways'
 
   describe('winrate pooling', () => {
     // The uncoupled baseline window is days 15–28 (chronicDays 21 minus the acute week): both
-    // accounts must clear wrMinDecidedBase (30) there — Main 14×4 = 56, Smurf 14×3 = 42 — and
-    // Main (96 + 21 games) stays the main account over Smurf (72 + 21).
-    const mainWins = span(5, 28, { perDay: 4, account: 'Main' }); // 96
+    // accounts must clear wrMinDecidedBase (30) there — Main 14×6 = 84, Smurf 14×3 = 42 — and
+    // Main clears mainAccountLeadMargin over Smurf whether or not Smurf's 21 acute games are
+    // the only acute games in the window (144 vs 93 ⇒ still a clear lead either way).
+    const mainWins = span(5, 28, { perDay: 6, account: 'Main' }); // 144
     const smurfWins = span(5, 28, { perDay: 3, account: 'Smurf', hour: 19 }); // 72
     const acute = (account: string, result: 'Win' | 'Loss') =>
       span(29, 35, { perDay: 3, result, account, hour: account === 'Main' ? 14 : 19 }); // 21 decided each
@@ -519,14 +528,131 @@ describe('main-account damper — an alt week moves the verdict less, both ways'
   });
 });
 
+describe('rank-proximity weighting — how much an alt game actually costs', () => {
+  // Rank-scalar points: 100/division, 500/tier (see ../rank/scalar). The main
+  // sits at Grandmaster 5, 0% (index 7) = 3500 — "low GM" in the ask this
+  // implements ("my main rank is low gm and i play on mid/high master then it
+  // should be taken into account 100% ... low master should weigh less and
+  // dia/emerald is basically smurfing at this point").
+  const GM5: RankPosition = { tier: 'Grandmaster', division: 5, progressPct: 0 }; // 3500
+  const MID_MASTER: RankPosition = { tier: 'Master', division: 2, progressPct: 50 }; // 3350, 150pt gap
+  const LOW_MASTER: RankPosition = { tier: 'Master', division: 5, progressPct: 0 }; // 3000, 500pt gap
+  const DIAMOND: RankPosition = { tier: 'Diamond', division: 3, progressPct: 0 }; // 2700, 800pt gap
+  const EMERALD: RankPosition = { tier: 'Emerald', division: 3, progressPct: 0 }; // 2200, 1300pt gap
+  const CHAMPION: RankPosition = { tier: 'Champion', division: 1, progressPct: 100 }; // 4500, above main
+
+  const mainBase = withRank(statSpan(5, 28, { perDay: 3, ...HEALTHY, account: 'Main' }), GM5);
+  /** altDamp for a whole acute week played on the alt at a given rank (or ranks, one per game). */
+  const altDampAt = (ranks: RankPosition | RankPosition[]) => {
+    const raw = statSpan(33, 35, { perDay: 3, ...HEALTHY, account: 'Smurf', hour: 19 });
+    const tagged = Array.isArray(ranks) ? raw.map((g, i) => ({ ...g, rankAtStart: ranks[i % ranks.length] })) : withRank(raw, ranks);
+    return perfAt([...mainBase, ...tagged], 35).altDamp;
+  };
+
+  it('at or above the main’s usual rank costs nothing — that isn’t smurfing', () => {
+    expect(altDampAt(CHAMPION)).toBe(1);
+    expect(altDampAt(GM5)).toBe(1); // exactly the main's own rank: gap 0
+  });
+
+  it('close below the main’s usual rank still counts fully ("mid/high master vs low gm")', () => {
+    expect(altDampAt(MID_MASTER)).toBe(1); // 150pt gap ≤ altRankCloseGap (250)
+  });
+
+  it('a moderate gap tapers the weight down without hitting the floor ("low master ... weighs less")', () => {
+    const d = altDampAt(LOW_MASTER); // 500pt gap, between the two thresholds
+    expect(d).toBeGreaterThan(T.altRankFloorWeight);
+    expect(d).toBeLessThan(1);
+    // t = (500−250)/(750−250) = 0.5 ⇒ weight = 1 − 0.5·(1−0.15)
+    expect(d).toBeCloseTo(1 - 0.5 * (1 - T.altRankFloorWeight), 9);
+  });
+
+  it('a large gap bottoms out at the floor ("dia/emerald is basically smurfing")', () => {
+    expect(altDampAt(DIAMOND)).toBeCloseTo(T.altRankFloorWeight, 9); // 800pt gap ≥ altRankSmurfGap (750)
+    expect(altDampAt(EMERALD)).toBeCloseTo(T.altRankFloorWeight, 9); // 1300pt gap, well past it
+  });
+
+  it('weighs each game by its own rank, not one verdict for the whole week', () => {
+    // Half the week at the main's own level, half deep in smurf territory — an
+    // even 3-3 split so the expected mean is exact — and altDamp is the plain
+    // mean of the two per-game weights, not a weight computed from an average rank.
+    const raw = statSpan(33, 35, { perDay: 2, ...HEALTHY, account: 'Smurf', hour: 19 }); // 3 days × 2 = 6 games
+    const tagged = raw.map((g, i) => ({ ...g, rankAtStart: i % 2 === 0 ? GM5 : EMERALD }));
+    const d = perfAt([...mainBase, ...tagged], 35).altDamp;
+    expect(d).toBeCloseTo((1 + T.altRankFloorWeight) / 2, 9);
+  });
+
+  it('falls back to the flat altAccountWeight when no rank data exists anywhere', () => {
+    const noRankMain = statSpan(5, 28, { perDay: 3, ...HEALTHY, account: 'Main' }); // no rankAtStart at all
+    const altGames = statSpan(33, 35, { perDay: 3, ...HEALTHY, account: 'Smurf', hour: 19 });
+    expect(perfAt([...noRankMain, ...altGames], 35).altDamp).toBeCloseTo(T.altAccountWeight, 9);
+  });
+
+  it('falls back per-game to the account’s own median when that specific game has no rankAtStart', () => {
+    // The alt's rank is known from EARLIER games in the window, just not from
+    // the acute ones themselves (e.g. no ±% logged on that particular match).
+    const altHistory = withRank(statSpan(10, 20, { perDay: 1, ...HEALTHY, account: 'Smurf', hour: 19 }), LOW_MASTER);
+    const altAcute = statSpan(33, 35, { perDay: 3, ...HEALTHY, account: 'Smurf', hour: 19 }); // untagged
+    const d = perfAt([...mainBase, ...altHistory, ...altAcute], 35).altDamp;
+    expect(d).toBeCloseTo(1 - 0.5 * (1 - T.altRankFloorWeight), 9); // same as a direct LOW_MASTER tag
+  });
+
+  it('the main’s "usual" rank is the median over the window, not a single outlier game', () => {
+    // Mostly Grandmaster 5, with a brief hot streak to Champion mixed in — the
+    // small minority must not drag the reference rank up with it.
+    const steady = withRank(statSpan(5, 24, { perDay: 1, ...HEALTHY, account: 'Main' }), GM5); // 20 games
+    const hotStreak = withRank(statSpan(25, 27, { perDay: 1, ...HEALTHY, account: 'Main' }), CHAMPION); // 3 games
+    const altGames = withRank(statSpan(33, 35, { perDay: 3, ...HEALTHY, account: 'Smurf', hour: 19 }), GM5);
+    const p = perfAt([...steady, ...hotStreak, ...altGames], 35);
+    expect(p.altDamp).toBe(1); // median still reads as GM5 ⇒ the alt is exactly rank-close
+  });
+
+  it('only looks inside the trailing window — a rank from long before it does not count as "usual"', () => {
+    // Ancient games at Bronze (outside mainRankWindowDays), current games at
+    // the main's real level — the reference rank must come from the recent
+    // window, or a long-since-outgrown rank would make every alt read as far above.
+    const ancient = withRank(span(-500, -480, { perDay: 1, account: 'Main' }), { tier: 'Bronze', division: 5, progressPct: 0 });
+    const p = perfAt([...ancient, ...mainBase, ...statSpan(33, 35, { perDay: 3, ...HEALTHY, account: 'Smurf', hour: 19 }).map((g) => ({ ...g, rankAtStart: LOW_MASTER }))], 35);
+    expect(p.altDamp).toBeCloseTo(1 - 0.5 * (1 - T.altRankFloorWeight), 9); // reads off the recent GM5 baseline, not ancient Bronze
+  });
+
+  it('single-account bit-identity holds even with rank data present', () => {
+    const p = perfAt(withRank(statSpan(5, 35, { perDay: 3, ...HEALTHY, account: 'Main' }), GM5), 35);
+    expect(p.altDamp).toBe(1);
+    expect(p.altShare).toBe(0);
+  });
+
+  it('a near-tie between two DIFFERENTLY-ranked accounts never damps either — not a coin-flip between two damped states', () => {
+    // The case a plain plurality got wrong: whichever of two near-equal accounts happens to be
+    // crowned supplies the rank the OTHER is judged against, and — unlike a flat weight — that
+    // is not symmetric (the higher-ranked one always reads as "at or above main"). One extra
+    // game flipping the crown must not flip the whole week between heavily damped and undamped.
+    // Equal total games (31 days × 3 = 93 each, acute window included in both) ⇒ an exact tie.
+    const mainGames = withRank(statSpan(5, 35, { perDay: 3, ...HEALTHY, account: 'Main' }), GM5);
+    const altGames = withRank(statSpan(5, 35, { perDay: 3, ...HEALTHY, account: 'Alt', hour: 19 }), EMERALD);
+    const acuteOnLow = [...mainGames, ...altGames];
+    const p = perfAt(acuteOnLow, 35);
+    expect(p.mainAccount).toBeNull(); // exact tie ⇒ no clear main
+    expect(p.altDamp).toBe(1); // ⇒ nobody is "alt" ⇒ nothing is damped
+    // A handful more games (clearing the 10% margin: 93 vs 103) restores rank-based damping, in
+    // only ONE direction (whichever account actually leads), never as a jump between two
+    // opposite damped states.
+    const lead = [...acuteOnLow, ...withRank(statSpan(20, 29, { perDay: 1, ...HEALTHY, account: 'Main' }), GM5)];
+    const q = perfAt(lead, 35);
+    expect(q.mainAccount).toBe('Main');
+    expect(q.altDamp).toBeLessThan(1); // now damped, because Alt (Emerald) reads against Main's GM5
+  });
+});
+
 describe('single-account bit-identity — weighting is invisible with one account', () => {
   // Goldens captured from the engine BEFORE main-account weighting landed (2026-09-03). A
-  // one-account history has w ≡ 1 everywhere, so the weighted engine must reproduce them EXACTLY
-  // (toEqual, no tolerance); the only additions are the two new fields.
+  // one-account history has every per-game weight ≡ 1 (rank-close or flat-fallback, doesn't
+  // matter — there's no alt game to weight), so the weighted engine must reproduce them EXACTLY
+  // (toEqual, no tolerance); the only additions are the three new fields (mainAccount, altShare,
+  // altDamp).
   it('collapse marathon (stats regime, decline fired) reproduces its pre-weighting golden', () => {
     const p = perfAt([...statSpan(5, 28, { perDay: 2, ...HEALTHY }), ...statSpan(35, 35, { perDay: 12, ...COLLAPSED })], 35);
     expect(p).toEqual({
-      available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0,
+      available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       declineFired: true, cusumMax: 24.647058823529417, countedGames: 12, statPenalty: 30,
       wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: { eliminations: -2.333333333333333, deaths: -2.5, damage: -2.083333333333333 },
@@ -537,7 +663,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
   it('manual winrate dip (b=0) reproduces its pre-weighting golden', () => {
     const p = perfAt([...span(5, 28, { perDay: 3 }), ...span(29, 35, { perDay: 4, result: 'Loss' })], 35);
     expect(p).toEqual({
-      available: true, statCoverage: 0, maxAccountShare: 1, mainAccount: 'Main', altShare: 0,
+      available: true, statCoverage: 0, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       declineFired: false, cusumMax: 0, countedGames: 0, statPenalty: 0,
       wrDip: 1, wrPenalty: 30, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: {}, objectiveAdverse: true, blend: 0, blendCoverage: 0, delta: -30,
@@ -553,7 +679,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
       35,
     );
     expect(p).toEqual({
-      available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0,
+      available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       declineFired: true, cusumMax: 26.25, countedGames: 35, statPenalty: 30,
       wrDip: 0.7142857142857143, wrPenalty: 15, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: { eliminations: -1, deaths: -1, damage: -1 },

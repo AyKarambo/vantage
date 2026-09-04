@@ -16,7 +16,7 @@ export function trends(ctx: ViewContext): HTMLElement {
     viewHead('Trends', 'Momentum over time and where your winrate concentrates'),
     chartCard({
       title: 'Winrate over time',
-      sub: byWeek ? 'by week' : 'by day',
+      sub: `${byWeek ? 'by week' : 'by day'} · bold line = 7-${byWeek ? 'week' : 'day'} rolling average`,
       columns: [
         { key: 'label', label: byWeek ? 'Week' : 'Day' },
         { key: 'winrate', label: 'WR' },

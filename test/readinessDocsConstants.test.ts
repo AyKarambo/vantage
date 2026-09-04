@@ -28,6 +28,10 @@ describe('deep-tier constants — numeric-literal pins (AC4a)', () => {
     cusumSlack: 0.25,
     evidenceMinGames: 8,
     heroLearnGames: 12,
+    altRankCloseGapDivisions: 2.5,
+    altRankSmurfGapDivisions: 7.5,
+    altRankFloorWeight: 0.15,
+    mainRankWindowDays: 90,
     altAccountWeight: 0.35,
     tiltPenCap: 10,
     tiltPenCapManual: 16,
@@ -64,6 +68,10 @@ describe('deep-tier constants — still derived from READINESS_TUNING (AC4b)', (
     expect(dc.wrPenaltyCap).toBe(T.wrPenaltyCap);
     expect(dc.cusumThreshold).toBe(T.cusumThreshold);
     expect(dc.heroLearnGames).toBe(T.heroLearnGames);
+    expect(dc.altRankCloseGapDivisions).toBe(T.altRankCloseGap / 100);
+    expect(dc.altRankSmurfGapDivisions).toBe(T.altRankSmurfGap / 100);
+    expect(dc.altRankFloorWeight).toBe(T.altRankFloorWeight);
+    expect(dc.mainRankWindowDays).toBe(T.mainRankWindowDays);
     expect(dc.altAccountWeight).toBe(T.altAccountWeight);
     expect(dc.restRecoveryCap).toBe(T.restRecoveryCap);
     expect(dc.rustFloor).toBe(T.baseScore - T.rustPenaltyCap);
@@ -76,7 +84,7 @@ describe('deep-tier copy — prose contains the interpolated constants (AC4c)', 
     ['anchorAndCaps', deepCopy.anchorAndCaps, ['anchor', 'loadCapDown', 'loadCapUp', 'perfCapDown', 'perfCapUp', 'subjCapDown', 'subjCapUp', 'subjCapDownManual']],
     ['loadRatio', deepCopy.loadRatio, ['ratioFreshMax', 'ratioElevated', 'ratioHigh']],
     ['declineDetection', deepCopy.declineDetection, ['cusumSlack', 'cusumThreshold', 'evidenceMinGames', 'heroLearnGames']],
-    ['accountWeighting', deepCopy.accountWeighting, ['altAccountWeight']],
+    ['accountWeighting', deepCopy.accountWeighting, ['altRankCloseGapDivisions', 'altRankSmurfGapDivisions', 'altRankFloorWeight', 'mainRankWindowDays', 'altAccountWeight']],
     ['tiltCaps', deepCopy.tiltCaps, ['tiltPenCap', 'tiltPenCapManual']],
     ['dampenerAndOutcomeCap', deepCopy.dampenerAndOutcomeCap, ['dampFactor', 'wrPenaltyCap']],
     ['restAndRust', deepCopy.restAndRust, ['restRecoveryCap', 'rustDecayPerDay', 'rustDays', 'rustFloor']],
@@ -89,12 +97,12 @@ describe('deep-tier copy — prose contains the interpolated constants (AC4c)', 
     });
   }
 
-  it('the account-weighting copy renders the weight as a multiplier and says the learning window pools accounts', () => {
+  it('the account-weighting copy is honest about rank-proximity, not a flat multiplier, and the learning window pools accounts', () => {
     const copy = deepCopy.accountWeighting();
-    expect(copy).toContain('×0.35');
     expect(copy).toContain('played most'); // names how the main account is picked
-    // It must describe the damper honestly — the checks themselves are account-blind.
-    expect(copy).toContain('neutral');
+    expect(copy).toContain('not smurfing'); // a rank-close alt is explicitly exempted
+    expect(copy).toContain('×0.15'); // the genuine floor for a large gap
+    expect(copy).toContain('×0.35'); // the no-rank-data fallback, distinct from the floor
     expect(deepCopy.declineDetection()).toContain('ALL your accounts');
   });
 });
