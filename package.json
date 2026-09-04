@@ -1,6 +1,6 @@
 {
   "name": "ow.vantage",
-  "version": "0.37.2",
+  "version": "0.39.0",
   "description": "Vantage — an account-safe Overwatch stats coach. Turns match history into priority maps, hero stats, mental tracking and improvement targets, with optional Notion export.",
   "author": "Timo Seikel",
   "license": "MIT",

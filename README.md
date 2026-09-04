@@ -663,8 +663,11 @@ It derives the next version from the latest `v*` tag plus the
 [Conventional Commits](https://www.conventionalcommits.org/) since it (`feat` → minor, `fix`/others →
 patch, `type!:`/`BREAKING CHANGE` → major), builds + signs the app exe, uninstaller and installer
 (required for the Overwolf gaming packages (GEP) to load), verifies the signature, then tags and
-publishes the GitHub Release. It's **tag-driven** and fail-closed — the version is baked into the
-installer but not committed back, and nothing is published unless the build verifies as signed.
+publishes the GitHub Release. It's **tag-driven** and fail-closed — nothing is published unless the
+build verifies as signed. On a successful, non-dry-run publish it also commits the released version
+into `package.json`/`package-lock.json` and pushes that to `main` — the "version floor" `npm start`'s
+banner and an unpackaged `app.getVersion()` read (a dry run or a failed build leaves those files
+untouched instead).
 
 To build locally without releasing:
 
