@@ -15,11 +15,16 @@ import type { ReadinessRegime } from './types';
 /**
  * Blend factor from the acute window's comparable-per-10 coverage.
  *
- * `blendCoverage` is the SUM of per-game trust weights (each `trustFor(base.n)`, already ramping
- * 0→1 over baseline n 15→20), NOT a binary counted-game count: a hero whose baseline just crossed
- * the trust floor contributes a fraction, so `b` ramps smoothly in the day index instead of
- * cliff-jumping when a whole hero cohort reclassifies at once. Saturating-linear (min(1,·) attains
- * 1.0 exactly, so the b=1 bit-identity is provable); floor `blendMinCounted` caps the per-game step.
+ * `blendCoverage` is the SUM of per-game (account weight × trust) — each trust `trustFor(base.n)`,
+ * already ramping 0→1 over baseline n 15→20 — NOT a binary counted-game count: a hero whose
+ * baseline just crossed the trust floor contributes a fraction, so `b` ramps smoothly in the day
+ * index instead of cliff-jumping when a whole hero cohort reclassifies at once. `acuteWeight` is
+ * the acute window's raw game count. Neither side carries the main-account damper: which account a
+ * game was played on says nothing about whether its stats are comparable, and a weight here would
+ * push a mixed-account week toward 'manual' — switching on the very caps that damper exists to
+ * avoid (the damper is applied once, to the finished subscore, in performance.ts).
+ * Saturating-linear (min(1,·) attains 1.0 exactly, so the b=1 bit-identity is provable); floor
+ * `blendMinCounted` caps the per-game step.
  */
 export function blendFor(blendCoverage: number, acuteGameCount: number): number {
   return Math.min(1, blendCoverage / Math.max(T.blendMinCounted, T.blendCoverageTarget * acuteGameCount));

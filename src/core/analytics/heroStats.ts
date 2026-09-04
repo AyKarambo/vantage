@@ -2,29 +2,47 @@
  * Per-hero stat rollups for the local player: exact totals, winrates and
  * per-10-minute averages aggregated across games.
  * Pure and I/O-free — consumed by both main and the browser preview.
+ *
+ * Two rules keep these numbers comparable with the game's own career profile:
+ *
+ *  - PER-10 DIVIDES BY PLAYED TIME. Rates are `total × 10 / minutes played on
+ *    the hero`, where played time excludes hero select, the per-mode setup
+ *    locks and the post-match scoreboard (see {@link ../playedTime}). Newer
+ *    captures carry it measured from the GEP rounds; older captures and manual
+ *    logs are estimated / taken as typed by `playedTimeOf`, and a hero row's
+ *    minutes are rescaled onto that basis by `heroPlayedMinutes`.
+ *
+ *  - GAMES AND WINS ARE CREDITED BY TIME SHARE. Blizzard's career profile shows
+ *    fractional "Games Played" / "Games Won" per hero: each hero played in a
+ *    match earns the fraction of that game (and of its win or loss) equal to
+ *    its share of the player's time in it, with no minimum-time threshold —
+ *    Tracer 6 min + Genji 2 min in one won game is 0.75 + 0.25 of a win. Win %
+ *    is computed from the fractional credit; the displayed counts are the
+ *    rounded credit (`heroTimeShares`). Without hero minutes the share is an
+ *    equal split.
  */
 import type { GameRecord, HeroSummary, HeroStat } from './types';
-import { mergeHeroStats } from '../perHero';
+import { heroCredits, heroPlayedMinutes, playedTimeOf, type MapModeResolver } from '../playedTime';
+import { roundCredit } from './grouping';
+
+export interface HeroStatsOptions {
+  /** Map name → mode for the played-time estimate on captures without rounds (defaults to the built-in table). */
+  mapModeOf?: MapModeResolver;
+}
 
 /** Exact per-hero stats for the local player, aggregated across games. */
-export function heroStats(games: GameRecord[]): HeroSummary[] {
-  const totals = new Map<string, HeroStat & { games: number; wins: number; losses: number; minutes: number }>();
+export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): HeroSummary[] {
+  const totals = new Map<string, HeroStat & { games: number; wins: number; losses: number; draws: number; minutes: number }>();
 
   for (const g of games) {
-    const decidedWin = g.result === 'Win' ? 1 : 0;
-    const decidedLoss = g.result === 'Loss' ? 1 : 0;
-    const minutes = g.durationMinutes ?? 0;
-    // Merge same-hero swap segments first, so a hero used twice in one match
-    // counts as one game and isn't double-summed.
-    const rows: HeroStat[] = g.perHero?.length
-      ? mergeHeroStats(g.perHero)
-      : g.heroes.map((hero) => ({ hero, role: g.role, eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 }));
-
-    const sharedMinutes = rows.length ? minutes / rows.length : 0;
-    for (const r of rows) {
-      const t = totals.get(r.hero) ?? {
-        hero: r.hero, role: r.role, eliminations: 0, deaths: 0, assists: 0,
-        damage: 0, healing: 0, mitigation: 0, games: 0, wins: 0, losses: 0, minutes: 0,
+    const played = playedTimeOf(g, opts.mapModeOf);
+    // Stats, game credit and minutes all come out of the same split, so a hero
+    // can never collect one without the others (same-hero swap segments are
+    // merged inside, so a hero used twice counts once).
+    for (const { hero, stats: r, share } of heroCredits(g)) {
+      const t = totals.get(hero) ?? {
+        hero, role: r.role, eliminations: 0, deaths: 0, assists: 0,
+        damage: 0, healing: 0, mitigation: 0, games: 0, wins: 0, losses: 0, draws: 0, minutes: 0,
       };
       t.role = t.role ?? r.role;
       t.eliminations += r.eliminations;
@@ -33,12 +51,12 @@ export function heroStats(games: GameRecord[]): HeroSummary[] {
       t.damage += r.damage;
       t.healing += r.healing;
       t.mitigation += r.mitigation;
-      t.games += 1;
-      t.wins += decidedWin;
-      t.losses += decidedLoss;
-      // Prefer the hero's real on-hero minutes; fall back to an equal split.
-      t.minutes += r.minutes != null ? r.minutes : sharedMinutes;
-      totals.set(r.hero, t);
+      t.games += share;
+      if (g.result === 'Win') t.wins += share;
+      else if (g.result === 'Loss') t.losses += share;
+      else t.draws += share;
+      t.minutes += heroPlayedMinutes(share, played) ?? 0;
+      totals.set(hero, t);
     }
   }
 
@@ -49,11 +67,12 @@ export function heroStats(games: GameRecord[]): HeroSummary[] {
       return {
         hero: t.hero,
         role: t.role,
-        games: t.games,
-        wins: t.wins,
-        losses: t.losses,
-        draws: t.games - decided,
+        // Rounded together so the parts add up (see roundCredit).
+        ...roundCredit({ games: t.games, wins: t.wins, losses: t.losses, draws: t.draws }),
         winrate: decided ? t.wins / decided : 0,
+        creditedGames: t.games,
+        creditedWins: t.wins,
+        creditedLosses: t.losses,
         totals: {
           eliminations: t.eliminations, deaths: t.deaths, assists: t.assists,
           damage: t.damage, healing: t.healing, mitigation: t.mitigation,
@@ -62,7 +81,9 @@ export function heroStats(games: GameRecord[]): HeroSummary[] {
         kda: (t.eliminations + t.assists) / Math.max(t.deaths, 1),
       } as HeroSummary;
     })
-    .sort((a, b) => b.games - a.games);
+    // Most-played first by the unrounded credit, so two heroes that round to
+    // the same count still order by real time on hero.
+    .sort((a, b) => (b.creditedGames ?? b.games) - (a.creditedGames ?? a.games));
 }
 
 // --- helpers ----------------------------------------------------------------

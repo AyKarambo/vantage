@@ -10,13 +10,16 @@ export type {
 // Grouping + win/loss aggregation
 export {
   winLoss, groupBy, byMap, byRole, byAccount, byHero, byMode, focusBy, trend, dayKey,
+  weightedWinLoss, weightedGroupBy, heroWeightedGames,
 } from './grouping';
+export type { WeightedGame } from './grouping';
 
 // Cross-dimension focus ranking (the Focus screen's "work on these" hub)
 export { focusEntries, focusTrend, focusGamesFor, linkFocusTargets } from './focus';
 
-// Per-hero stat rollups
+// Per-hero stat rollups (per-10 over played time, time-share game credit)
 export { heroStats } from './heroStats';
+export type { HeroStatsOptions } from './heroStats';
 
 // Self-rated performance rollups (0–100 slider; issue #44)
 export { performanceStats } from './performanceStats';

@@ -14,17 +14,22 @@ comms · toxicity · leavers · your improvement target).
 ## Screens
 
 Every screen sits behind a persistent sidebar: the account switcher (a specific tracked
-account, or **All accounts**), navigation, and a **Current session** card — a live recap
+account, or **All accounts** — with nothing pinned the chip says exactly that, and its rank
+line names the account the rank belongs to, e.g. `Karambo · Dmg · GM 4 · 16%`),
+navigation, and a **Current session** card — a live recap
 (W–L, net, winrate) of your current sitting. A sitting ends once you've gone longer than a
 configurable gap since your last game (default 3h; adjustable in Settings → General →
 Coaching), so a late-night session spanning past midnight still reads as one, and the card
 never shows stale data as "current."
 
-The sidebar **collapses to an icon-only rail** (the `«` control under the session card, or
-**Ctrl B**), which sticks between launches — useful on a small screen, or whenever you want the
-chrome out of the way. Collapsed, each icon keeps its name as a tooltip and the Review count
-shows as a dot. If the navigation ever does run out of room it scrolls, with the account
-switcher and session card staying put either side of it.
+The sidebar **collapses to an icon-only rail** (the small `«` button beside the account chip at
+the top of the sidebar, or **Ctrl B**), which sticks between launches — useful on a small screen,
+or whenever you want the chrome out of the way. Collapsed, each icon keeps its name as a tooltip,
+the toggle sits under the avatar, and the Review count shows as a dot. The **Current session**
+card is the bottom-most thing in the sidebar; if the navigation ever does run out of room it
+scrolls, with the account switcher and session card staying put either side of it. Opening the
+account switcher lists every account as an aligned row — ✓ · name · rank — with the active
+account's per-role lines beneath it.
 
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
   *winrate × volume* scatter with a top-priority callout, an activity heatmap
@@ -50,7 +55,9 @@ switcher and session card staying put either side of it.
   not merely hidden; the scoreboard and the with/vs records are unaffected.
 - **Matches** — the recent game log; click any row for a full **match detail page**
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
-  support ×2, per-hero tabs, competitive progress, a read-only **Grades card** with
+  support ×2, per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
+  wall-clock duration — the fight time those rates divide by, marked *est.* on older captures
+  (see *Played time* below) — competitive progress, a read-only **Grades card** with
   the match's target grades, performance rating and feel/leaver flags, and player
   history — each section degrades gracefully to whatever the game feed actually
   reported for that match). **Click any player's name** — on the scoreboard or in
@@ -93,8 +100,10 @@ switcher and session card staying put either side of it.
   actually have a value for that row (no `—` placeholders or dangling `·`), and
   disappears entirely when nothing applies.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
-- **Heroes** — the exact per-hero table (per-10-minute stats), with a click-through
-  drill-down drawer (per-map winrate, recent games, aggregates).
+- **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
+  credited to each hero by its share of the match time, the way the in-game career profile
+  does it — see *Played time* below), with a click-through drill-down drawer (per-map winrate,
+  recent games, aggregates).
 - **Focus** — the "what to work on" hub: your net-losing **maps** in one
   deficit-ranked list, each with a trend arrow (improving/declining) and — once you
   track it as a target — the winrate movement since you flagged it.
@@ -115,13 +124,18 @@ switcher and session card staying put either side of it.
   of *supercompensation*, detecting **over- and undertraining**. One **score-first composite**
   (0–100, the band derives from it — score and verdict can't disagree) built from three
   families: **behavioral load** (volume vs *your own* norm — habit is not risk), **objective
-  performance vs your own baselines** (winrate and per-10 elims/deaths/damage/healing, per
-  hero *and per account*, so an alt's lobbies never skew your main; a decline only counts once
-  it's sustained — one long marathon session qualifies, a single bad game never does), and
+  performance vs your own baselines** (winrate and elims/deaths/damage/healing per 10 minutes
+  **played** — fight time, not the wall clock — per hero *and per account*, so an alt's lobbies
+  never skew your main; the account you've played most lately is your **main** and carries the
+  verdict, and the more of a week you spent elsewhere the more this part of the score is pulled
+  back toward neutral — a week entirely on an alt keeps **×0.35** of it, credit as much as blame,
+  since that's where you experiment; a decline only counts once it's sustained — one
+  long marathon session qualifies, a single bad game never does), and
   down-weighted **self-report** (tilt + your performance rating, hard-capped so a feeling
   never outweighs the evidence). Working on your **improvement targets** softens a results dip
   (deliberate practice makes you temporarily worse — that's normal) unless your tilt is clearly
-  elevated; heroes you're still learning are exempt entirely. The screen shows the verdict +
+  elevated; heroes you're still learning — fewer than 12 games **across all your accounts**,
+  since hero experience is yours, not the account's — are exempt entirely. The screen shows the verdict +
   score, a **"what moves the score"** subscore breakdown, the top reasons, a rest
   recommendation, and the trend. The verdict is **regime-aware**: a ⚡ stats / ⚡◎ hybrid / ◎
   manual badge shows how much of the read rests on live match stats vs your own logs, blending
@@ -152,7 +166,7 @@ switcher and session card staying put either side of it.
   of graded — distinct from the "Not a real match" dismiss above it, which drops a *held*
   match that never entered history.
 - **Targets** — build a target (self-rated ◎, or measured ⚡ which **auto-grades from your
-  per-10-minute stats** — no manual read). The **Target library** card offers curated starting
+  stats per 10 minutes played** — no manual read). The **Target library** card offers curated starting
   points grouped by **Mechanics · Macro · Strategy · Training**, each entry showing a one-line
   coaching blurb and role tag — pick one and it prefills the builder. A measured stat within a
   **configurable partial-credit margin** of its threshold (default 20%, in Settings → General →
@@ -267,9 +281,11 @@ map rows and Overview scatter dots jump to the Maps screen), remembered role + a
 quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
 window-position memory, and a **Settings** screen with an
-**accounts manager** (detects and lists every account seen in your match history —
-create/edit/delete, per-role rank anchors — and **auto-switches** the active account
-filter when GEP reports a different logged-in account), a **Master data**
+**accounts manager** (a tidy list of every account seen in your match history — name, game
+count and a compact per-role rank summary per row, with create/edit/delete; everything
+role-specific — the **Set rank…** anchor and the placement-run controls — lives behind each
+row's **Manage ranks…** button; the active account filter **auto-switches** when GEP reports a
+different logged-in account), a **Master data**
 editor (see below), a **Quick Log** card (how many most-played heroes the log-match hero picker
 suggests) alongside the break
 reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
@@ -299,6 +315,29 @@ or remove any entry; maps carry an **In pool / Out of pool** toggle for the curr
 pool (an out-of-pool map stays in your history and analytics but is hidden from new-log suggestions
 and the demo generator). Season boundaries are hand-editable too, and the current season keeps
 auto-extrapolating on its usual cadence between edits.
+
+### Played time (what "per 10 minutes" divides by)
+
+Every per-10-minute stat — the Heroes table and drawer, the per-hero card on a match, the
+readiness decline detector and measured ⚡ target grades — divides by the time you could actually
+**play**, not the wall-clock match length. A match's clock includes stretches nobody can fight in:
+the hero-select phase before the first round, each round's setup lock (attackers behind the doors
+on Escort/Hybrid, the round-change overlay on Control) and the Victory/Defeat lineup, Play of the
+Game and scoreboard at the end. Dividing by all of that understates every rate against what the
+game's own career profile shows. So:
+
+- **Measured** — matches captured with the game feed's round events carry their played time
+  exactly (the rounds, minus each mode's setup lock).
+- **Estimated** — older captures without round events subtract the same phases as calibrated
+  constants (28 s of hero select, 40 s of scoreboard, the mode's typical setup locks, floored so a
+  short stomp is still mostly play), so old and new games stay comparable inside one baseline.
+  Match detail labels these **Played (est.)**.
+- **Reported** — a hand-logged duration is taken as typed; a person writing "12 min" isn't
+  counting the scoreboard.
+
+The same time shares decide **hero credit**: a hero played for a quarter of a game earns a quarter
+of that game and of its win or loss (no minimum), so hero win rates line up with the in-game
+career profile. The Matches list, map and role splits, and target scoping still count whole games.
 
 An **Update** button fetches the latest heroes & maps from the community
 [OverFast API](https://overfast-api.tekrop.fr) (MIT-licensed, derived from Blizzard's public
@@ -354,8 +393,9 @@ a network port, and Vantage sends nothing outward through it; see
   track at all** — a brand-new account, or a role never queued. Accepting an offer **counts the
   matches you have already played this season** on that track (up to a full run's worth), so a
   run started after the games it should cover isn't left reading short. Declining silences that
-  track for the season. Placement runs can also be **started manually** at any time from
-  Settings → Accounts, either from now or **from an earlier match** — and an open run's start can
+  track for the season. Placement runs can also be **started manually** at any time from the
+  account's **Manage ranks…** dialog in Settings → Accounts, either from now or **from an
+  earlier match** — and an open run's start can
   be **moved to a different match** later, for a run that was begun too late. For each of the
   **ten counted matches** the ±%
   input becomes a **predicted-rank picker** (tier and division only; entering a prediction is
@@ -367,7 +407,8 @@ a network port, and Vantage sends nothing outward through it; see
   ten the moment it begins. Until you answer it, the run is shown as
   **`Placements 10/10 · confirm your rank`** rather than as a prediction (a prediction is a guess,
   and the run is over), with a **Confirm rank** button on the Overview rank tile and
-  **"Confirm revealed rank"** in Settings → Accounts. Dismissing the dialog writes nothing and
+  **"Confirm revealed rank"** in the account's **Manage ranks…** dialog (Settings → Accounts).
+  Dismissing the dialog writes nothing and
   leaves the run open — nothing is ever confirmed on your behalf.
   Keep playing before you confirm and those extra matches are **ordinary games**: the game has
   revealed your rank and shows a ±% again, so Vantage takes the ±% for them like any other match.
@@ -498,7 +539,13 @@ Overwatch ─▶ GEP ─▶ aggregator ─▶ GameRecord ─▶ HistoryStore ─
 Electron/Overwolf/Notion plumbing kept at the edges:
 
 - `core/analytics/` — the stats engine (win/loss, groupings, trend, focus, per-hero,
-  session, calendar, hero drill-down). Pure and fully unit-tested.
+  session, calendar, hero drill-down). Pure and fully unit-tested. Hero rows are credited by
+  time share (`heroTimeShares`) and every per-10 rate divides by played minutes.
+- `core/playedTime.ts` — **played time**, the per-10 divisor: `playedTimeOf` (measured from the
+  aggregator's round spans; estimated from the wall clock via `PLAYED_TIME_ESTIMATE` +
+  `ROUND_SETUP_SECONDS` on older captures; taken as typed on manual logs), plus
+  `heroPlayedMinutes` / `heroTimeShares`. Shared by analytics, readiness, measured targets and
+  match detail.
 - `core/dashboardData.ts` — the **view-model**: raw games + filters → the exact payload
   the renderer consumes. Pure, so it powers both the app and the browser preview.
 - `core/mental.ts` · `core/progression.ts` · `core/targets/` · `core/maps.ts` — the
@@ -511,7 +558,10 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   recorded game.
 - `core/readiness/` — the pure readiness / training-load model: gap-based sessions, a local
   4am-day boundary, EWMA acute-vs-chronic load, per-account/per-hero stat **baselines** with a
-  one-sided-CUSUM decline detector (`baselines.ts`, `performance.ts`), a disagreement-gated
+  one-sided-CUSUM decline detector (`baselines.ts`, `performance.ts` — the still-learning count
+  pools a hero's games across accounts, and `mainAccountOf` picks the main so the finished
+  subscore lerps toward neutral with the share of the window played elsewhere — `altAccountWeight`,
+  0.35, at an all-alt week; the detectors themselves stay account-blind), a disagreement-gated
   subjective read (`subjective.ts`), and the **score-first composite** — three bounded
   subscore deltas on a 75 anchor, with the band derived from (score, driver, hard gates)
   (`score.ts`), plus a continuous **stats↔manual blend** `b` (`regime.ts`, bit-identical to the
@@ -569,8 +619,10 @@ npm start          # runs with the demo dataset
 npm run start:dev  # always forces Dev Mode on, ignoring the Settings toggle
 ```
 
-Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pipeline;
-`OW_SYNC_SENSOR=gep|counterwatch` switches the sensor.
+Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pipeline — with
+round events, paced at 60× real time; `OW_SYNC_SIM_SPEED=1` runs it at real speed so the measured
+played-time path is exercised like a live match; `OW_SYNC_SENSOR=gep|counterwatch` switches the
+sensor.
 
 ## Importing match history
 

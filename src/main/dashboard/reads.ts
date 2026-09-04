@@ -91,7 +91,10 @@ export function heroDetailRead(
   hero: string,
   filters: DashboardFilters | undefined,
 ): HeroDetail {
-  return heroDetail(filteredCompetitiveGames(provider, filters), hero);
+  // Same catalog-aware map-mode resolver the match detail uses, so an older
+  // capture's estimated played time subtracts the right mode's setup locks.
+  const mapModeOf = makeMapMode(provider.effectiveMasterData().maps);
+  return heroDetail(filteredCompetitiveGames(provider, filters), hero, { mapModeOf });
 }
 
 /**

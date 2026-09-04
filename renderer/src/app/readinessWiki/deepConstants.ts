@@ -34,6 +34,9 @@ export const deepConstants = {
   evidenceMinGames: T.evidenceMinGames, // 8
   heroLearnGames: T.heroLearnGames, // 12
 
+  // Several accounts, one player: the main account (most games) carries the verdict.
+  altAccountWeight: T.altAccountWeight, // 0.35
+
   // Self-report / tilt (both regime endpoints).
   tiltPenCap: T.tiltPenCap, // 10
   tiltPenCapManual: T.tiltPenCapManual, // 16

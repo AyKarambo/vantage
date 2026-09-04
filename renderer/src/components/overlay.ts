@@ -24,17 +24,33 @@ export function overlayOpen(): boolean {
   return document.querySelector('.overlay') !== null;
 }
 
-function mountOverlay(overlay: HTMLElement, panel: HTMLElement, onClose?: () => void): OverlayHandle {
+export interface OverlayOpts {
+  /** Adds a modifier class to the panel (e.g. `modal-card--wide`). */
+  panelClass?: string;
+  /**
+   * Runs when the USER dismisses the overlay — Escape or a backdrop click —
+   * after it has closed. Not called for a programmatic `close()` (a Save or
+   * Cancel button), so a dialog that chains into another one can decide what
+   * "just walked away" should return to, without double-firing on its own
+   * buttons.
+   */
+  onDismiss?: () => void;
+}
+
+function mountOverlay(overlay: HTMLElement, panel: HTMLElement, opts: Pick<OverlayOpts, 'onDismiss'> = {}): OverlayHandle {
   const close = () => {
     window.removeEventListener('keydown', onKey);
     overlay.remove();
-    onClose?.();
+  };
+  const dismiss = () => {
+    close();
+    opts.onDismiss?.();
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') dismiss();
   };
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
+    if (e.target === overlay) dismiss();
   });
   // Clicks inside the panel must not bubble to the backdrop handler.
   panel.addEventListener('click', (e) => e.stopPropagation());
@@ -46,11 +62,11 @@ function mountOverlay(overlay: HTMLElement, panel: HTMLElement, onClose?: () => 
 /** Open a centered modal. `body(close)` builds the card contents. */
 export function openModal(
   build: (close: () => void) => Node,
-  opts?: { panelClass?: string },
+  opts?: OverlayOpts,
 ): OverlayHandle {
   const panel = h('div', { class: `modal-card${opts?.panelClass ? ' ' + opts.panelClass : ''}` });
   const overlay = h('div', { class: 'overlay overlay--center' }, panel);
-  const handle = mountOverlay(overlay, panel);
+  const handle = mountOverlay(overlay, panel, { onDismiss: opts?.onDismiss });
   panel.append(build(handle.close));
   return handle;
 }

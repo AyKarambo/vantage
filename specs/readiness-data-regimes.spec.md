@@ -69,7 +69,7 @@ Unchanged in spirit: evidence-informed wellness nudge, not a diagnosis; anti-fal
 - Detecting or surfacing the GEP outage itself (GEP health telemetry exists elsewhere — `gepHealth.ts`); this spec only makes the *scoring* robust to it.
 - User-configurable weights or sensitivity; ML/fitted models.
 - `breakReminder.ts`; removing any band, chip, toast, or setting.
-- Re-litigating any other decision of `readiness-score-rework.spec.md` (dampener bounds, exemptions, per-account baselines, disagreement gating all stand).
+- Re-litigating any other decision of `readiness-score-rework.spec.md` (dampener bounds, exemptions, per-account baselines, disagreement gating all stand). *Note (2026-09-03):* that spec's dated Amendment has since changed two account rules — the still-learning exemption pools a hero's games **across accounts**, and the account with the most games is the **main** account whose games weigh 1 while games on other accounts enter every objective accumulator at ×0.35. The blend carries the weights on both sides and its floor is sized on the RAW acute game count, so `b` is bit-identical for single-account histories and a mixed window reads exactly as comparable as the same games on one account. Coverage (`statCoverage`) is likewise a weighted ratio, so it — and through it confidence — still moves when comparability differs BETWEEN accounts. Per-10 qualification now gates on **played** minutes. Stat baselines stay per account; nothing else in this spec moves.
 
 ## Constraints
 

@@ -50,7 +50,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view' },
     viewHead('Heroes',
-      `Exact stats, per 10 minutes · click a hero to drill down${hidden > 0 ? ` · ${hidden} low-sample hidden` : ''}`,
+      `Exact stats, per 10 minutes played · click a hero to drill down${hidden > 0 ? ` · ${hidden} low-sample hidden` : ''}`,
       minGamesChips),
     card({ class: 'card--flush', style: { padding: '4px 10px 10px' } },
       dataTable({

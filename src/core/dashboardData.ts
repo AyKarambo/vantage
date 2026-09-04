@@ -182,7 +182,7 @@ export function computeDashboard(
     // of a linked target runs over the unfiltered history (like staleness —
     // it is about the target's lifetime, not the current filter).
     focusItems: linkFocusTargets(focusEntries(games), authoredTargets, all),
-    heroStats: heroStats(games).filter((h) => h.games >= 2).slice(0, 24),
+    heroStats: heroStats(games, { mapModeOf }).filter((h) => h.games >= 2).slice(0, 24),
     matches: recentMatches(games, mapModeOf, activeMeasured, margin, suppressed),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),

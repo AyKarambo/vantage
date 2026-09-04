@@ -10,6 +10,7 @@ import { resolveRole } from './resolvers/role';
 import { roleOfHero } from './heroes';
 import { playerHistory } from './playerIndex';
 import { mergeHeroStats } from './perHero';
+import { heroCredits, heroPlayedMinutes, playedTimeOf } from './playedTime';
 import { measuredGradesForMatch, type AuthoredTarget } from './targets';
 
 /**
@@ -45,6 +46,17 @@ export function matchDetail(
   const game = all.find((g) => g.matchId === matchId);
   if (!game) return null;
 
+  // Played time is the per-10 divisor (see ./playedTime). The per-hero rows
+  // are emitted with their minutes already on that basis — a no-op on measured
+  // records, a rescale of wall-clock swap minutes on older ones — so the
+  // renderer only divides and formats.
+  const played = playedTimeOf(game, mapModeOf);
+  const perHero = heroCredits(game).map(({ stats, share }) => {
+    if (stats.minutes == null) return stats; // no timed swaps → the panel equal-splits the played time
+    const minutes = heroPlayedMinutes(share, played);
+    return minutes != null && minutes > 0 ? { ...stats, minutes } : stats;
+  });
+
   return {
     matchId: game.matchId,
     timestamp: game.timestamp,
@@ -59,10 +71,11 @@ export function matchDetail(
     srDelta: game.srDelta,
     rankAtStart: game.rankAtStart,
     durationMinutes: game.durationMinutes,
+    ...(played ? { playedMinutes: played.minutes, playedSource: played.source } : {}),
     performance: game.performance,
     finalScore: game.finalScore,
     heroes: game.heroes,
-    perHero: mergeHeroStats(game.perHero ?? []),
+    perHero,
     mental: game.mental,
     review: game.review,
     measuredGrades: activeMeasured.length ? measuredGradesForMatch(game, activeMeasured, margin) : undefined,

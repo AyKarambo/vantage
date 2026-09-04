@@ -20,7 +20,7 @@ import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
 import { createGepServicePoller } from './gepServicePoller';
 import { decideGepNotification, nextNotifyBaseline, type ServiceStatus } from '../core/gepService';
-import { DEFAULT_MASTER_DATA, mergeMasterData } from '../core/masterData';
+import { DEFAULT_MASTER_DATA, makeMapMode, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
@@ -192,7 +192,13 @@ function main(): void {
     mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps.map((m) => m.name);
   const activeMapNames = (): string[] =>
     mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps.filter((m) => m.isActive).map((m) => m.name);
-  const aggregator = new MatchAggregator();
+  // The aggregator times a match's played minutes per game mode (setup locks
+  // differ by mode), resolved through the user's map catalog so a map they
+  // added or re-classified in Settings → Master Data is timed as that mode,
+  // not as Unknown. Read at call time: the catalog can change mid-session.
+  const aggregator = new MatchAggregator(undefined, {
+    mapModeOf: (map) => makeMapMode(mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps)(map),
+  });
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
   // The migration executor repoints every store at once.

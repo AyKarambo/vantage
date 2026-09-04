@@ -267,7 +267,8 @@ describe('computeDashboard — measured grades on match rows + grading settings'
   };
 
   it('populates a row measuredGrades for active measured targets, and exposes the effective grading settings', () => {
-    const g = game({ result: 'Win', durationMinutes: 10, perHero: perHero(11240) }); // 11240 per 10
+    // playedMinutes is the per-10 divisor; a measured 10 keeps 11240 exact.
+    const g = game({ result: 'Win', durationMinutes: 10, playedMinutes: 10, perHero: perHero(11240) }); // 11240 per 10
     const d = computeDashboard([g], {}, { active: false, preference: 'off', hasRealHistory: true },
       { targets: [measured('t', 'Damage ≥ 9000')] });
     const row = d.matches.find((m) => m.matchId === g.matchId)!;
@@ -278,9 +279,9 @@ describe('computeDashboard — measured grades on match rows + grading settings'
   it('threads the configured partial margin into row grades (partial vs missed)', () => {
     const t = measured('t', 'Damage ≥ 10000');
     const ctx = { active: false, preference: 'off' as const, hasRealHistory: true };
-    const wide = computeDashboard([game({ result: 'Loss', durationMinutes: 10, perHero: perHero(8500) })], {}, ctx,
+    const wide = computeDashboard([game({ result: 'Loss', durationMinutes: 10, playedMinutes: 10, perHero: perHero(8500) })], {}, ctx,
       { targets: [t], grading: { partialMargin: 0.2 } });
-    const tight = computeDashboard([game({ result: 'Loss', durationMinutes: 10, perHero: perHero(8500) })], {}, ctx,
+    const tight = computeDashboard([game({ result: 'Loss', durationMinutes: 10, playedMinutes: 10, perHero: perHero(8500) })], {}, ctx,
       { targets: [t], grading: { partialMargin: 0.1 } });
     expect(gradeOf(wide.matches[0])).toBe('partial'); // 8500 in 20% band [8000,10000)
     expect(gradeOf(tight.matches[0])).toBe('missed'); // 8500 below 10% band [9000,10000)

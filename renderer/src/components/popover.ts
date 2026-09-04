@@ -9,14 +9,18 @@ export interface PopoverHandle {
   close(): void;
 }
 
-/** Open a popover anchored above/below `anchor` (auto side by viewport half). */
+/**
+ * Open a popover anchored above/below `anchor` (auto side by viewport half).
+ * `panelClass` adds a modifier class to the panel (e.g. `popover-panel--wide`
+ * for list-like content), mirroring overlay.ts.
+ */
 export function openPopover(
   anchor: HTMLElement,
   build: (close: () => void) => Node,
-  opts: { onClose?: () => void } = {},
+  opts: { onClose?: () => void; panelClass?: string } = {},
 ): PopoverHandle {
   const backdrop = h('div', { class: 'popover-backdrop' });
-  const panel = h('div', { class: 'popover-panel' });
+  const panel = h('div', { class: `popover-panel${opts.panelClass ? ' ' + opts.panelClass : ''}` });
   panel.addEventListener('click', (e) => e.stopPropagation());
 
   const close = (): void => {

@@ -44,6 +44,10 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
     const daysAgo = (count - i) / (count / 30); // spread across ~30 days, oldest first
     const timestamp = now - daysAgo * 86400000 - between(0, 6) * 3600000;
     const duration = Math.round(between(7, 16));
+    // Played time (the per-10 divisor): the wall clock minus roughly the hero
+    // select + scoreboard a real capture measures outside the rounds, so demo
+    // per-10 numbers are self-consistent and read as measured, not estimated.
+    const played = Math.max(3, duration - 1.5);
 
     const wr = clamp(ACCOUNT_WR[account] + (ROLE_WR[role] - 0.5) + mapMod[map], 0.2, 0.82);
     const roll = rnd();
@@ -58,7 +62,9 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
       const h = pick(heroPool);
       if (!heroes.includes(h)) heroes.push(h);
     }
-    const perHero = heroes.map((hero) => statLine(hero, role, duration / heroes.length, between));
+    // Per-hero minutes split the played time evenly and sum back to it.
+    const heroMinutes = played / heroes.length;
+    const perHero = heroes.map((hero) => ({ ...statLine(hero, role, heroMinutes, between), minutes: heroMinutes }));
 
     // Data-tier mix — the detail page must degrade gracefully, so the demo
     // season deliberately spans every capture tier: full two-team roster with
@@ -76,6 +82,15 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
       if (rnd() < 0.5) finalScore = sampleScore(result, rnd);
     } else if (rnd() < 0.25) {
       perHeroOut = undefined;
+    }
+    // The legacy tier predates round tracking, so it carries no played time and
+    // its hero minutes are wall-clock (the first segment anchored at match
+    // start) — the demo season has to exercise the read-time ESTIMATE too, or
+    // the "Played (est.)" box and the estimated per-10 path never appear.
+    const legacy = tier >= 0.7;
+    if (legacy && perHeroOut) {
+      const wallMinutes = duration / heroes.length;
+      perHeroOut = perHeroOut.map((h) => ({ ...h, minutes: wallMinutes }));
     }
 
     // Manual (◎) after-game self-report — tilt clusters on losses, positive
@@ -109,6 +124,7 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
       result,
       gameType,
       durationMinutes: duration,
+      ...(legacy ? {} : { playedMinutes: played }),
       heroes,
       perHero: perHeroOut,
       finalScore,

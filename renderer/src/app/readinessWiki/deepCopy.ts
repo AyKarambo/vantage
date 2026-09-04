@@ -36,7 +36,19 @@ export const deepCopy = {
     return (
       `A dip only counts when it is SUSTAINED, not one bad game. A one-sided tally adds up how far each game falls below your baseline ` +
       `(ignoring the first ${dc.cusumSlack} of noise) and only fires once it crosses ${dc.cusumThreshold} across at least ${dc.evidenceMinGames} recent games. ` +
-      `Heroes inside their first ${dc.heroLearnGames} games are exempt — early games learning something new never count against you.`
+      `Heroes inside their first ${dc.heroLearnGames} games are exempt — counted across ALL your accounts, because hero experience is yours, not the account's — ` +
+      `so early games learning something new never count against you.`
+    );
+  },
+
+  /** Performance deep tier: several accounts, one player — the main account carries the verdict. */
+  accountWeighting(): string {
+    return (
+      `Play on more than one account and the one you have played most lately is your main — it carries the verdict. ` +
+      `Every check below runs on all your games the same way; what changes is the SIZE of the result. ` +
+      `The more of the week you spent away from your main, the more this part of the score is pulled back toward neutral — a week entirely on an alt keeps ×${dc.altAccountWeight} of it. ` +
+      `That applies to credit as much as to blame: you experiment on alts, so neither a great nor an awful week there says as much about you. ` +
+      `Stats are still compared to each account's own usual, so an alt's lobbies never skew your main's baseline.`
     );
   },
 

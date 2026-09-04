@@ -129,13 +129,30 @@ export interface MatchDetail {
    * rather than derived.
    */
   rankAtStart?: RankPosition;
+  /** Wall-clock match length in whole minutes — the header's "Duration", not a per-10 divisor. */
   durationMinutes?: number;
+  /**
+   * Minutes the player could actually fight — the per-10 divisor behind the
+   * per-hero panel (see `core/playedTime`). Absent when nothing usable is
+   * recorded (per-10 stats then show a dash).
+   */
+  playedMinutes?: number;
+  /**
+   * Where `playedMinutes` came from: measured from the GEP rounds, estimated
+   * from the wall clock of an older capture, or a hand-logged duration taken
+   * as typed. Lets the panel flag an estimate.
+   */
+  playedSource?: 'measured' | 'estimated' | 'reported';
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */
   finalScore?: string;
   heroes: string[];
-  /** Local player's per-hero lines; [] when GEP gave no per-hero data. */
+  /**
+   * Local player's per-hero lines, merged per hero; [] when GEP gave no
+   * per-hero data. `minutes`, when present, are already on the played-time
+   * basis of `playedMinutes` (rescaled for older wall-clock captures).
+   */
   perHero: HeroStat[];
   mental?: MatchMental;
   /**

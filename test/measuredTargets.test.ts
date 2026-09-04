@@ -6,6 +6,7 @@ import {
   foldMeasuredGradesForExport, effectiveImprovementGrade, matchExportSignature,
   targetLearningCurve, TARGET_LIBRARY, type AuthoredTarget,
 } from '../src/core/targets';
+import { PLAYED_TIME_ESTIMATE, setupMinutes } from '../src/core/playedTime';
 
 let seq = 0;
 function game(p: Partial<GameRecord> = {}): GameRecord {
@@ -19,6 +20,10 @@ function game(p: Partial<GameRecord> = {}): GameRecord {
     result: 'Win' as Result,
     gameType: 'Competitive',
     heroes: ['Tracer'],
+    // Per-10 rates divide by PLAYED time, not the wall clock. These fixtures
+    // assert exact numbers, so a typed duration is also the measured played
+    // time — a case that wants the estimate path passes `playedMinutes: undefined`.
+    ...(p.durationMinutes != null ? { playedMinutes: p.durationMinutes } : {}),
     ...p,
   };
 }
@@ -68,6 +73,25 @@ describe('matchStatValue — per-10 / ratio', () => {
   it('returns null for a rate stat with no duration', () => {
     expect(matchStatValue(game({ perHero: [hero({ damage: 9000 })] }), 'Damage')).toBeNull();
   });
+  it('divides by the measured played time, not the wall clock, when a capture has both', () => {
+    const g = game({ durationMinutes: 12, playedMinutes: 10, perHero: [hero({ damage: 11240 })] });
+    expect(matchStatValue(g, 'Damage')).toBe(11240); // 11240 × 10 / 10 played — not / 12
+  });
+  it('ESTIMATE PATH: a legacy 10-minute Ilios capture without playedMinutes divides by 10 − 68/60 − the Control setup locks', () => {
+    // No rounds recorded → hero select (28 s) + scoreboard (40 s) + the mode's
+    // setup locks for a typical best-of-three (2.5 rounds → 1.5 × 15 s) come off
+    // the wall clock before it becomes the divisor.
+    const g = game({ durationMinutes: 10, playedMinutes: undefined, perHero: [hero({ damage: 11240 })] });
+    const outside = (PLAYED_TIME_ESTIMATE.preRoundSeconds + PLAYED_TIME_ESTIMATE.postMatchSeconds) / 60;
+    const played = 10 - outside - setupMinutes('Control', 2.5);
+    expect(outside).toBeCloseTo(68 / 60, 9);
+    expect(matchStatValue(g, 'Damage')).toBe(Math.round(11240 * 10 / played));
+    expect(matchStatValue(g, 'Damage')).toBeGreaterThan(11240); // a shorter divisor → a higher rate
+  });
+  it('a hand-logged duration is taken as typed (no estimate)', () => {
+    const g = game({ matchId: 'manual-1', durationMinutes: 10, playedMinutes: undefined, perHero: [hero({ damage: 11240 })] });
+    expect(matchStatValue(g, 'Damage')).toBe(11240);
+  });
 });
 
 describe('matchStatValue — role/hero scope (D)', () => {
@@ -91,6 +115,20 @@ describe('matchStatValue — role/hero scope (D)', () => {
   it('hero scope measures only that hero over its own minutes', () => {
     // Tracer: 12000 damage over its 10 equal-split minutes → 12000 per 10.
     expect(matchStatValue(multi(), 'Damage', { heroScope: ['Tracer'] })).toBe(12000);
+  });
+
+  it('hero scope rescales legacy wall-clock hero minutes onto the estimated played time', () => {
+    // An older capture: swap-timed minutes summing to the 20-minute wall clock,
+    // no rounds. The estimate shortens the divisor; each hero's minutes shrink
+    // by the same factor, so its rate rises by it.
+    const g = game({
+      durationMinutes: 20, playedMinutes: undefined,
+      perHero: [hero({ hero: 'Bastion', role: 'damage', damage: 40000, minutes: 15 }), hero({ hero: 'Tracer', role: 'damage', damage: 12000, minutes: 5 })],
+    });
+    const played = 20 - 68 / 60 - setupMinutes('Control', 2.5);
+    const tracerMinutes = 5 * (played / 20);
+    expect(matchStatValue(g, 'Damage', { heroScope: ['Tracer'] })).toBe(Math.round(12000 * 10 / tracerMinutes));
+    expect(matchStatValue(g, 'Damage')).toBe(Math.round(52000 * 10 / played));
   });
 
   it('hero scope folds casing / accents / punctuation via heroMatchKey', () => {

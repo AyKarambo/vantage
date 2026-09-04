@@ -60,6 +60,23 @@ describe('matchToGame', () => {
     expect(game?.perHero).toBeUndefined();
   });
 
+  it('passes the measured played time and its rounds through, and times a synthesized single hero by it', () => {
+    const rounds = [{ startedAt: 1_028_000, endedAt: 1_328_000 }, { startedAt: 1_329_000, endedAt: 1_560_000 }];
+    const game = matchToGame(base({ playedMinutes: 8.6, rounds }), ACCOUNTS);
+    expect(game?.durationMinutes).toBe(10); // the wall clock is still the displayed duration
+    expect(game?.playedMinutes).toBe(8.6);
+    expect(game?.rounds).toEqual(rounds);
+    // Single hero → all of the PLAYED time was spent on it, not the wall clock.
+    expect(game?.perHero?.[0].minutes).toBe(8.6);
+  });
+
+  it('leaves playedMinutes/rounds absent on a capture without round events (read-time estimates it)', () => {
+    const game = matchToGame(base(), ACCOUNTS);
+    expect(game).not.toHaveProperty('playedMinutes');
+    expect(game).not.toHaveProperty('rounds');
+    expect(game?.perHero?.[0].minutes).toBe(10); // falls back to the wall clock
+  });
+
   it('passes finalScore and the retained roster through', () => {
     const roster = [
       { battleTag: 'Karambo#21234', heroName: 'Tracer', kills: 20, isLocal: true },

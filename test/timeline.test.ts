@@ -38,7 +38,8 @@ describe('targetTimeline', () => {
     };
     const g = (ts: number, hero: string, elim: number): GameRecord => ({
       matchId: `m${++seq}`, timestamp: ts, account: 'M', role: 'damage', map: 'Ilios',
-      result: 'Win', gameType: 'Competitive', heroes: [hero], durationMinutes: 10,
+      // Per-10 divides by the PLAYED minutes (measured here), not the wall clock.
+      result: 'Win', gameType: 'Competitive', heroes: [hero], durationMinutes: 10, playedMinutes: 10,
       perHero: [{ hero, role: 'damage', eliminations: elim, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0 }],
     });
     const tl = targetTimeline([g(1, 'Tracer', 12), g(2, 'Ana', 5), g(3, 'Tracer', 6)], t);

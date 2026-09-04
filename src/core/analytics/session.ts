@@ -5,8 +5,8 @@
  * preview.
  */
 import type { GameRecord, Streak } from './types';
-import { byMap, dayKey, winLoss } from './grouping';
-import { heroStats } from './heroStats';
+import { byMap, dayKey, heroWeightedGames, weightedGroupBy, weightedWinLoss, winLoss } from './grouping';
+import { heroStats, type HeroStatsOptions } from './heroStats';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets';
 import { isPositiveComms } from '../comms';
 
@@ -166,14 +166,20 @@ export function sessionRecap(games: GameRecord[], now: number = Date.now()): Ses
   };
 }
 
-/** Drill-down for one hero: overall, per-map, recent games, exact stats. */
-export function heroDetail(games: GameRecord[], hero: string) {
+/**
+ * Drill-down for one hero: overall, per-map, recent games, exact stats.
+ * `overall` and `byMap` credit each game by the hero's share of the player's
+ * time in it (the career-profile rule, matching the Heroes table); `recent`
+ * lists the games whole.
+ */
+export function heroDetail(games: GameRecord[], hero: string, opts: HeroStatsOptions = {}) {
   const gs = games.filter((g) => g.heroes.includes(hero)).sort((a, b) => b.timestamp - a.timestamp);
+  const weighted = heroWeightedGames(gs, hero);
   return {
     hero,
-    overall: winLoss(gs),
-    byMap: byMap(gs).slice(0, 12),
+    overall: weightedWinLoss(weighted),
+    byMap: weightedGroupBy(weighted, (e) => e.game.map).slice(0, 12),
     recent: gs.slice(0, 10).map((g) => ({ map: g.map, role: g.role, result: g.result, account: g.account, timestamp: g.timestamp })),
-    stats: heroStats(gs).find((h) => h.hero === hero) ?? null,
+    stats: heroStats(gs, opts).find((h) => h.hero === hero) ?? null,
   };
 }

@@ -1076,6 +1076,12 @@ table.data tbody tr:hover {
   padding: 12px 14px;
   animation: rise-in 140ms var(--ease);
 }
+/* Wider panel for list-like content (the account switcher): a name, a rank
+   line and the active account's per-role table need more than 340px. */
+.popover-panel--wide {
+  min-width: 320px;
+  max-width: 420px;
+}
 .gep-popover-title {
   font-size: 11px;
   color: var(--muted-2);
@@ -1097,11 +1103,16 @@ table.data tbody tr:hover {
   flex-direction: column;
   gap: 2px;
 }
+/* One grid per row — check | name | rank — so every account name starts at the
+   same x and every rank text ends at the same x, whichever rows carry a check
+   or a rank. The active account's per-role table spans the name and rank
+   columns beneath (.acct-menu-roles). Baseline-aligned so the 13px name and
+   the 11px rank text share a line instead of the smaller one floating up. */
 .acct-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: baseline;
   width: 100%;
   text-align: left;
   padding: 7px 9px;
@@ -1120,43 +1131,41 @@ table.data tbody tr:hover {
   background: var(--surface-2);
   color: var(--accent-bright);
 }
-.acct-menu-item .acct-menu-check {
+.acct-menu-check {
+  grid-column: 1;
   color: var(--accent-bright);
   font-size: 12px;
-  /* The active row's label column can grow much taller than one line (the
-     per-role expansion below it) — align-items:center on the item would then
-     center the check against the WHOLE block instead of the account name at
-     its top. Pin it to the top unconditionally; identical to center for the
-     common one-line case, so this only changes anything when expanded. */
-  align-self: flex-start;
-  margin-top: 2px;
+  text-align: center;
 }
-/* Account name over its calculated rank line (when an anchor is set). */
-.acct-menu-label {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+.acct-menu-name {
+  grid-column: 2;
   min-width: 0;
 }
-.acct-menu-label .acct-menu-rank {
+/* The account's calculated rank line (when an anchor is set), right-aligned. */
+.acct-menu-rank {
+  grid-column: 3;
   font-size: 11px;
+  text-align: right;
 }
 /* The active account's per-role expansion — one line per tracked role, so the
-   switcher can show every role's rank without dumping it for every account. */
+   switcher can show every role's rank without dumping it for every account.
+   Its own two-column grid (role | status) under the name and rank columns;
+   each .acct-menu-role-row is `display: contents`, so the role labels form
+   one column and the status texts another across every row. */
 .acct-menu-roles {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  column-gap: 10px;
+  row-gap: 1px;
   margin-top: 3px;
   padding-top: 3px;
   border-top: 1px solid var(--border);
-}
-.acct-menu-role-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
   font-size: 10.5px;
   color: var(--dim);
+}
+.acct-menu-role-row {
+  display: contents;
 }
 .acct-menu-role-accent {
   color: var(--accent-text-2);
@@ -1560,4 +1569,190 @@ table.data tbody tr:hover {
   font-size: 11px;
   min-width: 84px;
   text-align: center;
+}
+
+/* Accounts manager — list grid + manage-ranks modal */
+/* One grid for the whole list: header and rows are `display: contents`, so
+   every row's cells share the same four tracks and the actions column is as
+   wide as the widest row — that is what keeps names, counts, chips and buttons
+   vertically aligned across accounts of different kinds. Cells stretch to the
+   row height (the grid default) and centre their own content, so the per-cell
+   top border draws one continuous separator instead of a stepped one. */
+.acct-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 70px minmax(0, 1.6fr) auto;
+  column-gap: 14px;
+  align-items: stretch;
+}
+.acct-grid-head,
+.acct-grid-row {
+  display: contents;
+}
+.acct-grid-head > * {
+  font-size: 11px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding-bottom: 6px;
+}
+.acct-grid-row > * {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.acct-grid-name-cell {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+}
+.acct-grid-name,
+.acct-grid-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-grid-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.acct-grid-sub {
+  font-size: 11px;
+  color: var(--dim);
+}
+.acct-grid-games {
+  justify-content: flex-end;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.acct-grid-head > .acct-grid-games {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.acct-role-summary {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.acct-role-chip {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 1px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.acct-role-chip.is-placement {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-text-2);
+}
+.acct-role-chip.is-empty {
+  padding-left: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--dim);
+}
+.acct-grid-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.acct-grid-actions .btn {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+/* Inline edit / label forms take the whole row, so their fields line up with
+   the add-account form below rather than squeezing into the name column. */
+.acct-grid-form {
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.acct-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.acct-form-field {
+  min-width: 160px;
+}
+
+/* Manage-ranks modal: all four roles for one account, one grid row each —
+   role | status | actions — with a drifted run's recount note spanning under
+   the status and actions columns. */
+.modal-card--ranks {
+  width: 640px;
+}
+.rank-modal {
+  gap: 14px;
+  padding: 18px;
+}
+.rank-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rank-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.rank-modal-rows {
+  display: flex;
+  flex-direction: column;
+}
+.rank-modal-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.rank-modal-role {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.rank-modal-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11.5px;
+}
+.rank-modal-placed {
+  font-size: 10px;
+}
+.rank-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.rank-modal-actions .btn {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+.rank-modal-note {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rank-modal-foot {
+  display: flex;
+  justify-content: flex-end;
 }

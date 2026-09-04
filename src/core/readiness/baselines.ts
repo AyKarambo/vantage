@@ -3,13 +3,23 @@
  *
  * Buckets are PER ACCOUNT (a smurf's easy-lobby numbers must never inflate the
  * main account's baseline), keyed by hero with a per-role fallback. Only
- * single-hero games with real `perHero` stats and a usable duration qualify —
- * per-hero playtime inside a multi-hero match is not recorded, so any per-10
- * attribution there would be systematically biased (unlike the display-side
- * `heroStats`, which accepts that bias for table completeness).
+ * single-hero games with real `perHero` stats and a usable PLAYED time qualify.
+ * The per-10 divisor is the time the player could actually fight — measured
+ * from the round events on newer captures, estimated from the wall clock on
+ * older ones (see `../playedTime`) — so a bucket built from both eras stays
+ * comparable. Multi-hero games are still excluded: newer captures do record
+ * per-hero minutes, but older ones don't, and mixing attributed with
+ * unattributed rows inside one bucket would bias it (the display-side
+ * `heroStats` accepts that bias for table completeness; a decline detector
+ * must not).
+ *
+ * Hero EXPERIENCE (`heroLifetime`, the learning-window input) is the one map
+ * that pools ACROSS accounts: how many games a player has on a hero is a
+ * property of the player, not of the account they queued on.
  */
 
 import type { GameRecord } from '../analytics';
+import { playedMinutesOf } from '../playedTime';
 import { READINESS_TUNING as T } from './constants';
 import { dayOrdinal } from './day';
 import { meanSd, type MeanSd } from './stats';
@@ -42,26 +52,38 @@ export interface Baselines {
   heroBuckets: Map<string, QualifyingGame[]>;
   /** `${account}|${role}` → qualifying games, ascending. */
   roleBuckets: Map<string, QualifyingGame[]>;
-  /** `${account}|${hero}` → lifetime games on that hero (any game listing the hero — experience, not just qualifying). */
+  /**
+   * hero → lifetime games on that hero ACROSS ALL ACCOUNTS (any game listing the
+   * hero — experience, not just qualifying). Keyed by hero alone on purpose: the
+   * learning-window exemption asks "has this player learned this hero", and 244
+   * games on the main make the same hero on an alt a hero they know.
+   */
   heroLifetime: Map<string, number>;
 }
 
 export const heroKey = (account: string, hero: string): string => `${account}|${hero}`;
 export const roleKey = (account: string, role: string): string => `${account}|${role}`;
 
-/** Whether a game qualifies for the per-10 decline component (strict hygiene, plan §2.2). */
-export function qualifiesForPer10(g: GameRecord): boolean {
-  return (
-    g.heroes.length === 1 &&
-    g.perHero?.length === 1 &&
-    typeof g.durationMinutes === 'number' &&
-    g.durationMinutes >= T.minPer10Minutes
-  );
+/**
+ * The per-10 divisor for a game — its played minutes — or null when the game
+ * cannot feed per-10 rates (strict hygiene, plan §2.2): single-hero games with
+ * a real `perHero` row only, and at least `minPer10Minutes` of PLAYED time
+ * (measured or estimated by `playedMinutesOf`; nothing is fabricated).
+ */
+export function per10MinutesOf(g: GameRecord): number | null {
+  if (g.heroes.length !== 1 || g.perHero?.length !== 1) return null;
+  const played = playedMinutesOf(g);
+  return played !== null && played >= T.minPer10Minutes ? played : null;
 }
 
-function toQualifying(g: GameRecord): QualifyingGame {
+/** Whether a game qualifies for the per-10 decline component. */
+export function qualifiesForPer10(g: GameRecord): boolean {
+  return per10MinutesOf(g) !== null;
+}
+
+function toQualifying(g: GameRecord, playedMinutes: number): QualifyingGame {
   const row = g.perHero![0];
-  const scale = 10 / g.durationMinutes!;
+  const scale = 10 / playedMinutes;
   return {
     ordinal: dayOrdinal(g.timestamp),
     timestamp: g.timestamp,
@@ -86,11 +108,11 @@ export function buildBaselines(games: GameRecord[]): Baselines {
 
   for (const g of games) {
     for (const hero of g.heroes) {
-      const key = heroKey(g.account, hero);
-      heroLifetime.set(key, (heroLifetime.get(key) ?? 0) + 1);
+      heroLifetime.set(hero, (heroLifetime.get(hero) ?? 0) + 1);
     }
-    if (!qualifiesForPer10(g)) continue;
-    const q = toQualifying(g);
+    const played = per10MinutesOf(g);
+    if (played === null) continue;
+    const q = toQualifying(g, played);
     qualifying.push(q);
     const hk = heroKey(q.account, q.hero);
     const rk = roleKey(q.account, q.role);

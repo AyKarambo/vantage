@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { MatchAggregator, parseRoster } from '../src/core/matchAggregator';
+import { MatchAggregator, isRoundEndMessage, isRoundStartMessage, parseRoster } from '../src/core/matchAggregator';
 import type { GepMessage } from '../src/core/model';
 import { resolveRole } from '../src/core/resolvers/role';
 import { resolveResult } from '../src/core/resolvers/result';
-import { buildCompetitiveMatch } from '../src/main/simulate';
+import { buildCompetitiveMatch, buildCompetitiveTimeline, SIM_TIMING } from '../src/main/simulate';
 import { matchToGame } from '../src/core/gameRecord';
+import { ROUND_SETUP_SECONDS } from '../src/core/playedTime';
 
 const info = (feature: string, key: string, value: unknown): GepMessage => ({
   kind: 'info',
@@ -238,6 +239,243 @@ describe('MatchAggregator per-hero stats', () => {
     // damage), not the raw last-seen roster role (Mercy, support) — otherwise a
     // harmless post-round browse would misclassify the whole match's role.
     expect(rec?.heroRole).toBe('damage');
+  });
+});
+
+describe('MatchAggregator round timing (played time)', () => {
+  const MIN = 60_000;
+  /** Real captures deliver the round events as `match_info` events with a null value. */
+  const round = (key: 'round_start' | 'round_end'): GepMessage => ({ kind: 'event', feature: 'match_info', key, value: null });
+
+  /** An aggregator driven by an explicit clock: `at(ms, msg)` sets the time, then feeds. */
+  function clocked(options?: ConstructorParameters<typeof MatchAggregator>[1]) {
+    let t = 0;
+    const agg = new MatchAggregator(() => t, options);
+    const at = (ms: number, m: GepMessage) => {
+      t = ms;
+      return agg.handle(m);
+    };
+    return { agg, at };
+  }
+
+  function start(at: (ms: number, m: GepMessage) => unknown, map: string, id: string): void {
+    at(0, event('match_start'));
+    at(100, info('game_info', 'battle_tag', 'P#1'));
+    at(200, info('match_info', 'map', map));
+    at(300, info('match_info', 'pseudo_match_id', id));
+  }
+
+  it('measures playedMinutes from round_start/round_end, excluding the pre-round hero select and the post-match tail', () => {
+    // Real capture shape: match_start → round_start ~28 s (hero select);
+    // round_end → next round_start ~1 s; outcome 3 ms before the final
+    // round_end; match_end ~40 s after it (POTG + scoreboard).
+    const { at } = clocked();
+    start(at, 'Ilios', 'rt-1'); // Control: doors open at round start, ~15 s overlay before a later round
+    at(10_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    at(28_000, round('round_start'));
+    at(28_000 + 5 * MIN, round('round_end'));
+    at(29_000 + 5 * MIN, round('round_start'));
+    at(29_000 + 9 * MIN, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', kills: 20, deaths: 5, assists: 7, damage: 9000 }));
+    at(29_000 + 10 * MIN, info('match_info', 'match_outcome', 'victory'));
+    at(29_003 + 10 * MIN, round('round_end'));
+    const rec = at(69_003 + 10 * MIN, event('match_end'))!;
+
+    expect(rec.rounds).toEqual([
+      { startedAt: 28_000, endedAt: 28_000 + 5 * MIN },
+      { startedAt: 29_000 + 5 * MIN, endedAt: 29_003 + 10 * MIN },
+    ]);
+    // Round 1 fully fightable (5 min); round 2 minus the 15 s round-change overlay.
+    const played = (5 * MIN + (5 * MIN + 3 - 15_000)) / MIN;
+    expect(rec.playedMinutes).toBeCloseTo(played, 9);
+    // The wall clock stays the displayed duration: ~11.15 min → 11.
+    expect(rec.durationMinutes).toBe(11);
+    // The single hero's minutes are the played minutes (its segment ran from
+    // match start to match end, clipped to the play windows).
+    expect(rec.perHero).toHaveLength(1);
+    expect(rec.perHero![0].minutes).toBeCloseTo(played, 9);
+    expect(rec.perHero![0]).toMatchObject({ hero: 'Tracer', eliminations: 20, deaths: 5 });
+    // Round-trips onto the analyzable game.
+    const game = matchToGame(rec, {})!;
+    expect(game.playedMinutes).toBeCloseTo(played, 9);
+    expect(game.rounds).toHaveLength(2);
+  });
+
+  it("removes the Escort first-round setup lock (attackers behind doors) from the round's play window", () => {
+    const { at } = clocked();
+    start(at, 'Junkertown', 'rt-escort');
+    at(28_000, round('round_start'));
+    at(28_000 + 5 * MIN, info('match_info', 'match_outcome', 'defeat'));
+    at(28_003 + 5 * MIN, round('round_end'));
+    const rec = at(68_003 + 5 * MIN, event('match_end'))!;
+    expect(rec.rounds).toHaveLength(1);
+    expect(rec.playedMinutes).toBeCloseTo((5 * MIN + 3 - ROUND_SETUP_SECONDS.Escort.first * 1000) / MIN, 9);
+    expect(ROUND_SETUP_SECONDS.Escort.first).toBe(45);
+  });
+
+  it('closes a round whose round_end never arrived at match_outcome, not at match_end', () => {
+    const { at } = clocked();
+    start(at, 'Ilios', 'rt-missed-end');
+    at(28_000, round('round_start'));
+    at(500_000, info('match_info', 'match_outcome', 'victory'));
+    const rec = at(540_000, event('match_end'))!; // 40 s of scoreboard must not count
+    expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 500_000 }]);
+    expect(rec.playedMinutes).toBeCloseTo((500_000 - 28_000) / MIN, 9);
+  });
+
+  it('closes a round whose round_end never arrived at match_end when there was no outcome either', () => {
+    const { at } = clocked();
+    start(at, 'Ilios', 'rt-no-outcome');
+    at(28_000, round('round_start'));
+    const rec = at(300_000, event('match_end'))!;
+    expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 300_000 }]);
+    expect(rec.playedMinutes).toBeCloseTo((300_000 - 28_000) / MIN, 9);
+  });
+
+  it('a round_start while a round is still open closes the open one; a stray round_end is ignored', () => {
+    const { at } = clocked();
+    start(at, 'Ilios', 'rt-stray');
+    at(5_000, round('round_end')); // nothing open yet → ignored
+    at(28_000, round('round_start'));
+    at(228_000, round('round_start')); // round 1's end was missed → closed here
+    at(428_000, round('round_end'));
+    const rec = at(468_000, event('match_end'))!;
+    expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 228_000 }, { startedAt: 228_000, endedAt: 428_000 }]);
+  });
+
+  it('with no round events leaves playedMinutes/rounds absent and keeps the legacy wall-clock hero minutes exactly', () => {
+    const { at } = clocked();
+    start(at, 'Ilios', 'rt-none');
+    at(60_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 10, deaths: 2, assists: 3, damage: 4000 }));
+    at(180_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', role: 'damage', kills: 18, deaths: 4, assists: 5, damage: 9000 }));
+    at(590_000, info('match_info', 'match_outcome', 'victory'));
+    const rec = at(600_000, event('match_end'))!;
+    expect(rec.rounds).toBeUndefined();
+    expect(rec.playedMinutes).toBeUndefined();
+    const ph = Object.fromEntries((rec.perHero ?? []).map((h) => [h.hero, h]));
+    expect(ph.Tracer.minutes).toBeCloseTo(3, 9); // match start → swap at 3 min (wall clock)
+    expect(ph.Genji.minutes).toBeCloseTo(7, 9); // swap → match end at 10 min (wall clock)
+    expect(rec.durationMinutes).toBe(10);
+  });
+
+  it('clips hero segments to the play windows: a hero-select swap earns 0 minutes and is dropped, a mid-round swap splits at the swap', () => {
+    const { at } = clocked();
+    start(at, 'Junkertown', 'rt-clip'); // Escort: 45 s setup lock at the start of round 1
+    // Ana picked during hero select, swapped off 22 s into the round — still
+    // behind the spawn doors, so nothing was playable on her.
+    at(5_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Ana', role: 'support', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    at(28_000, round('round_start'));
+    at(50_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    // Real stats accrue on Tracer, then a mid-round swap to Genji.
+    at(199_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', kills: 10, deaths: 2, assists: 3, damage: 4000 }));
+    at(200_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', role: 'damage', kills: 10, deaths: 2, assists: 3, damage: 4000 }));
+    at(328_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', kills: 18, deaths: 4, assists: 5, damage: 9000 }));
+    at(328_000, info('match_info', 'match_outcome', 'victory'));
+    at(328_003, round('round_end'));
+    const rec = at(368_003, event('match_end'))!;
+
+    const windowStart = 28_000 + 45_000; // doors open
+    expect(rec.heroes).toEqual(['Tracer', 'Genji']); // Ana: 0 played minutes, zero stats → spawn-only, dropped
+    const ph = Object.fromEntries((rec.perHero ?? []).map((h) => [h.hero, h]));
+    expect(ph.Tracer.minutes).toBeCloseTo((200_000 - windowStart) / MIN, 9); // clipped to the door-open instant
+    expect(ph.Genji.minutes).toBeCloseTo((328_003 - 200_000) / MIN, 9); // the 40 s scoreboard tail excluded
+    expect(ph.Tracer).toMatchObject({ eliminations: 10, deaths: 2 });
+    expect(ph.Genji).toMatchObject({ eliminations: 8, deaths: 2 });
+    // The hero minutes sum to the match's played minutes.
+    expect(ph.Tracer.minutes! + ph.Genji.minutes!).toBeCloseTo(rec.playedMinutes!, 9);
+    expect(rec.playedMinutes).toBeCloseTo((328_003 - windowStart) / MIN, 9);
+    expect(rec.durationMinutes).toBe(6); // 6.13 min wall clock
+  });
+
+  it('a swap while a round is still open clips against the open round too (setup offset applied)', () => {
+    const { at } = clocked();
+    start(at, 'Junkertown', 'rt-open');
+    at(28_000, round('round_start'));
+    at(30_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
+    // Swap 2 min in — the round has no round_end yet when Tracer's segment closes.
+    at(148_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Genji', role: 'damage', kills: 6, deaths: 1, assists: 1, damage: 3000 }));
+    at(328_000, info('match_info', 'match_outcome', 'defeat'));
+    at(328_003, round('round_end'));
+    const rec = at(368_003, event('match_end'))!;
+    const ph = Object.fromEntries((rec.perHero ?? []).map((h) => [h.hero, h]));
+    expect(ph.Tracer.minutes).toBeCloseTo((148_000 - 73_000) / MIN, 9); // first hero from match start, doors at 73 s
+  });
+
+  it('times a segment that closed BEFORE the first round against the rounds, not the wall clock', () => {
+    // Vantage attached mid-match, so the first round_start was never delivered
+    // and Ana's segment closed before any round existed. Timing it there would
+    // leave one record with hero minutes on two different bases — wall clock for
+    // Ana, play windows for Tracer — summing past the match's own played time.
+    const { at } = clocked();
+    at(1_000, info('game_info', 'battle_tag', 'P#1'));
+    at(1_100, info('match_info', 'map', 'Junkertown')); // Escort: 45 s first-round lock
+    at(1_200, info('roster', 'roster_0', { name: 'P#1', hero: 'Ana', role: 'support', kills: 2, deaths: 1, assists: 4, damage: 900 }));
+    at(180_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 5, deaths: 2, assists: 4, damage: 3000 }));
+    at(240_000, round('round_start'));
+    at(660_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', kills: 14, deaths: 5, assists: 6, damage: 9000 }));
+    at(660_000, info('match_info', 'match_outcome', 'victory'));
+    at(660_003, round('round_end'));
+    const rec = at(700_003, event('match_end'))!;
+
+    const ph = Object.fromEntries((rec.perHero ?? []).map((h) => [h.hero, h]));
+    // Ana played entirely before the round we saw — no played minutes at all
+    // (a zero-length segment records none), though her stats keep her row alive.
+    expect(ph.Ana.minutes).toBeUndefined();
+    expect(ph.Tracer.minutes).toBeCloseTo((660_003 - (240_000 + 45_000)) / MIN, 9);
+    // The invariant that matters: hero minutes never exceed the match's own.
+    const total = (rec.perHero ?? []).reduce((m, h) => m + (h.minutes ?? 0), 0);
+    expect(total).toBeCloseTo(rec.playedMinutes!, 9);
+  });
+
+  it('accepts a custom map-mode resolver so user-catalog maps get the right setup lock', () => {
+    const run = (mapModeOf?: (map: string) => 'Escort' | 'Push') => {
+      const { at } = clocked(mapModeOf ? { mapModeOf } : undefined);
+      start(at, 'Somewhere New', 'rt-resolver');
+      at(28_000, round('round_start'));
+      at(328_000, info('match_info', 'match_outcome', 'victory'));
+      at(328_003, round('round_end'));
+      return at(368_003, event('match_end'))!;
+    };
+    expect(run().playedMinutes).toBeCloseTo(300_003 / MIN, 9); // unknown map → no lock
+    expect(run(() => 'Escort').playedMinutes).toBeCloseTo((300_003 - 45_000) / MIN, 9);
+    expect(run(() => 'Push').playedMinutes).toBeCloseTo(300_003 / MIN, 9);
+  });
+
+  it('leaves playedMinutes absent when every round is shorter than its setup lock', () => {
+    const { at } = clocked();
+    start(at, 'Junkertown', 'rt-forfeit');
+    at(28_000, round('round_start'));
+    const rec = at(40_000, event('match_end'))!; // 12 s "round" — a forfeit in setup
+    expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 40_000 }]);
+    expect(rec.playedMinutes).toBeUndefined();
+  });
+
+  it('recognizes the round events with the same tolerance as match_start (event kind, key or feature)', () => {
+    expect(isRoundStartMessage(round('round_start'))).toBe(true);
+    expect(isRoundEndMessage(round('round_end'))).toBe(true);
+    expect(isRoundStartMessage({ kind: 'event', feature: 'round_start', key: 'x', value: null })).toBe(true);
+    expect(isRoundStartMessage({ kind: 'info', feature: 'match_info', key: 'round_start', value: null })).toBe(false);
+    expect(isRoundStartMessage(round('round_end'))).toBe(false);
+    expect(isRoundEndMessage(event('match_end'))).toBe(false);
+  });
+
+  it('the dev simulation timeline, replayed at its own pace, measures a positive played time on King\'s Row', () => {
+    let t = 0;
+    const agg = new MatchAggregator(() => t);
+    let rec = null;
+    for (const step of buildCompetitiveTimeline({ battleTag: 'Karambo#21234', map: "King's Row" }, 'sim-rt')) {
+      t = step.at;
+      rec = agg.handle(step.msg) ?? rec;
+    }
+    expect(rec).not.toBeNull();
+    const roundMs = SIM_TIMING.roundEndMs - SIM_TIMING.roundStartMs;
+    expect(rec!.rounds).toEqual([{ startedAt: SIM_TIMING.roundStartMs, endedAt: SIM_TIMING.roundEndMs }]);
+    expect(rec!.playedMinutes).toBeCloseTo((roundMs - ROUND_SETUP_SECONDS.Hybrid.first * 1000) / MIN, 9);
+    expect(rec!.perHero![0].minutes).toBeCloseTo(rec!.playedMinutes!, 9);
+    expect(rec!.durationMinutes).toBe(Math.round((SIM_TIMING.roundEndMs + SIM_TIMING.matchEndAfterRoundEndMs) / MIN));
+    expect(rec!.outcome).toBe('Victory');
+    // The bare message list keeps match_end last (the roster-retention test slices it off).
+    const messages = buildCompetitiveMatch({ battleTag: 'Karambo#21234', map: "King's Row" }, 'sim-rt');
+    expect(messages[messages.length - 1].key).toBe('match_end');
   });
 });
 

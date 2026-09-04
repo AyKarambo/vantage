@@ -21,11 +21,12 @@ import { openModal } from '../components/overlay';
 import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
-import { pct, rankLabel, relTime, roleLabel, signed } from '../format';
+import { pct, relTime, roleLabel, signed } from '../format';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { maybeOfferPlacements } from './placementOffer';
 import { roleStatus } from '../roleStatus';
+import { sidebarChip } from '../sidebarChip';
 import { overview } from '../views/overview';
 import { live } from '../views/live';
 import { matches } from '../views/matches';
@@ -175,7 +176,10 @@ export class App {
     h('div', { class: 'nav-group' }, 'Current session'),
     this.sessionBody,
   );
-  /** Collapse/expand the rail. Pinned below the session card so it never scrolls away. */
+  /** Collapse/expand the rail. Sits beside the account chip in the sidebar's
+   *  top row (Ctrl B does the same), so the session card can be the bottom-most
+   *  element. Persistent like every other sidebar node — applyCollapsed mutates
+   *  it in place, it is never rebuilt per state. */
   private readonly collapseToggle = h('button', {
     class: 'sidebar-collapse',
     on: { click: () => this.toggleCollapsed() },
@@ -526,20 +530,19 @@ export class App {
   private renderSidebar(state: AppState): void {
     if (!this.sidebarBuilt) this.buildSidebar();
     const d = state.data;
-    // The chip doubles as the account switcher: a PINNED filter always shows
-    // that account's own name — a manual choice is never silently overridden.
-    // Unpinned ("All accounts"), it shows whoever was played most recently
-    // instead of the literal "All accounts" label, so the corner widget reads
-    // as "what am I doing right now" — d.primaryRank already resolves to that
-    // account (see dashboardData's mostRecentAccount), so this just borrows it
-    // rather than re-deriving anything. Falls back to the literal label only
-    // when there's no rank data to resolve from at all (a brand-new profile).
-    const displayName = d
-      ? (d.filters.account !== 'all' ? d.filters.account : (d.primaryRank?.account ?? 'All accounts'))
-      : 'Vantage';
-    this.avatarEl.textContent = displayName.charAt(0).toUpperCase();
-    this.accountNameEl.textContent = displayName;
-    this.accountSubEl.textContent = d ? rankLine(d) : '—';
+    // The chip doubles as the account switcher. PINNED, it is that account — a
+    // manual choice is never silently overridden. Unpinned it says "All
+    // accounts" outright (it used to borrow the most recently played account's
+    // name, which named ONE account over a dashboard showing every one) and its
+    // sub-line attributes the rank to whichever account it belongs to. The
+    // wording lives in sidebarChip.ts; this only paints it.
+    const chip = sidebarChip(d);
+    this.avatarEl.textContent = chip.glyph;
+    this.avatarEl.classList.toggle('is-all', chip.scope === 'all');
+    this.accountNameEl.textContent = chip.name;
+    this.accountSubEl.textContent = chip.sub;
+    // One line with an ellipsis (app.css); the full line is the tooltip.
+    this.accountSubEl.title = chip.sub;
 
     // Saving a review doesn't refetch, so subtract the games graded since the
     // last snapshot (only those the snapshot still counts as pending).
@@ -561,12 +564,12 @@ export class App {
    * refresh can't destroy a nav button under an in-progress click.
    */
   private buildSidebar(): void {
-    // The nav lives in its own scrollable box between the account chip and the
-    // session card, both of which stay pinned. Without it the sidebar's flex
-    // children simply overflow their container — at the app's own 1300×840 spec
-    // size the nav is already taller than the space it has, so the session card
-    // was being pushed straight down over the status bar. Every nav item added
-    // since made that worse, and would again.
+    // The nav lives in its own scrollable box between the top row (account chip
+    // + rail toggle) and the session card, both of which stay pinned. Without
+    // it the sidebar's flex children simply overflow their container — at the
+    // app's own 1300×840 spec size the nav is already taller than the space it
+    // has, so the session card was being pushed straight down over the status
+    // bar. Every nav item added since made that worse, and would again.
     const navChildren: Array<Node> = [];
     for (const section of NAV) {
       navChildren.push(h('div', { class: 'nav-group' }, section.group));
@@ -592,10 +595,14 @@ export class App {
     }
     render(
       this.sidebarHost,
+      // The rail toggle gets its own slim row above the chip rather than a
+      // column beside it: at 212px the chip's rank line needs every pixel of
+      // its width, and 24px + a gap is a quarter of the text column.
+      h('div', { class: 'sidebar-top' }, this.collapseToggle),
       this.accountChip,
       h('nav', { class: 'sidebar-nav' }, ...navChildren),
+      // Last on purpose: the session card is the bottom-most thing in the sidebar.
       this.sessionCardEl,
-      this.collapseToggle,
     );
     this.applyCollapsed();
     this.sidebarBuilt = true;
@@ -689,6 +696,8 @@ export class App {
         const runs = d.placements.filter((p) => p.account === account);
         const roles = SWITCHER_ROLES.filter((role) => perRole?.[role] || runs.some((p) => p.role === role));
         if (!roles.length) return null;
+        // A two-column grid of its own (role | status) so the labels and the
+        // texts line up across rows; each row is `display: contents`.
         return h('div', { class: 'acct-menu-roles' },
           ...roles.map((role) => {
             const openRun = runs.find((p) => p.role === role && !p.completed);
@@ -700,13 +709,16 @@ export class App {
           }),
         );
       };
+      // Every row is one grid (see .acct-menu-item): check | name | rank, with
+      // the active account's per-role table spanning the name and rank columns
+      // beneath. Flat children rather than nested flex columns, so names, rank
+      // texts and role lines share the same column edges across every row.
       const item = (label: string, active: boolean, run: () => void, account?: string): HTMLElement => {
-        const sub = account ? rankSub(account) : null;
         return h('button', { class: `acct-menu-item${active ? ' is-active' : ''}`, on: { click: () => { run(); close(); } } },
-          sub
-            ? h('span', { class: 'acct-menu-label' }, h('span', null, label), sub, active ? roleRows(account!) : null)
-            : h('span', null, label),
           active ? h('span', { class: 'acct-menu-check' }, '✓') : null,
+          h('span', { class: 'acct-menu-name' }, label),
+          account ? rankSub(account) : null,
+          active && account ? roleRows(account) : null,
         );
       };
       return h('div', { class: 'acct-menu' },
@@ -715,7 +727,7 @@ export class App {
         h('div', { class: 'acct-menu-sep' }),
         item('Manage accounts →', false, () => store.setView('settings')),
       );
-    });
+    }, { panelClass: 'popover-panel--wide' });
   }
 
   /** The "Current session" body, re-rendered into the persistent session card. */
@@ -986,32 +998,6 @@ function routeKey(view: ViewId, matchId?: string, playerName?: string, targetId?
   if (playerName) return `${view}:@${playerName}`;
   if (targetId) return `${view}:#${targetId}`;
   return view;
-}
-
-/**
- * The sidebar rank line: the user's real anchored rank when they've set one,
- * otherwise the winrate-derived heuristic estimate. Showing the heuristic while
- * an anchor exists was the "says Platinum 1 even though I set my rank" bug.
- *
- * Prefixed with the role name: `d.primaryRank` resolves to whichever role was
- * most recently played (see dashboardData), so without the prefix the number
- * alone wouldn't say which of an account's roles it belongs to.
- *
- * While the anchored (account, role) track is in an OPEN placement run, the
- * computed rank above is stale/meaningless (Overwatch shows no ±% or protection
- * during placements) — this shows `Placements N/10` (+ the latest prediction,
- * when one exists) instead, via the shared roleStatus/placementParts.
- */
-function rankLine(d: DashboardData): string {
-  const r = d.primaryRank;
-  if (r) {
-    const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
-    // No `movement` passed through roleStatus's rankParts call — the sidebar
-    // shows no arrow (that's the Overview KPI's job).
-    const status = roleStatus(r, openRun);
-    return `${roleLabel(r.role)} · ${status.text}`;
-  }
-  return `${rankLabel(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }
 
 /** Keys whose cheatsheet label needs more than first-letter capitalization. */

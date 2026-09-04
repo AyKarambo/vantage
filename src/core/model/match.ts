@@ -41,12 +41,27 @@ export interface HeroStat {
   healing: number;
   mitigation: number;
   /**
-   * Real time on this hero, in fractional minutes, when the aggregator could
-   * time the hero swaps (first hero starts at match start, last ends at match
-   * end). Absent on older records and manual logs — consumers fall back to an
-   * equal split of the match duration (see {@link ../perHero}).
+   * Time on this hero, in fractional minutes, when the aggregator could time
+   * the hero swaps. On records that carry {@link MatchRecord.rounds} this is
+   * PLAYED time — the swap segment clipped to the rounds' play windows (setup
+   * phases, the pre-round hero select and the post-match scoreboard removed).
+   * Older captures timed swaps by wall clock instead (first hero from match
+   * start, last hero to match end); {@link ../playedTime} scales those down at
+   * read time. Absent on manual logs — consumers fall back to an equal split
+   * of the played time (see {@link ../perHero}).
    */
   minutes?: number;
+}
+
+/**
+ * One GEP round (`round_start` → `round_end`), absolute epoch ms. Real captures
+ * show the between-round setup phase lives INSIDE the next round (round_end →
+ * round_start is ~1 s), so a round's span still includes its own setup lock;
+ * {@link ../playedTime} subtracts that per game mode.
+ */
+export interface RoundSpan {
+  startedAt: number;
+  endedAt: number;
 }
 
 /**
@@ -84,7 +99,17 @@ export interface MatchRecord {
   finalScore?: string;
   startedAt?: number;
   endedAt?: number;
+  /** Wall-clock `match_start` → `match_end`, rounded to whole minutes — the displayed match length. */
   durationMinutes?: number;
+  /** Every GEP round observed, in order. Absent when the feed sent no round events. */
+  rounds?: RoundSpan[];
+  /**
+   * Minutes the player could actually fight: the rounds' play windows summed
+   * (each round minus its mode's setup lock; the pre-round hero select and the
+   * post-match scoreboard fall outside every round). Fractional, unrounded.
+   * Absent without round events — {@link ../playedTime} then estimates it.
+   */
+  playedMinutes?: number;
   /** Signed competitive SR change for this match (percentage points of a division). */
   srDelta?: number;
 }

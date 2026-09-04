@@ -19,9 +19,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
-- **The sidebar collapses to an icon rail** — the `«` control under the session card, or
-  **Ctrl B**. It sticks between launches. Each icon keeps its name as a tooltip, and the Review
-  count becomes a dot. Handy on a small screen, or whenever you'd rather have the room.
+- **The sidebar collapses to an icon rail** — the small `«` button beside the account chip at
+  the top of the sidebar, or **Ctrl B**. It sticks between launches. Each icon keeps its name as
+  a tooltip, and the Review count becomes a dot. Handy on a small screen, or whenever you'd
+  rather have the room.
 
 - **Every match remembers the rank you went into it with.** Your history now shows where you
   stood when each game started, so you can read a session back and see the climb (or the slide)
@@ -51,6 +52,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **Readiness no longer calls a hero you main "still learning" because an alt has few games on
+  it.** The first-12-games exemption counted games per account, so 244 Genji games on your main
+  and 6 on an alt read as *still learning Genji* whenever the alt came up. Hero experience is
+  yours, not the account's: the count now pools every account you play. Your stat baselines stay
+  per account, as before.
 - **Destroying a turret or pylon no longer counts as an elimination.** Overwatch reports it as an
   ordinary kill — victim "Takigano", hero "Illari Healing Pylon" — so the live elimination count
   was inflated in every match. Those now read as *"Kirito destroyed Takigano's Healing Pylon"* in
@@ -104,6 +110,42 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Changed
 
+- **Per-10-minute stats now divide by the time you could actually play.** A match's clock
+  includes the hero select, each round's setup lock and the scoreboard at the end — nobody can
+  fight in any of it — so dividing by the full length quietly understated every rate against
+  what the game's own career profile shows. The Heroes table, the per-hero card on a match, the
+  readiness decline read and measured ⚡ target grades now use **played** time instead: measured
+  from the game feed's round events on new matches, estimated from the wall clock on older ones
+  (the card says *(est.)* when so), and taken as typed on hand-logged games. Match detail shows
+  the played time next to the usual duration. Expect every per-10 number to rise a little. Two
+  knock-on effects worth knowing: a measured ⚡ target grade on an older match can flip now that
+  the divisor changed, so the next Notion sync rewrites those rows; and Notion itself has no
+  played-time column, so a match re-imported from Notion falls back to the estimate even if it
+  was measured here.
+- **Hero win rates credit each hero by its share of the match**, like the in-game career
+  profile. A hero you played for a quarter of a game earns a quarter of that game and of its win
+  or loss, instead of every hero played getting the whole game. Game counts show the rounded
+  credit; the Win % comes from the exact share. This applies to the Heroes table and the hero
+  drill-down — the Matches list, map and role splits and target
+  scoping still count whole games.
+- **Readiness treats the account you play most as your main.** Games on your other accounts
+  count for about a third (×0.35) in the objective read, so an alt-only rough patch moves the
+  verdict much less — it takes roughly three times as many games there to say the same thing.
+  Your main has to be clearly ahead: if you split your time about evenly, or play one account,
+  nothing changes. An account you have not touched in weeks no longer counts as your main. The *"recent games span multiple accounts"* note now names your main account
+  and the weight, and a quieter *"games on your other accounts count ×0.35"* note appears
+  whenever an alt shows up in your recent games. **Help → What moves the score** explains it
+  under *Several accounts, one player*.
+- **Settings → Accounts is a tidy list.** One row per account — name, game count and a compact
+  per-role rank summary — with everything role-specific (set rank, placement runs, confirming a
+  revealed rank, reset and cancel) moved into a **Manage ranks…** dialog behind each row, instead
+  of a block of buttons under every account.
+- **The sidebar's collapse control moved to the top of the sidebar**, above the account chip,
+  and **Current session** is now the bottom card. With nothing pinned the chip says **All
+  accounts** (it used to borrow the name of whichever account you'd played most recently) and
+  its rank line names the account it belongs to — *Karambo · Dmg · GM 4 · 16%*. The
+  account switcher is wider and lines up as check · name · rank, with the active account's
+  per-role lines beneath it.
 - **Targets list and detail page.** The Targets list now shows each target in plain language —
   name, grading mode, hit-rate, and a one-sentence status (e.g., "Paying off — you win more when
   you hit it") — alongside an **Active** toggle, removing stats jargon from the overview. Click
