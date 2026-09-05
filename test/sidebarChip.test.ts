@@ -31,7 +31,10 @@ describe('sidebarChip — unpinned ("All accounts")', () => {
       scope: 'all',
       name: ALL_ACCOUNTS_LABEL,
       glyph: ALL_ACCOUNTS_GLYPH,
-      sub: 'Karambo · Dmg · GM 4 · 16%',
+      sub: 'Karambo · Dmg · GM4 · 16%',
+      // The tooltip keeps the long form — it is the escape hatch the two-line
+      // clamp depends on, so it must not shrink with the line it expands.
+      subFull: 'Karambo · Dmg · Grandmaster 4 · 16%',
     });
   });
 
@@ -44,7 +47,7 @@ describe('sidebarChip — unpinned ("All accounts")', () => {
 
   it('keeps the shield and the open placement run in the attributed line', () => {
     const shielded = snapshot({ primaryRank: { account: 'Karambo', role: 'tank', tier: 'Diamond', division: 2, progressPct: 40, protected: true } });
-    expect(sidebarChip(shielded).sub).toBe('Karambo · Tank · Diamond 2 · 40% 🛡');
+    expect(sidebarChip(shielded).sub).toBe('Karambo · Tank · D2 · 40% 🛡');
     const placing = snapshot({
       primaryRank: { account: 'Smurf', role: 'support', tier: 'Gold', division: 3, progressPct: 50, protected: false },
       placements: [{ account: 'Smurf', role: 'support', completed: false, counted: 3, target: 10, awaitingRank: false }],
@@ -59,7 +62,7 @@ describe('sidebarChip — unpinned ("All accounts")', () => {
         { account: 'Karambo', role: 'damage', completed: true, counted: 10, target: 10, awaitingRank: false },
       ],
     });
-    expect(sidebarChip(other).sub).toBe('Karambo · Dmg · GM 4 · 16%');
+    expect(sidebarChip(other).sub).toBe('Karambo · Dmg · GM4 · 16%');
   });
 
   it('falls back to a neutral account count when there is no rank to attribute', () => {
@@ -70,7 +73,10 @@ describe('sidebarChip — unpinned ("All accounts")', () => {
 
   it('never shows the winrate heuristic for the whole-profile scope', () => {
     const chip = sidebarChip(snapshot({ primaryRank: undefined }));
-    expect(chip.sub).not.toContain('Platinum');
+    // Positive, not `not.toContain('Platinum')` — a negative assertion passes
+    // even when the abbreviation silently stops firing, which is exactly the
+    // failure mode the old string-replace had.
+    expect(chip.sub).toBe('3 accounts');
   });
 });
 
@@ -80,7 +86,8 @@ describe('sidebarChip — pinned to an account', () => {
       scope: 'account',
       name: 'Karambo',
       glyph: 'K',
-      sub: 'Dmg · GM 4 · 16%',
+      sub: 'Dmg · GM4 · 16%',
+      subFull: 'Dmg · Grandmaster 4 · 16%',
     });
   });
 
@@ -89,7 +96,7 @@ describe('sidebarChip — pinned to an account', () => {
   });
 
   it('falls back to the winrate heuristic when the account has no anchor', () => {
-    expect(sidebarChip(snapshot({ filters: { account: 'Alt' }, primaryRank: undefined })).sub).toBe('Plat 1 · 62%');
+    expect(sidebarChip(snapshot({ filters: { account: 'Alt' }, primaryRank: undefined })).sub).toBe('P1 · 62%');
   });
 
   it('shows the open run (with prediction) over the stale rank', () => {
@@ -97,20 +104,23 @@ describe('sidebarChip — pinned to an account', () => {
       filters: { account: 'Karambo' },
       placements: [{ account: 'Karambo', role: 'damage', completed: false, counted: 7, target: 10, awaitingRank: false, latestPrediction: { tier: 'Master', division: 5 } }],
     });
-    expect(sidebarChip(d).sub).toBe('Dmg · Placements 7/10 · Master 5 (predicted)');
+    // The prediction shortens too — this is the longest string the app builds,
+    // and it lands in the tightest box it has.
+    expect(sidebarChip(d).sub).toBe('Dmg · Placements 7/10 · M5 (predicted)');
+    expect(sidebarChip(d).subFull).toBe('Dmg · Placements 7/10 · Master 5 (predicted)');
   });
 });
 
 describe('sidebarChip — no snapshot', () => {
   it('shows the app name and a dash until the first load', () => {
-    expect(sidebarChip(null)).toEqual({ scope: 'none', name: 'Vantage', glyph: 'V', sub: '—' });
+    expect(sidebarChip(null)).toEqual({ scope: 'none', name: 'Vantage', glyph: 'V', sub: '—', subFull: '—' });
     expect(sidebarChip(undefined).scope).toBe('none');
   });
 });
 
 describe('rankLine / allAccountsLine / accountCountLine', () => {
   it('rankLine rounds the heuristic progress', () => {
-    expect(rankLine(snapshot({ primaryRank: undefined, progression: { tier: 'Gold', division: 3, progressPct: 40.6 } }))).toBe('Gold 3 · 41%');
+    expect(rankLine(snapshot({ primaryRank: undefined, progression: { tier: 'Gold', division: 3, progressPct: 40.6 } }))).toBe('G3 · 41%');
   });
 
   it('allAccountsLine prefixes rankLine with the account', () => {

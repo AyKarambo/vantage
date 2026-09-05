@@ -124,11 +124,15 @@ function rankKpi(ctx: ViewContext): HTMLElement {
   if (r) {
     const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
     if (openRun) return placementKpi(openRun, ctx);
-    const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected, movement: r.movement });
+    // Short: the KPI value is 22px mono in a ~153px card at the 1040px minimum
+    // window, where "Grandmaster 3" wraps to a second line and unbalances the row.
+    const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected, movement: r.movement, short: true });
     const arrow = p.movementDir === 'up' ? '▴ ' : p.movementDir === 'down' ? '▾ ' : '';
     const context = r.protected ? `${p.bufferPctText} · rank protected` : `${p.bufferPctText} in division`;
     return kpiCard({
       label: 'Rank',
+      // Short: 22px mono in a ~153px card at the 1040px minimum window, with
+      // no room for "Grandmaster 3" on one line.
       value: `${p.rankLabel}${p.shield ? ' 🛡' : ''}`,
       delta: {
         text: `${arrow}${context}`,
@@ -153,9 +157,16 @@ function rankKpi(ctx: ViewContext): HTMLElement {
     // rather than picking one arbitrarily or reverting to the heuristic.
     return kpiCard({ label: 'Rank', value: 'Placements', delta: { text: `${scoped.length} tracks in progress` } });
   }
+  // Goes through `rankParts` like the anchored branch above rather than
+  // composing the label by hand — the inline version bypassed the shared
+  // renderer entirely and so was invisible to any change made there.
+  const est = rankParts({
+    tier: d.progression.tier, division: d.progression.division,
+    progressPct: d.progression.progressPct, protected: false, short: true,
+  });
   return kpiCard({
     label: 'Rank',
-    value: `${d.progression.tier} ${d.progression.division}`,
+    value: est.rankLabel,
     delta: {
       text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
       dir: d.progression.delta >= 0 ? 'up' : 'down',

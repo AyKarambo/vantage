@@ -30,14 +30,17 @@ export function roleStatus(
   rank: Pick<RankSummary, 'tier' | 'division' | 'progressPct' | 'protected'> | undefined,
   openRun: Pick<PlacementRunSummary, 'counted' | 'target' | 'latestPrediction' | 'awaitingRank'> | undefined,
   wasPlaced = false,
+  short = false,
 ): RoleStatus {
   if (openRun) {
-    const pp = placementParts(openRun.counted, openRun.target, openRun.latestPrediction, openRun.awaitingRank);
+    const pp = placementParts(
+      openRun.counted, openRun.target, openRun.latestPrediction, openRun.awaitingRank, short,
+    );
     const suffix = pp.predictionLabel ?? pp.awaitingLabel;
     return { text: suffix ? `${pp.counter} · ${suffix}` : pp.counter, tone: 'placement' };
   }
   if (rank) {
-    const p = rankParts(rank);
+    const p = rankParts({ ...rank, short });
     return { text: `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`, tone: wasPlaced ? 'placed' : 'rank' };
   }
   return { text: 'No rank yet', tone: 'empty' };
@@ -56,16 +59,6 @@ export const ROLE_ORDER: readonly Role[] = ['tank', 'damage', 'support', 'openQ'
  * account onto a third line.
  */
 export const ROLE_SHORT: Readonly<Record<Role, string>> = { tank: 'Tank', damage: 'Dmg', support: 'Sup', openQ: 'OQ' };
-
-/**
- * Tier names too long for a chip. Only these three are shortened — the rest
- * (Bronze … Master) already fit, and abbreviating "Diamond" to "Dia" reads
- * worse than the space it saves.
- */
-const TIER_SHORT: Readonly<Record<string, string>> = { Platinum: 'Plat', Grandmaster: 'GM', Champion: 'Champ' };
-
-/** "Grandmaster" → "GM"; unmapped tiers pass through unchanged. */
-export const tierShort = (tier: string): string => TIER_SHORT[tier] ?? tier;
 
 /** One chip of {@link accountRoleSummary}. */
 export interface RoleSummaryChip {
@@ -107,8 +100,10 @@ export function accountRoleSummary(
       continue;
     }
     if (rank) {
-      const p = rankParts(rank);
-      const label = `${tierShort(rank.tier)} ${rank.division} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
+      // Always short: these chips exist to be terse, and they sit in a
+      // minmax(0, 1.6fr) track whose minimum is zero.
+      const p = rankParts({ ...rank, short: true });
+      const label = `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
       chips.push({ role, text: `${ROLE_SHORT[role]} · ${label}`, tone: run?.completed ? 'placed' : 'rank' });
     }
     // Neither: untracked, no chip.

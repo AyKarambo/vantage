@@ -587,7 +587,9 @@ export class App {
     this.accountNameEl.textContent = chip.name;
     this.accountSubEl.textContent = chip.sub;
     // One line with an ellipsis (app.css); the full line is the tooltip.
-    this.accountSubEl.title = chip.sub;
+    // The FULL form — the sub-line is clamped to two lines, so the tooltip is
+    // the escape hatch that clamp depends on and must not shrink with it.
+    this.accountSubEl.title = chip.subFull;
 
     // Saving a review doesn't refetch, so subtract the games graded since the
     // last snapshot (only those the snapshot still counts as pending).
@@ -731,7 +733,10 @@ export class App {
           // No rank to lead with — a track mid-placements with nothing behind it.
           return note ? h('span', { class: 'acct-menu-rank u-dim' }, note) : null;
         }
-        const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected });
+        // Short: this sits in the popover's content-sized third track, where a
+        // long rank steals width from the account NAME beside it (a collapsible
+        // minmax(0, 1fr)) rather than clipping.
+        const p = rankParts({ tier: rk.tier, division: rk.division, progressPct: rk.progressPct, protected: rk.protected, short: true });
         const rank = `${p.rankLabel} · ${p.bufferPctText}${p.shield ? ' 🛡' : ''}`;
         return h('span', { class: 'acct-menu-rank u-dim' }, note ? `${rank} · ${note}` : rank);
       };
@@ -748,7 +753,9 @@ export class App {
         return h('div', { class: 'acct-menu-roles' },
           ...roles.map((role) => {
             const openRun = runs.find((p) => p.role === role && !p.completed);
-            const status = roleStatus(perRole?.[role], openRun);
+            // Short: a ~168px status column at the panel's 320px minimum, where
+            // "Placements 4/10 · Platinum 4 (predicted)" wraps to two lines.
+            const status = roleStatus(perRole?.[role], openRun, false, true);
             return h('div', { class: 'acct-menu-role-row' },
               h('span', null, roleLabel(role)),
               h('span', { class: status.tone === 'placement' ? 'acct-menu-role-accent' : undefined }, status.text),

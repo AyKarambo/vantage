@@ -4,6 +4,7 @@ import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/co
 import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { rankLabel, relTime, roleLabel, signed } from '../format';
+import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
 import { wrHsl } from '../theme';
@@ -148,7 +149,7 @@ function prettyDay(label: string): string {
 }
 
 /** A field's rendered value for `m`, or `null` when it has nothing to show (spec F3). */
-function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext): Node | null {
+function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext, mode: MatchFieldMode = 'inline'): Node | null {
   switch (key) {
     case 'role':
       return m.role ? h('span', { class: 'tag tag--role' }, roleIcon(m.role)) : null;
@@ -165,11 +166,13 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext): Node | n
       // so a later correction to an older game never restates it. Only present
       // when the match records a ±%; blank otherwise, rather than repeating the
       // previous match's rank as if it were evidence.
+      // Short in COLUMN mode (a fixed 84px cell), full inline — the inline form
+      // lands in the free-flowing `1fr` meta track and has all the room it needs.
       return m.rankAtStart
         ? h('span', {
             class: 'mono u-dim',
-            title: 'The rank you had when this match started',
-          }, `${rankLabel(m.rankAtStart.tier, m.rankAtStart.division)} · ${Math.round(m.rankAtStart.progressPct)}%`)
+            title: `The rank you had when this match started — ${rankLabel(m.rankAtStart.tier, m.rankAtStart.division)}`,
+          }, `${(mode === 'column' ? shortRankLabelOf : rankLabel)(m.rankAtStart.tier, m.rankAtStart.division)} · ${Math.round(m.rankAtStart.progressPct)}%`)
         : null;
     case 'duration':
       return m.durationMinutes != null ? document.createTextNode(`${m.durationMinutes}m`) : null;
@@ -285,7 +288,7 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
   // when nothing qualifies.
   const inlineSegments = FIELD_ORDER
     .filter((key) => columns[key] === 'inline')
-    .map((key) => fieldNode(key, m, ctx))
+    .map((key) => fieldNode(key, m, ctx, 'inline'))
     .filter((node): node is Node => node != null);
   const metaLine = inlineSegments.length
     ? h('div', { class: 'row-meta' }, ...joinWithDot(inlineSegments))
@@ -293,7 +296,7 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
 
   const columnKeys = FIELD_ORDER.filter((key) => columns[key] === 'column');
   const columnCells = columnKeys
-    .map((key) => h('div', { class: `match-col match-col--${key}` }, fieldNode(key, m, ctx) ?? ''));
+    .map((key) => h('div', { class: `match-col match-col--${key}` }, fieldNode(key, m, ctx, 'column') ?? ''));
 
   return h('div', {
     class: 'match-row is-clickable',

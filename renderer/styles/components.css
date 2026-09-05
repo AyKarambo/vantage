@@ -82,6 +82,12 @@
   font-weight: 600;
   margin-top: 5px;
   line-height: 1.1;
+  /* Four flex cards share the row, so at the 1040px minimum window each inner
+     box is ~153px. Without this a long value wrapped to a second 22px line and
+     pushed its own card taller than the other three. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .kpi-delta {
   font-size: 11px;
@@ -1402,7 +1408,11 @@ table.data tbody tr:hover {
 }
 .match-col--role,
 .match-col--heroes,
-.match-col--account {
+.match-col--account,
+/* Was the only MatchColumnKey with no width rule at all, so it rode a bare
+   `auto` track — and since `.match-col` sets nowrap, an auto track can never
+   ellipsise. It silently took width from the map/meta `1fr` track on every row. */
+.match-col--rankAtStart {
   width: 84px;
 }
 .match-col--srDelta,
@@ -1676,6 +1686,12 @@ table.data tbody tr:hover {
   border: 1px solid var(--border);
   color: var(--text-2);
   white-space: nowrap;
+  /* nowrap without these meant an over-long chip painted OVER the actions
+     column instead of clipping — its track is a minmax(0, 1.6fr) whose
+     minimum is zero, so there is no floor to protect it. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .acct-role-chip.is-placement {
   background: var(--accent-soft);
