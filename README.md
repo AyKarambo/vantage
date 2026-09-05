@@ -60,10 +60,15 @@ account's per-role lines beneath it.
   (see *Played time* below) — competitive progress, a read-only **Grades card** with
   the match's target grades, performance rating and feel/leaver flags, and player
   history — each section degrades gracefully to whatever the game feed actually
-  reported for that match). **Click any player's name** — on the scoreboard or in
-  the "players you've met" list — to open their **shared-match history**: every
-  game you played with or against them, your result and their hero each time, with
-  a W/L split by teammate vs opponent (local, GEP-only, never exported). Every
+  reported for that match). **Click any player's name** — on the scoreboard, in the
+  match's player-history table, on the Live roster, or from the **Players** screen —
+  to open their **shared-match history**: a table of every game you played with or
+  against them, showing what they played, what you played, on which account and
+  role, and the rank you went in at (recorded at the time where possible,
+  otherwise reconstructed and marked as an estimate). The match's own player-history
+  card splits your record into *together* and *as opponents* — with/against is only
+  known when the game feed reported both teams, so those two columns don't have to
+  add up to the games column, and the card says so. Local, GEP-only, never exported. Every
   match is **editable** from here — both hand-logged and auto-tracked matches, down to
   their game facts (result, map, role, heroes) and their manual layer (mental flags,
   leaver-team, SR %, target grades). Correcting a game fact the feed got wrong on an
@@ -99,6 +104,14 @@ account's per-role lines beneath it.
   Leaver / +Comms / Abusive pills. The meta line only ever joins the fields you've set to inline that
   actually have a value for that row (no `—` placeholders or dangling `·`), and
   disappears entirely when nothing applies.
+- **Players** — everyone you've met, searchable by name and sortable by shared games,
+  your record with them, your record against them, or when you last saw them. A
+  **min. games** chip row hides the one-offs. The counts here follow the filter bar
+  (role · season · account) and say so; opening a player shows their **complete
+  all-time** record, which the filters never touch — the screen explains the
+  difference rather than leaving two numbers to disagree. Local, GEP-only, never
+  exported. Players are matched on the name before the `#`, so two BattleTags
+  sharing a name fold into one row, flagged with a ⚠.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
   credited to each hero by its share of the match time, the way the in-game career profile
@@ -275,7 +288,10 @@ bar — the account switcher in the top-left already covers "which account", and
 applies. **Role icons appear app-wide** (filter bar, scoreboard, hero picker) so
 tank/damage/support is always visually distinguishable at a glance. Quality-of-life
 throughout: **Ctrl+K command palette** (jump to any screen, run actions, find a
-map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens, `?` cheatsheet, `←/→`
+map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` screens — the first nine sidebar
+entries, so adding **Players** shifted Maps/Heroes/Focus/Mental down one and Trends off the
+list; `Esc`, `Alt+←` or the mouse back button to go **back** to the previous screen
+you were actually on, `?` cheatsheet, `←/→`
 between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/PageDown` to page
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
 Review, `W/L/D`+`Enter` in the log dialog), toasts with

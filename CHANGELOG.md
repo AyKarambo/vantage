@@ -19,6 +19,22 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **A Players screen.** Everyone you've met, in one searchable list — sort by how often you've
+  played together, your record with them, your record against them, or when you last saw them,
+  and hide the one-offs with the **min. games** chips. The counts follow the filter bar; opening
+  a player still shows their complete all-time record.
+
+- **Back actually goes back.** Every screen you've drilled into now has a `←`, and **Esc**,
+  **Alt+←** or your mouse's back button do the same thing. Following a chain — a match, then a
+  player, then one of their matches — walks back the way you came instead of dumping you on the
+  Matches list every time.
+
+- **The rank you went into each game with, on a player's page.** Their shared-match list is now
+  a table: what they played, what you played, on which account and role, and your rank at the
+  time. Ranks we recorded at the time are shown plainly; ones we had to reconstruct are marked
+  `est.`, and a game we can't honestly place — during placements, before a rank reset, or on a
+  track with no rank set — is left blank with the reason rather than filled with a guess.
+
 - **The sidebar collapses to an icon rail** — the small `«` button beside the account chip at
   the top of the sidebar, or **Ctrl B**. It sticks between launches. Each icon keeps its name as
   a tooltip, and the Review count becomes a dot. Handy on a small screen, or whenever you'd
@@ -51,6 +67,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   being sent to the window at all, and leaves the scoreboard and with/vs records untouched.
 
 ### Fixed
+
+- **"11W 5L together" wasn't your record together.** The player-history card on a match added up
+  every game with that person regardless of side, then labelled it *together*. It now shows your
+  real teammate record and your record against them as two separate figures — and a dash, not
+  `0W 0L`, where the game feed never told us which side they were on.
+
+- **Ctrl+9 no longer opens Trends.** The screen shortcuts follow the sidebar, so adding Players
+  moved Maps to Ctrl+6, Heroes to 7, Focus to 8 and Mental to 9, leaving Trends without one.
+  It's still one Ctrl+K away.
 
 - **Readiness no longer calls a hero you main "still learning" because an alt has few games on
   it.** The first-12-games exemption counted games per account, so 244 Genji games on your main

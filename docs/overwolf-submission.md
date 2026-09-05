@@ -400,7 +400,7 @@ needed. Tray, the live GEP sensor, and Notion's network calls are swapped for no
 (none affect what's on screen); everything else — window chrome, CSP, contextIsolation,
 sandbox — is the shipped configuration.
 
-**Paste this into the form's instructions field** (1582/2000 chars):
+**Paste this into the form's instructions field** (1666/2000 chars):
 
 ```text
 Vantage is a single frameless desktop window (no in-game overlay, no browser tabs) — a left sidebar switches between screens; the active one is always highlighted. No ad container anywhere in the UI: the app is ad-free by design.
@@ -411,17 +411,18 @@ Sidebar screens, top to bottom (one screenshot each, docs/overwolf-review/screen
 - Overview (01) — KPI cards, priority-map scatter, session recap.
 - Review (02) — queue of recent games to grade.
 - Matches (03) — match log; click a row for match detail (04): scoreboard + per-hero stats.
-- Maps (05) — winrate by map/mode.
-- Heroes (06) — per-hero stats table.
-- Focus (07) — weakest maps/heroes/roles, ranked by cost.
-- Mental (08) — tilt/comms tracking vs winrate.
-- Trends (09) — winrate over time.
-- Readiness (10) — opt-in training-load coach, off by default.
-- Targets (11) — user-authored improvement targets.
-- Notion sync (12) — optional export; shown disconnected until the user pastes their own integration token.
-- Logs (13) — live debug log viewer.
-- Settings — General tab (14): accounts/app behavior. Master Data tab (15): editable heroes/maps/seasons.
-- About (16) — version/build info, privacy summary, support link.
+- Players (05) — everyone met in tracked games, read from the end-of-match scoreboard; local only, never exported.
+- Maps (06) — winrate by map/mode.
+- Heroes (07) — per-hero stats table.
+- Focus (08) — weakest maps/heroes/roles, ranked by cost.
+- Mental (09) — tilt/comms tracking vs winrate.
+- Trends (10) — winrate over time.
+- Readiness (11) — opt-in training-load coach, off by default.
+- Targets (12) — user-authored improvement targets.
+- Notion sync (13) — optional export; shown disconnected until the user pastes their own integration token.
+- Logs (14) — live debug log viewer.
+- Settings — General tab (15): accounts/app behavior. Master Data tab (16): editable heroes/maps/seasons.
+- About (17) — version/build info, privacy summary, support link.
 
 Also reachable from anywhere: Ctrl+K command palette (17, search/navigate/actions) and the "Log match" modal (18, manual match entry). First launch shows a one-time intro tour (00), replayable from "Help" in the status bar.
 ```

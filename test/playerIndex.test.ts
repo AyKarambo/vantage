@@ -567,3 +567,32 @@ describe('selectPlayers / normalizePlayerSelection', () => {
     expect(players.map((p) => p.name)).toEqual(order);
   });
 });
+
+/**
+ * Guardrails 1 and 5 as observable behaviour, not just prose: the local player
+ * is never a row or a click target anywhere in the player index, and nothing
+ * derived from a roster can reach the only outbound path the app has.
+ */
+describe('player index — guardrails', () => {
+  const roster = [meT(0), them('Nova#11214', 0), them('Vex#2321', 1)];
+
+  it('never lists the tracked player in any surface', () => {
+    const target = game({ result: 'Win', matchId: 't', roster });
+    const all = [game({ result: 'Win', timestamp: 2000, roster }), target];
+    const localTag = 'Karambo#21234';
+
+    expect(playerDirectory(all).players.some((p) => p.name === localTag)).toBe(false);
+    expect(playerHistory(all, target).some((p) => p.name === localTag)).toBe(false);
+    expect(playerRecords(all, [localTag])).toEqual([]);
+    // ...and asking for them by name yields no drill-down at all.
+    expect(playerMatchHistory(all, localTag)).toBeNull();
+  });
+
+  it('keeps every roster-derived field out of the Notion export schema', async () => {
+    const { REQUIRED_PROPERTIES } = await import('../src/notion/gametrackerSchema');
+    const columns = Object.keys(REQUIRED_PROPERTIES).map((k) => k.toLowerCase());
+    for (const forbidden of ['roster', 'opponent', 'teammate', 'encounter', 'player', 'enemy']) {
+      expect(columns.some((c) => c.includes(forbidden)), `${forbidden} must not be exported`).toBe(false);
+    }
+  });
+});

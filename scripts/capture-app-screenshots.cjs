@@ -58,7 +58,11 @@ const KILL_ANIM_CSS = `
 `;
 
 // Sidebar order — must match renderer/src/app/shell.ts's NAV flattened order.
-const NAV = ['overview', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about'];
+// The `.nav-item` count assertion below compares against this array's length, so
+// a screen missing here fails the capture rather than silently skipping a shot.
+// (It had drifted: `live` and `faq` shipped without being added, and `players` is
+// new.)
+const NAV = ['overview', 'live', 'review', 'matches', 'players', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about', 'faq'];
 
 async function poll(win, expr, timeoutMs) {
   const start = Date.now();

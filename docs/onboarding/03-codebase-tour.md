@@ -109,10 +109,11 @@ the target already holds Vantage data, full relocate otherwise).
 | [`main.ts`](../../renderer/src/main.ts) | Entry: `new App(must('#app'))`. |
 | [`app/shell.ts`](../../renderer/src/app/shell.ts) | The `App` class: titlebar/sidebar/statusbar, the `VIEWS` registry (ViewId → render fn), navigation, global shortcuts (Ctrl+K = log match). |
 | [`app/log-match.ts`](../../renderer/src/app/log-match.ts) / [`app/onboarding.ts`](../../renderer/src/app/onboarding.ts) | The quick-capture modal; the first-run tour. |
-| [`store.ts`](../../renderer/src/store.ts) | The reactive store: `{ filters, view, params, data, loading, status, error }`, pub-sub, `refresh()` fetches via bridge, filters persist to localStorage. |
+| [`store.ts`](../../renderer/src/store.ts) | The reactive store: `{ filters, view, params, data, loading, status, error }`, pub-sub, `refresh()` fetches via bridge, filters persist to localStorage. Also owns the session back stack (`goBack`/`backLabel`). |
+| [`backStack.ts`](../../renderer/src/backStack.ts) | The pure, DOM-free back-stack reducer (push/pop/collapse/staleness) — unit-tested in `test/backStack.test.ts`, the `scrollNav.ts` precedent. |
 | [`bridge.ts`](../../renderer/src/bridge.ts) | Proxy over `window.owstats`; the preview swaps in a mock behind the same interface. |
 | [`dom.ts`](../../renderer/src/dom.ts) | `h()` — the composition primitive — plus `render`, `clear`, `must`. |
-| [`views/`](../../renderer/src/views) | One module per screen (`overview`, `matches`, `matchDetail`, `maps`, `heroes`, `focus`, `mental`, `trends`, `review`, `targets/`, `notion/`). All are `(ctx: ViewContext) => HTMLElement`. `view.ts` has the shared `ViewContext`, `viewHead()`, `filterBar()`. |
+| [`views/`](../../renderer/src/views) | One module per screen (`overview`, `live`, `matches`, `matchDetail`, `players`, `playerHistory`, `maps`, `heroes`, `focus`, `mental`, `trends`, `readiness`, `review`, `targets/`, `notion/`, `faq`). All are `(ctx: ViewContext) => HTMLElement`. `view.ts` has the shared `ViewContext`, `viewHead()`, `filterBar()`. |
 | [`components/`](../../renderer/src/components) | `primitives/` (card, button, segmented, select, pills, KPI/stat blocks) plus `table.ts` (sortable data table), `overlay.ts` (modals), `scoreboard.ts`. Views compose these — don't hand-roll markup. |
 | [`charts/`](../../renderer/src/charts) | Dependency-free SVG: `svg.ts` element builders; `plots/` (line, scatter, horizontal bars, donut, sparkline). |
 | [`theme.ts`](../../renderer/src/theme.ts) | JS mirror of the CSS color tokens for SVG charts (`wrColor`, `modeColor`, `PALETTE`). |
