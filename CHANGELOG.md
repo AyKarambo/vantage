@@ -22,7 +22,8 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **A Players screen.** Everyone you've met, in one searchable list — sort by how often you've
   played together, your record with them, your record against them, or when you last saw them,
   and hide the one-offs with the **min. games** chips. The counts follow the filter bar; opening
-  a player still shows their complete all-time record.
+  a player still shows their complete all-time record. It answers to **Ctrl+0**, and every other
+  screen keeps the number it already had.
 
 - **Back actually goes back.** Every screen you've drilled into now has a `←`, and **Esc**,
   **Alt+←** or your mouse's back button do the same thing. Following a chain — a match, then a
@@ -72,10 +73,6 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   every game with that person regardless of side, then labelled it *together*. It now shows your
   real teammate record and your record against them as two separate figures — and a dash, not
   `0W 0L`, where the game feed never told us which side they were on.
-
-- **Ctrl+9 no longer opens Trends.** The screen shortcuts follow the sidebar, so adding Players
-  moved Maps to Ctrl+6, Heroes to 7, Focus to 8 and Mental to 9, leaving Trends without one.
-  It's still one Ctrl+K away.
 
 - **Readiness no longer calls a hero you main "still learning" because an alt has few games on
   it.** The first-12-games exemption counted games per account, so 244 Genji games on your main

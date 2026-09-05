@@ -79,6 +79,18 @@ interface NavItem {
   label: string;
   /** A text glyph (rendered as-is) or a prebuilt inline-SVG node (appended). */
   icon: string | Node;
+  /**
+   * The digit this screen answers to as `Ctrl+<key>` — a property OF the screen,
+   * not of its position. Shortcuts used to be handed out by sidebar order and
+   * capped at nine, so inserting an item renumbered everything below it and
+   * silently pushed the tenth off the end entirely. Omit it and the screen has
+   * no digit shortcut (the palette still reaches it).
+   *
+   * `0` is the tenth key on the row, not a zeroth screen. There is no
+   * application menu, so Electron registers no zoom accelerator to collide with
+   * it — the browser preview is the one place the host may still steal it.
+   */
+  key?: number;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -134,21 +146,24 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: 'Workspace',
     items: [
-      { id: 'overview', label: 'Overview', icon: '◈' },
-      { id: 'live', label: 'Live', icon: '◉' },
-      { id: 'review', label: 'Review', icon: '⚑' },
-      { id: 'matches', label: 'Matches', icon: '▤' },
-      { id: 'players', label: 'Players', icon: peopleIcon() },
-      { id: 'maps', label: 'Maps', icon: '◇' },
-      { id: 'heroes', label: 'Heroes', icon: '◍' },
+      // Digits are pinned per screen (see NavItem.key), so this list can be
+      // reordered or added to without moving anyone's muscle memory. Players
+      // takes Ctrl+0 — the tenth key — rather than displacing Maps..Trends.
+      { id: 'overview', label: 'Overview', icon: '◈', key: 1 },
+      { id: 'live', label: 'Live', icon: '◉', key: 2 },
+      { id: 'review', label: 'Review', icon: '⚑', key: 3 },
+      { id: 'matches', label: 'Matches', icon: '▤', key: 4 },
+      { id: 'players', label: 'Players', icon: peopleIcon(), key: 0 },
+      { id: 'maps', label: 'Maps', icon: '◇', key: 5 },
+      { id: 'heroes', label: 'Heroes', icon: '◍', key: 6 },
     ],
   },
   {
     group: 'Insights',
     items: [
-      { id: 'focus', label: 'Focus', icon: '◎' },
-      { id: 'mental', label: 'Mental', icon: '◐' },
-      { id: 'trends', label: 'Trends', icon: '◔' },
+      { id: 'focus', label: 'Focus', icon: '◎', key: 7 },
+      { id: 'mental', label: 'Mental', icon: '◐', key: 8 },
+      { id: 'trends', label: 'Trends', icon: '◔', key: 9 },
       { id: 'readiness', label: 'Readiness', icon: '◆' },
       { id: 'targets', label: 'Targets', icon: goalFlagIcon() },
     ],
@@ -956,13 +971,19 @@ export class App {
       combo: 'ctrl+b', description: 'Collapse / expand the sidebar', group: 'Global',
       allowInInput: true, run: () => this.toggleCollapsed(),
     });
-    NAV.flatMap((g) => g.items).forEach((item, i) => {
-      if (i >= 9) return;
+    // Explicit keys only — a screen without one simply has no digit shortcut
+    // (the palette still reaches it). Duplicates would be a typo, so the first
+    // wins and the rest are dropped rather than shadowing each other by
+    // registration order.
+    const claimed = new Set<number>();
+    for (const item of NAV.flatMap((g) => g.items)) {
+      if (item.key === undefined || claimed.has(item.key)) continue;
+      claimed.add(item.key);
       registerShortcut({
-        combo: `ctrl+${i + 1}`, description: `Go to ${item.label}`, group: 'Navigate',
+        combo: `ctrl+${item.key}`, description: `Go to ${item.label}`, group: 'Navigate',
         run: () => store.setView(item.id),
       });
-    });
+    }
     registerShortcut({
       combo: 'escape', description: 'Back — the previous screen', group: 'Navigate',
       // No allowInInput, deliberately: the dispatcher's overlay probe is exactly
