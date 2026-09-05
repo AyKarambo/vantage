@@ -8,13 +8,13 @@ import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
 import type { DashboardData, GameLoggedPayload, GepStatusPayload, Role } from '../../../src/shared/contract';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
-import { statusText, store } from '../store';
+import { DETAIL_PARENT, statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
-import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
+import { initShortcuts, overlayCapturing, registerShortcut, shortcutGroups } from '../shortcuts';
 import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
 import { openModal } from '../components/overlay';
@@ -31,6 +31,7 @@ import { overview } from '../views/overview';
 import { live } from '../views/live';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
+import { players } from '../views/players';
 import { playerHistory } from '../views/playerHistory';
 import { maps } from '../views/maps';
 import { heroes } from '../views/heroes';
@@ -60,12 +61,13 @@ import { CHANGELOG } from '../generated/changelog';
 
 // matchDetail, playerHistory and targetDetail are parameterized views: registered
 // here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
-const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
+const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, matchDetail, players, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
  *  unaffected by it, so showing the bar would imply a control that does nothing.
- *  playerHistory is a cross-history drill-down over the full local index. faq
+ *  playerHistory is a cross-history drill-down over the full local index — the
+ *  all-time record under Players, whose own list IS filter-scoped. faq
  *  is static help copy, unaffected by any filter. */
 const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq', 'live']);
 
@@ -77,6 +79,18 @@ interface NavItem {
   label: string;
   /** A text glyph (rendered as-is) or a prebuilt inline-SVG node (appended). */
   icon: string | Node;
+  /**
+   * The digit this screen answers to as `Ctrl+<key>` — a property OF the screen,
+   * not of its position. Shortcuts used to be handed out by sidebar order and
+   * capped at nine, so inserting an item renumbered everything below it and
+   * silently pushed the tenth off the end entirely. Omit it and the screen has
+   * no digit shortcut (the palette still reaches it).
+   *
+   * `0` is the tenth key on the row, not a zeroth screen. There is no
+   * application menu, so Electron registers no zoom accelerator to collide with
+   * it — the browser preview is the one place the host may still steal it.
+   */
+  key?: number;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -104,24 +118,52 @@ function goalFlagIcon(): SVGSVGElement {
   svg.appendChild(pennant);
   return svg;
 }
+/**
+ * The Players nav glyph: two overlapping head-and-shoulders marks. Drawn inline
+ * in `currentColor` like {@link goalFlagIcon} rather than picked from the text
+ * glyph set — every unused geometric candidate (⊚, ⊛, ◍) either collides with an
+ * existing icon at 15px or is not guaranteed in the bundled font.
+ */
+function peopleIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '15');
+  svg.setAttribute('height', '15');
+  svg.setAttribute('aria-hidden', 'true');
+  const back = document.createElementNS(SVG_NS, 'path');
+  back.setAttribute('d', 'M16.5 11a3 3 0 100-6 3 3 0 000 6zm0 1.6c-1 0-1.9.2-2.6.5 1.2.9 2 2.2 2.2 3.9H22v-1c0-2-2.5-3.4-5.5-3.4z');
+  back.setAttribute('fill', 'currentColor');
+  back.setAttribute('opacity', '0.55');
+  const front = document.createElementNS(SVG_NS, 'path');
+  front.setAttribute('d', 'M9 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm0 1.8c-3.3 0-7 1.7-7 3.9V19h14v-1.3c0-2.2-3.7-3.9-7-3.9z');
+  front.setAttribute('fill', 'currentColor');
+  svg.appendChild(back);
+  svg.appendChild(front);
+  return svg;
+}
+
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: 'Workspace',
     items: [
-      { id: 'overview', label: 'Overview', icon: '◈' },
-      { id: 'live', label: 'Live', icon: '◉' },
-      { id: 'review', label: 'Review', icon: '⚑' },
-      { id: 'matches', label: 'Matches', icon: '▤' },
-      { id: 'maps', label: 'Maps', icon: '◇' },
-      { id: 'heroes', label: 'Heroes', icon: '◍' },
+      // Digits are pinned per screen (see NavItem.key), so this list can be
+      // reordered or added to without moving anyone's muscle memory. Players
+      // takes Ctrl+0 — the tenth key — rather than displacing Maps..Trends.
+      { id: 'overview', label: 'Overview', icon: '◈', key: 1 },
+      { id: 'live', label: 'Live', icon: '◉', key: 2 },
+      { id: 'review', label: 'Review', icon: '⚑', key: 3 },
+      { id: 'matches', label: 'Matches', icon: '▤', key: 4 },
+      { id: 'players', label: 'Players', icon: peopleIcon(), key: 0 },
+      { id: 'maps', label: 'Maps', icon: '◇', key: 5 },
+      { id: 'heroes', label: 'Heroes', icon: '◍', key: 6 },
     ],
   },
   {
     group: 'Insights',
     items: [
-      { id: 'focus', label: 'Focus', icon: '◎' },
-      { id: 'mental', label: 'Mental', icon: '◐' },
-      { id: 'trends', label: 'Trends', icon: '◔' },
+      { id: 'focus', label: 'Focus', icon: '◎', key: 7 },
+      { id: 'mental', label: 'Mental', icon: '◐', key: 8 },
+      { id: 'trends', label: 'Trends', icon: '◔', key: 9 },
       { id: 'readiness', label: 'Readiness', icon: '◆' },
       { id: 'targets', label: 'Targets', icon: goalFlagIcon() },
     ],
@@ -551,9 +593,10 @@ export class App {
     // last snapshot (only those the snapshot still counts as pending).
     const gradedOverlap = d ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId)).length : 0;
     const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
-    // Parameterized views highlight their parent list in the sidebar.
-    const activeNav: ViewId = state.view === 'matchDetail' || state.view === 'playerHistory' ? 'matches'
-      : state.view === 'targetDetail' ? 'targets' : state.view;
+    // Parameterized views highlight their parent list in the sidebar. Read from
+    // DETAIL_PARENT rather than a second hand-written branch chain, so the
+    // parenting is expressed exactly once (it also drives relaunch restore).
+    const activeNav: ViewId = DETAIL_PARENT[state.view as keyof typeof DETAIL_PARENT] ?? state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews);
 
@@ -928,20 +971,29 @@ export class App {
       combo: 'ctrl+b', description: 'Collapse / expand the sidebar', group: 'Global',
       allowInInput: true, run: () => this.toggleCollapsed(),
     });
-    NAV.flatMap((g) => g.items).forEach((item, i) => {
-      if (i >= 9) return;
+    // Explicit keys only — a screen without one simply has no digit shortcut
+    // (the palette still reaches it). Duplicates would be a typo, so the first
+    // wins and the rest are dropped rather than shadowing each other by
+    // registration order.
+    const claimed = new Set<number>();
+    for (const item of NAV.flatMap((g) => g.items)) {
+      if (item.key === undefined || claimed.has(item.key)) continue;
+      claimed.add(item.key);
       registerShortcut({
-        combo: `ctrl+${i + 1}`, description: `Go to ${item.label}`, group: 'Navigate',
+        combo: `ctrl+${item.key}`, description: `Go to ${item.label}`, group: 'Navigate',
         run: () => store.setView(item.id),
       });
+    }
+    registerShortcut({
+      combo: 'escape', description: 'Back — the previous screen', group: 'Navigate',
+      // No allowInInput, deliberately: the dispatcher's overlay probe is exactly
+      // what leaves Escape to an open modal/drawer/popover/palette for its own
+      // dismissal, and its typing guard keeps Escape usable inside a field.
+      when: () => store.backLabel() !== null, run: () => { store.goBack(); },
     });
     registerShortcut({
-      combo: 'escape', description: 'Back to Matches (from a match detail)', group: 'Navigate',
-      when: () => store.get().view === 'matchDetail', run: () => store.setView('matches'),
-    });
-    registerShortcut({
-      combo: 'escape', description: 'Back to Targets (from a target detail)', group: 'Navigate',
-      when: () => store.get().view === 'targetDetail', run: () => store.setView('targets'),
+      combo: 'alt+arrowleft', description: 'Back — the previous screen', group: 'Navigate', hidden: true,
+      when: () => store.backLabel() !== null, run: () => { store.goBack(); },
     });
     registerShortcut({
       combo: 'arrowleft', description: 'Older match (on a match detail)', group: 'Navigate',
@@ -989,6 +1041,24 @@ export class App {
     };
     window.addEventListener('pointerup', releasePress, true);
     window.addEventListener('pointercancel', releasePress, true);
+    // Thumb buttons: MouseEvent.button 3 = Back, 4 = Forward. Only Back is bound
+    // — there is no forward stack. BOTH are preventDefault()ed so the embedding
+    // Chromium can't start its own history navigation underneath: a no-op in the
+    // packaged app (one page load, empty history), but `npm run preview` runs in
+    // a real browser where it would navigate away from the harness entirely. We
+    // ACT on mouseup so a press that ends elsewhere doesn't navigate.
+    const thumb = (e: MouseEvent): boolean => e.button === 3 || e.button === 4;
+    window.addEventListener('mousedown', (e) => { if (thumb(e)) e.preventDefault(); }, true);
+    window.addEventListener('auxclick', (e) => { if (thumb(e)) e.preventDefault(); }, true);
+    window.addEventListener('mouseup', (e) => {
+      if (e.button !== 3) return;
+      e.preventDefault();
+      // An open modal/drawer/popover/palette owns dismissal. No isTyping guard:
+      // a click is not typing. preventDefault on mousedown does not cancel the
+      // paired pointer events, so contentPressed still clears above.
+      if (overlayCapturing()) return;
+      store.goBack();
+    }, true);
     // Safety net: if the window loses focus mid-press (app switch, focus theft),
     // a pointerup might never reach us. Clearing the flag on blur guarantees a
     // same-route refresh can never be held back indefinitely — and the focus

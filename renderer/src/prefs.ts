@@ -54,6 +54,10 @@ interface PrefsShape {
   heroSort: HeroSortPref;
   /** Heroes table minimum-games filter. */
   minGames: number;
+  /** Players table sort choice — its own key; the Heroes table's is unrelated. */
+  playerSort: HeroSortPref;
+  /** Players table minimum-shared-games filter. */
+  minPlayerGames: number;
   /** Last quick-log inputs (role only — map, hero, result stay fresh). */
   logPrefill: LogPrefillPref;
   /** Saved filter combinations. */

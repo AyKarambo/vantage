@@ -23,7 +23,7 @@ One behavior layer that makes the app *feel* like a polished daily companion: a 
 ## Shortcut registry (`shortcuts.ts`)
 
 - Declarative bindings (`combo`, `description`, `group`, optional `when` / `allowInInput` / `hidden`) dispatched by one window `keydown` listener. Guards on every binding: never fires while an input/textarea/select/contenteditable has focus, and never while an overlay or popover is open — except bindings marked `allowInInput` (Ctrl+K).
-- Registered by the shell: `Ctrl+K` (palette), `?` (cheatsheet), `Ctrl+1…9` (first nine sidebar entries), `Escape` (back to Matches, only on a match detail), `←`/`→` (older/newer match, only on a match detail). The Review screen registers `H`/`P`/`M`/`S` (see `screen-review.spec.md`).
+- Registered by the shell: `Ctrl+K` (palette), `?` (cheatsheet), `Ctrl+1…9` and `Ctrl+0` (screen jumps — each digit is declared on its own `NavItem.key`, not derived from sidebar position, so reordering or inserting an item never renumbers the others; a screen with no `key` simply has no digit shortcut, and a duplicate digit is dropped rather than shadowing), `Escape` and `Alt+←` (**back** — the previous screen on the session stack, from anywhere; suppressed while an overlay/popover/palette is open, which keeps `Escape` for its dismissal), `←`/`→` (older/newer match, only on a match detail). The mouse back button (`MouseEvent.button === 3`) is bound to the same action outside the shortcut registry. The Review screen registers `H`/`P`/`M`/`S` (see `screen-review.spec.md`).
 - The `?` cheatsheet overlay renders itself from the registrations, grouped, in registration order, with comfortable padding and aligned key badges.
 
 ## Status-bar connection indicator
@@ -47,11 +47,12 @@ One behavior layer that makes the app *feel* like a polished daily companion: a 
 - **Season entries:** `Last 7 days`, `Last 30 days`, one entry per season with ≥1 competitive match (current season always included), newest first, then `All time` (`src/core/season.ts`).
 - **Reset chip:** when any filter differs from the defaults (role=all, days=30), a "Reset (N)" chip restores the defaults in one click (the active account is left untouched — that's the switcher's job).
 - **Presets:** up to 2 saved filter combinations as one-click chips (auto-named, e.g. "Support · 30d"); "+ save preset" appears while the current combination is non-default and unsaved; right-click removes a preset. Persisted via `prefs.filterPresets`.
-- **Per-view suppression:** `FILTERLESS_VIEWS` in `shell.ts` (currently just `readiness`) hides the filter bar for a view whose data is intentionally unscoped by any filter or the account switcher (see `readiness-score-rework.spec.md`).
+- **Per-view suppression:** `FILTERLESS_VIEWS` in `shell.ts` (`readiness`, `about`, `playerHistory`, `faq`, `live`) hides the filter bar for a view whose data is intentionally unscoped by any filter or the account switcher (see `readiness-score-rework.spec.md`).
 
 ## View restore, scroll memory & status text
 
-- The active top-level view persists (`prefs.view`) and is restored on launch; a match detail persists as `matches` (the app never reopens on `matchDetail`).
+- The active top-level view persists (`prefs.view`) and is restored on launch; a parameterized drill-down persists as its `DETAIL_PARENT` (a match detail as `matches`, a player as `players`, a target detail as `targets`), so the app never reopens on a drill-down. `DETAIL_PARENT` also drives which sidebar item highlights while a drill-down is open, and the restorable set is compiler-checked (`RESTORABLE` in `store.ts`).
+- **Back stack:** the store keeps a bounded (20) session trail of the routes behind the current one, pushing the OUTGOING route on every `setView` and collapsing runs within one view (so 200 arrow-key steps through match details leave one entry). It is never persisted. Back pops to the newest entry that still resolves — a match is only "gone" on positive evidence of deletion, never on absence from the filter-scoped list — and one-shot params (`highlight`, `prefillName`, `editTargetId`) are stripped at push time so going back cannot re-issue a command. The pure reducer is `renderer/src/backStack.ts` (`test/backStack.test.ts`).
 - Per-route scroll positions are remembered in-session and restored when navigating back (notably Matches ↔ matchDetail); a data refresh on the same route keeps the current scroll.
 - Status text "N games · updated Xm ago" is re-derived every 60s while idle, so the relative time never lies.
 

@@ -468,6 +468,34 @@
   display: inline-block;
 }
 
+/* Compact, non-sortable table for inside a card (the match detail's player
+   history). Same alignment rules as table.data — label left, numbers right —
+   but no sticky header, no sort cursor, and no scroll container of its own. */
+table.mini {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.mini th,
+table.mini td {
+  text-align: right;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.mini th:first-child,
+table.mini td:first-child {
+  text-align: left;
+}
+table.mini th {
+  color: var(--muted-2);
+  font-weight: 500;
+  font-size: 11px;
+}
+table.mini tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* Data table ---------------------------------------------------------------- */
 .table-wrap {
   /* Own scroll container so the sticky header row actually engages. */
@@ -1755,4 +1783,24 @@ table.data tbody tr:hover {
 .rank-modal-foot {
   display: flex;
   justify-content: flex-end;
+}
+
+/* In-view search box (the Players list). Deliberately not a filter-bar control:
+   its text is view-local, never a route param or a store filter. */
+.search-input {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 10px;
+  min-width: 190px;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.search-input::placeholder {
+  color: var(--muted-2);
 }

@@ -52,6 +52,9 @@ export async function deleteMatch(m: DeletableMatch, reset: () => void): Promise
     await store.refresh();
     return;
   }
+  // Positive evidence for the back stack: an entry pointing at this match is now
+  // a dead end, so Back skips it. The Undo below takes that back.
+  store.noteMatchDeleted(m.matchId);
   await store.refresh();
   // Deleting the last real game drops history to empty, and an empty history
   // with the demo preference on refills every view with generated sample games
@@ -90,6 +93,7 @@ async function undoDelete(m: DeletableMatch): Promise<void> {
     toast(`Your ${m.map} match can't be restored any more.`);
     return;
   }
+  store.noteMatchRestored(m.matchId);
   await store.refresh();
   toast(`Restored your ${m.map} match.`);
 }

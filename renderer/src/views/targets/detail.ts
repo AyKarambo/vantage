@@ -15,19 +15,19 @@ import { badge, button, card, chip } from '../../components/primitives';
 import { phaseChip, targetTrend } from '../../components/targetTrend';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
-import type { ViewContext } from '../view';
+import { backControl, type ViewContext } from '../view';
 import { winSplit, confirmDelete } from './shared';
 
 export function targetDetail(ctx: ViewContext): HTMLElement {
   const t = ctx.data.targets.find((x) => x.id === ctx.params.targetId);
   if (!t) {
     return h('div', { class: 'view', style: { maxWidth: '760px' } },
-      backRow(ctx),
+      backRow(),
       card({}, h('div', { class: 'empty' }, 'This target is no longer in your library.')),
     );
   }
   return h('div', { class: 'view', style: { maxWidth: '760px' } },
-    backRow(ctx),
+    backRow(),
     headerCard(t, ctx),
     t.learning
       ? targetTrend(t.learning)
@@ -36,8 +36,10 @@ export function targetDetail(ctx: ViewContext): HTMLElement {
   );
 }
 
-function backRow(ctx: ViewContext): HTMLElement {
-  return h('div', null, button('← Targets', { variant: 'ghost', onClick: () => ctx.navigate('targets') }));
+function backRow(): HTMLElement {
+  // The shared ← — see `backControl`. Null (nothing behind) renders an empty row,
+  // which keeps the header's spacing stable either way.
+  return h('div', null, backControl());
 }
 
 /** Name, rule, grading mode, phase, hit-rate, grade history, and win splits. */

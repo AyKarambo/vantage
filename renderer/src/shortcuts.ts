@@ -45,10 +45,12 @@ export function initShortcuts(): void {
   if (bound) return;
   bound = true;
   window.addEventListener('keydown', (e) => {
+    // An IME composition's Escape/arrows are for the candidate window, not us.
+    if (e.isComposing || e.keyCode === 229) return;
     const combo = comboOf(e);
     if (!combo) return;
     const typing = isTyping(e.target);
-    const overlayOpen = Boolean(document.querySelector('.overlay, .popover-backdrop'));
+    const overlayOpen = overlayCapturing();
     for (const s of registry) {
       if (s.combo !== combo) continue;
       if (typing && !s.allowInInput) continue;
@@ -63,10 +65,38 @@ export function initShortcuts(): void {
   });
 }
 
-function comboOf(e: KeyboardEvent): string | null {
+/**
+ * An open overlay/popover/palette owns the keyboard AND the pointer. Shared by
+ * the key dispatcher and the shell's mouse-back binding so the two can't drift.
+ * Broader than `overlay.ts`'s own check, which sees only `.overlay`.
+ */
+export function overlayCapturing(): boolean {
+  return document.querySelector('.overlay, .popover-backdrop') !== null;
+}
+
+/** The structural subset {@link comboOf} reads, so a test can build one. */
+export interface ComboSource {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+}
+
+/**
+ * Modifiers are emitted in a FIXED order — `ctrl+` then `alt+` — so a binding
+ * writes 'ctrl+alt+x', never 'alt+ctrl+x'. Ctrl and Cmd stay folded so one
+ * binding covers both platforms. Alt now gets its own prefix: previously it was
+ * ignored entirely, so Alt+ArrowLeft produced 'arrowleft' and stepped the match
+ * list. Separating it is what lets the stepper (←) and Back (Alt+←) coexist on a
+ * match detail. Every existing binding is unmodified, so every existing combo
+ * string is unchanged.
+ */
+export function comboOf(e: ComboSource): string | null {
   const key = e.key.toLowerCase();
   if (key === 'control' || key === 'shift' || key === 'alt' || key === 'meta') return null;
-  return `${e.ctrlKey || e.metaKey ? 'ctrl+' : ''}${key}`;
+  const ctrl = e.ctrlKey || e.metaKey ? 'ctrl+' : '';
+  const alt = e.altKey ? 'alt+' : '';
+  return `${ctrl}${alt}${key}`;
 }
 
 function isTyping(target: EventTarget | null): boolean {

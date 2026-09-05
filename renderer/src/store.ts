@@ -9,6 +9,10 @@ import { migrateLegacySeasonDays } from '../../src/core/season';
 import { bridge } from './bridge';
 import { relTime } from './format';
 import { prefs } from './prefs';
+import {
+  back, entryLabel, pushEntry, resolveEntry, routeParams, sameParams,
+  type BackEntry, type BackStack, type ResolveContext, type Resolver,
+} from './backStack';
 
 export type ViewId =
   | 'overview'
@@ -16,6 +20,7 @@ export type ViewId =
   | 'review'
   | 'matches'
   | 'matchDetail'
+  | 'players'
   | 'playerHistory'
   | 'targetDetail'
   | 'maps'
@@ -51,26 +56,6 @@ export interface ViewParams {
   editTargetId?: string;
 }
 
-/** Every `ViewParams` key, kept in sync by the compiler: adding a key here
- *  without adding it to this array is a type error, so `sameParams` can never
- *  silently drop a new param from the dedupe/re-render checks. */
-const VIEW_PARAM_KEYS: Required<{ [K in keyof ViewParams]: true }> = {
-  matchId: true,
-  highlight: true,
-  day: true,
-  flag: true,
-  prefillName: true,
-  playerName: true,
-  targetId: true,
-  editTargetId: true,
-};
-
-/** Structural equality over every `ViewParams` key — used by `setView`'s
- *  navigation dedupe so a future param can't be forgotten from the check. */
-function sameParams(a: ViewParams, b: ViewParams): boolean {
-  return (Object.keys(VIEW_PARAM_KEYS) as Array<keyof ViewParams>).every((k) => a[k] === b[k]);
-}
-
 export interface AppState {
   filters: Required<DashboardFilters>;
   view: ViewId;
@@ -95,18 +80,33 @@ type Listener = (state: AppState) => void;
 export const FILTER_DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', days: 30 };
 const STORAGE_KEY = 'vantageFilters';
 
-/** Parameterized drill-downs persist their parent list for relaunch restore. */
-const DETAIL_PARENT: Partial<Record<ViewId, ViewId>> = {
+/**
+ * Parameterized drill-downs persist their parent list for relaunch restore, and
+ * this is also the single source of the sidebar's "which nav item is active"
+ * mapping — expressing the parenting once rather than in two hand-written places.
+ */
+export const DETAIL_PARENT = {
   matchDetail: 'matches',
-  playerHistory: 'matches',
+  playerHistory: 'players',
   targetDetail: 'targets',
+} as const satisfies Record<string, ViewId>;
+
+/**
+ * Every restorable (non-detail) view, kept in sync by the COMPILER — a new
+ * top-level `ViewId` fails to build until it is listed here. The hand-written
+ * array this replaces was silent if forgotten, and forgetting it cost a screen
+ * its relaunch restore with no other symptom.
+ */
+const RESTORABLE: Record<Exclude<ViewId, keyof typeof DETAIL_PARENT>, true> = {
+  overview: true, live: true, review: true, matches: true, players: true, maps: true,
+  heroes: true, focus: true, mental: true, trends: true, readiness: true, targets: true,
+  notion: true, logs: true, settings: true, about: true, faq: true,
 };
 
 /** The last visited top-level view, restored on launch (never a detail page). */
 function initialView(): ViewId {
   const saved = prefs.get('view');
-  const valid: ViewId[] = ['overview', 'live', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about', 'faq'];
-  return valid.includes(saved as ViewId) ? (saved as ViewId) : 'overview';
+  return saved != null && saved in RESTORABLE ? (saved as ViewId) : 'overview';
 }
 
 class Store {
@@ -125,6 +125,11 @@ class Store {
   private readonly listeners = new Set<Listener>();
   /** Monotonic id of the newest in-flight {@link refresh}; older ones can't commit. */
   private fetchSeq = 0;
+  /** Session-only, never persisted: a relaunch starts at {@link initialView}
+   *  (always a top-level view) with an empty stack, and therefore no ←. */
+  private backStack: BackStack = [];
+  /** Ids this session has POSITIVE evidence are deleted — see `resolveEntry`. */
+  private readonly deletedMatchIds = new Set<string>();
 
   get(): AppState {
     return this.state;
@@ -136,10 +141,74 @@ class Store {
   }
 
   setView(view: ViewId, params: ViewParams = {}): void {
+    // Unchanged, and deliberately BEFORE the push: re-navigating to where you
+    // already stand still records nothing.
     if (view === this.state.view && sameParams(params, this.state.params)) return;
+    this.backStack = pushEntry(this.backStack, this.currentEntry());
+    this.commitView(view, params);
+  }
+
+  /**
+   * The ONLY legal way to change `view`/`params`. Shared by {@link setView} and
+   * {@link goBack} — Back is a real navigation, so it must write the relaunch
+   * preference exactly like a forward one. Keep this the sole commit point: a
+   * future surface that writes `state.view` another way would silently stop the
+   * back stack recording.
+   */
+  private commitView(view: ViewId, params: ViewParams): void {
     // Detail pages restore to their parent list on relaunch.
-    prefs.set('view', DETAIL_PARENT[view] ?? view);
+    prefs.set('view', DETAIL_PARENT[view as keyof typeof DETAIL_PARENT] ?? view);
     this.patch({ view, params });
+  }
+
+  private currentEntry(): BackEntry {
+    return { view: this.state.view, params: routeParams(this.state.params) };
+  }
+
+  private resolver(): Resolver {
+    const ctx: ResolveContext = {
+      targets: this.state.data?.targets ?? null,
+      deletedMatchIds: this.deletedMatchIds,
+    };
+    return (e) => resolveEntry(e, ctx);
+  }
+
+  /** Navigate to the previous resolvable screen; false when there is none. */
+  goBack(): boolean {
+    const r = back(this.backStack, this.currentEntry(), this.resolver());
+    // A miss leaves the stack intact — a match's 12s Undo can revive entries.
+    if (!r.entry) return false;
+    this.backStack = r.stack;
+    // A FRESH params object. The stored entry is owned solely by the stack and
+    // never handed to a view, so nothing keyed on params identity (targets'
+    // `consumedEditParams` WeakSet) can ever be shown a resurrected reference.
+    this.commitView(r.entry.view, { ...r.entry.params });
+    return true;
+  }
+
+  /** Where a Back press would land, or null when nowhere — one call answers
+   *  both "render the ←?" and "what does its tooltip say?". */
+  backLabel(): string | null {
+    const { entry } = back(this.backStack, this.currentEntry(), this.resolver());
+    return entry ? entryLabel(entry) : null;
+  }
+
+  /**
+   * Positive evidence a match is gone. Idempotent, and capped so a mass-delete
+   * session can't grow it without bound — evicting a tombstone costs at worst
+   * one extra Back press onto the honest "no longer in your history" card.
+   */
+  noteMatchDeleted(id: string): void {
+    this.deletedMatchIds.add(id);
+    if (this.deletedMatchIds.size > 500) {
+      const oldest = this.deletedMatchIds.values().next();
+      if (!oldest.done) this.deletedMatchIds.delete(oldest.value);
+    }
+  }
+
+  /** The 12-second Undo put it back. */
+  noteMatchRestored(id: string): void {
+    this.deletedMatchIds.delete(id);
   }
 
   /** Re-notify subscribers without refetching — for local (client-side) state

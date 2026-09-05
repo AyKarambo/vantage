@@ -14,7 +14,7 @@ import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
 import { redactForExport } from '../core/logRedaction';
 import { formatDiagnostics } from '../core/about';
-import { currentRank, rankEnteringMatch, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
+import { currentRank, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
@@ -34,7 +34,7 @@ import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import {
   PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, trackMatches, hasDrifted, isAwaitingRank,
-  runProgress, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds,
+  runProgress, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, resetBoundaries,
   type PlacementRun,
 } from '../core/placements';
 import type { MasterDataStore } from '../store/masterData';
@@ -68,7 +68,7 @@ function sameHeroes(a: string[], b: string[]): boolean {
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes, account
    *  management (relabel/delete), per-match delete, and the pending-store read. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
+  history: Pick<HistoryStore, 'count' | 'revision' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -189,6 +189,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
     games: () => (deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : []),
+    historyRevision: () => deps.history.revision(),
     isSample: () => effectiveDemo(demoPref(), deps.history.count()),
     demoContext: () => ({
       active: effectiveDemo(demoPref(), deps.history.count()),
@@ -438,11 +439,16 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // return a meaningless 0 — so say that instead, and let the caller offer
       // anchoring rather than show a fabricated number.
       if (!deps.rankAnchors.get(input.account, input.role)) return { anchored: false };
+      const games = deps.history.all();
       return {
         anchored: true,
         srDelta: srDeltaForSetRank(
-          deps.history.all(), deps.rankAnchors.map(),
+          games, deps.rankAnchors.map(),
           input.account, input.role, input.timestamp, input.rank,
+          // The rank-before used here now honours the same open-run mask as every
+          // other rank surface, so the back-computed ±% can't be measured against
+          // a position built from deltas the rest of the app is holding back.
+          suppressedMatchIds(games, deps.placements.allRuns()),
         ),
       };
     },
@@ -1053,9 +1059,15 @@ function syncRankAtStart(deps: DataProviderDeps, matchId: string): void {
     if (game.rankAtStart !== undefined) deps.history.editManual(matchId, { rankAtStart: null });
     return;
   }
-  const suppressed = suppressedMatchIds(games, deps.placements.allRuns());
+  const runs = deps.placements.allRuns();
+  const suppressed = suppressedMatchIds(games, runs);
+  // The reset boundary was missing here, so a match older than a completed
+  // placement run used to snapshot a rank reconstructed straight ACROSS the
+  // ladder discontinuity — and `rankAtStart` is write-once, so that fabrication
+  // was permanent. Such a match now stores nothing at all.
   const state = rankEnteringMatch(
     games, deps.rankAnchors.map(), game.account, game.role, game.timestamp, suppressed,
+    resetBoundaries(runs).get(rankKey(game.account, game.role)),
   );
   const next = state
     ? { tier: state.tier, division: state.division, progressPct: state.progressPct }

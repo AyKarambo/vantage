@@ -4,7 +4,7 @@ export { PLACEMENT_RUN_LENGTH } from './types';
 export type { PredictedRank, PlacementRun } from './types';
 export {
   countedMatches, trackMatchesFrom, trackMatches, runProgress, isRunComplete, isAwaitingRank,
-  hasDrifted, suppressedMatchIds, shouldOfferRun, shouldOfferNewTrackRun,
+  hasDrifted, suppressedMatchIds, resetBoundaries, shouldOfferRun, shouldOfferNewTrackRun,
 } from './engine';
 export { srEntryMode, isStillCounting } from './entryMode';
 export type { SrEntryMode, EntryModeRun } from './entryMode';

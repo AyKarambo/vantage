@@ -457,6 +457,23 @@
   justify-content: space-between;
   gap: 16px;
 }
+/* Back + titles are ONE child of .view-head, so space-between keeps seeing two. */
+.view-head-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.view-head-titles {
+  min-width: 0;
+}
+.view-back {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  padding: 4px 10px;
+  font-size: 15px;
+  line-height: 1.1;
+}
 .view-title {
   font-size: 22px;
   font-weight: 600;

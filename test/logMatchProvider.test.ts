@@ -185,6 +185,9 @@ describe('rankEntryPreview — "I ended at this rank" translated to a ±%', () =
           [k, { tier: a.tier, division: a.division, progressPct: a.progressPct, setAt: a.setAt }])),
         set: (rec: Anchor) => { store[rankKey(rec.account, rec.role)] = rec; return rec; },
       },
+      // The rank-before now honours the open-placement-run mask, like every
+      // other rank surface. No runs here, so nothing is masked.
+      placements: { allRuns: () => [] },
       getConfig: () => ({ accounts: { main: 'Main' } }),
     } as unknown as DataProviderDeps;
     return { provider: createDataProvider(deps), patches, store };

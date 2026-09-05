@@ -26,6 +26,13 @@ import type {
  */
 export interface DataProvider {
   games(): GameRecord[];
+  /**
+   * Opaque revision of the history store — changes on every write, never
+   * repeats. Main-internal (like {@link DataProvider.rankAnchorMap}); its only
+   * consumer is the Players read's directory memo, which must not serve a page
+   * from before a match landed.
+   */
+  historyRevision(): string;
   isSample(): boolean;
   /** Demo facts (effective display, raw choice, real-history presence) for the dashboard payload. */
   demoContext(): DemoContext;

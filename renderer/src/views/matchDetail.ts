@@ -24,6 +24,7 @@ import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelt
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
+import { store } from '../store';
 import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
@@ -31,7 +32,7 @@ import { classifyGameType } from '../../../src/core/matchFilter';
 import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { PALETTE, wrHsl } from '../theme';
-import type { ViewContext } from './view';
+import { backControl, type ViewContext } from './view';
 
 const ROLE_OPTS: Array<{ value: Role; label: string }> = [
   { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' },
@@ -71,6 +72,9 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
   render(host, backRow(ctx), card({}, h('div', { class: 'hint' }, 'Loading match…')));
   bridge.matchDetail(matchId, ctx.data.filters).then((d) => {
     if (!d) {
+      // Self-healing net for an out-of-band delete (the MCP server, another
+      // window): tell the back stack so every later Back skips this entry.
+      store.noteMatchDeleted(matchId);
       render(host, backRow(ctx), card({}, h('div', { class: 'empty' }, 'This match is no longer in your history.')));
       return;
     }
@@ -79,14 +83,16 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
   return host;
 }
 
-/** Back link + prev/next steppers through the filtered match list (also ←/→). */
+/** Back control + prev/next steppers through the filtered match list (also ←/→). */
 function backRow(ctx: ViewContext): HTMLElement {
   const matches = ctx.data.matches;
   const idx = matches.findIndex((m) => m.matchId === ctx.params.matchId);
   const older = idx >= 0 ? matches[idx + 1] : undefined;
   const newer = idx >= 0 ? matches[idx - 1] : undefined;
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-    button('← Matches', { variant: 'ghost', onClick: () => ctx.navigate('matches') }),
+    // The shared ← — where it leads depends on how you got here, which is the
+    // whole point; the old fixed "← Matches" lied on a player → match chain.
+    backControl(),
     h('span', { style: { flex: '1' } }),
     button('‹ Older', {
       variant: 'ghost', disabled: !older, title: 'Previous match (←)',
@@ -793,29 +799,68 @@ function buildMatchEditor(
 
 function playerHistorySection(d: MatchDetail, ctx: ViewContext): HTMLElement {
   const hasRoster = Boolean(d.scoreboard?.some((e) => !e.isLocal));
-  const body = d.playerHistory.length
-    ? d.playerHistory.map((p) => encounterRow(p, ctx))
-    : [h('div', { class: 'hint' },
+  if (!d.playerHistory.length) {
+    return card({ title: 'Player history', sub: PLAYER_HISTORY_SUB },
+      h('div', { class: 'hint' },
         hasRoster
           ? 'No players from this match in your tracked history yet.'
           : 'No roster was recorded for this match.',
-      )];
-  return card({ title: 'Player history', sub: 'players from this match you have met before — click a name for all your shared games' }, ...body);
+      ),
+    );
+  }
+  // Counts are PRIOR games — this match is excluded, so they read one lower than
+  // the drill-down's own total. Both surfaces say which they show.
+  const anyUnknown = d.playerHistory.some((p) => p.relationKnown < p.encounters);
+  return card({ title: 'Player history', sub: PLAYER_HISTORY_SUB },
+    h('table', { class: 'mini' },
+      h('thead', null,
+        h('tr', null,
+          h('th', null, 'Player'),
+          h('th', null, 'Prior'),
+          h('th', null, 'Together'),
+          h('th', null, 'As opponents'),
+          h('th', null, 'Last'),
+        ),
+      ),
+      h('tbody', null, ...d.playerHistory.map((p) => encounterRow(p, ctx))),
+    ),
+    anyUnknown
+      ? h('div', { class: 'hint', style: { marginTop: '8px' } },
+          'With / against is only known when the game feed reported both teams, so those two '
+          + 'columns need not add up to the games column.')
+      : null,
+  );
+}
+
+const PLAYER_HISTORY_SUB =
+  'games you played with these people BEFORE this one — click a name for every game you have shared';
+
+/**
+ * A split cell. `—` rather than `0W 0L` when no prior game had a known team
+ * relation: zeroes would assert "never on their team", which is a different
+ * claim from "the feed never said" (guardrail 1).
+ */
+function splitCell(wl: { wins: number; losses: number }, known: number): HTMLElement {
+  if (!known) {
+    const cell = h('td', { class: 'u-dim' }, '—');
+    cell.title = 'The game feed never reported both teams for these games.';
+    return cell;
+  }
+  return h('td', { class: 'mono' }, `${wl.wins}W ${wl.losses}L`);
 }
 
 function encounterRow(p: PlayerEncounter, ctx: ViewContext): HTMLElement {
-  const wl = p.results ? ` · ${p.results.wins}W ${p.results.losses}L together` : '';
-  return h('div', { class: 'row' },
-    h('span', { class: 'row-main', style: { fontSize: '12.5px', fontWeight: '500' } },
+  return h('tr', null,
+    h('td', null,
       h('button', {
         class: 'inline-link inline-link--strong',
-        title: `See the matches you shared with ${p.name}`,
+        title: `See every game you have shared with ${p.name}`,
         on: { click: () => ctx.navigate('playerHistory', { playerName: p.name }) },
       }, p.name),
     ),
-    h('span', { class: 'u-muted', style: { fontSize: '11.5px' } },
-      `${p.encounters} prior ${p.encounters === 1 ? 'match' : 'matches'}${wl}`),
-    h('span', { class: 'u-dim mono', style: { fontSize: '11px', minWidth: '46px', textAlign: 'right' } },
-      relTime(p.lastSeen)),
+    h('td', { class: 'mono' }, String(p.encounters)),
+    splitCell(p.sameTeam, p.relationKnown),
+    splitCell(p.enemyTeam, p.relationKnown),
+    h('td', { class: 'u-dim mono' }, relTime(p.lastSeen)),
   );
 }

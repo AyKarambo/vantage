@@ -113,6 +113,13 @@ function updateValues(g: GameRecord): SQLInputValue[] {
  * Callers that create short-lived instances must {@link close} them — an open
  * handle keeps the file locked on Windows.
  */
+/**
+ * Monotonic per-open sequence. `open()` runs again after a data-folder repoint,
+ * which opens a DIFFERENT file and resets SQLite's change counter — folding this
+ * in makes a revision string unrepeatable across re-opens.
+ */
+let OPEN_SEQ = 0;
+
 export class HistoryStore {
   private dir: string;
   private dbPath: string;
@@ -123,6 +130,8 @@ export class HistoryStore {
   private hasStmt!: StatementSync;
   private allStmt!: StatementSync;
   private countStmt!: StatementSync;
+  private changesStmt!: StatementSync;
+  private openId = 0;
   private importedCountStmt!: StatementSync;
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
@@ -272,6 +281,26 @@ export class HistoryStore {
   /** Total number of stored games. */
   count(): number {
     return Number(this.countStmt.get()?.c ?? 0);
+  }
+
+  /**
+   * Opaque monotonic revision of this store: it changes whenever anything was
+   * written through it, and never repeats across re-opens.
+   *
+   * Derived from SQLite's own `total_changes()` rather than a hand-bumped
+   * counter, so a future mutator cannot forget to move it — which matters
+   * because the GEP path reaches {@link add} through the match pipeline and
+   * never touches `DataProvider`, so a provider-level epoch would go stale for
+   * the rest of a session after a live match.
+   *
+   * Caveat: `total_changes()` counts changes on THIS connection. That holds
+   * today — one process owns the DB and every write goes through this class —
+   * but a second connection writing the same file would not move it. A
+   * rolled-back transaction still bumps it, which is a spurious cache MISS,
+   * never a stale HIT.
+   */
+  revision(): string {
+    return `${this.openId}:${Number(this.changesStmt.get()?.n ?? 0)}`;
   }
 
   // --- pending (no-outcome) holding store --------------------------------------
@@ -518,6 +547,8 @@ export class HistoryStore {
     this.hasStmt = this.db.prepare('SELECT 1 FROM games WHERE matchId = ?');
     this.allStmt = this.db.prepare('SELECT data FROM games ORDER BY rowid');
     this.countStmt = this.db.prepare('SELECT COUNT(*) AS c FROM games');
+    this.changesStmt = this.db.prepare('SELECT total_changes() AS n');
+    this.openId = ++OPEN_SEQ;
     // Import channels share the `importedAt` flag but are scoped by `importSource`
     // so one channel's clear/count never touches another's. `COALESCE(…,'notion')`
     // maps legacy Notion imports (written before the column existed) to 'notion'.

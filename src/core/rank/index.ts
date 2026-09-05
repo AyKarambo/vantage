@@ -8,3 +8,5 @@ export { TIERS, applyMatch, computeRank, stateFromAnchor, ladderPoints } from '.
 export { competitiveComps, currentRank } from './timeline';
 export { rankToPoints, pointsToRank } from './scalar';
 export { rankAfterMatch, rankEnteringMatch, srDeltaForSetRank } from './reconstruct';
+export { enteringRanks, enteringRankAt } from './entering';
+export type { EnteringRank, EnteringRankNote, EnteringRanksOptions } from './entering';
