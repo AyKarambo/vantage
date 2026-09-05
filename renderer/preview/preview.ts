@@ -34,13 +34,13 @@ import {
   type MasterDataOverrides, type FetchedCatalog,
 } from '../../src/core/masterData';
 import { sourceOf } from '../../src/core/source';
-import { currentRank, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
+import { currentRank, enteringRanks, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, shouldOfferRun, shouldOfferNewTrackRun, trackMatches, type PlacementRun } from '../../src/core/placements';
+import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, resetBoundaries, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, trackMatches, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 
@@ -436,8 +436,19 @@ const mock: OwStatsApi = {
     const eff = effectiveMasterData();
     return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin);
   },
-  playerHistory: async (name: string) =>
-    playerMatchHistory(dataset(), name, makeMapMode(effectiveMasterData().maps)),
+  playerHistory: async (name: string) => {
+    // Same composition as `reads.playerHistoryRead`, so the harness shows the
+    // rank column the real app does rather than a silently empty one — including
+    // its competitive-only gate, which this mock used to skip (the harness listed
+    // quick-play games the real drill-down never shows).
+    const games = dataset().filter((g) => isCompetitive(g.gameType));
+    const runs = [...previewPlacementRuns.values()];
+    return playerMatchHistory(games, name, makeMapMode(effectiveMasterData().maps),
+      enteringRanks(games, anchorMap(), {
+        suppressed: suppressedMatchIds(games, runs),
+        resetBefore: resetBoundaries(runs),
+      }));
+  },
   playerRecords: async (names: string[]) => playerRecords(dataset(), names),
   onLiveMatch: (cb: (p: LiveMatchPayload) => void) => {
     liveMatchListeners.add(cb);

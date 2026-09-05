@@ -44,7 +44,7 @@ export type {
 } from './masterData';
 
 // Match drill-down payloads
-export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, PlayerMatchHistory, PlayerRecord, MatchDetail } from './matchDetail';
+export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, SharedMatchRank, PlayerMatchHistory, PlayerRecord, MatchDetail } from './matchDetail';
 export type { LiveMatchPayload, LiveKillEntry } from './liveMatch';
 
 // Notion export/import payloads

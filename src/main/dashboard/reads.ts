@@ -156,8 +156,19 @@ export function playerHistoryRead(
   provider: DataProvider,
   name: string,
 ): PlayerMatchHistory | null {
+  // Every provider read hoisted into a local in ONE synchronous tick: the same
+  // `games` array feeds the name index, the suppression mask and the rank fold,
+  // so no row can reference a match the fold never saw.
+  const games = competitiveOnly(provider.games());
   const master = provider.effectiveMasterData();
-  return playerMatchHistory(competitiveOnly(provider.games()), name, makeMapMode(master.maps));
+  const runs = provider.placementRuns();
+  // ONE grouped pass for every match's entering rank, not one history walk per
+  // row — see `core/rank/entering`. `playerMatchHistory` only looks the result
+  // up, so it structurally cannot walk history twice.
+  return playerMatchHistory(games, name, makeMapMode(master.maps), enteringRanks(games, provider.rankAnchorMap(), {
+    suppressed: suppressedMatchIds(games, runs),
+    resetBefore: resetBoundaries(runs),
+  }));
 }
 
 /**

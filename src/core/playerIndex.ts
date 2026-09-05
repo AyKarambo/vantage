@@ -1,7 +1,12 @@
 import type { GameRecord } from './analytics';
 import { battleTagName, type RosterPlayer } from './model';
 import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
-import type { PlayerEncounter, PlayerMatchHistory, PlayerRecord, PlayerSharedMatch } from '../shared/contract';
+import { roleOfHero } from './heroes';
+import { resolveRole } from './resolvers/role';
+import type { EnteringRank } from './rank';
+import type {
+  PlayerEncounter, PlayerMatchHistory, PlayerRecord, PlayerSharedMatch, SharedMatchRank,
+} from '../shared/contract';
 
 /**
  * Player-encounter index, derived at query time from the rosters stored on the
@@ -78,6 +83,7 @@ export function playerMatchHistory(
   all: GameRecord[],
   name: string,
   mapModeOf: MapModeResolver = makeMapMode(DEFAULT_MASTER_DATA.maps),
+  ranks?: ReadonlyMap<string, EnteringRank>,
 ): PlayerMatchHistory | null {
   const key = battleTagName(name ?? '');
   if (!key) return null;
@@ -97,6 +103,11 @@ export function playerMatchHistory(
     // Team relation only when both teams were reported by the feed.
     const relation = local?.team != null && them.team != null ? them.team === local.team : undefined;
 
+    // The SAME derivation the match-detail scoreboard uses for a non-local row:
+    // GEP's own heroRole first, the hero table second, never guessed. Reusing it
+    // is what stops the table and the scoreboard disagreeing about a role.
+    const theirRole = resolveRole(undefined, them.heroRole) ?? roleOfHero(them.heroName);
+    const rank = sharedMatchRank(ranks?.get(game.matchId));
     matches.push({
       matchId: game.matchId,
       timestamp: game.timestamp,
@@ -105,7 +116,11 @@ export function playerMatchHistory(
       result: game.result,
       ...(relation !== undefined ? { sameTeam: relation } : {}),
       ...(them.heroName ? { hero: them.heroName } : {}),
+      ...(theirRole ? { theirRole } : {}),
       account: game.account,
+      role: game.role,
+      heroes: game.heroes,
+      ...(rank ? { rank } : {}),
     });
 
     lastSeen = Math.max(lastSeen, game.timestamp);
@@ -125,6 +140,23 @@ export function playerMatchHistory(
   if (!matches.length) return null;
   matches.sort((a, b) => b.timestamp - a.timestamp);
   return { name: display || 'Unknown', encounters: matches.length, lastSeen, results, sameTeam, enemyTeam, matches };
+}
+
+/**
+ * Collapse a core entering-rank cell to the wire shape. 'calculated' and
+ * 'reconstructed' become one 'derived' badge: the reader cannot act on the
+ * difference, and `protected` — the one thing that distinguishes them — is
+ * deliberately not on the wire, so nothing built on this DTO can draw a shield
+ * it has no way to know. `progressPct` passes through VERBATIM, negatives
+ * included (a protection carry), exactly as the stored column already does.
+ */
+function sharedMatchRank(cell: EnteringRank | undefined): SharedMatchRank | undefined {
+  if (!cell) return undefined;
+  const note: SharedMatchRank['note'] =
+    cell.note === 'calculated' || cell.note === 'reconstructed' ? 'derived' : cell.note;
+  if (!cell.position) return { note };
+  const { tier, division, progressPct } = cell.position;
+  return { note, tier, division, progressPct };
 }
 
 /** Normalized identity (shared `battleTagName` form). Empty → no identity. */

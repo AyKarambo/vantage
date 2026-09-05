@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { playerHistory, playerMatchHistory, playerRecords } from '../src/core/playerIndex';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, RosterPlayer } from '../src/core/model';
+import type { EnteringRank } from '../src/core/rank';
 
 let seq = 0;
 function game(p: Partial<GameRecord> & { result: Result }): GameRecord {
@@ -210,6 +211,65 @@ describe('playerMatchHistory', () => {
     expect(h.sameTeam).toEqual({ wins: 0, losses: 0 });
     expect(h.enemyTeam).toEqual({ wins: 0, losses: 0 });
     expect(h.results).toEqual({ wins: 1, losses: 0 }); // still counts your result
+  });
+
+  it('carries your own role, account and heroes for the table', () => {
+    const all = [game({
+      result: 'Win', role: 'support', account: 'Alt', heroes: ['Ana', 'Kiriko'],
+      roster: [meT(0), them('Nova#11214', 0, 'Genji')],
+    })];
+    const m = playerMatchHistory(all, 'Nova#11214')!.matches[0];
+    expect(m).toMatchObject({ role: 'support', account: 'Alt', heroes: ['Ana', 'Kiriko'], hero: 'Genji' });
+  });
+
+  it("derives their role from GEP's heroRole first, then the hero table, and never guesses", () => {
+    const all = [
+      // GEP said so outright — its historical spelling normalizes to 'damage'.
+      game({ result: 'Win', matchId: 'a', timestamp: 3000, roster: [meT(0), { battleTag: 'Nova#11214', heroName: 'Genji', heroRole: 'offense', team: 0 }] }),
+      // No heroRole: derived from the hero table.
+      game({ result: 'Win', matchId: 'b', timestamp: 2000, roster: [meT(0), { battleTag: 'Nova#11214', heroName: 'Ana', team: 0 }] }),
+      // Neither — a masked slot stays blank rather than being guessed.
+      game({ result: 'Win', matchId: 'c', timestamp: 1000, roster: [meT(0), { battleTag: 'Nova#11214', team: 0 }] }),
+    ];
+    const byId = new Map(playerMatchHistory(all, 'Nova#11214')!.matches.map((m) => [m.matchId, m]));
+    expect(byId.get('a')!.theirRole).toBe('damage');
+    expect(byId.get('b')!.theirRole).toBe('support');
+    expect(byId.get('c')!.theirRole).toBeUndefined();
+    expect(byId.get('c')!.hero).toBeUndefined();
+  });
+
+  it('attaches the entering rank from a prebuilt map, collapsing derived notes', () => {
+    const all = [
+      game({ result: 'Win', matchId: 'stored', timestamp: 3000, roster: [meT(0), them('Nova#11214', 0)] }),
+      game({ result: 'Win', matchId: 'calc', timestamp: 2000, roster: [meT(0), them('Nova#11214', 0)] }),
+      game({ result: 'Win', matchId: 'blank', timestamp: 1000, roster: [meT(0), them('Nova#11214', 0)] }),
+    ];
+    const ranks = new Map<string, EnteringRank>([
+      ['stored', { note: 'stored', position: { tier: 'Gold', division: 3, progressPct: 40 } }],
+      // Both engine notes must reach the wire as one 'derived' badge...
+      ['calc', { note: 'calculated', position: { tier: 'Gold', division: 2, progressPct: 10 }, protected: true }],
+      ['blank', { note: 'placements' }],
+    ]);
+    const byId = new Map(playerMatchHistory(all, 'Nova#11214', undefined, ranks)!.matches.map((m) => [m.matchId, m]));
+    expect(byId.get('stored')!.rank).toEqual({ note: 'stored', tier: 'Gold', division: 3, progressPct: 40 });
+    expect(byId.get('calc')!.rank).toEqual({ note: 'derived', tier: 'Gold', division: 2, progressPct: 10 });
+    // ...and `protected` must NOT reach it: the backward walk can't recover it,
+    // so no surface built on this DTO may draw a shield.
+    expect(byId.get('calc')!.rank).not.toHaveProperty('protected');
+    expect(byId.get('blank')!.rank).toEqual({ note: 'placements' });
+  });
+
+  it('leaves rank absent entirely when no map is supplied', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), them('Nova#11214', 0)] })];
+    expect(playerMatchHistory(all, 'Nova#11214')!.matches[0].rank).toBeUndefined();
+  });
+
+  it('passes a negative progress percent through verbatim (a protection carry)', () => {
+    const all = [game({ result: 'Loss', matchId: 'm', roster: [meT(0), them('Nova#11214', 0)] })];
+    const ranks = new Map<string, EnteringRank>([
+      ['m', { note: 'calculated', position: { tier: 'Gold', division: 3, progressPct: -19 }, protected: true }],
+    ]);
+    expect(playerMatchHistory(all, 'Nova#11214', undefined, ranks)!.matches[0].rank?.progressPct).toBe(-19);
   });
 });
 

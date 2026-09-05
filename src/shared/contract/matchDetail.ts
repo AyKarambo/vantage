@@ -57,6 +57,36 @@ export interface PlayerEncounter {
   relationKnown: number;
 }
 
+/**
+ * The rank you were sitting at going INTO a shared match, for the player table.
+ *
+ * `'stored'`  — the match's own `rankAtStart` snapshot: what you actually saw at
+ *               the time, and it keeps saying that even after an older match's
+ *               ±% is corrected.
+ * `'derived'` — reconstructed at read time from the track's rank anchor. An
+ *               ESTIMATE: a match with no logged ±% contributes 0, and a later
+ *               re-anchor rewrites it. Shown flagged, never as fact. It collapses
+ *               the engine's 'calculated' (forward replay) and 'reconstructed'
+ *               (backward walk) — see `core/rank/entering`.
+ *
+ * Every remaining note carries NO tier/division/progressPct: the cell is BLANK
+ * and the note is the reason. There is deliberately no winrate-estimate fallback
+ * (unlike {@link MatchDetail.competitive}) — a guess in a rank column is worse
+ * than a blank.
+ *
+ * `progressPct` is 0–100 within the division and passes through verbatim; it can
+ * be NEGATIVE (a rank-protection carry), exactly as the Matches list's stored
+ * "Rank at start" field already renders it. Protection itself is deliberately
+ * NOT represented: the backward walk cannot recover it, so no surface built on
+ * this DTO can draw the shield.
+ */
+export interface SharedMatchRank {
+  note: 'stored' | 'derived' | 'placements' | 'pre-reset' | 'no-anchor' | 'stale-anchor';
+  tier?: string;
+  division?: number;
+  progressPct?: number;
+}
+
 /** One stored match the tracked player shared with a specific other player. */
 export interface PlayerSharedMatch {
   matchId: string;
@@ -69,8 +99,36 @@ export interface PlayerSharedMatch {
   sameTeam?: boolean;
   /** The hero they played (their roster `heroName`), when reported. */
   hero?: string;
+  /**
+   * The role they played — GEP's own `heroRole` first, the hero table second,
+   * exactly as the match-detail scoreboard derives it. Absent when the feed
+   * reported neither and the hero is unknown; never guessed.
+   */
+  theirRole?: Role;
   /** Which of your accounts played it. */
   account: string;
+  /**
+   * Which role YOU queued. Rank is tracked per (account × role) — see
+   * `core/rank/types` rankKey — so the account alone cannot name the ladder
+   * track {@link PlayerSharedMatch.rank} belongs to.
+   */
+  role: Role;
+  /**
+   * The heroes YOU played, already spawn-only-filtered and hero-swap-merged
+   * (`GameRecord.heroes`). Empty on a record with no hero data.
+   *
+   * Note the asymmetry with {@link PlayerSharedMatch.hero}, which is singular:
+   * the aggregator banks per-hero segments only for the tracked player, and
+   * overwrites the roster slot for everyone else on every tick. So your own
+   * swaps are known and theirs never were — that data was never captured and
+   * cannot be backfilled.
+   */
+  heroes: string[];
+  /**
+   * Your entering rank, or the reason there isn't one. ABSENT on a
+   * non-competitive row, which is not the same as a blank cell.
+   */
+  rank?: SharedMatchRank;
 }
 
 /**
