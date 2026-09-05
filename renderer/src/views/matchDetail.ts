@@ -24,6 +24,7 @@ import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelt
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { scoreboard } from '../components/scoreboard';
+import { store } from '../store';
 import { gradedThisSession } from '../reviews';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
@@ -71,6 +72,9 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
   render(host, backRow(ctx), card({}, h('div', { class: 'hint' }, 'Loading match…')));
   bridge.matchDetail(matchId, ctx.data.filters).then((d) => {
     if (!d) {
+      // Self-healing net for an out-of-band delete (the MCP server, another
+      // window): tell the back stack so every later Back skips this entry.
+      store.noteMatchDeleted(matchId);
       render(host, backRow(ctx), card({}, h('div', { class: 'empty' }, 'This match is no longer in your history.')));
       return;
     }
