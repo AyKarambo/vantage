@@ -15,7 +15,9 @@ comms · toxicity · leavers · your improvement target).
 
 Every screen sits behind a persistent sidebar: the account switcher (a specific tracked
 account, or **All accounts** — with nothing pinned the chip says exactly that, and its rank
-line names the account the rank belongs to, e.g. `Karambo · Dmg · GM 4 · 16%`),
+line names the account the rank belongs to, e.g. `Karambo · Dmg · GM4 · 16%` — ranks are written
+short wherever the layout is tight, `B S G P E D M GM C` plus the division, with the full name in
+the tooltip),
 navigation, and a **Current session** card — a live recap
 (W–L, net, winrate) of your current sitting. A sitting ends once you've gone longer than a
 configurable gap since your last game (default 3h; adjustable in Settings → General →
