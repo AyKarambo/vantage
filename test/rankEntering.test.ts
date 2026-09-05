@@ -252,6 +252,24 @@ describe('rankEnteringMatch — the write path, rebuilt on the same fold', () =>
     expect(rankEnteringMatch(games, anchors, 'Main', 'damage', 1_000)).not.toBeNull();
   });
 
+  // A behaviour change worth pinning rather than leaving incidental. The old
+  // no-previous-match branch returned the anchor verbatim for a match sitting
+  // exactly ON the anchor instant; it now subtracts that match's own +/-%.
+  // That is the honest reading — `competitiveComps` excludes a match at `setAt`
+  // with a strict `>`, i.e. the anchor is a reading taken AFTER it — and it is
+  // reachable, because completing a placement run stamps `setAt` at the last
+  // match in the window.
+  it('treats the anchor as a reading taken AFTER a match sitting exactly on it', () => {
+    const anchors = anchorAt(1_000, 'Gold', 3, 40);
+    const games = [game({ matchId: 'onAnchor', result: 'Win', timestamp: 1_000, srDelta: 25 })];
+    const entering = rankEnteringMatch(games, anchors, 'Main', 'damage', 1_000)!;
+    expect({ tier: entering.tier, division: entering.division, progressPct: entering.progressPct })
+      .toEqual({ tier: 'Gold', division: 3, progressPct: 15 });
+    // The batch agrees, which is what keeps the read and write paths identical.
+    expect(enteringRanks(games, anchors).get('onAnchor')!.position)
+      .toEqual({ tier: 'Gold', division: 3, progressPct: 15 });
+  });
+
   it('honours the suppression mask on a track whose first match is the target', () => {
     // The old no-previous-match branch dropped `suppressed` entirely, so the two
     // branches of one function disagreed about whether a masked delta counted.

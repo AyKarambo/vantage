@@ -15,7 +15,7 @@
 import { h, must, render } from '../dom';
 import type { PlayerList, PlayerListRow, PlayerSortKey } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { pct, relTime, roleLabel } from '../format';
+import { relTime, roleLabel } from '../format';
 import { button, card, chip, emptyState } from '../components/primitives';
 import { dataTable, type Column } from '../components/table';
 import { prefs } from '../prefs';
@@ -83,8 +83,11 @@ const wl = (w: { wins: number; losses: number }): HTMLElement => {
 
 function columns(): Array<Column<PlayerListRow>> {
   // `get` is inert here — `onSort` bypasses dataTable's local sorting entirely —
-  // but it still returns the same rank core orders by, so the two can't drift if
-  // a future caller ever does sort locally.
+  // but it returns the same quantity `selectPlayers` ranks by (a winrate for the
+  // record columns, not a win count), so a future caller that did sort locally
+  // would at least get the same order rather than a subtly different one.
+  const rate = (w: { wins: number; losses: number }): number | null =>
+    w.wins + w.losses ? w.wins / (w.wins + w.losses) : null;
   return [
     {
       key: 'name', label: 'Player', get: (r) => r.name,
@@ -100,13 +103,28 @@ function columns(): Array<Column<PlayerListRow>> {
       ),
     },
     { key: 'games', label: 'Games together', get: (r) => r.games },
-    { key: 'with', label: 'With me', get: (r) => r.sameTeam.wins, render: (r) => wl(r.sameTeam) },
-    { key: 'vs', label: 'Against me', get: (r) => r.enemyTeam.wins, render: (r) => wl(r.enemyTeam) },
+    { key: 'with', label: 'With me', get: (r) => rate(r.sameTeam), render: (r) => wl(r.sameTeam) },
+    { key: 'vs', label: 'Against me', get: (r) => rate(r.enemyTeam), render: (r) => wl(r.enemyTeam) },
     { key: 'lastSeen', label: 'Last seen', get: (r) => r.lastSeen, render: (r) => relTime(r.lastSeen) },
   ];
 }
 
 export function players(ctx: ViewContext): HTMLElement {
+  // A pending keystroke belongs to the view instance that scheduled it. Without
+  // this, its `load()` still bumps the shared `seq` after the new instance has
+  // started its own request, so the new response is discarded as superseded and
+  // the screen stays on "Loading players…" until something else triggers a load.
+  if (debounce) { clearTimeout(debounce); debounce = undefined; }
+
+  // The shell rebuilds the whole view on every new snapshot — a background
+  // refresh, a tracked match, the window-focus refetch — which replaces the
+  // input node and drops the caret mid-typing. The factory runs BEFORE
+  // `replaceChildren`, so the outgoing input is still the active element here:
+  // read its caret now and restore it once the new node is mounted.
+  const outgoing = document.activeElement;
+  const hadFocus = outgoing instanceof HTMLInputElement && outgoing.classList.contains('search-input');
+  const caret = hadFocus ? outgoing.selectionStart : null;
+
   const host = h('div', { class: 'view' });
   const tableHost = h('div', null, h('div', { class: 'hint' }, 'Loading players…'));
   const footNote = h('div', { class: 'hint', style: { marginTop: '8px' } });
@@ -295,6 +313,17 @@ export function players(ctx: ViewContext): HTMLElement {
           : null,
       ),
     );
+  }
+
+  // After the shell mounts this tree (the factory returns first, `render`
+  // replaces the children right after), put the caret back where it was.
+  if (hadFocus) {
+    setTimeout(() => {
+      if (!host.isConnected) return;
+      searchInput.focus();
+      const at = caret ?? searchInput.value.length;
+      searchInput.setSelectionRange(at, at);
+    }, 0);
   }
 
   void load();

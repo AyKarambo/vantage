@@ -135,6 +135,14 @@ export function srDeltaForSetRank(
  * guard {@link rankAfterMatch} already takes, and which this function was
  * missing: it used to walk straight through a reset and hand back a rank the
  * player never held, which `syncRankAtStart` then persisted permanently.
+ *
+ * One boundary changed with the move onto {@link enteringRankAt}: a match
+ * sitting EXACTLY on `anchor.setAt` with nothing earlier on the track used to
+ * return the anchor verbatim, and now returns `anchor − its own ±%`. That is the
+ * honest reading — `../timeline competitiveComps` excludes a match at `setAt`
+ * with a strict `>`, so the anchor is a reading taken AFTER it — and it is
+ * reachable, because completing a placement run stamps `setAt` at the last match
+ * in the window. Pinned by `test/rankEntering.test.ts`.
  */
 export function rankEnteringMatch(
   games: GameRecord[],
