@@ -19,6 +19,17 @@ export interface TableOpts<T> {
   onRowClick?: (row: T) => void;
   /** Persist the sort choice under this prefs key (survives re-renders + restarts). */
   persistSortAs?: 'heroSort';
+  /**
+   * Take over sorting. When supplied, a header click reports the new key and
+   * direction instead of re-ordering `rows`, and the table does NOT redraw — the
+   * caller fetches an ordered page and re-renders, so the header arrow and the
+   * rows always change together.
+   *
+   * Required whenever `rows` is a CAPPED page: sorting a page locally would
+   * quietly mean "the top N by the previous key, re-ordered" while the header
+   * claims the page is sorted by the new one.
+   */
+  onSort?: (sort: { key: string; dir: 1 | -1 }) => void;
 }
 
 export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
@@ -32,7 +43,9 @@ export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
   };
 
   function draw(): void {
-    const rows = [...opts.rows].sort((a, b) => {
+    // With `onSort`, the caller owns the order — `rows` arrives already sorted
+    // (and possibly capped), so re-sorting here would reorder only the page.
+    const rows = opts.onSort ? [...opts.rows] : [...opts.rows].sort((a, b) => {
       const va = sortVal(a, sort.key), vb = sortVal(b, sort.key);
       if (va < vb) return sort.dir;
       if (va > vb) return -sort.dir;
@@ -49,7 +62,10 @@ export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
           th.addEventListener('click', () => {
             sort = { key: c.key, dir: sort.key === c.key ? (-sort.dir as 1 | -1) : -1 };
             if (opts.persistSortAs) prefs.set(opts.persistSortAs, sort);
-            draw();
+            // Deliberately no local redraw here: the caller re-renders with the
+            // newly-ordered page, so the arrow can never move without the rows.
+            if (opts.onSort) opts.onSort(sort);
+            else draw();
           });
         } else {
           th.style.cursor = 'default';

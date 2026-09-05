@@ -196,6 +196,7 @@ export const VIEW_TITLES: Record<ViewId, string> = {
   review: 'Review',
   matches: 'Matches',
   matchDetail: 'the match',
+  players: 'Players',
   playerHistory: 'the player',
   targetDetail: 'the target',
   maps: 'Maps',

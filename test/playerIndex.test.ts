@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { playerHistory, playerMatchHistory, playerRecords } from '../src/core/playerIndex';
+import {
+  PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerHistory, playerMatchHistory,
+  playerRecords, selectPlayers,
+} from '../src/core/playerIndex';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, RosterPlayer } from '../src/core/model';
 import type { EnteringRank } from '../src/core/rank';
+import type { PlayerListQuery, PlayerListRow, PlayerSortKey } from '../src/shared/contract';
 
 let seq = 0;
 function game(p: Partial<GameRecord> & { result: Result }): GameRecord {
@@ -359,5 +363,207 @@ describe('playerRecords', () => {
     expect(batched.sameTeam).toEqual(single.sameTeam);
     expect(batched.enemyTeam).toEqual(single.enemyTeam);
     expect(batched.encounters).toBe(single.encounters);
+  });
+});
+
+describe('playerDirectory', () => {
+  it('aggregates every player met, one encounter per game, newest name preferred', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 3000, roster: [meT(0), them('Nova#11214', 0), them('Vex#2321', 1)] }),
+      game({ result: 'Loss', timestamp: 5000, roster: [meT(1), them('Nova#11214', 0)] }),
+      // The same person in two slots must still count as ONE shared game.
+      game({ result: 'Win', timestamp: 6000, roster: [meT(0), them('Vex#2321', 0), them('vex', 0)] }),
+    ];
+    const d = playerDirectory(all);
+    // Both have 2 games, so the tie-break is most-recent-first.
+    expect(d.players.map((p) => p.name)).toEqual(['Vex#2321', 'Nova#11214']);
+    expect(d.players[0]).toMatchObject({ games: 2, lastSeen: 6000 });
+    expect(d.players[1]).toMatchObject({ games: 2, lastSeen: 5000 });
+    expect(d.scannedGames).toBe(3);
+    expect(d.gamesWithRoster).toBe(3);
+  });
+
+  it('splits the record by team relation, and leaves it empty when teams are unreported', () => {
+    const all = [
+      game({ result: 'Win', roster: [meT(0), them('Nova#11214', 0)] }),
+      game({ result: 'Loss', roster: [meT(0), them('Nova#11214', 1)] }),
+      game({ result: 'Win', roster: [me, other('Nova#11214')] }), // no teams
+    ];
+    const row = playerDirectory(all).players[0];
+    expect(row.games).toBe(3);
+    expect(row.sameTeam).toEqual({ wins: 1, losses: 0 });
+    expect(row.enemyTeam).toEqual({ wins: 0, losses: 1 });
+  });
+
+  it('never lists the tracked player', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), them('Nova#11214', 0)] })];
+    expect(playerDirectory(all).players.map((p) => p.name)).toEqual(['Nova#11214']);
+  });
+
+  it('reports how many games carried a roster, so an empty screen can say why', () => {
+    const all = [game({ result: 'Win' }), game({ result: 'Win', roster: [meT(0), them('Nova#11214', 0)] })];
+    const d = playerDirectory(all);
+    expect(d.scannedGames).toBe(2);
+    expect(d.gamesWithRoster).toBe(1);
+  });
+
+  it('flags a row where the name-before-# merge folded two real tags together', () => {
+    const all = [
+      game({ result: 'Win', roster: [meT(0), them('Nova#1111', 0)] }),
+      game({ result: 'Win', roster: [meT(0), them('Nova#2222', 0)] }),
+      game({ result: 'Win', roster: [meT(0), them('Vex#2321', 0)] }),
+    ];
+    const byName = new Map(playerDirectory(all).players.map((p) => [p.name, p]));
+    // Documented limit, not a bug — but the row says it may be two people.
+    expect(byName.get('Nova#1111')!.games).toBe(2);
+    expect(byName.get('Nova#1111')!.ambiguous).toBe(true);
+    expect(byName.get('Vex#2321')!.ambiguous).toBe(false);
+  });
+
+  it('does not treat a bare name plus its own tag as ambiguous', () => {
+    const all = [
+      game({ result: 'Win', roster: [meT(0), them('nova', 0)] }),
+      game({ result: 'Win', roster: [meT(0), them('Nova#1111', 0)] }),
+    ];
+    const row = playerDirectory(all).players[0];
+    expect(row.name).toBe('Nova#1111');
+    expect(row.ambiguous).toBe(false);
+  });
+
+  it('orders by games desc, then last seen, then key — deterministically', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 1000, roster: [meT(0), them('Bravo#2', 0)] }),
+      game({ result: 'Win', timestamp: 2000, roster: [meT(0), them('Alpha#1', 0)] }),
+      game({ result: 'Win', timestamp: 3000, roster: [meT(0), them('Alpha#1', 0)] }),
+    ];
+    expect(playerDirectory(all).players.map((p) => p.name)).toEqual(['Alpha#1', 'Bravo#2']);
+    // Same input twice → same order (codepoint compare, no localeCompare).
+    expect(playerDirectory(all).players).toEqual(playerDirectory(all).players);
+  });
+
+  it('walks the history exactly once', () => {
+    let reads = 0;
+    const games: GameRecord[] = [];
+    for (let i = 0; i < 500; i++) {
+      const g = game({ result: 'Win', timestamp: i * 1000 });
+      const roster = [meT(0), them(`P${i % 40}#1`, i % 2)];
+      Object.defineProperty(g, 'roster', { get() { reads++; return roster; } });
+      games.push(g);
+    }
+    playerDirectory(games);
+    // The loop reads `roster` twice per game (the length guard, then the walk);
+    // what matters is that it is O(games), never O(games x players).
+    expect(reads).toBeLessThanOrEqual(1500);
+  });
+
+  it('agrees with playerRecords on the same fixture', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 2000, roster: [meT(0), them('Nova#11214', 0)] }),
+      game({ result: 'Loss', timestamp: 3000, roster: [meT(0), them('Nova#11214', 1)] }),
+      game({ result: 'Draw', timestamp: 4000, roster: [meT(0), them('Nova#11214', 0)] }),
+    ];
+    const row = playerDirectory(all).players[0];
+    const rec = playerRecords(all, ['Nova#11214'])[0];
+    expect(row.sameTeam).toEqual(rec.sameTeam);
+    expect(row.enemyTeam).toEqual(rec.enemyTeam);
+    expect(row.lastSeen).toEqual(rec.lastSeen);
+    expect(row.games).toBe(rec.encounters);
+  });
+
+  it('returns nothing for an empty history without throwing', () => {
+    expect(playerDirectory([])).toEqual({ players: [], scannedGames: 0, gamesWithRoster: 0 });
+  });
+});
+
+describe('selectPlayers / normalizePlayerSelection', () => {
+  const row = (over: Partial<PlayerListRow>): PlayerListRow => ({
+    key: 'nova', name: 'Nova#1111', games: 1, lastSeen: 1000,
+    sameTeam: { wins: 0, losses: 0 }, enemyTeam: { wins: 0, losses: 0 }, ambiguous: false, ...over,
+  });
+  const sel = (over: Partial<PlayerListQuery> = {}) => normalizePlayerSelection({ filters: {}, ...over });
+
+  it('defaults to most shared games first', () => {
+    const players = [row({ key: 'a', name: 'A#1', games: 2 }), row({ key: 'b', name: 'B#1', games: 9 })];
+    expect(selectPlayers(players, sel()).rows.map((p) => p.name)).toEqual(['B#1', 'A#1']);
+  });
+
+  it('caps AFTER sorting, and reports the uncapped total', () => {
+    const players = Array.from({ length: 500 }, (_, i) => row({ key: `p${i}`, name: `P${i}#1`, games: i + 1 }));
+    const out = selectPlayers(players, sel());
+    expect(out.rows).toHaveLength(PLAYER_ROW_CAP);
+    expect(out.matched).toBe(500);
+    // The top of the sorted set, not the top of an arbitrary page.
+    expect(out.rows[0].games).toBe(500);
+  });
+
+  // The whole reason sorting happens on main: sorting a capped page would give
+  // "the 200 most-played, re-ordered by date" while claiming to be "most recent".
+  it('sorting by last seen returns the genuinely most recent, not a re-ordered page', () => {
+    const players = [
+      ...Array.from({ length: 400 }, (_, i) => row({ key: `old${i}`, name: `Old${i}#1`, games: 40, lastSeen: 1000 })),
+      row({ key: 'fresh', name: 'Fresh#1', games: 1, lastSeen: 9_999_999 }),
+    ];
+    const out = selectPlayers(players, sel({ sort: 'lastSeen' }));
+    expect(out.rows[0].name).toBe('Fresh#1');
+  });
+
+  it('searches the identity and the displayed tag, case-insensitively', () => {
+    const players = [row({ key: 'nova', name: 'Nova#1111' }), row({ key: 'vex', name: 'Vex#2321' })];
+    expect(selectPlayers(players, sel({ search: 'nov' })).rows.map((p) => p.name)).toEqual(['Nova#1111']);
+    expect(selectPlayers(players, sel({ search: 'NOVA' })).rows).toHaveLength(1);
+    // A discriminator degrades to the identity — the row IS the merged Nova.
+    expect(selectPlayers(players, sel({ search: 'nova#2222' })).rows).toHaveLength(1);
+    // ...while the raw query can still discriminate against the displayed tag.
+    expect(selectPlayers(players, sel({ search: '#11' })).rows.map((p) => p.name)).toEqual(['Nova#1111']);
+    expect(selectPlayers(players, sel({ search: 'nobody' })))
+      .toEqual({ rows: [], matched: 0 });
+    expect(selectPlayers(players, sel({ search: '   ' })).rows).toHaveLength(2);
+  });
+
+  it('search filters but never re-ranks — the chosen column still orders', () => {
+    const players = [
+      row({ key: 'nova1', name: 'Nova#1', games: 2 }),
+      row({ key: 'nova2', name: 'Novaa#2', games: 9 }),
+    ];
+    expect(selectPlayers(players, sel({ search: 'nova' })).rows.map((p) => p.games)).toEqual([9, 2]);
+  });
+
+  it('applies the minimum-games floor and reflects it in the total', () => {
+    const players = [row({ key: 'a', name: 'A#1', games: 1 }), row({ key: 'b', name: 'B#1', games: 7 })];
+    const out = selectPlayers(players, sel({ minGames: 5 }));
+    expect(out.rows.map((p) => p.name)).toEqual(['B#1']);
+    expect(out.matched).toBe(1);
+  });
+
+  it('sinks players with no decided games in BOTH sort directions', () => {
+    const players = [
+      row({ key: 'none', name: 'None#1', games: 5 }),
+      row({ key: 'good', name: 'Good#1', games: 5, sameTeam: { wins: 5, losses: 0 } }),
+      row({ key: 'bad', name: 'Bad#1', games: 5, sameTeam: { wins: 0, losses: 5 } }),
+    ];
+    for (const dir of [1, -1] as const) {
+      const names = selectPlayers(players, sel({ sort: 'with', dir })).rows.map((p) => p.name);
+      expect(names[names.length - 1], `dir ${dir}`).toBe('None#1');
+    }
+  });
+
+  it('normalizes hostile input rather than trusting the wire', () => {
+    expect(normalizePlayerSelection(undefined)).toEqual({
+      search: '', minGames: 1, sort: 'games', dir: -1, limit: PLAYER_ROW_CAP,
+    });
+    expect(sel({ sort: 'nonsense' as PlayerSortKey }).sort).toBe('games');
+    expect(sel({ dir: 3 as 1 }).dir).toBe(-1);
+    expect(sel({ minGames: Number('abc') }).minGames).toBe(1);
+    expect(sel({ minGames: -5 }).minGames).toBe(1);
+    expect(sel({ minGames: 2.7 }).minGames).toBe(2);
+    expect(sel({ search: 'x'.repeat(10_000) }).search).toHaveLength(64);
+    expect(sel({ search: 42 as unknown as string }).search).toBe('');
+  });
+
+  it('does not mutate the directory it selects from', () => {
+    const players = [row({ key: 'a', name: 'A#1', games: 1 }), row({ key: 'b', name: 'B#1', games: 9 })];
+    const order = players.map((p) => p.name);
+    selectPlayers(players, sel({ sort: 'lastSeen' }));
+    expect(players.map((p) => p.name)).toEqual(order);
   });
 });

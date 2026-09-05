@@ -68,7 +68,7 @@ function sameHeroes(a: string[], b: string[]): boolean {
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes, account
    *  management (relabel/delete), per-match delete, and the pending-store read. */
-  history: Pick<HistoryStore, 'count' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
+  history: Pick<HistoryStore, 'count' | 'revision' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -189,6 +189,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     // Sample games fill an empty history ONLY when the user opted into demo mode;
     // a fresh-start user sees nothing until they track real matches.
     games: () => (deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : []),
+    historyRevision: () => deps.history.revision(),
     isSample: () => effectiveDemo(demoPref(), deps.history.count()),
     demoContext: () => ({
       active: effectiveDemo(demoPref(), deps.history.count()),

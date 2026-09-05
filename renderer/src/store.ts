@@ -20,6 +20,7 @@ export type ViewId =
   | 'review'
   | 'matches'
   | 'matchDetail'
+  | 'players'
   | 'playerHistory'
   | 'targetDetail'
   | 'maps'
@@ -79,18 +80,33 @@ type Listener = (state: AppState) => void;
 export const FILTER_DEFAULTS: Required<DashboardFilters> = { account: 'all', role: 'all', days: 30 };
 const STORAGE_KEY = 'vantageFilters';
 
-/** Parameterized drill-downs persist their parent list for relaunch restore. */
-const DETAIL_PARENT: Partial<Record<ViewId, ViewId>> = {
+/**
+ * Parameterized drill-downs persist their parent list for relaunch restore, and
+ * this is also the single source of the sidebar's "which nav item is active"
+ * mapping — expressing the parenting once rather than in two hand-written places.
+ */
+export const DETAIL_PARENT = {
   matchDetail: 'matches',
-  playerHistory: 'matches',
+  playerHistory: 'players',
   targetDetail: 'targets',
+} as const satisfies Record<string, ViewId>;
+
+/**
+ * Every restorable (non-detail) view, kept in sync by the COMPILER — a new
+ * top-level `ViewId` fails to build until it is listed here. The hand-written
+ * array this replaces was silent if forgotten, and forgetting it cost a screen
+ * its relaunch restore with no other symptom.
+ */
+const RESTORABLE: Record<Exclude<ViewId, keyof typeof DETAIL_PARENT>, true> = {
+  overview: true, live: true, review: true, matches: true, players: true, maps: true,
+  heroes: true, focus: true, mental: true, trends: true, readiness: true, targets: true,
+  notion: true, logs: true, settings: true, about: true, faq: true,
 };
 
 /** The last visited top-level view, restored on launch (never a detail page). */
 function initialView(): ViewId {
   const saved = prefs.get('view');
-  const valid: ViewId[] = ['overview', 'live', 'review', 'matches', 'maps', 'heroes', 'focus', 'mental', 'trends', 'readiness', 'targets', 'notion', 'logs', 'settings', 'about', 'faq'];
-  return valid.includes(saved as ViewId) ? (saved as ViewId) : 'overview';
+  return saved != null && saved in RESTORABLE ? (saved as ViewId) : 'overview';
 }
 
 class Store {
@@ -141,7 +157,7 @@ class Store {
    */
   private commitView(view: ViewId, params: ViewParams): void {
     // Detail pages restore to their parent list on relaunch.
-    prefs.set('view', DETAIL_PARENT[view] ?? view);
+    prefs.set('view', DETAIL_PARENT[view as keyof typeof DETAIL_PARENT] ?? view);
     this.patch({ view, params });
   }
 

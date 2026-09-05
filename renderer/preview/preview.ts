@@ -13,7 +13,7 @@ import type {
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
   PlacementOffer, LiveMatchPayload,
-  GradingSettings, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
+  GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import { activeMeasuredTargets, type AuthoredTarget } from '../../src/core/targets';
@@ -26,7 +26,10 @@ import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../sr
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { roleOfHero } from '../../src/core/heroes';
 import { matchDetail, orderScoreboard } from '../../src/core/matchDetail';
-import { playerMatchHistory, playerRecords } from '../../src/core/playerIndex';
+import {
+  PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerMatchHistory, playerRecords,
+  selectPlayers,
+} from '../../src/core/playerIndex';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -450,6 +453,42 @@ const mock: OwStatsApi = {
       }));
   },
   playerRecords: async (names: string[]) => playerRecords(dataset(), names),
+  playerList: async (query: PlayerListQuery) => {
+    const sel = normalizePlayerSelection(query);
+    const scope = { account: query?.filters?.account ?? 'all', role: query?.filters?.role ?? 'all', days: query?.filters?.days ?? 30 };
+    const games = applyFilters(
+      dataset().filter((g) => isCompetitive(g.gameType)),
+      scope,
+      effectiveMasterData().seasons.map((s) => s.start),
+    );
+    const dir = playerDirectory(games);
+    // The demo roster pool is ~20 names, so nothing here can exercise the row
+    // cap, its caption, or the empty states. `?players=N` pads the aggregate
+    // with synthetic rows so those are reachable by hand. Preview-only — this
+    // file never ships.
+    const pad = Number(new URLSearchParams(location.search).get('players'));
+    if (Number.isFinite(pad) && pad > dir.players.length) {
+      for (let i = dir.players.length; i < pad; i++) {
+        dir.players.push({
+          key: `synth${i}`, name: `Synthetic${i}#${1000 + i}`,
+          games: (i % 17) + 1, lastSeen: Date.now() - i * 60_000,
+          sameTeam: { wins: i % 5, losses: i % 3 }, enemyTeam: { wins: i % 4, losses: i % 6 },
+          ambiguous: i % 23 === 0,
+        });
+      }
+    }
+    const { rows, matched } = selectPlayers(dir.players, sel);
+    return {
+      rows, matched,
+      totalInScope: dir.players.length,
+      cap: PLAYER_ROW_CAP,
+      scannedGames: dir.scannedGames,
+      gamesWithRoster: dir.gamesWithRoster,
+      sort: sel.sort, dir: sel.dir,
+      appliedSearch: sel.search, appliedMinGames: sel.minGames,
+      scope,
+    };
+  },
   onLiveMatch: (cb: (p: LiveMatchPayload) => void) => {
     liveMatchListeners.add(cb);
     return () => liveMatchListeners.delete(cb);

@@ -11,6 +11,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
+import type { PlayerList, PlayerListQuery } from './players';
 import type { LiveMatchPayload } from './liveMatch';
 import type {
   ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress,
@@ -50,6 +51,16 @@ export interface OwStatsApi {
    * shared match are absent from the result.
    */
   playerRecords(names: string[]): Promise<PlayerRecord[]>;
+  /**
+   * The Players screen list: everyone met inside the filter bar's scope,
+   * name-searched, floored by a minimum-games chip, then sorted and CAPPED on
+   * main — so the renderer never re-sorts a capped page. Carries the uncapped
+   * `matched`/`totalInScope` counts and an echo of what was applied.
+   *
+   * Filter-SCOPED, in deliberate contrast to {@link OwStatsApi.playerHistory},
+   * which stays a complete all-time record for one player.
+   */
+  playerList(query: PlayerListQuery): Promise<PlayerList>;
   exportNotion(filters: DashboardFilters): Promise<ExportResult>;
   notionStatus(): Promise<NotionStatus>;
   setNotionToken(token: string): Promise<NotionStatus>;
@@ -338,6 +349,7 @@ export const IPC_CHANNELS = {
   heroDetail: 'dashboard:hero-detail',
   matchDetail: 'dashboard:match-detail',
   playerHistory: 'dashboard:player-history',
+  playerList: 'dashboard:player-list',
   playerRecords: 'dashboard:player-records',
   exportNotion: 'dashboard:export-notion',
   notionStatus: 'notion:status',

@@ -464,3 +464,41 @@ describe('HistoryStore (SQLite) — mergeImported', () => {
     expect(h.all().find((x) => x.matchId === 'b')?.review?.grades).toEqual({ 't-1': 'hit' });
   });
 });
+
+describe('HistoryStore (SQLite) — revision()', () => {
+  it('changes on every write and stays stable across pure reads', () => {
+    const h = open(tmp());
+    const start = h.revision();
+    // Reads must not move it, or the Players memo would re-walk on every call.
+    h.all();
+    h.count();
+    expect(h.revision()).toBe(start);
+
+    h.add(g({ matchId: 'a' }));
+    const afterAdd = h.revision();
+    expect(afterAdd).not.toBe(start);
+
+    h.editManual('a', { srDelta: 21 });
+    const afterEdit = h.revision();
+    expect(afterEdit).not.toBe(afterAdd);
+
+    h.setReview('a', { grades: {}, flags: {} });
+    const afterReview = h.revision();
+    expect(afterReview).not.toBe(afterEdit);
+
+    h.deleteMatch('a');
+    expect(h.revision()).not.toBe(afterReview);
+  });
+
+  it('never repeats a revision across two stores at the same change count', () => {
+    // Two stores over different folders each start at zero changes; without the
+    // per-open sequence they would report the same string and a memo keyed on it
+    // could serve one store's page for the other (the data-folder repoint path).
+    const a = open(tmp());
+    const b = open(tmp());
+    expect(a.revision()).not.toBe(b.revision());
+    a.add(g({ matchId: 'x' }));
+    b.add(g({ matchId: 'x' }));
+    expect(a.revision()).not.toBe(b.revision());
+  });
+});

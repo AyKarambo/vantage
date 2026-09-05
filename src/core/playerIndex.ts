@@ -5,7 +5,8 @@ import { roleOfHero } from './heroes';
 import { resolveRole } from './resolvers/role';
 import type { EnteringRank } from './rank';
 import type {
-  PlayerEncounter, PlayerMatchHistory, PlayerRecord, PlayerSharedMatch, SharedMatchRank,
+  PlayerEncounter, PlayerListQuery, PlayerListRow, PlayerMatchHistory, PlayerRecord,
+  PlayerSharedMatch, PlayerSortKey, SharedMatchRank,
 } from '../shared/contract';
 
 /**
@@ -231,4 +232,188 @@ export function playerRecords(all: GameRecord[], names: readonly string[]): Play
   return [...wanted.values()]
     .filter((r) => r.encounters > 0)
     .sort((a, b) => b.encounters - a.encounters || b.lastSeen - a.lastSeen);
+}
+
+/**
+ * Max rows one Players page carries. Lives here, one function away from the
+ * `matched` count it truncates, so the two can never disagree — the same
+ * discipline as `dashboardData`'s ROW_CAP. Coupled to the fact that `dataTable`
+ * renders every row into the DOM with its own click listener and nothing in the
+ * renderer virtualizes.
+ */
+export const PLAYER_ROW_CAP = 200;
+
+export interface PlayerDirectory {
+  /** Every distinct player met, games desc → lastSeen desc → key asc. */
+  players: PlayerListRow[];
+  /** Games walked (already filter-scoped by the caller). */
+  scannedGames: number;
+  /** How many carried a usable roster — 0 means "no roster data at all". */
+  gamesWithRoster: number;
+}
+
+const defaultPlayerOrder = (a: PlayerListRow, b: PlayerListRow): number =>
+  b.games - a.games || b.lastSeen - a.lastSeen || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+
+/**
+ * Every player met across `games`, aggregated in ONE pass — the Players screen.
+ *
+ * Deliberately takes no query, floor, sort or cap: those change per keystroke
+ * and per header click, and keying the walk on them is exactly what would stop
+ * it being memoizable at the edge. Scope is the CALLER's job — hand it a
+ * filtered slice and it aggregates that slice; filter resolution stays at the
+ * edge (guardrail 3).
+ *
+ * The accumulation is duplicated from {@link playerRecords} rather than
+ * extracted: that function runs on every live roster tick and is not worth
+ * disturbing for this. The "agrees with playerRecords" unit test is what keeps
+ * the two in step.
+ */
+export function playerDirectory(games: readonly GameRecord[]): PlayerDirectory {
+  const rows = new Map<string, PlayerListRow>();
+  /** First full `#`-tag seen per key (lowercased) — drives `ambiguous`. */
+  const firstTag = new Map<string, string>();
+  let gamesWithRoster = 0;
+  for (const game of games) {
+    if (!game.roster?.length) continue;
+    gamesWithRoster += 1;
+    const local = game.roster.find((p) => p.isLocal);
+    const counted = new Set<string>(); // one encounter per game per player
+    for (const other of game.roster) {
+      if (other.isLocal) continue;
+      const key = nameKey(other);
+      if (!key || counted.has(key)) continue;
+      counted.add(key);
+      let row = rows.get(key);
+      if (!row) {
+        row = {
+          key,
+          name: displayName(other),
+          games: 0,
+          lastSeen: 0,
+          sameTeam: { wins: 0, losses: 0 },
+          enemyTeam: { wins: 0, losses: 0 },
+          ambiguous: false,
+        };
+        rows.set(key, row);
+      }
+      row.games += 1;
+      if (game.timestamp > row.lastSeen) row.lastSeen = game.timestamp;
+      const tag = other.battleTag?.trim();
+      if (tag?.includes('#')) {
+        const canon = tag.toLowerCase();
+        const seen = firstTag.get(key);
+        if (seen === undefined) {
+          firstTag.set(key, canon);
+          // First #-tag wins, so the displayed name is stable across reads.
+          if (!row.name.includes('#')) row.name = tag;
+        } else if (seen !== canon) {
+          // Two real tags folded into one row by the name-before-# merge.
+          row.ambiguous = true;
+        }
+      }
+      // Team relation only when the feed reported a team for BOTH rows —
+      // otherwise "with" and "vs" would be a guess (mirrors playerRecords).
+      if (local?.team == null || other.team == null) continue;
+      const side = other.team === local.team ? row.sameTeam : row.enemyTeam;
+      if (game.result === 'Win') side.wins += 1;
+      else if (game.result === 'Loss') side.losses += 1;
+    }
+  }
+  return {
+    players: [...rows.values()].sort(defaultPlayerOrder),
+    scannedGames: games.length,
+    gamesWithRoster,
+  };
+}
+
+export interface PlayerSelection {
+  search: string;
+  minGames: number;
+  sort: PlayerSortKey;
+  dir: 1 | -1;
+  limit: number;
+}
+
+/**
+ * Every sortable key → its numeric rank, or `null` when the row has no evidence
+ * for it. `name` sorts on text and is branched on first in {@link comparePlayers};
+ * its entry exists so this record stays exhaustive over `PlayerSortKey` and can
+ * double as the untrusted-key guard in {@link normalizePlayerSelection}.
+ */
+const RANKERS: Record<PlayerSortKey, (r: PlayerListRow) => number | null> = {
+  name: () => 0,
+  games: (r) => r.games,
+  with: (r) => winrateOf(r.sameTeam),
+  vs: (r) => winrateOf(r.enemyTeam),
+  lastSeen: (r) => r.lastSeen,
+};
+
+/**
+ * Winrate, or null when nothing was decided — never 0, which would let a player
+ * you have no decided games with top a "best record together" sort.
+ */
+function winrateOf(w: { wins: number; losses: number }): number | null {
+  const n = w.wins + w.losses;
+  return n ? w.wins / n : null;
+}
+
+/** Total and locale-free, so the cap always cuts at the same row. */
+const tieBreak = (a: PlayerListRow, b: PlayerListRow): number =>
+  b.games - a.games || b.lastSeen - a.lastSeen || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+
+/** `dir: 1` = ascending (the ↑ header indicator), `-1` = descending. */
+function comparePlayers(a: PlayerListRow, b: PlayerListRow, sort: PlayerSortKey, dir: 1 | -1): number {
+  if (sort === 'name') {
+    const na = a.name.toLowerCase();
+    const nb = b.name.toLowerCase();
+    return na === nb ? tieBreak(a, b) : na < nb ? -dir : dir;
+  }
+  const ra = RANKERS[sort](a);
+  const rb = RANKERS[sort](b);
+  if (ra === null || rb === null) {
+    // Unknown sinks in BOTH directions — a player you have no decided games
+    // with has no record together, and must never lead either ordering.
+    return ra === rb ? tieBreak(a, b) : ra === null ? 1 : -1;
+  }
+  return ra === rb ? tieBreak(a, b) : ra < rb ? -dir : dir;
+}
+
+/** Untrusted IPC args in → a selection that cannot misbehave. */
+export function normalizePlayerSelection(q: PlayerListQuery | undefined): PlayerSelection {
+  const raw = typeof q?.search === 'string' ? q.search : '';
+  const min = Number(q?.minGames);
+  return {
+    search: raw.trim().toLowerCase().slice(0, 64),
+    minGames: Number.isFinite(min) ? Math.max(1, Math.trunc(min)) : 1,
+    sort: q?.sort != null && q.sort in RANKERS ? q.sort : 'games',
+    dir: q?.dir === 1 ? 1 : -1,
+    limit: PLAYER_ROW_CAP,
+  };
+}
+
+/**
+ * Filter → sort → cap. `matched` is taken from the SAME array the slice comes
+ * from, one line apart, so a page and its denominator cannot disagree. Never
+ * mutates `players` (it is the memoized aggregate).
+ *
+ * Sorting happens HERE, over the whole matched set, and only then is the page
+ * cut. Sorting a capped page instead would silently mean "the top 200 by games,
+ * re-ordered" while claiming to be "the 200 most recent".
+ */
+export function selectPlayers(
+  players: readonly PlayerListRow[],
+  sel: PlayerSelection,
+): { rows: PlayerListRow[]; matched: number } {
+  const q = sel.search;
+  // The identity form of the query, so typing a discriminator degrades to the
+  // base name — correct, since the index merges Nova#1111 with Nova#2222 into
+  // one row. The raw query still matches the displayed tag, so `#11` can still
+  // discriminate.
+  const qKey = q ? battleTagName(q) : '';
+  const matches = players.filter((p) =>
+    p.games >= sel.minGames
+    && (!q || (qKey !== '' && p.key.includes(qKey)) || p.name.toLowerCase().includes(q)));
+  matches.sort((a, b) => comparePlayers(a, b, sel.sort, sel.dir));
+  return { rows: matches.slice(0, sel.limit), matched: matches.length };
 }

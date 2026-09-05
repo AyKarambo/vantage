@@ -45,6 +45,8 @@ export type {
 
 // Match drill-down payloads
 export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, SharedMatchRank, PlayerMatchHistory, PlayerRecord, MatchDetail } from './matchDetail';
+// Players screen (the filter-scoped player directory).
+export type { PlayerSortKey, PlayerListRow, PlayerListQuery, PlayerList } from './players';
 export type { LiveMatchPayload, LiveKillEntry } from './liveMatch';
 
 // Notion export/import payloads

@@ -1,14 +1,18 @@
 import { heroDetail, type GameRecord } from '../../core/analytics';
 import { matchDetail } from '../../core/matchDetail';
 import { activeMeasuredTargets } from '../../core/targets';
-import { playerMatchHistory, playerRecords } from '../../core/playerIndex';
+import {
+  PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerMatchHistory, playerRecords,
+  selectPlayers, type PlayerDirectory,
+} from '../../core/playerIndex';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
 import { enteringRanks, rankKey } from '../../core/rank';
 import type {
-  DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerMatchHistory, PlayerRecord,
+  DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerList, PlayerListQuery,
+  PlayerMatchHistory, PlayerRecord,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 
@@ -184,4 +188,90 @@ export function playerRecordsRead(
   names: string[],
 ): PlayerRecord[] {
   return playerRecords(competitiveOnly(provider.games()), names);
+}
+
+/**
+ * The aggregated directory for ONE (history revision, filter scope, minute).
+ * Single-entry and module-level on purpose: only the scope the user is looking
+ * at is worth holding, and it retains the AGGREGATE only — never parsed games.
+ *
+ * This memo is load-bearing, not an optimization. `provider.games()` re-reads the
+ * games table and JSON.parses every row's blob synchronously on the main process.
+ * A debounced search plus header clicks would be several such reads per second
+ * on a large history, which would starve the GEP feed. With the memo, only a
+ * filter change (or a write, or a new minute) pays for a walk; every keystroke
+ * and header click is a filter+sort over an in-memory array.
+ */
+let directoryMemo: { key: string; dir: PlayerDirectory } | null = null;
+
+/** Drop the memo. For tests only — module state outlives a vitest case. */
+export function resetPlayerDirectoryMemo(): void {
+  directoryMemo = null;
+}
+
+/** Defensive default only: the renderer always sends a fully-populated filter
+ *  set. Mirrors the renderer's FILTER_DEFAULTS. */
+function normalizeScope(f: DashboardFilters | undefined): Required<DashboardFilters> {
+  return { account: f?.account ?? 'all', role: f?.role ?? 'all', days: f?.days ?? 30 };
+}
+
+function directoryKey(provider: DataProvider, scope: Required<DashboardFilters>): string {
+  // `days` must be keyed through a canonical string — every `{ season }` object
+  // stringifies to '[object Object]', which would make two different seasons
+  // share one cache entry (the same trap `daysToValue` avoids in the filter bar).
+  const days = typeof scope.days === 'object' ? `s:${scope.days.season}` : String(scope.days);
+  // The minute bucket is load-bearing: `days: 7 | 30` is a ROLLING window
+  // recomputed from `Date.now()` on every call, so a key with no time term would
+  // pin the list to whatever "last 30 days" meant when the memo was filled. One
+  // forced re-walk per minute of active use. `seasonStarts` is in the key because
+  // a master-data season edit moves a `{ season }` window without touching the
+  // history DB's change counter.
+  return [
+    provider.historyRevision(), scope.account, scope.role, days,
+    seasonStarts(provider).join('.'), Math.floor(Date.now() / 60_000),
+  ].join('|');
+}
+
+function memoizedDirectory(provider: DataProvider, scope: Required<DashboardFilters>): PlayerDirectory {
+  // Demo data is a generated season — walking it is free, and skipping the memo
+  // removes the whole "did the sample set change?" question.
+  if (provider.isSample()) return playerDirectory(filteredCompetitiveGames(provider, scope));
+  const key = directoryKey(provider, scope);
+  if (directoryMemo?.key === key) return directoryMemo.dir;
+  const dir = playerDirectory(filteredCompetitiveGames(provider, scope));
+  directoryMemo = { key, dir };
+  return dir;
+}
+
+/**
+ * The Players screen list, over the filter-scoped competitive history.
+ *
+ * Deliberately the mirror image of {@link playerHistoryRead}: THIS is scoped by
+ * the filter bar (it answers "who did I meet in this range?"), while the
+ * per-player drill-down behind it is not (it answers "what is my complete record
+ * with this person?"). Both facts are stated on their own screens, because the
+ * two counts legitimately differ.
+ *
+ * The query arrives over IPC, so it is normalized in core before use;
+ * `filteredCompetitiveGames` — the one place account/role/season resolve — is
+ * what keeps this composition short.
+ */
+export function playerListRead(provider: DataProvider, query: PlayerListQuery | undefined): PlayerList {
+  const sel = normalizePlayerSelection(query);
+  const scope = normalizeScope(query?.filters);
+  const dir = memoizedDirectory(provider, scope);
+  const { rows, matched } = selectPlayers(dir.players, sel);
+  return {
+    rows,
+    matched,
+    totalInScope: dir.players.length,
+    cap: PLAYER_ROW_CAP,
+    scannedGames: dir.scannedGames,
+    gamesWithRoster: dir.gamesWithRoster,
+    sort: sel.sort,
+    dir: sel.dir,
+    appliedSearch: sel.search,
+    appliedMinGames: sel.minGames,
+    scope,
+  };
 }

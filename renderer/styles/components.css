@@ -1784,3 +1784,23 @@ table.data tbody tr:hover {
   display: flex;
   justify-content: flex-end;
 }
+
+/* In-view search box (the Players list). Deliberately not a filter-bar control:
+   its text is view-local, never a route param or a store filter. */
+.search-input {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 10px;
+  min-width: 190px;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.search-input::placeholder {
+  color: var(--muted-2);
+}

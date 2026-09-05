@@ -6,7 +6,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
-  AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput,
+  AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput, PlayerListQuery,
   MatchEditInput, RankAnchorInput, RankEntryPreviewInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementDeclineInput,
@@ -15,7 +15,7 @@ import type {
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
 import {
-  dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead, playerRecordsRead, filteredCompetitiveGames,
+  dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead, playerListRead, playerRecordsRead, filteredCompetitiveGames,
 } from './reads';
 
 /**
@@ -74,6 +74,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   );
   handle(ch.playerHistory, (_e, name: string) => playerHistoryRead(provider, name));
   handle(ch.playerRecords, (_e, names: string[]) => playerRecordsRead(provider, names));
+  handle(ch.playerList, (_e, query: PlayerListQuery) => playerListRead(provider, query));
 
   // Notion sync screen.
   handle(ch.notionStatus, () => provider.notionStatus());

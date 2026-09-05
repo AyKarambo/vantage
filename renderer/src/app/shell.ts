@@ -8,7 +8,7 @@ import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
 import type { DashboardData, GameLoggedPayload, GepStatusPayload, Role } from '../../../src/shared/contract';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
-import { statusText, store } from '../store';
+import { DETAIL_PARENT, statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
@@ -31,6 +31,7 @@ import { overview } from '../views/overview';
 import { live } from '../views/live';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
+import { players } from '../views/players';
 import { playerHistory } from '../views/playerHistory';
 import { maps } from '../views/maps';
 import { heroes } from '../views/heroes';
@@ -60,12 +61,13 @@ import { CHANGELOG } from '../generated/changelog';
 
 // matchDetail, playerHistory and targetDetail are parameterized views: registered
 // here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
-const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, matchDetail, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
+const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, matchDetail, players, playerHistory, targetDetail, maps, heroes, focus, mental, trends, readiness, targets, notion, logs: logViewer, settings, about, faq };
 
 /** Views that suppress the global filter bar — their data is account-agnostic
  *  (readiness tracks the player, not a per-account selection) or otherwise
  *  unaffected by it, so showing the bar would imply a control that does nothing.
- *  playerHistory is a cross-history drill-down over the full local index. faq
+ *  playerHistory is a cross-history drill-down over the full local index — the
+ *  all-time record under Players, whose own list IS filter-scoped. faq
  *  is static help copy, unaffected by any filter. */
 const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq', 'live']);
 
@@ -104,6 +106,30 @@ function goalFlagIcon(): SVGSVGElement {
   svg.appendChild(pennant);
   return svg;
 }
+/**
+ * The Players nav glyph: two overlapping head-and-shoulders marks. Drawn inline
+ * in `currentColor` like {@link goalFlagIcon} rather than picked from the text
+ * glyph set — every unused geometric candidate (⊚, ⊛, ◍) either collides with an
+ * existing icon at 15px or is not guaranteed in the bundled font.
+ */
+function peopleIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '15');
+  svg.setAttribute('height', '15');
+  svg.setAttribute('aria-hidden', 'true');
+  const back = document.createElementNS(SVG_NS, 'path');
+  back.setAttribute('d', 'M16.5 11a3 3 0 100-6 3 3 0 000 6zm0 1.6c-1 0-1.9.2-2.6.5 1.2.9 2 2.2 2.2 3.9H22v-1c0-2-2.5-3.4-5.5-3.4z');
+  back.setAttribute('fill', 'currentColor');
+  back.setAttribute('opacity', '0.55');
+  const front = document.createElementNS(SVG_NS, 'path');
+  front.setAttribute('d', 'M9 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm0 1.8c-3.3 0-7 1.7-7 3.9V19h14v-1.3c0-2.2-3.7-3.9-7-3.9z');
+  front.setAttribute('fill', 'currentColor');
+  svg.appendChild(back);
+  svg.appendChild(front);
+  return svg;
+}
+
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: 'Workspace',
@@ -112,6 +138,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'live', label: 'Live', icon: '◉' },
       { id: 'review', label: 'Review', icon: '⚑' },
       { id: 'matches', label: 'Matches', icon: '▤' },
+      { id: 'players', label: 'Players', icon: peopleIcon() },
       { id: 'maps', label: 'Maps', icon: '◇' },
       { id: 'heroes', label: 'Heroes', icon: '◍' },
     ],
@@ -551,9 +578,10 @@ export class App {
     // last snapshot (only those the snapshot still counts as pending).
     const gradedOverlap = d ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId)).length : 0;
     const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
-    // Parameterized views highlight their parent list in the sidebar.
-    const activeNav: ViewId = state.view === 'matchDetail' || state.view === 'playerHistory' ? 'matches'
-      : state.view === 'targetDetail' ? 'targets' : state.view;
+    // Parameterized views highlight their parent list in the sidebar. Read from
+    // DETAIL_PARENT rather than a second hand-written branch chain, so the
+    // parenting is expressed exactly once (it also drives relaunch restore).
+    const activeNav: ViewId = DETAIL_PARENT[state.view as keyof typeof DETAIL_PARENT] ?? state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews);
 
