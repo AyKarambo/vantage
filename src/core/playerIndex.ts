@@ -14,6 +14,12 @@ import type { PlayerEncounter, PlayerMatchHistory, PlayerRecord, PlayerSharedMat
  * tracked player, tolerates matches without rosters, and matches names
  * case-insensitively on the part before `#` (GEP sometimes drops the
  * discriminator). Sorted by most encounters, then most recent.
+ *
+ * `results` is the tracked player's COMBINED record across those games;
+ * `sameTeam`/`enemyTeam` split it by team relation, which is only knowable when
+ * the feed reported a team for both rows. The two splits therefore need not add
+ * up to `encounters` — `relationKnown` says how many games they cover, so a
+ * caller can tell "never on their team" from "never knew".
  */
 export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncounter[] {
   const targets = (match.roster ?? []).filter((p) => !p.isLocal && nameKey(p));
@@ -22,6 +28,7 @@ export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncou
   const found = new Map<string, PlayerEncounter>();
   for (const game of all) {
     if (game.matchId === match.matchId || !game.roster?.length) continue;
+    const local = game.roster.find((p) => p.isLocal);
     const seen = new Set<string>(); // count each shared match once per player
     for (const other of game.roster) {
       if (other.isLocal) continue;
@@ -35,6 +42,9 @@ export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncou
         encounters: 0,
         lastSeen: 0,
         results: { wins: 0, losses: 0 },
+        sameTeam: { wins: 0, losses: 0 },
+        enemyTeam: { wins: 0, losses: 0 },
+        relationKnown: 0,
       };
       entry.encounters += 1;
       entry.lastSeen = Math.max(entry.lastSeen, game.timestamp);
@@ -42,6 +52,15 @@ export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncou
       if (!entry.name.includes('#')) entry.name = displayName(other, entry.name);
       if (game.result === 'Win') entry.results!.wins += 1;
       else if (game.result === 'Loss') entry.results!.losses += 1;
+      // Team relation only when the feed reported a team for BOTH rows —
+      // otherwise "with" and "vs" would be a guess, and telling those apart is
+      // the entire point of the split (mirrors playerRecords).
+      if (local?.team != null && other.team != null) {
+        entry.relationKnown += 1;
+        const side = other.team === local.team ? entry.sameTeam : entry.enemyTeam;
+        if (game.result === 'Win') side.wins += 1;
+        else if (game.result === 'Loss') side.losses += 1;
+      }
       found.set(key, entry);
     }
   }

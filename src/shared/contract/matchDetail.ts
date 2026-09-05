@@ -40,6 +40,21 @@ export interface PlayerEncounter {
   lastSeen: number;
   /** The tracked player's results across those shared matches. */
   results?: { wins: number; losses: number };
+  /**
+   * W/L over prior matches where they were on YOUR team. Only games whose feed
+   * reported a team for both rows count, so this plus {@link enemyTeam} need not
+   * add up to {@link encounters} — see {@link relationKnown}.
+   */
+  sameTeam: { wins: number; losses: number };
+  /** W/L over prior matches where they were on the ENEMY team. */
+  enemyTeam: { wins: number; losses: number };
+  /**
+   * How many prior shared matches had a KNOWN team relation. Zero means the feed
+   * never reported both teams for this player, so the splits are empty because
+   * nothing is known — not because the record is 0W-0L. The UI must render `—`
+   * rather than zeroes in that case (guardrail 1: blanks, never inferences).
+   */
+  relationKnown: number;
 }
 
 /** One stored match the tracked player shared with a specific other player. */

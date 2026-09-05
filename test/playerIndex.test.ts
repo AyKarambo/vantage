@@ -80,6 +80,81 @@ describe('playerHistory', () => {
     const history = playerHistory([dup, target], target);
     expect(history[0].encounters).toBe(1);
   });
+
+  // The card used to render the COMBINED record under the word "together".
+  it('splits the record by team relation instead of repeating the combined one', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [meT(1), them('Nova#11214', 1)] });
+    const all = [
+      game({ result: 'Win', timestamp: 2000, roster: [meT(1), them('Nova#11214', 1)] }),
+      game({ result: 'Loss', timestamp: 3000, roster: [meT(1), them('Nova#11214', 1)] }),
+      game({ result: 'Win', timestamp: 4000, roster: [meT(1), them('Nova#11214', 2)] }),
+      target,
+    ];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.encounters).toBe(3);
+    expect(nova.relationKnown).toBe(3);
+    expect(nova.sameTeam).toEqual({ wins: 1, losses: 1 });
+    expect(nova.enemyTeam).toEqual({ wins: 1, losses: 0 });
+    // The combined record stays available and is deliberately NOT either split.
+    expect(nova.results).toEqual({ wins: 2, losses: 1 });
+  });
+
+  it('leaves both splits empty and relationKnown at 0 when the feed reported no teams', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [me, other('Nova#11214')] });
+    const all = [
+      game({ result: 'Win', timestamp: 2000, roster: [me, other('Nova#11214')] }),
+      game({ result: 'Loss', timestamp: 3000, roster: [me, other('Nova#11214')] }),
+      target,
+    ];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.encounters).toBe(2);
+    // Zero because nothing is KNOWN — the caller renders a dash, not 0W-0L.
+    expect(nova.relationKnown).toBe(0);
+    expect(nova.sameTeam).toEqual({ wins: 0, losses: 0 });
+    expect(nova.enemyTeam).toEqual({ wins: 0, losses: 0 });
+    expect(nova.results).toEqual({ wins: 1, losses: 1 });
+  });
+
+  it('counts a half-known history honestly: splits cover only the games with teams', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [meT(1), them('Nova#11214', 1)] });
+    const all = [
+      game({ result: 'Win', timestamp: 2000, roster: [meT(1), them('Nova#11214', 2)] }),
+      // No teams reported on this one.
+      game({ result: 'Win', timestamp: 3000, roster: [me, other('Nova#11214')] }),
+      target,
+    ];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.encounters).toBe(2);
+    expect(nova.relationKnown).toBe(1);
+    // Together + as-opponents deliberately does NOT equal encounters.
+    expect(nova.sameTeam).toEqual({ wins: 0, losses: 0 });
+    expect(nova.enemyTeam).toEqual({ wins: 1, losses: 0 });
+  });
+
+  it('moves neither split on a draw, but still counts the encounter', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [meT(1), them('Nova#11214', 1)] });
+    const all = [game({ result: 'Draw', timestamp: 2000, roster: [meT(1), them('Nova#11214', 1)] }), target];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.encounters).toBe(1);
+    expect(nova.relationKnown).toBe(1);
+    expect(nova.sameTeam).toEqual({ wins: 0, losses: 0 });
+    expect(nova.results).toEqual({ wins: 0, losses: 0 });
+  });
+
+  // The split must never disagree with the live board's numbers for the same pair.
+  it('agrees with playerRecords on the same fixture', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [meT(1), them('Nova#11214', 1)] });
+    const shared = [
+      game({ result: 'Win', timestamp: 2000, roster: [meT(1), them('Nova#11214', 1)] }),
+      game({ result: 'Loss', timestamp: 3000, roster: [meT(1), them('Nova#11214', 2)] }),
+    ];
+    const nova = playerHistory([...shared, target], target)[0];
+    // playerRecords sees the target match too, so compare over the same slice.
+    const rec = playerRecords(shared, ['Nova#11214'])[0];
+    expect(nova.sameTeam).toEqual(rec.sameTeam);
+    expect(nova.enemyTeam).toEqual(rec.enemyTeam);
+    expect(nova.encounters).toBe(rec.encounters);
+  });
 });
 
 const meT = (team: number): RosterPlayer => ({ battleTag: 'Karambo#21234', heroName: 'Tracer', team, isLocal: true });
