@@ -21,7 +21,8 @@
  */
 import type { PlacementRunSummary, Role } from '../../src/shared/contract';
 import { rankLabel } from './format';
-import { ROLE_SHORT, roleStatus, tierShort } from './roleStatus';
+import { shortRankLabelOf } from '../../src/core/rankDisplay';
+import { ROLE_SHORT, roleStatus } from './roleStatus';
 
 /** The unpinned scope's headline. */
 export const ALL_ACCOUNTS_LABEL = 'All accounts';
@@ -45,18 +46,30 @@ export interface SidebarChip {
   name: string;
   /** The avatar's single character. */
   glyph: string;
-  /** The rank sub-line beneath the name. */
+  /** The rank sub-line beneath the name — abbreviated to fit the 108px column. */
   sub: string;
+  /**
+   * The same line with FULL tier names, for the element's `title`. The sub-line
+   * is clamped to two lines and the tooltip is the escape hatch that clamp
+   * relies on, so it must not shrink along with the thing it exists to expand.
+   */
+  subFull: string;
 }
 
 /** What the chip says for a snapshot (or for none, before the first load). */
 export function sidebarChip(d: SidebarChipInput | null | undefined): SidebarChip {
-  if (!d) return { scope: 'none', name: 'Vantage', glyph: 'V', sub: '—' };
+  if (!d) return { scope: 'none', name: 'Vantage', glyph: 'V', sub: '—', subFull: '—' };
   if (d.filters.account !== 'all') {
     const name = d.filters.account;
-    return { scope: 'account', name, glyph: name.charAt(0).toUpperCase(), sub: rankLine(d) };
+    return {
+      scope: 'account', name, glyph: name.charAt(0).toUpperCase(),
+      sub: rankLine(d), subFull: rankLine(d, false),
+    };
   }
-  return { scope: 'all', name: ALL_ACCOUNTS_LABEL, glyph: ALL_ACCOUNTS_GLYPH, sub: allAccountsLine(d) };
+  return {
+    scope: 'all', name: ALL_ACCOUNTS_LABEL, glyph: ALL_ACCOUNTS_GLYPH,
+    sub: allAccountsLine(d), subFull: allAccountsLine(d, false),
+  };
 }
 
 /**
@@ -73,19 +86,23 @@ export function sidebarChip(d: SidebarChipInput | null | undefined): SidebarChip
  * during placements) — this shows `Placements N/10` (+ the latest prediction,
  * when one exists) instead, via the shared roleStatus/placementParts.
  */
-export function rankLine(d: SidebarChipInput): string {
+export function rankLine(d: SidebarChipInput, short = true): string {
   const r = d.primaryRank;
   if (r) {
     const openRun = d.placements.find((p) => p.account === r.account && p.role === r.role && !p.completed);
     // No `movement` passed through roleStatus's rankParts call — the sidebar
     // shows no arrow (that's the Overview KPI's job).
-    const status = roleStatus(r, openRun);
-    // Short role and tier labels (`Dmg · GM 4 · 16%`): the chip shares its row
-    // with the collapse toggle, and the long form wrapped to three lines. The
-    // full text lives in the manage-ranks modal and the switcher popover.
-    return `${ROLE_SHORT[r.role]} · ${status.text.replace(rankLabel(r.tier, r.division), `${tierShort(r.tier)} ${r.division}`)}`;
+    //
+    // `short` goes STRUCTURALLY into roleStatus rather than being applied to its
+    // output afterwards. This used to substring-replace the long label out of an
+    // already-composed string, with a needle rebuilt from `rankLabelOf` — so any
+    // change to that shape would have made the replace silently no-op and
+    // reverted the chip to long names, with nothing failing to say so.
+    const status = roleStatus(r, openRun, false, short);
+    return `${ROLE_SHORT[r.role]} · ${status.text}`;
   }
-  return `${tierShort(d.progression.tier)} ${d.progression.division} · ${Math.round(d.progression.progressPct)}%`;
+  const label = short ? shortRankLabelOf : rankLabel;
+  return `${label(d.progression.tier, d.progression.division)} · ${Math.round(d.progression.progressPct)}%`;
 }
 
 /**
@@ -93,8 +110,10 @@ export function rankLine(d: SidebarChipInput): string {
  * to, because the headline above it no longer names one. Without any rank to
  * attribute, a plain account count.
  */
-export function allAccountsLine(d: SidebarChipInput): string {
-  return d.primaryRank ? `${d.primaryRank.account} · ${rankLine(d)}` : accountCountLine(d.options.accounts.length);
+export function allAccountsLine(d: SidebarChipInput, short = true): string {
+  return d.primaryRank
+    ? `${d.primaryRank.account} · ${rankLine(d, short)}`
+    : accountCountLine(d.options.accounts.length);
 }
 
 /** `0 → "No accounts yet"`, `1 → "1 account"`, `n → "n accounts"`. */

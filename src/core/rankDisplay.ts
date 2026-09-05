@@ -9,6 +9,38 @@
 /** "Gold 3", "Master 2" — the tier + division label, one source of truth. */
 export const rankLabelOf = (tier: string, division: number): string => `${tier} ${division}`;
 
+/**
+ * Single-letter tier codes for the surfaces that genuinely have no room — the
+ * sidebar's 108px clamped column, the Overview KPI at 22px mono, the account
+ * switcher's ~168px status column, the Settings role chips and the Matches
+ * "Rank at start" column.
+ *
+ * `G` (Gold) and `GM` (Grandmaster) differ by one glyph, and `M` (Master) sits
+ * next to `GM` on the ladder, so a misread there is a plausible one-rung error
+ * rather than an obviously wrong one. That is a deliberate trade for the width;
+ * widening one pair is a one-line change here.
+ *
+ * DISPLAY ONLY. `rank/engine`'s `TIERS.indexOf` silently coerces an unrecognised
+ * tier to index 0 = Bronze, so a code reaching the anchor store would demote a
+ * Grandmaster to Bronze with no error. Never persist one, never compare one
+ * against `TIERS`, never parse one back.
+ */
+const TIER_CODE: Readonly<Record<string, string>> = {
+  Bronze: 'B', Silver: 'S', Gold: 'G', Platinum: 'P', Emerald: 'E',
+  Diamond: 'D', Master: 'M', Grandmaster: 'GM', Champion: 'C',
+};
+
+/** "Grandmaster" → "GM". An unknown tier passes through IN FULL, never mangled. */
+export const tierCodeOf = (tier: string): string => TIER_CODE[tier] ?? tier;
+
+/**
+ * "Gold", 3 → "G3". The division is glued to the code deliberately: it reads as
+ * one token, which is what lets it sit next to a role code (`Sup · S2`) without
+ * the two numbers competing.
+ */
+export const shortRankLabelOf = (tier: string, division: number): string =>
+  `${tierCodeOf(tier)}${division}`;
+
 /** A rank's anchor→now movement direction on the Overview KPI. */
 export type RankMovementDir = 'up' | 'down' | 'neutral';
 
@@ -43,6 +75,13 @@ export interface RankPartsInput {
    * arrow renders.
    */
   movement?: number;
+  /**
+   * Render the tier as a code ({@link shortRankLabelOf}) instead of its full
+   * name. Set by the SURFACE, not by the kind of string: the same rank reads
+   * `G3` in the sidebar and `Gold 3` on the match-detail card, because only one
+   * of those is short of room.
+   */
+  short?: boolean;
 }
 
 /** The structured pieces each rank surface composes; see {@link rankParts}. */
@@ -64,7 +103,7 @@ export interface RankParts {
  */
 export function rankParts(input: RankPartsInput): RankParts {
   const parts: RankParts = {
-    rankLabel: rankLabelOf(input.tier, input.division),
+    rankLabel: (input.short ? shortRankLabelOf : rankLabelOf)(input.tier, input.division),
     shield: input.protected,
     bufferPctText: `${Math.round(input.progressPct)}%`,
   };
@@ -112,12 +151,17 @@ export function placementParts(
   target: number,
   prediction?: { tier: string; division: number },
   awaitingRank = false,
+  short = false,
 ): PlacementParts {
   const parts: PlacementParts = { counter: `Placements ${counted}/${target}` };
   if (awaitingRank) {
     parts.awaitingLabel = 'confirm your rank';
   } else if (prediction) {
-    parts.predictionLabel = `${rankLabelOf(prediction.tier, prediction.division)} (predicted)`;
+    // The prediction is the app's LONGEST rank string and it lands in its
+    // TIGHTEST box (the sidebar's attributed placement line), so this is the one
+    // that has to shorten for that site to gain anything at all.
+    const label = short ? shortRankLabelOf : rankLabelOf;
+    parts.predictionLabel = `${label(prediction.tier, prediction.division)} (predicted)`;
   }
   return parts;
 }

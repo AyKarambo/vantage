@@ -17,6 +17,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Changed
+
+- **Ranks are written short where the screen is tight** — `G3`, `GM4`, `C2`, first letter plus the
+  division (`GM` for Grandmaster). You'll see it in the sidebar, the Rank tile on Overview, the
+  account switcher, the per-role chips in Settings, and the *Rank at start* column on Matches.
+  Everywhere with room to spare still says `Grandmaster 4` in full — the match detail, a player's
+  page, the manage-ranks dialog, and every rank picker — and the sidebar keeps the full name in its
+  tooltip. Replaces the older half-measure that only shortened Platinum, Grandmaster and Champion.
+
 ### Added
 
 - **A Players screen.** Everyone you've met, in one searchable list — sort by how often you've

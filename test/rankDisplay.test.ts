@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   rankParts, movementDirOf, rankLabelOf, placementParts, accountPlacementNote, RANK_MOVEMENT_NEUTRAL_THRESHOLD,
+  tierCodeOf, shortRankLabelOf,
 } from '../src/core/rankDisplay';
+import { TIERS } from '../src/core/rank/engine';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { GameRecord } from '../src/core/analytics';
 import type { Role } from '../src/core/model';
@@ -184,5 +186,51 @@ describe('accountRanks — per-account rank for the switcher popover', () => {
   it('is an empty map when no anchors exist at all', () => {
     const d = computeDashboard([g('Main')], { days: 'all' }, demo, {});
     expect(d.accountRanks).toEqual({});
+  });
+});
+
+describe('short rank labels', () => {
+  it('maps every tier on the ladder to a distinct code', () => {
+    expect(TIERS.map(tierCodeOf)).toEqual(['B', 'S', 'G', 'P', 'E', 'D', 'M', 'GM', 'C']);
+    // A future tier insertion must not silently collide with an existing code.
+    expect(new Set(TIERS.map(tierCodeOf)).size).toBe(TIERS.length);
+  });
+
+  it('passes an unknown tier through IN FULL rather than mangling it', () => {
+    // Display-only: `TIERS.indexOf` coerces an unrecognised tier to Bronze, so a
+    // half-abbreviated unknown reaching a lookup would be worse than a long one.
+    expect(tierCodeOf('Radiant')).toBe('Radiant');
+    expect(shortRankLabelOf('Radiant', 2)).toBe('Radiant2');
+  });
+
+  it('glues the division to the code', () => {
+    expect(shortRankLabelOf('Gold', 3)).toBe('G3');
+    expect(shortRankLabelOf('Grandmaster', 4)).toBe('GM4');
+    expect(shortRankLabelOf('Champion', 2)).toBe('C2');
+    expect(shortRankLabelOf('Bronze', 1)).toBe('B1');
+  });
+
+  it('rankParts renders long by default and short on request', () => {
+    const input = { tier: 'Grandmaster', division: 4, progressPct: 16, protected: false };
+    expect(rankParts(input).rankLabel).toBe('Grandmaster 4');
+    expect(rankParts({ ...input, short: true }).rankLabel).toBe('GM4');
+    // The other parts are untouched by the flag.
+    expect(rankParts({ ...input, short: true }).bufferPctText).toBe('16%');
+    expect(rankParts({ ...input, short: true }).shield).toBe(false);
+  });
+
+  it('placementParts shortens only the prediction', () => {
+    const p = placementParts(4, 10, { tier: 'Master', division: 5 }, false, true);
+    expect(p.predictionLabel).toBe('M5 (predicted)');
+    // The counter carries no tier, so it never changes shape.
+    expect(p.counter).toBe('Placements 4/10');
+    expect(placementParts(4, 10, { tier: 'Master', division: 5 }).predictionLabel)
+      .toBe('Master 5 (predicted)');
+  });
+
+  it('leaves the awaiting label alone in short mode', () => {
+    const p = placementParts(10, 10, { tier: 'Master', division: 5 }, true, true);
+    expect(p.awaitingLabel).toBe('confirm your rank');
+    expect(p.predictionLabel).toBeUndefined();
   });
 });

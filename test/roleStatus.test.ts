@@ -4,8 +4,9 @@ import {
   ROLE_SHORT,
   accountRoleSummary,
   roleStatus,
-  tierShort,
 } from '../renderer/src/roleStatus';
+import { tierCodeOf } from '../src/core/rankDisplay';
+import { TIERS } from '../src/core/rank/engine';
 import type { PlacementRunSummary, RankSummary } from '../src/shared/contract';
 
 /**
@@ -50,12 +51,13 @@ describe('roleStatus', () => {
   });
 });
 
-describe('tierShort', () => {
-  it('shortens only the tiers too long for a chip', () => {
-    expect(tierShort('Grandmaster')).toBe('GM');
-    expect(tierShort('Platinum')).toBe('Plat');
-    expect(tierShort('Champion')).toBe('Champ');
-    for (const t of ['Bronze', 'Silver', 'Gold', 'Emerald', 'Diamond', 'Master']) expect(tierShort(t)).toBe(t);
+describe('tier codes', () => {
+  // REPLACES the old three-entry `tierShort` policy (Plat/GM/Champ, everything
+  // else passing through on the grounds that "Dia" read worse than the space it
+  // saved). There is one short form now, applied only where the layout is
+  // genuinely tight — see `core/rankDisplay`.
+  it('gives every tier a code, and the chips use it', () => {
+    expect(TIERS.map(tierCodeOf)).toEqual(['B', 'S', 'G', 'P', 'E', 'D', 'M', 'GM', 'C']);
   });
 });
 
@@ -64,16 +66,16 @@ describe('accountRoleSummary', () => {
     expect(ROLE_ORDER).toEqual(['tank', 'damage', 'support', 'openQ']);
     const chips = accountRoleSummary('Main', [rank({ role: 'openQ' }), rank({ role: 'tank', tier: 'Silver', division: 1 })], []);
     expect(chips.map((c) => c.role)).toEqual(['tank', 'openQ']);
-    expect(chips[0]).toEqual({ role: 'tank', text: 'Tank · Silver 1 · 40%', tone: 'rank' });
-    expect(chips[1].text).toBe(`${ROLE_SHORT.openQ} · Gold 3 · 40%`);
+    expect(chips[0]).toEqual({ role: 'tank', text: 'Tank · S1 · 40%', tone: 'rank' });
+    expect(chips[1].text).toBe(`${ROLE_SHORT.openQ} · G3 · 40%`);
   });
 
-  it('shortens the long tier names and keeps the protection shield', () => {
+  it('shortens every tier and keeps the protection shield', () => {
     const chips = accountRoleSummary('Main', [
       rank({ role: 'damage', tier: 'Grandmaster', division: 4, progressPct: 16 }),
       rank({ role: 'support', tier: 'Platinum', division: 2, progressPct: -8, protected: true }),
     ], []);
-    expect(chips.map((c) => c.text)).toEqual(['Dmg · GM 4 · 16%', 'Sup · Plat 2 · -8% 🛡']);
+    expect(chips.map((c) => c.text)).toEqual(['Dmg · GM4 · 16%', 'Sup · P2 · -8% 🛡']);
   });
 
   it('an open run shows only its counter — the prediction is left to the modal', () => {
@@ -93,18 +95,18 @@ describe('accountRoleSummary', () => {
     const chips = accountRoleSummary('Main', [rank({ role: 'support', tier: 'Diamond', division: 5, progressPct: 0 })], [
       run({ role: 'support', counted: 10, completed: true }),
     ]);
-    expect(chips).toEqual([{ role: 'support', text: 'Sup · Diamond 5 · 0%', tone: 'placed' }]);
+    expect(chips).toEqual([{ role: 'support', text: 'Sup · D5 · 0%', tone: 'placed' }]);
   });
 
   it('rounds the % the way every other rank surface does', () => {
-    expect(accountRoleSummary('Main', [rank({ role: 'tank', progressPct: 33.6 })], [])[0].text).toBe('Tank · Gold 3 · 34%');
+    expect(accountRoleSummary('Main', [rank({ role: 'tank', progressPct: 33.6 })], [])[0].text).toBe('Tank · G3 · 34%');
   });
 
   it('filters to the requested account, so callers can pass the whole ranks/placements lists', () => {
     const chips = accountRoleSummary('Alt', [
       rank({ role: 'tank' }), rank({ role: 'damage', account: 'Alt', tier: 'Bronze', division: 2, progressPct: 70 }),
     ], [run({ role: 'support' }), run({ role: 'support', account: 'Alt', counted: 7 })]);
-    expect(chips.map((c) => c.text)).toEqual(['Dmg · Bronze 2 · 70%', 'Sup · Placements 7/10']);
+    expect(chips.map((c) => c.text)).toEqual(['Dmg · B2 · 70%', 'Sup · Placements 7/10']);
   });
 
   it('is empty for an account that tracks nothing', () => {
