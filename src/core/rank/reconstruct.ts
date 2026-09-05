@@ -1,8 +1,8 @@
 import type { Role } from '../model';
 import type { GameRecord } from '../analytics';
 import { classifyGameType } from '../matchFilter';
-import { stateFromAnchor } from './engine';
 import { currentRank } from './timeline';
+import { enteringRankAt } from './entering';
 import { rankKey, type RankAnchorMap, type RankPosition, type RankState } from './types';
 import { rankToPoints, pointsToRank } from './scalar';
 
@@ -35,23 +35,6 @@ function sumSr(
     // (see ../rank/timeline competitiveComps): a delta that never moved the
     // ladder must not be subtracted back out of it either.
     .reduce((sum, g) => sum + (suppressed?.has(g.matchId) ? 0 : g.srDelta ?? 0), 0);
-}
-
-/** The latest (account, role) competitive match strictly before `beforeTs`, if any. */
-function prevCompTs(games: GameRecord[], account: string, role: Role, beforeTs: number): number | undefined {
-  let best: number | undefined;
-  for (const g of games) {
-    if (
-      g.account === account &&
-      g.role === role &&
-      classifyGameType(g.gameType) === 'competitive' &&
-      g.timestamp < beforeTs &&
-      (best === undefined || g.timestamp > best)
-    ) {
-      best = g.timestamp;
-    }
-  }
-  return best;
 }
 
 /**
@@ -95,26 +78,6 @@ export function rankAfterMatch(
   return { ...pointsToRank(points), protected: false };
 }
 
-/** The reconstructed rank **immediately before** the match at `matchTs` (i.e. after the previous comp match). */
-function rankBeforeMatch(
-  games: GameRecord[],
-  anchors: RankAnchorMap,
-  account: string,
-  role: Role,
-  matchTs: number,
-): RankPosition {
-  const anchor = anchors[rankKey(account, role)];
-  const prev = prevCompTs(games, account, role, matchTs);
-  if (prev !== undefined) return rankAfterMatch(games, anchors, account, role, prev)!;
-  // No earlier comp match on this track.
-  if (matchTs >= anchor.setAt) return stateFromAnchor(anchor); // target is the first after the anchor
-  // Target predates the anchor with nothing before it: reconstruct to just
-  // before the target by subtracting the target itself and everything up to the
-  // anchor from the anchor's scalar.
-  const points = rankToPoints(anchor) - sumSr(games, account, role, (ts) => ts >= matchTs && ts <= anchor.setAt);
-  return pointsToRank(points);
-}
-
 /**
  * The SR % this match must have produced to land on `enteredAfter`, given the
  * reconstructed rank immediately before it — the editor's "Set current rank"
@@ -137,10 +100,14 @@ export function srDeltaForSetRank(
   role: Role,
   matchTs: number,
   enteredAfter: RankPosition,
+  suppressed?: ReadonlySet<string>,
 ): number {
-  if (!anchors[rankKey(account, role)]) return 0;
-  const before = rankBeforeMatch(games, anchors, account, role, matchTs);
-  return Math.round(rankToPoints(enteredAfter) - rankToPoints(before));
+  // Deliberately NOT given a resetBefore: "what ±% produces this rank" is a
+  // within-era question, and blanking it across a reset would break the editor's
+  // back-compute rather than make it honest.
+  const cell = enteringRankAt(games, anchors, account, role, matchTs, { suppressed });
+  if (!cell.position) return 0;
+  return Math.round(rankToPoints(enteredAfter) - rankToPoints(cell.position));
 }
 
 /**
@@ -161,6 +128,13 @@ export function srDeltaForSetRank(
  * Best-effort by the same terms as {@link rankAfterMatch}: matches with no
  * logged ±% contribute 0, and rank protection can't be reversed walking
  * backward. Forward of the anchor the engine's own replay is authoritative.
+ *
+ * `resetBefore`, when given, is this track's ladder-reset instant (see
+ * `../placements/engine` resetBoundaries). A match strictly before it returns
+ * null rather than a value reconstructed ACROSS the discontinuity — the same
+ * guard {@link rankAfterMatch} already takes, and which this function was
+ * missing: it used to walk straight through a reset and hand back a rank the
+ * player never held, which `syncRankAtStart` then persisted permanently.
  */
 export function rankEnteringMatch(
   games: GameRecord[],
@@ -169,11 +143,9 @@ export function rankEnteringMatch(
   role: Role,
   matchTs: number,
   suppressed?: ReadonlySet<string>,
+  resetBefore?: number,
 ): RankState | null {
-  if (!anchors[rankKey(account, role)]) return null;
-  const prev = prevCompTs(games, account, role, matchTs);
-  // The previous match on this track IS the position we entered on.
-  if (prev !== undefined) return rankAfterMatch(games, anchors, account, role, prev, undefined, suppressed);
-  const position = rankBeforeMatch(games, anchors, account, role, matchTs);
-  return { ...position, protected: false };
+  const cell = enteringRankAt(games, anchors, account, role, matchTs, { suppressed, resetBefore });
+  if (!cell.position) return null;
+  return { ...cell.position, protected: cell.protected ?? false };
 }

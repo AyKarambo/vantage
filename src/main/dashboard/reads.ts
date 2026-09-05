@@ -5,7 +5,8 @@ import { playerMatchHistory, playerRecords } from '../../core/playerIndex';
 import { computeDashboard, applyFilters } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
-import { suppressedMatchIds } from '../../core/placements';
+import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
+import { enteringRanks, rankKey } from '../../core/rank';
 import type {
   DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerMatchHistory, PlayerRecord,
 } from '../../shared/contract';
@@ -142,10 +143,9 @@ function resetBoundaryFor(
 ): number | undefined {
   const game = games.find((g) => g.matchId === matchId);
   if (!game) return undefined;
-  const run = provider.placementRuns().find(
-    (r) => r.account === game.account && r.role === game.role && r.completedAt !== undefined,
-  );
-  return run?.startedAt;
+  // One definition of "boundary", in core, shared with the write path and the
+  // player table — so the three can never drift apart.
+  return resetBoundaries(provider.placementRuns()).get(rankKey(game.account, game.role));
 }
 
 /**

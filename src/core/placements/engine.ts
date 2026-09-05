@@ -1,6 +1,6 @@
 import type { GameRecord } from '../analytics';
 import type { Role } from '../model';
-import type { RankAnchor } from '../rank';
+import { rankKey, type RankAnchor } from '../rank';
 import { classifyGameType } from '../matchFilter';
 import { PLACEMENT_RUN_LENGTH, type PlacementRun, type PredictedRank } from './types';
 
@@ -261,4 +261,33 @@ export function shouldOfferNewTrackRun(opts: {
   if (existingRun) return false;
   if (declinedSeasonStarts.includes(seasonStart)) return false;
   return trackMatchCount > 0;
+}
+
+/**
+ * The ladder-reset instant per (account, role) track, keyed by {@link rankKey}.
+ *
+ * A COMPLETED run's `startedAt` is the boundary: where the old ladder stopped
+ * meaning anything, so a match before it cannot be reconstructed from the
+ * post-placement anchor. An OPEN run is NOT a boundary — it has written no
+ * anchor yet, so the old one still describes the ladder its matches were played
+ * on, and every one of those matches is masked by {@link suppressedMatchIds}
+ * anyway.
+ *
+ * Takes the LATEST completed run per track. `PlacementStore` keeps one run per
+ * track today, so this matches the single-run lookup it replaces — but it is what
+ * a future list-shaped store needs, and it will not silently pick an arbitrary
+ * one. Note the store's own limit: starting a new run REPLACES the previous one,
+ * so an older era's boundary is forgotten permanently and history before it
+ * reconstructs unguarded. That is a pre-existing data-model hole (`competitiveOf`
+ * has it too), not one this function opens.
+ */
+export function resetBoundaries(runs: readonly PlacementRun[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const run of runs) {
+    if (run.completedAt === undefined) continue;
+    const key = rankKey(run.account, run.role);
+    const prev = out.get(key);
+    if (prev === undefined || run.startedAt > prev) out.set(key, run.startedAt);
+  }
+  return out;
 }
