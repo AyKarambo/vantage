@@ -27,7 +27,12 @@ export interface KpiOpts {
 export function kpiCard(o: KpiOpts): HTMLElement {
   return h('div', { class: `kpi${o.accent ? ' kpi--accent' : ''}` },
     h('div', { class: 'kpi-label' }, o.label),
-    h('div', { class: 'kpi-value' }, o.value),
+    // `.kpi-value` is nowrap + ellipsis so one long value can't push its card
+    // taller than the other three in the row. A KPI value has no other home for
+    // its text, so the full string always stays reachable as the tooltip —
+    // truncation must never be the only thing left (e.g. "Placements 10/10" at
+    // the 1040px minimum window).
+    h('div', { class: 'kpi-value', title: o.value }, o.value),
     o.delta && h('div', { class: `kpi-delta${o.delta.dir ? ' is-' + o.delta.dir : ''}` }, o.delta.text),
     o.action && button(o.action.label, { variant: 'soft', class: 'kpi-action', onClick: o.action.run }),
   );
