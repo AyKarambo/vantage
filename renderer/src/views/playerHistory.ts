@@ -10,32 +10,34 @@ import { h, render } from '../dom';
 import type { PlayerMatchHistory, PlayerSharedMatch } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { relTime } from '../format';
-import { button, card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
-import { viewHead, type ViewContext } from './view';
+import { card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
+import { backControl, viewHead, type ViewContext } from './view';
 
 export function playerHistory(ctx: ViewContext): HTMLElement {
   const host = h('div', { class: 'view' });
   const name = ctx.params.playerName;
   if (!name) {
-    render(host, backRow(ctx), card({}, emptyState('No player selected.')));
+    render(host, backRow(), card({}, emptyState('No player selected.')));
     return host;
   }
-  render(host, backRow(ctx), card({}, h('div', { class: 'hint' }, 'Loading player history…')));
+  render(host, backRow(), card({}, h('div', { class: 'hint' }, 'Loading player history…')));
   bridge.playerHistory(name).then((data) => {
     if (!data || !data.matches.length) {
-      render(host, backRow(ctx), card({}, emptyState(`No tracked matches with ${name} yet.`)));
+      render(host, backRow(), card({}, emptyState(`No tracked matches with ${name} yet.`)));
       return;
     }
-    render(host, backRow(ctx), ...sections(data, ctx));
+    render(host, ...sections(data, ctx));
   });
   return host;
 }
 
-/** Back to the match the click came from is not tracked; return to Matches. */
-function backRow(ctx: ViewContext): HTMLElement {
-  return h('div', { style: { marginBottom: '4px' } },
-    button('← Matches', { variant: 'ghost', onClick: () => ctx.navigate('matches') }),
-  );
+/**
+ * The shared ← for the three branches that never build a `viewHead` (no name,
+ * loading, no shared matches). The success branch gets its back control from
+ * `viewHead` instead — these are exactly the dead ends that most need a way out.
+ */
+function backRow(): HTMLElement {
+  return h('div', { style: { marginBottom: '4px' } }, backControl());
 }
 
 function sections(d: PlayerMatchHistory, ctx: ViewContext): Node[] {

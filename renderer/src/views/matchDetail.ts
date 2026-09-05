@@ -32,7 +32,7 @@ import { classifyGameType } from '../../../src/core/matchFilter';
 import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { PALETTE, wrHsl } from '../theme';
-import type { ViewContext } from './view';
+import { backControl, type ViewContext } from './view';
 
 const ROLE_OPTS: Array<{ value: Role; label: string }> = [
   { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' },
@@ -83,14 +83,16 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
   return host;
 }
 
-/** Back link + prev/next steppers through the filtered match list (also ←/→). */
+/** Back control + prev/next steppers through the filtered match list (also ←/→). */
 function backRow(ctx: ViewContext): HTMLElement {
   const matches = ctx.data.matches;
   const idx = matches.findIndex((m) => m.matchId === ctx.params.matchId);
   const older = idx >= 0 ? matches[idx + 1] : undefined;
   const newer = idx >= 0 ? matches[idx - 1] : undefined;
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-    button('← Matches', { variant: 'ghost', onClick: () => ctx.navigate('matches') }),
+    // The shared ← — where it leads depends on how you got here, which is the
+    // whole point; the old fixed "← Matches" lied on a player → match chain.
+    backControl(),
     h('span', { style: { flex: '1' } }),
     button('‹ Older', {
       variant: 'ghost', disabled: !older, title: 'Previous match (←)',

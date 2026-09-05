@@ -14,7 +14,7 @@ import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
-import { initShortcuts, registerShortcut, shortcutGroups } from '../shortcuts';
+import { initShortcuts, overlayCapturing, registerShortcut, shortcutGroups } from '../shortcuts';
 import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
 import { openModal } from '../components/overlay';
@@ -936,12 +936,15 @@ export class App {
       });
     });
     registerShortcut({
-      combo: 'escape', description: 'Back to Matches (from a match detail)', group: 'Navigate',
-      when: () => store.get().view === 'matchDetail', run: () => store.setView('matches'),
+      combo: 'escape', description: 'Back — the previous screen', group: 'Navigate',
+      // No allowInInput, deliberately: the dispatcher's overlay probe is exactly
+      // what leaves Escape to an open modal/drawer/popover/palette for its own
+      // dismissal, and its typing guard keeps Escape usable inside a field.
+      when: () => store.backLabel() !== null, run: () => { store.goBack(); },
     });
     registerShortcut({
-      combo: 'escape', description: 'Back to Targets (from a target detail)', group: 'Navigate',
-      when: () => store.get().view === 'targetDetail', run: () => store.setView('targets'),
+      combo: 'alt+arrowleft', description: 'Back — the previous screen', group: 'Navigate', hidden: true,
+      when: () => store.backLabel() !== null, run: () => { store.goBack(); },
     });
     registerShortcut({
       combo: 'arrowleft', description: 'Older match (on a match detail)', group: 'Navigate',
@@ -989,6 +992,24 @@ export class App {
     };
     window.addEventListener('pointerup', releasePress, true);
     window.addEventListener('pointercancel', releasePress, true);
+    // Thumb buttons: MouseEvent.button 3 = Back, 4 = Forward. Only Back is bound
+    // — there is no forward stack. BOTH are preventDefault()ed so the embedding
+    // Chromium can't start its own history navigation underneath: a no-op in the
+    // packaged app (one page load, empty history), but `npm run preview` runs in
+    // a real browser where it would navigate away from the harness entirely. We
+    // ACT on mouseup so a press that ends elsewhere doesn't navigate.
+    const thumb = (e: MouseEvent): boolean => e.button === 3 || e.button === 4;
+    window.addEventListener('mousedown', (e) => { if (thumb(e)) e.preventDefault(); }, true);
+    window.addEventListener('auxclick', (e) => { if (thumb(e)) e.preventDefault(); }, true);
+    window.addEventListener('mouseup', (e) => {
+      if (e.button !== 3) return;
+      e.preventDefault();
+      // An open modal/drawer/popover/palette owns dismissal. No isTyping guard:
+      // a click is not typing. preventDefault on mousedown does not cancel the
+      // paired pointer events, so contentPressed still clears above.
+      if (overlayCapturing()) return;
+      store.goBack();
+    }, true);
     // Safety net: if the window loses focus mid-press (app switch, focus theft),
     // a pointerup might never reach us. Clearing the flag on blur guarantees a
     // same-route refresh can never be held back indefinitely — and the focus

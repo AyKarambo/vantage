@@ -2,10 +2,10 @@
 import { h } from '../dom';
 import type { DashboardData, DashboardFilters } from '../../../src/shared/contract';
 import type { ViewId, ViewParams } from '../store';
-import { FILTER_DEFAULTS } from '../store';
+import { FILTER_DEFAULTS, store } from '../store';
 import { prefs, type FilterPresetPref } from '../prefs';
 import { roleLabel } from '../format';
-import { chip, select, type SelectOption } from '../components/primitives';
+import { button, chip, select, type SelectOption } from '../components/primitives';
 
 export interface ViewContext {
   data: DashboardData;
@@ -129,12 +129,43 @@ function filterField(label: string, value: string, options: SelectOption[], onCh
   );
 }
 
-/** Standard view header: title, subtitle, and optional right-aligned actions. */
+/**
+ * The one Back control — a `←`, rendered only while the session stack has a
+ * resolvable previous screen. Every back button in the app is literally this
+ * same node, so the drill-downs that build their own header rows stay in step
+ * with {@link viewHead}.
+ *
+ * The glyph carries no destination text on purpose: where Back leads is
+ * session-dependent, so a fixed "← Matches" would be a lie on exactly the
+ * match → player → match chain this feature exists for, and a variable label
+ * would make the title jump between screens. The destination lives in the
+ * tooltip and the aria-label instead.
+ */
+export function backControl(): HTMLButtonElement | null {
+  const dest = store.backLabel();
+  if (dest === null) return null;
+  const el = button('←', {
+    variant: 'ghost',
+    class: 'view-back',
+    title: `Back to ${dest} — Esc, Alt+←, or the mouse back button`,
+    onClick: () => { store.goBack(); },
+  });
+  el.setAttribute('aria-label', `Back to ${dest}`);
+  return el;
+}
+
+/** Standard view header: back, title, subtitle, and optional right-aligned actions. */
 export function viewHead(title: string, sub: string, actions?: Node | Node[]): HTMLElement {
   return h('div', { class: 'view-head' },
-    h('div', null,
-      h('h1', { class: 'view-title' }, title),
-      h('div', { class: 'view-sub' }, sub),
+    // Back and the titles are ONE flex child: `.view-head` is
+    // justify-content:space-between over exactly two children, and a third
+    // would push the title block to the centre on every view passing `actions`.
+    h('div', { class: 'view-head-main' },
+      backControl(),
+      h('div', { class: 'view-head-titles' },
+        h('h1', { class: 'view-title' }, title),
+        h('div', { class: 'view-sub' }, sub),
+      ),
     ),
     actions ? h('div', { class: 'view-actions' }, ...(Array.isArray(actions) ? actions : [actions])) : null,
   );
