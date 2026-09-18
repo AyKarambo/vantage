@@ -6,11 +6,45 @@
  */
 import { h } from '../../dom';
 import type { TargetSummary } from '../../../../src/shared/contract';
-import { pct } from '../../format';
+import { pct, roleLabel } from '../../format';
 import { button } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
+import { roleIcon } from '../../components/roleIcon';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
+
+/**
+ * A target's role/hero scope as plain text — "Tank", "Zarya, D.Va" for
+ * hero-only, "Support · Ana" for both. `undefined` when unscoped. The text
+ * half of {@link scopeBadge}, exposed separately so a caller that needs to
+ * describe several targets' scopes in one sentence (Review's "N targets
+ * skipped — scoped to …", R8) doesn't have to re-derive the same format.
+ */
+export function scopeLabel(t: Pick<TargetSummary, 'roleScope' | 'heroScope'>): string | undefined {
+  const heroes = t.heroScope?.length ? t.heroScope.join(', ') : undefined;
+  if (!t.roleScope && !heroes) return undefined;
+  return t.roleScope && heroes ? `${roleLabel(t.roleScope)} · ${heroes}` : (t.roleScope ? roleLabel(t.roleScope) : heroes!);
+}
+
+/**
+ * A target's role/hero scope, rendered as a compact badge (R8) — a role icon
+ * plus its {@link scopeLabel}. `null` when unscoped (the common case) —
+ * nothing to say, so nothing shown. Shared by the "Your targets" row, the
+ * detail header, and Review's grade row, so a player can tell WHY a target
+ * didn't appear on a given match without opening the builder.
+ */
+export function scopeBadge(t: Pick<TargetSummary, 'roleScope' | 'heroScope'>): HTMLElement | null {
+  const label = scopeLabel(t);
+  if (!label) return null;
+  return h('span', {
+    class: 'scope-badge u-dim',
+    style: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', whiteSpace: 'nowrap' },
+    title: `Scoped to ${label}`,
+  },
+    t.roleScope ? roleIcon(t.roleScope, { size: 12 }) : null,
+    h('span', null, label),
+  );
+}
 
 /**
  * One labelled winrate track (win when hit / when missed). `decided` is how

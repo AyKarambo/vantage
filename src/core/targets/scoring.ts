@@ -72,6 +72,11 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,
+    // Newest first (R8) — from the same `graded` list `attempts` counts, not
+    // a second independently-filtered pass.
+    recentAttempts: graded.slice(-10).reverse().map((g) => ({
+      matchId: g.matchId, map: g.map, timestamp: g.timestamp, result: g.result, grade: g.review!.grades[t.id],
+    })),
     // The Focus Trend learning curve — live targets only (archived stay light).
     ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t, margin) }),
   };
@@ -115,6 +120,11 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,
+    // Newest first (R8), including the per-10/KDA value behind the grade —
+    // from the same `scored` list `attempts` counts, not a second pass.
+    recentAttempts: scored.slice(-10).reverse().map(({ g, res }) => ({
+      matchId: g.matchId, map: g.map, timestamp: g.timestamp, result: g.result, grade: res.grade, value: res.value,
+    })),
     // The Focus Trend learning curve — live targets only (archived stay light).
     // Measured: its execution (hit-rate) overlay is margin-sensitive, so thread it.
     ...(t.archivedAt ? {} : { learning: targetLearningCurve(games, t, margin) }),

@@ -5,6 +5,7 @@
  */
 import type { Role } from '../model';
 import type { TargetLearningCurve } from './learningCurve';
+import type { OrderedAttempt } from './timeline';
 
 export type TargetMode = 'self' | 'measured';
 
@@ -71,6 +72,13 @@ export interface TargetSummary {
    * live (non-archived) targets only; drives the phase chip + trend panel.
    */
   learning?: TargetLearningCurve;
+  /**
+   * The last 10 attempts, newest first (R8) — the detail page's "Recent
+   * attempts" card. Drawn from the same in-scope/graded games `attempts`
+   * counts, not a second, independently-filtered pass, so the two can never
+   * disagree about which games attempted this target.
+   */
+  recentAttempts: OrderedAttempt[];
 }
 
 /** Clamp a ratio into the valid 0..1 winrate/hitrate range. */

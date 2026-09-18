@@ -7,16 +7,18 @@
  * back to Targets with the builder pre-filled via `editTargetId`.
  */
 import { h } from '../../dom';
-import type { TargetSummary } from '../../../../src/shared/contract';
-import { pct } from '../../format';
+import type { OrderedAttempt, TargetSummary } from '../../../../src/shared/contract';
+import { parseMeasuredRule } from '../../../../src/core/targets';
+import { pct, relTime } from '../../format';
 import { PALETTE } from '../../theme';
 import { sparkline } from '../../charts/plots';
-import { badge, button, card, chip } from '../../components/primitives';
+import { badge, button, card, chip, resultPill } from '../../components/primitives';
 import { phaseChip, targetTrend } from '../../components/targetTrend';
+import { GRADES } from '../../components/reviewControls';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
 import { backControl, type ViewContext } from '../view';
-import { winSplit, confirmDelete } from './shared';
+import { winSplit, confirmDelete, scopeBadge } from './shared';
 
 export function targetDetail(ctx: ViewContext): HTMLElement {
   const t = ctx.data.targets.find((x) => x.id === ctx.params.targetId);
@@ -29,11 +31,23 @@ export function targetDetail(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view view--narrow' },
     backRow(),
     headerCard(t, ctx),
+    recentAttemptsCard(t, ctx),
     t.learning
       ? targetTrend(t.learning)
-      : h('div', { class: 'hint', style: { marginTop: '12px' } },
-          'No focus trend yet — it appears once this target is live and tracking your games.'),
+      : h('div', { class: 'hint', style: { marginTop: '12px' } }, trendFallback(t, ctx)),
   );
+}
+
+/**
+ * The "no focus trend" line, mode-aware (R8, a fold-in) — it used to read
+ * the same "not live and tracking yet" copy for a demo target, an archived
+ * one, and a genuinely fresh live one, even though only the last of those is
+ * actually waiting on anything.
+ */
+function trendFallback(t: TargetSummary, ctx: ViewContext): string {
+  if (ctx.data.isSample) return "Demo targets don't carry a focus trend — build your own to see it.";
+  if (t.archivedAt) return 'Archived targets stop tracking their trend; restore it to resume.';
+  return 'No focus trend yet — it appears once this target is live and tracking your games.';
 }
 
 function backRow(): HTMLElement {
@@ -48,6 +62,7 @@ function headerCard(t: TargetSummary, ctx: ViewContext): HTMLElement {
   return card({ variant: 'raised', title: t.name, sub: t.rule },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' } },
       badge(t.mode === 'measured' ? 'Measured' : 'Self-rated', t.mode === 'measured' ? 'auto' : 'manual'),
+      scopeBadge(t),
       t.learning ? phaseChip(t.learning) : null,
       h('span', { style: { flex: '1' } }),
       sparkline(t.spark, { width: 150, height: 34, color: accent, fill: true }),
@@ -61,6 +76,59 @@ function headerCard(t: TargetSummary, ctx: ViewContext): HTMLElement {
     h('div', { class: 'hint', style: { marginTop: '6px' } },
       'Your winrate in games where you hit this target vs games where you didn’t.'),
     actionsRow(t, ctx),
+  );
+}
+
+/**
+ * "Recent attempts" (R8): the last 10 games this target actually attempted,
+ * newest first, each linking straight to its match — the natural post-
+ * session question ("which games did I miss it on, and did I lose those?")
+ * used to have no answer even though the per-game series already existed.
+ * Absent entirely when the target has nothing to show yet.
+ */
+function recentAttemptsCard(t: TargetSummary, ctx: ViewContext): HTMLElement | null {
+  if (!t.recentAttempts.length) return null;
+  const parsed = t.mode === 'measured' ? parseMeasuredRule(t.rule) : null;
+  const unit = parsed ? (parsed.stat === 'KDA' ? 'KDA' : `${parsed.stat}/10`) : '';
+  return card({ variant: 'raised', title: 'Recent attempts' },
+    h('div', { class: 'stack', style: { gap: '2px' } },
+      ...t.recentAttempts.map((a) => attemptRow(a, unit, ctx)),
+    ),
+  );
+}
+
+function attemptRow(a: OrderedAttempt, unit: string, ctx: ViewContext): HTMLElement {
+  const open = (): void => ctx.navigate('matchDetail', { matchId: a.matchId });
+  const g = a.grade ? GRADES.find((x) => x.v === a.grade) : undefined;
+  return h('div', {
+    class: 'target-row target-row--link',
+    role: 'button',
+    tabindex: '0',
+    title: 'Open this match',
+    style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 4px' },
+    on: {
+      click: open,
+      keydown: (e) => {
+        const key = (e as KeyboardEvent).key;
+        if (key === 'Enter' || key === ' ') { e.preventDefault(); open(); }
+      },
+    },
+  },
+    h('span', { class: 'u-dim', style: { fontSize: '11px', width: '48px', flex: '0 0 auto' } }, relTime(a.timestamp)),
+    h('span', { class: 'row-main', style: { fontSize: '12.5px', minWidth: '0', flex: '1' } }, a.map),
+    resultPill(a.result),
+    g
+      ? h('span', {
+          style: {
+            fontSize: '10.5px', fontWeight: '700', padding: '2px 8px', borderRadius: 'var(--r-sm)',
+            background: g.bg, color: g.fg, flex: '0 0 auto',
+          },
+        }, g.label)
+      : h('span', { class: 'u-dim', style: { fontSize: '10.5px', flex: '0 0 auto' } }, 'ungraded'),
+    a.value != null
+      ? h('span', { class: 'mono u-dim', style: { fontSize: '11px', width: '70px', textAlign: 'right', flex: '0 0 auto' } },
+          `${a.value.toLocaleString('en-US')} ${unit}`)
+      : null,
   );
 }
 

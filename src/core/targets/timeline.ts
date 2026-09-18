@@ -11,6 +11,9 @@ import { matchInTargetScope } from './scope';
 
 /** One in-scope game for a target, ascending by timestamp. */
 export interface OrderedAttempt {
+  /** The match this attempt happened in — lets a consumer (the detail page's "Recent attempts" card, R8) link straight back to it. */
+  matchId: string;
+  map: string;
   timestamp: number;
   result: Result;
   /**
@@ -37,13 +40,15 @@ export function targetTimeline(games: GameRecord[], t: AuthoredTarget, margin: n
     for (const g of ordered) {
       const res = evaluateMeasured(g, t, margin);
       if (!res) continue;
-      out.push({ timestamp: g.timestamp, result: g.result, grade: res.grade, value: res.value });
+      out.push({ matchId: g.matchId, map: g.map, timestamp: g.timestamp, result: g.result, grade: res.grade, value: res.value });
     }
     return out;
   }
   return ordered
     .filter((g) => matchInTargetScope(g, t))
     .map((g) => ({
+      matchId: g.matchId,
+      map: g.map,
       timestamp: g.timestamp,
       result: g.result,
       grade: g.review?.grades[t.id],

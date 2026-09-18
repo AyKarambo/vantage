@@ -148,6 +148,12 @@ describe('sampleTargets', () => {
       // real target's instead of silently reading as "no games yet".
       expect(t.hitDecided).toBe(t.hits);
       expect(t.missDecided).toBe(t.attempts - t.hits);
+      // R8: real matchId/map (so a demo "Recent attempts" row links to a
+      // match that actually exists), capped at 10, newest first.
+      expect(t.recentAttempts.length).toBeLessThanOrEqual(10);
+      expect(t.recentAttempts.every((a) => a.matchId && a.map)).toBe(true);
+      const ts = t.recentAttempts.map((a) => a.timestamp);
+      expect(ts).toEqual([...ts].sort((a, b) => b - a));
     }
   });
 });

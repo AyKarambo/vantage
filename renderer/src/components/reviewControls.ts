@@ -33,16 +33,24 @@ export const GRADES: Array<{ v: TargetGrade; label: string; bg: string; fg: stri
  * "needs grading"). Returns `{ el, set }` for every branch so the keyboard hook
  * (H/P/M) can drive it. Measured targets are graded the same way as self-rated
  * ones — the app has no auto-scoring source yet, so nothing is read-only here.
+ *
+ * `scopeBadge` (R8) is a pre-built node (`views/targets/shared.ts`'s helper)
+ * rather than something this component computes itself — a components/
+ * module staying decoupled from a views/ one, not a missing feature.
  */
 export function targetGradeRow(
   t: TargetSummary,
   initial: TargetGrade | undefined,
   onChange: (g: TargetGrade) => void,
+  scopeBadge?: Node | null,
 ): { el: HTMLElement; set: (g: TargetGrade) => void } {
   const control = gradeControl(onChange);
   const el = h('div', { class: 'review-target' },
     h('div', { class: 'row-main', style: { minWidth: '0' } },
-      h('div', { style: { fontSize: '13px' } }, t.name),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '7px' } },
+        h('span', { style: { fontSize: '13px' } }, t.name),
+        scopeBadge ?? null,
+      ),
       h('div', { class: 'mono u-dim', style: { fontSize: '10.5px', marginTop: '2px' } }, t.rule),
     ),
     control.el,

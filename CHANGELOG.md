@@ -542,6 +542,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   before Customize or Add saves them — a fixed "~9k/10 is a solid DPS floor at most ranks" is
   equally wrong for a GM Genji and a Bronze Reaper, so both now personalize the number first when
   you have the data for it, and **Add**'s toast says "— adjusted to your last 30 games" when it did.
+- **Target detail shows the games behind the numbers, and scope stops being invisible.** The
+  detail page gains a **"Recent attempts"** card — your last 10 games with this target, newest
+  first (date · map · result · grade · the measured value when it has one), each one opening
+  that match. A scoped target now shows a compact **scope badge** (role icon + "Tank" / "Zarya,
+  D.Va" / "Support · Ana") on its Targets row, its detail page, and its grade row on Review — and
+  an out-of-scope self target on a Review card leaves a muted "1 target skipped — scoped to …"
+  line instead of just silently not showing up. A demo target and an archived one used to share
+  the same "not live and tracking yet" line under the Focus Trend panel — each now gets its own
+  honest reason there's nothing there. The page's own head now says "Targets," matching the nav
+  item and everything else on the screen.
 
 ## 0.34.0 — 31 July 2026
 

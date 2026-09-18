@@ -12,7 +12,7 @@ import { pct, signed } from '../../format';
 import { badge, button, card, chip, pill, type PillState } from '../../components/primitives';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
-import { confirmDelete } from './shared';
+import { confirmDelete, scopeBadge } from './shared';
 
 export function libraryCard(ctx: ViewContext): HTMLElement {
   const live = ctx.data.targets.filter((t) => !t.archivedAt);
@@ -45,6 +45,7 @@ function targetRow(t: TargetSummary, ctx: ViewContext): HTMLElement {
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
           h('span', { class: 'row-name', style: { flex: '0 1 auto', minWidth: '0', fontSize: '13.5px' } }, t.name),
           badge(t.mode === 'measured' ? 'Measured' : 'Self-rated', t.mode === 'measured' ? 'auto' : 'manual'),
+          scopeBadge(t),
         ),
         h('div', { class: 'hint', style: { fontSize: '11.5px', marginTop: '3px', lineHeight: '1.45' } }, targetStatusSentence(t)),
       ),
