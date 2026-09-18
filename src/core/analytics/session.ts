@@ -5,11 +5,12 @@
  * preview.
  */
 import type { GameRecord, Streak } from './types';
-import { byMap, dayKey, heroWeightedGames, weightedGroupBy, weightedWinLoss, winLoss } from './grouping';
+import { byHero, byMap, dayKey, heroWeightedGames, weightedGroupBy, weightedWinLoss, winLoss } from './grouping';
 import { heroStats, type HeroStatsOptions } from './heroStats';
 import { focusTrend, heroForm } from './focus';
-import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets';
+import { activeMeasuredTargets, foldMeasuredGradesForExport, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../targets';
 import { isPositiveComms } from '../comms';
+import { isCompetitive } from '../matchFilter';
 
 /** Current win/loss streak from the most recent decided games. */
 export function streak(games: GameRecord[]): Streak {
@@ -99,40 +100,74 @@ export function groupByDay<T extends { timestamp: number; result: string }>(
   }));
 }
 
-/** The previous day's coach-style recap (the Overview card). */
-export interface SessionRecap {
-  date: string;
+/**
+ * The "how did that go?" read for the trailing gap-based sitting (S3) — the
+ * Overview recap used to key off the previous UTC calendar day, so a sitting
+ * spanning midnight was split across two days and a player west of UTC had
+ * evening games filed under the next day. This follows the same sitting
+ * boundary {@link currentSession} walks instead, so it stays one block.
+ */
+export interface SessionDebrief {
+  startedAt: number;
+  endedAt: number;
+  /** True once the sitting has closed (the newest game is older than the gap) — the caller decides whether to show a debrief for a still-open sitting. */
+  closed: boolean;
+  games: number;
   wins: number;
   losses: number;
-  net: number;
+  draws: number;
   winrate: number;
-  games: number;
+  net: number;
+  /** Sum of logged SR deltas; absent when the sitting logged none. */
+  srDelta?: number;
+  /** How many of `games` contributed to {@link srDelta}. */
+  srDeltaGames?: number;
   bestMap?: string;
   worstMap?: string;
+  /** Heroes played, by time-share credited games, most-played first (top 3). */
+  heroes: Array<{ hero: string; winrate: number; games: number }>;
   flags: { tilt: number; toxicMates: number; leaver: number; positiveComms: number };
-  /** Hit-rate over that day's graded targets; absent when nothing was graded. */
+  /** Hit-rate over the sitting's graded targets — self-rated grades PLUS active measured auto-grades; absent when nothing was graded. */
   targetHitRate?: number;
+  /** Competitive games in the sitting with no review at all yet — "Review these N games →". */
+  ungradedMatchIds: string[];
 }
 
 /**
- * Recap of the previous calendar day (shown once on the next day's first
- * open). Null when yesterday had no games. Works over the UNFILTERED history —
- * the recap is about the player's day, not the current filter scope.
+ * Debrief of the trailing gap-based sitting — the same boundary
+ * {@link currentSession} walks, over the FULL unfiltered history (a player
+ * who last played two days ago still gets a debrief for THAT sitting, not
+ * nothing). Null when there are no games at all.
  */
-export function sessionRecap(games: GameRecord[], now: number = Date.now()): SessionRecap | null {
-  const date = dayKey(now - 86_400_000);
-  const day = games.filter((g) => dayKey(g.timestamp) === date);
-  if (!day.length) return null;
+export function sessionDebrief(
+  games: GameRecord[],
+  targets: readonly AuthoredTarget[],
+  now: number = Date.now(),
+  gapMinutes: number = 180,
+  margin?: number,
+): SessionDebrief | null {
+  if (!games.length) return null;
+  const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
+  const gapMs = gapMinutes * 60_000;
+  let trailing: GameRecord[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].timestamp - sorted[i - 1].timestamp > gapMs) trailing = [];
+    trailing.push(sorted[i]);
+  }
+  const last = trailing[trailing.length - 1];
 
-  const wl = winLoss(day);
-  const maps = byMap(day).filter((m) => m.games > 0);
+  const wl = winLoss(trailing);
+  const maps = byMap(trailing).filter((m) => m.games > 0);
   const byWr = [...maps].sort((a, b) => b.winrate - a.winrate);
+  const heroes = byHero(trailing)
+    .filter((h) => h.key !== 'Unknown')
+    .sort((a, b) => b.games - a.games)
+    .slice(0, 3)
+    .map((h) => ({ hero: h.key, winrate: h.winrate, games: h.games }));
 
   const flags = { tilt: 0, toxicMates: 0, leaver: 0, positiveComms: 0 };
-  for (const g of day) {
+  for (const g of trailing) {
     for (const key of Object.keys(flags) as Array<keyof typeof flags>) {
-      // positiveComms resolves through the comms tone so new `comms:'positive'`
-      // records count alongside legacy `positiveComms:true` ones.
       if (key === 'positiveComms') {
         if (isPositiveComms(g.mental) || isPositiveComms(g.review?.flags)) flags.positiveComms++;
       } else if (g.mental?.[key] || g.review?.flags?.[key]) {
@@ -141,13 +176,19 @@ export function sessionRecap(games: GameRecord[], now: number = Date.now()): Ses
     }
   }
 
+  const srDeltas = trailing.map((g) => g.srDelta).filter((v): v is number => v != null);
+
+  // Hit-rate over the merged grade view every self+measured surface already
+  // uses (foldMeasuredGradesForExport): stored self-rated grades, with every
+  // currently-active MEASURED target's grade recomputed fresh from stats
+  // (dropped when the match can't measure it) — so a stale stored grade or a
+  // target that's since gone inactive can't leak into tonight's read.
+  const activeMeasured = activeMeasuredTargets(targets);
   let hits = 0;
   let attempts = 0;
-  for (const g of day) {
-    for (const [targetId, grade] of Object.entries(g.review?.grades ?? {})) {
-      // Exclude the hidden Notion-import bookkeeping grade (spec B2: imported
-      // grades must not move target stats) — only visible authored-target
-      // grades count toward the hit-rate.
+  for (const g of trailing) {
+    const effective = foldMeasuredGradesForExport(g.review?.grades, activeMeasured, g, margin);
+    for (const [targetId, grade] of Object.entries(effective)) {
       if (targetId === NOTION_IMPROVEMENT_TARGET_ID) continue;
       attempts++;
       if (grade === 'hit') hits++;
@@ -155,15 +196,21 @@ export function sessionRecap(games: GameRecord[], now: number = Date.now()): Ses
   }
 
   return {
-    date,
+    startedAt: trailing[0].timestamp,
+    endedAt: last.timestamp,
+    closed: now - last.timestamp > gapMs,
+    games: trailing.length,
     wins: wl.wins,
     losses: wl.losses,
-    net: wl.wins - wl.losses,
+    draws: wl.draws,
     winrate: wl.winrate,
-    games: day.length,
+    net: wl.wins - wl.losses,
+    ...(srDeltas.length ? { srDelta: srDeltas.reduce((a, b) => a + b, 0), srDeltaGames: srDeltas.length } : {}),
     ...(byWr.length >= 2 ? { bestMap: byWr[0].key, worstMap: byWr[byWr.length - 1].key } : {}),
+    heroes,
     flags,
     ...(attempts ? { targetHitRate: hits / attempts } : {}),
+    ungradedMatchIds: trailing.filter((g) => !g.review && isCompetitive(g.gameType)).map((g) => g.matchId),
   };
 }
 

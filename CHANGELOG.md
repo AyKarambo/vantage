@@ -357,6 +357,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   any of them. The legend now shows one swatch per mode present, not one per map. Every "focus"
   dot (net ≥ 3 — the ones the card tells you to "fix first") carries an always-visible short-name
   label, and the X axis gets three numeric ticks with faint gridlines alongside its caption.
+- **The post-session recap follows your actual sitting, not the UTC calendar day.** It used to
+  key off "yesterday" — a sitting that ended two hours ago got no recap, one that spanned
+  midnight split across two days and two tallies, and a player west of UTC found their evening
+  games filed under the next day. It now debriefs the same gap-based sitting the sidebar's
+  Current-session card tracks, the moment it closes. The card adds SR change and a "Review these
+  N games →" link for whatever's still ungraded, and its target hit-rate now folds in active
+  **measured** auto-grades alongside self-rated ones, not just the latter. Dismissing it collapses
+  it to a one-line reopen instead of hiding it until the next sitting closes. The sidebar's own
+  Current-session card now names its actual rule when empty ("No games in the last 3h — your next
+  game starts a new sitting") instead of a bare "no session yet", shows your streak and top map
+  when a sitting is running, and is a real click-through into that sitting's games.
 
 ## 0.34.0 — 31 July 2026
 

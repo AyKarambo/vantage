@@ -6,7 +6,7 @@
 import type { Role, Result } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
@@ -264,8 +264,13 @@ export interface DashboardData {
   gradingSettings: GradingSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */
   totalGamesAllTime: number;
-  /** Yesterday's recap (unfiltered); absent when yesterday had no games. */
-  recap?: SessionRecap;
+  /**
+   * The trailing gap-based sitting's debrief (S3, unfiltered — same account
+   * scope as {@link session}); absent when there are no games at all. The
+   * Overview only renders it once `closed` is true — a still-open sitting is
+   * already covered by the sidebar's live "Current session" card.
+   */
+  recap?: SessionDebrief;
 }
 
 /** Hero drill-down payload. */

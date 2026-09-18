@@ -1,6 +1,7 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
-import { h } from '../dom';
-import type { DashboardData, Group, PlacementRunSummary, SessionRecap } from '../../../src/shared/contract';
+import { h, render } from '../dom';
+import type { DashboardData, Group, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
+import { dayKey, dayPartAt } from '../../../src/core/analytics';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
@@ -25,7 +26,7 @@ export function overview(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view' },
     head,
     hiddenHistoryBanner(ctx),
-    recapCard(d),
+    recapCard(ctx),
     kpiRow(ctx),
     scatterCard(ctx),
     bottomRow(ctx),
@@ -49,34 +50,68 @@ function hiddenHistoryBanner(ctx: ViewContext): HTMLElement | null {
   );
 }
 
-/** Yesterday's coach recap — shown once per day, dismissible. */
-function recapCard(d: DashboardData): HTMLElement | null {
-  const r = d.recap;
-  if (!r || prefs.get('recapShown') === r.date) return null;
-
+/**
+ * Last session's debrief (S3) — the trailing gap-based sitting, once it has
+ * closed (a still-open one is the sidebar's live "Current session" card).
+ * Dismissing COLLAPSES it to a one-line sub rather than removing it outright
+ * — the reopen affordance stays visible instead of vanishing until the next
+ * sitting closes — keyed by `endedAt` via the `recapShown` pref, so a new
+ * sitting's debrief always starts expanded.
+ */
+function recapCard(ctx: ViewContext): HTMLElement | null {
+  const r = ctx.data.recap;
+  if (!r) return null;
+  const key = String(r.endedAt);
   const host = h('div');
-  const dismiss = (): void => {
-    prefs.set('recapShown', r.date);
-    host.remove();
+  const openMatches = (): void => ctx.navigate('matches', { day: dayKey(r.startedAt) });
+  const titleText = `Last session · ${sessionLabel(r.endedAt)} · ${r.games} game${r.games === 1 ? '' : 's'}`;
+
+  const drawCollapsed = (): void => {
+    render(host, h('div', {
+      class: 'hint', style: { margin: '-4px 0 12px', cursor: 'pointer', lineHeight: '1.5' },
+      title: 'Show last session again',
+      on: { click: () => { prefs.remove('recapShown'); drawExpanded(); } },
+    }, `${titleText} — ${r.wins}–${r.losses}. `, h('span', { class: 'u-dim' }, 'Show again')));
   };
-  host.append(card({
-    variant: 'glow',
-    title: 'Yesterday’s session',
-    sub: recapLine(r),
-    actions: button('✕', { variant: 'ghost', title: 'Dismiss (shows once per day)', onClick: dismiss }),
-  },
-    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '4px' } },
+
+  const drawExpanded = (): void => {
+    const dismiss = (): void => { prefs.set('recapShown', key); drawCollapsed(); };
+    const boxes = [
       statBox(h('span', { class: r.net >= 0 ? 'is-win' : 'is-loss' }, `${r.wins}–${r.losses}`), `${signed(r.net)} net`),
       statBox(pct(r.winrate), 'winrate'),
-      r.bestMap ? statBox(shorten(r.bestMap), 'best map') : statBox('—', 'best map'),
-      r.targetHitRate !== undefined ? statBox(pct(r.targetHitRate), 'targets hit') : statBox('—', 'targets hit'),
-    ),
-  ));
+      ...(r.srDelta !== undefined ? [statBox(`${signed(Math.round(r.srDelta))}%`, 'SR change')] : []),
+      ...(r.bestMap ? [statBox(shorten(r.bestMap), 'best map')] : []),
+      ...(r.targetHitRate !== undefined ? [statBox(pct(r.targetHitRate), 'targets hit')] : []),
+    ].slice(0, 4);
+    render(host, card({
+      variant: 'glow',
+      title: titleText,
+      sub: recapLine(r),
+      actions: button('✕', { variant: 'ghost', title: 'Collapse (shows the sitting again next time)', onClick: dismiss }),
+    },
+      h('div', { style: { display: 'grid', gridTemplateColumns: `repeat(${boxes.length}, 1fr)`, gap: '10px', marginTop: '4px' } }, ...boxes),
+      h('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } },
+        r.ungradedMatchIds.length
+          ? button(`Review these ${r.ungradedMatchIds.length} game${r.ungradedMatchIds.length === 1 ? '' : 's'} →`, { variant: 'soft', onClick: () => ctx.navigate('review') })
+          : null,
+        button('View games →', { variant: 'ghost', onClick: openMatches }),
+      ),
+    ));
+  };
+
+  (prefs.get('recapShown') === key ? drawCollapsed : drawExpanded)();
   return host;
 }
 
-function recapLine(r: SessionRecap): string {
-  const bits = [`${r.games} game${r.games === 1 ? '' : 's'}`];
+/** "Tue evening" — the day-part bucket {@link dayPartAt} already uses elsewhere, so this never names a different window than the Trends time-of-day card would. */
+function sessionLabel(endedAt: number): string {
+  const d = new Date(endedAt);
+  const weekday = d.toLocaleDateString(undefined, { weekday: 'short' });
+  return `${weekday} ${dayPartAt(d.getHours()).toLowerCase()}`;
+}
+
+function recapLine(r: SessionDebrief): string {
+  const bits = [`${r.wins}–${r.losses}`];
   if (r.worstMap) bits.push(`toughest: ${r.worstMap}`);
   if (r.flags.tilt) bits.push(`tilt flagged ×${r.flags.tilt}`);
   return bits.join(' · ');
