@@ -63,7 +63,10 @@ account's per-role lines beneath it.
   scoreline. The kill feed and its count can
   be switched off in **Settings → General** — off means it isn't sent to the window at all,
   not merely hidden; the scoreboard and the with/vs records are unaffected.
-- **Matches** — the recent game log; click any row for a full **match detail page**
+- **Matches** — the recent game log, grouped **by day or by sitting** (a "By day / By sitting"
+  toggle, S4) — sitting grouping follows the same gap-based boundary as the sidebar's Current
+  session card, so a sitting spanning midnight stays one block instead of splitting across two
+  day headers; click any row for a full **match detail page**
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
   support ×2, per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
   wall-clock duration — the fight time those rates divide by, marked *est.* on older captures

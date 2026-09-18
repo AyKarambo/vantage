@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentSession, dayKey, groupByDay, sessionDebrief } from '../src/core/analytics';
+import { currentSession, dayKey, groupByDay, groupBySitting, sessionDebrief, sessionHistory } from '../src/core/analytics';
 import type { GameRecord, HeroStat } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
@@ -283,5 +283,113 @@ describe('sessionDebrief (S3)', () => {
     ];
     const inactive = measuredTarget('Deaths ≤ 3', { id: 'm', isActive: false });
     expect(sessionDebrief(games, [inactive], NOW)!.targetHitRate).toBeUndefined();
+  });
+});
+
+describe('sessionHistory (S4)', () => {
+  it('returns no sittings for no games', () => {
+    expect(sessionHistory([], 180)).toEqual([]);
+  });
+
+  it('splits into sittings on the gap and returns them newest-first', () => {
+    const games = [
+      game({ timestamp: hoursAgo(50), result: 'Loss' }),
+      game({ timestamp: hoursAgo(49), result: 'Win' }),
+      // gap > 180min here
+      game({ timestamp: hoursAgo(2), result: 'Win' }),
+      game({ timestamp: hoursAgo(1), result: 'Win' }),
+    ];
+    const rows = sessionHistory(games, 180);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ games: 2, wins: 2, losses: 0, net: 2 }); // most recent sitting first
+    expect(rows[0].startedAt).toBe(hoursAgo(2));
+    expect(rows[0].endedAt).toBe(hoursAgo(1));
+    expect(rows[1]).toMatchObject({ games: 2, wins: 1, losses: 1, net: 0 });
+  });
+
+  it('minutes spans first-game-start to last-game-end — a single 15-minute game reads as 15, not 0', () => {
+    const solo = [game({ timestamp: hoursAgo(1), result: 'Win', durationMinutes: 15 })];
+    expect(sessionHistory(solo, 180)[0].minutes).toBe(15);
+
+    const two = [
+      game({ timestamp: hoursAgo(1), result: 'Win', durationMinutes: 10 }),
+      game({ timestamp: hoursAgo(1) + 20 * 60_000, result: 'Loss' }),
+    ];
+    expect(sessionHistory(two, 180)[0].minutes).toBe(30); // 20min span + the first game's own 10min
+  });
+
+  it('counts tilt from quick-log or review without double-counting one game', () => {
+    const games = [
+      game({ timestamp: hoursAgo(2), result: 'Loss', mental: { tilt: true } }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', review: { at: NOW, grades: {}, flags: { tilt: true } } }),
+    ];
+    expect(sessionHistory(games, 180)[0].tiltCount).toBe(2);
+  });
+
+  it('sums SR delta, excluding suppressed (placement) games from the sum', () => {
+    const games = [
+      game({ timestamp: hoursAgo(2), result: 'Win', srDelta: 25, matchId: 'p1' }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', srDelta: -18, matchId: 'm2' }),
+    ];
+    const suppressed = new Set(['p1']);
+    const r = sessionHistory(games, 180, suppressed)[0];
+    expect(r.srDelta).toBe(-18); // p1's +25 excluded — a placement SR isn't comparable
+    expect(r.srDeltaGames).toBe(1);
+  });
+
+  it('reports the top map and average self-rating', () => {
+    const games = [
+      game({ timestamp: hoursAgo(3), result: 'Win', map: 'Ilios', performance: 80 }),
+      game({ timestamp: hoursAgo(2), result: 'Win', map: 'Ilios', performance: 60 }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', map: 'Busan' }), // unrated
+    ];
+    const r = sessionHistory(games, 180)[0];
+    expect(r.topMap).toBe('Ilios');
+    expect(r.avgRating).toBe(70);
+  });
+
+  it('reports the streak as it stood at the END of the sitting', () => {
+    const games = [
+      game({ timestamp: hoursAgo(3), result: 'Loss' }),
+      game({ timestamp: hoursAgo(2), result: 'Win' }),
+      game({ timestamp: hoursAgo(1), result: 'Win' }),
+    ];
+    expect(sessionHistory(games, 180)[0].streak).toEqual({ type: 'W', count: 2 });
+  });
+});
+
+describe('groupBySitting (S4)', () => {
+  const at = (i: number, result: Result): { timestamp: number; result: Result } => ({ timestamp: hoursAgo(i), result });
+
+  it('joins rows across midnight when consecutive gaps stay within the threshold — the bug day-grouping had', () => {
+    const rows = [
+      { timestamp: Date.UTC(2026, 6, 3, 23, 30, 0), result: 'Win' as Result },
+      { timestamp: Date.UTC(2026, 6, 4, 0, 45, 0), result: 'Loss' as Result }, // 75min later, crosses midnight
+    ];
+    const groups = groupBySitting(rows, 180, Date.UTC(2026, 6, 4, 4, 0, 0));
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items).toHaveLength(2);
+  });
+
+  it('splits on a gap exceeding the threshold, newest sitting first', () => {
+    const rows = [at(7, 'Win'), at(6, 'Loss'), at(1, 'Win'), at(0.5, 'Win')];
+    const groups = groupBySitting(rows, 180, NOW);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].items).toHaveLength(2); // the two recent games
+    expect(groups[1].items).toHaveLength(2); // the two older games
+    expect(groups[0].wins).toBe(2);
+    expect(groups[1]).toMatchObject({ wins: 1, losses: 1 });
+  });
+
+  it('labels the sitting containing `now` as "Today\'s session" only while it is still open', () => {
+    const open = groupBySitting([at(1, 'Win')], 180, NOW);
+    expect(open[0].label).toBe('Today’s session');
+
+    const closed = groupBySitting([at(4, 'Win')], 180, NOW); // 4h ago, past the 3h gap
+    expect(closed[0].label).not.toBe('Today’s session');
+  });
+
+  it('returns no groups for no rows', () => {
+    expect(groupBySitting([], 180, NOW)).toEqual([]);
   });
 });

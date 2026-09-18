@@ -1,7 +1,7 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
-import { aggregateGrade, dayKey, groupByDay } from '../../../src/core/analytics';
+import { aggregateGrade, dayKey, groupByDay, groupBySitting } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { rankLabel, relTime, roleLabel, signed } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
@@ -54,23 +54,48 @@ export function matches(ctx: ViewContext): HTMLElement {
       : map
         ? ctx.data.matches.filter((m) => m.map === map)
         : ctx.data.matches;
-  const groups = groupByDay(rows);
+  // By day / by sitting (S4) — a single-day drill-down (from the heatmap)
+  // keeps calendar grouping; grouping any further by sitting inside one
+  // already-picked day would be a distinction with no real difference.
+  const grouping = day ? 'day' : (prefs.get('matchGrouping') ?? 'day');
+  const bySitting = grouping === 'sitting';
+  const groups = bySitting
+    ? groupBySitting(rows, ctx.data.sessionSettings.gapMinutes)
+    : groupByDay(rows);
   const scopeChip = day || flag || map ? drillDownChip(ctx, day, flag, map) : null;
   const columns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
 
+  const headActions: Node[] = [];
+  if (!day) headActions.push(groupingToggle(grouping));
+  headActions.push(customizeViewButton());
+
   return h('div', { class: 'view view--wide' },
-    viewHead('Matches', `${rows.length} games in range · newest first · click a match for details`,
-      customizeViewButton()),
+    viewHead('Matches', `${rows.length} games in range · newest first · click a match for details`, headActions),
     scopeChip,
     card({ class: 'card--flush', style: { padding: '8px' } },
       rows.length
         ? h('div', null, ...groups.flatMap((g) => [
-            dayHeader(g.label, g.wins, g.losses),
+            dayHeader(g.label, g.wins, g.losses, bySitting ? netSR(g.items) : undefined),
             ...g.items.map((m) => matchRow(m, ctx, columns)),
           ]))
         : (day || flag || map) ? emptyState('No games match this drill-down — clear the scope above to see everything.') : emptyActions(ctx),
     ),
   );
+}
+
+/** "By day / By sitting" (S4) — persisted, triggers a full re-render since regrouping needs the whole list re-walked. */
+function groupingToggle(value: 'day' | 'sitting'): HTMLElement {
+  return segmented({
+    options: [{ value: 'day', label: 'By day' }, { value: 'sitting', label: 'By sitting' }],
+    value,
+    onChange: (v) => { prefs.set('matchGrouping', v); store.rerender(); },
+  });
+}
+
+/** Sum of the group's known SR deltas; undefined when none logged one — same "absent, not zero" convention as everywhere else. */
+function netSR(items: MatchRow[]): number | undefined {
+  const deltas = items.map((m) => m.srDelta).filter((v): v is number => v != null);
+  return deltas.length ? deltas.reduce((a, b) => a + b, 0) : undefined;
 }
 
 /** "Customize view" affordance — opens the per-field hidden/inline/column popover (spec F1). */
@@ -135,11 +160,14 @@ function emptyActions(ctx: ViewContext): HTMLElement {
   );
 }
 
-function dayHeader(label: string, wins: number, losses: number): HTMLElement {
+function dayHeader(label: string, wins: number, losses: number, netSR?: number): HTMLElement {
   return h('div', { class: 'day-header' },
     h('span', { class: 'day-header-label' }, prettyDay(label)),
     h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${wins}–${losses}`),
     h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${signed(wins - losses)} net`),
+    // A sitting header additionally states its SR swing (S4) — day headers
+    // never have, since a calendar day isn't the unit an SR run is judged by.
+    netSR !== undefined ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(Math.round(netSR))}%`) : null,
   );
 }
 

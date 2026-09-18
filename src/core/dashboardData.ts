@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
-  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, streak,
+  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak,
   trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
@@ -174,6 +174,8 @@ export function computeDashboard(
     rankTrend,
     placements,
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
+    // Every past sitting (S4), same account scope + gap as `session` above, capped like every other list.
+    sessions: sessionHistory(sessionGames, sessionSettings.gapMinutes, suppressed).slice(0, ROW_CAP),
     byRole: byRole(games),
     byAccount: byAccount(games),
     byMap: byMap(games),

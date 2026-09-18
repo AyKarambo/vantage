@@ -214,6 +214,134 @@ export function sessionDebrief(
   };
 }
 
+/** A game with no logged duration is assumed this long — mirrors readiness's own `defaultGameMinutes` fallback, duplicated rather than imported so this stays independent of readiness's internal tuning (S4). */
+const DEFAULT_GAME_MINUTES = 12;
+
+/** One past sitting, newest first (S4) — the compact row `sessionHistory` returns per sitting, for a history list rather than a single debrief. */
+export interface SessionSummary {
+  startedAt: number;
+  endedAt: number;
+  /** Wall-clock span of the sitting, including the first game's own play time (its `timestamp` marks when it ENDED). */
+  minutes: number;
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winrate: number;
+  net: number;
+  /** Sum of logged, non-suppressed SR deltas; absent when the sitting logged none. */
+  srDelta?: number;
+  /** How many of `games` contributed to {@link srDelta}. */
+  srDeltaGames?: number;
+  /** Games flagged tilted (quick-log OR review, merged so one game never double-counts). */
+  tiltCount: number;
+  /** The streak AT THE END of the sitting. */
+  streak: Streak;
+  /** Most-played map in the sitting, when any game recorded one. */
+  topMap?: string;
+  /** Average self-rating (0-100) over the sitting's rated games; absent when none were rated. */
+  avgRating?: number;
+}
+
+/**
+ * Every past sitting, newest first (S4) — the gap-walk `currentSession`/
+ * `sessionDebrief` already use, applied across the WHOLE history instead of
+ * just the trailing sitting. `suppressed` (placement-run games) is excluded
+ * from the SR sum only — a placement's SR swings are not comparable to a
+ * normal match's, but the games themselves still count toward W-L/tilt/etc.
+ */
+export function sessionHistory(
+  games: GameRecord[],
+  gapMinutes: number = 180,
+  suppressed?: ReadonlySet<string>,
+): SessionSummary[] {
+  if (!games.length) return [];
+  const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
+  const gapMs = gapMinutes * 60_000;
+  const sittings: GameRecord[][] = [];
+  let current: GameRecord[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].timestamp - sorted[i - 1].timestamp > gapMs) {
+      sittings.push(current);
+      current = [];
+    }
+    current.push(sorted[i]);
+  }
+  sittings.push(current);
+
+  return sittings.reverse().map((sitting): SessionSummary => {
+    const first = sitting[0];
+    const last = sitting[sitting.length - 1];
+    const wl = winLoss(sitting);
+    const maps = byMap(sitting).filter((m) => m.games > 0).sort((a, b) => b.games - a.games);
+
+    let tiltCount = 0;
+    for (const g of sitting) {
+      if (g.mental?.tilt || g.review?.flags?.tilt) tiltCount++;
+    }
+
+    const srDeltas = sitting
+      .filter((g) => !suppressed?.has(g.matchId))
+      .map((g) => g.srDelta)
+      .filter((v): v is number => v != null);
+    const ratings = sitting.map((g) => g.performance).filter((v): v is number => v != null);
+
+    return {
+      startedAt: first.timestamp,
+      endedAt: last.timestamp,
+      minutes: Math.round((last.timestamp - first.timestamp) / 60_000 + (first.durationMinutes ?? DEFAULT_GAME_MINUTES)),
+      games: sitting.length,
+      wins: wl.wins,
+      losses: wl.losses,
+      draws: wl.draws,
+      winrate: wl.winrate,
+      net: wl.wins - wl.losses,
+      ...(srDeltas.length ? { srDelta: srDeltas.reduce((a, b) => a + b, 0), srDeltaGames: srDeltas.length } : {}),
+      tiltCount,
+      streak: streak(sitting),
+      ...(maps[0] ? { topMap: maps[0].key } : {}),
+      ...(ratings.length ? { avgRating: ratings.reduce((a, b) => a + b, 0) / ratings.length } : {}),
+    };
+  });
+}
+
+/**
+ * Group timestamped rows by their gap-based SITTING rather than calendar day
+ * (S4) — a past-midnight sitting stays one block instead of splitting under
+ * "Today"/"Yesterday" with two separate tallies. Same label convention as
+ * {@link groupByDay}: the sitting containing `now` reads "Today's session" (only
+ * meaningful if it's still open — callers scope `rows` accordingly), newest first.
+ */
+export function groupBySitting<T extends { timestamp: number; result: string }>(
+  rows: T[],
+  gapMinutes: number,
+  now: number = Date.now(),
+): Array<DayGroup<T>> {
+  const sorted = [...rows].sort((a, b) => b.timestamp - a.timestamp); // newest first
+  const gapMs = gapMinutes * 60_000;
+  const groups: Array<{ items: T[] }> = [];
+  for (const r of sorted) {
+    const open = groups[groups.length - 1];
+    if (open && open.items[open.items.length - 1].timestamp - r.timestamp <= gapMs) open.items.push(r);
+    else groups.push({ items: [r] });
+  }
+  const todayOpen = groups[0] && now - groups[0].items[0].timestamp <= gapMs;
+  return groups.map((g, i) => {
+    const start = g.items[g.items.length - 1].timestamp;
+    const end = g.items[0].timestamp;
+    const label = i === 0 && todayOpen
+      ? 'Today’s session'
+      : `${new Date(start).toLocaleDateString(undefined, { weekday: 'short' })} · ${new Date(start).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}–${new Date(end).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+    return {
+      key: `${start}`,
+      label,
+      wins: g.items.filter((r) => r.result === 'Win').length,
+      losses: g.items.filter((r) => r.result === 'Loss').length,
+      items: g.items,
+    };
+  });
+}
+
 /**
  * Drill-down for one hero: overall, per-map, recent games, exact stats.
  * `overall` and `byMap` credit each game by the hero's share of the player's

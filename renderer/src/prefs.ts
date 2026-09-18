@@ -62,7 +62,7 @@ interface PrefsShape {
   logPrefill: LogPrefillPref;
   /** Saved filter combinations. */
   filterPresets: FilterPresetPref[];
-  /** Day-key of the last session recap shown (one per day). */
+  /** `endedAt` of the last-session debrief the player collapsed (S3) — re-expands once a newer sitting closes. */
   recapShown: string;
   /** Active winrate colour scheme (Appearance). Applied at bundle load in `theme.ts`. */
   winrateScheme: WinrateScheme;
@@ -74,6 +74,8 @@ interface PrefsShape {
   colorblind?: boolean;
   /** Matches-list per-field display mode, merged over `MATCH_COLUMNS_DEFAULT`. */
   matchColumns: MatchColumnsPref;
+  /** Matches-list grouping (S4) — calendar day (default) or gap-based sitting. */
+  matchGrouping: 'day' | 'sitting';
   /** How many "most played" heroes the Log Match hero picker shortlists (default 6, clamped 3-15). */
   suggestedHeroCount: number;
   /**
