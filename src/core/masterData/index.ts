@@ -31,7 +31,7 @@ export {
   effectiveSeasonStarts,
 } from './merge';
 export { diffMasterData } from './diff';
-export { makeMapMode, type MapModeResolver } from './resolver';
+export { makeMapMode, makeMapActive, type MapModeResolver } from './resolver';
 export {
   upsertHeroOverride,
   removeHeroOverride,

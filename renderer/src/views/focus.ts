@@ -1,29 +1,35 @@
 /**
- * Focus — the "work on these" hub: net-losing maps in one priority list, each
- * with a trend verdict and, when an improvement target is linked, the
- * since-flagged progress. Overview teases → Focus prioritizes → Maps stays
- * the reference table → Targets is the commitment.
+ * Focus — the "work on these" hub: net-losing maps, heroes AND roles (H1),
+ * each in its own worst-first section, ranked by a sample-aware deficit so a
+ * real, well-evidenced weakness outranks a same-sized but noisy small sample.
+ * Every row carries a trend verdict and, when an improvement target is
+ * linked, the since-flagged progress. Overview teases → Focus prioritizes →
+ * Maps/Trends stay the raw reference tables → Targets is the commitment.
  */
 import { h, applyStyle } from '../dom';
-import type { FocusEntry, FocusProgress } from '../../../src/shared/contract';
-import { pct, signed } from '../format';
+import type { FocusEntry, FocusProgress, Role } from '../../../src/shared/contract';
+import { pct, roleLabel, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
-import { button, card } from '../components/primitives';
-import { trendArrow } from '../components/trendArrow';
+import { button, card, pill } from '../components/primitives';
+import { TREND_META } from '../components/trendArrow';
 import { inlineLink } from '../components/inlineLink';
+import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 
 export function focus(ctx: ViewContext): HTMLElement {
   const items = ctx.data.focusItems;
-  const maxNet = items[0]?.net ?? 1;
+  const roles = items.filter((e) => e.dimension === 'role');
+  const heroes = items.filter((e) => e.dimension === 'hero');
+  const maps = items.filter((e) => e.dimension === 'map');
 
   return h('div', { class: 'view' },
-    viewHead('Focus', 'The maps that cost you the most points — work on these'),
-    card({ title: 'Work on these', sub: 'net = losses − wins · across your maps' },
-      items.length
-        ? h('div', { class: 'stack', style: { gap: '14px' } }, ...items.map((e) => focusRow(ctx, e, maxNet)))
-        : h('div', { class: 'empty empty--good' }, 'No maps are net-losing right now — nice. 🎯'),
-    ),
+    viewHead('Focus', 'The roles, heroes and maps that cost you the most points — work on these'),
+    focusSection(ctx, 'Roles', 'net = losses − wins · across your roles', roles),
+    focusSection(ctx, 'Heroes', 'net = losses − wins · across your heroes', heroes),
+    focusSection(ctx, 'Maps', 'net = losses − wins · across your maps', maps),
+    items.length
+      ? null
+      : card({ title: 'Work on these' }, h('div', { class: 'empty empty--good' }, 'Nothing is net-losing right now — nice. 🎯')),
     card({ variant: 'glow', title: 'Build a focus routine' },
       h('p', { class: 'hint', style: { lineHeight: '1.6', margin: '0 0 12px' } },
         'Practice your bottom three before ranked and review one replay each. Small, repeatable — that is how the deficit closes.'),
@@ -32,43 +38,109 @@ export function focus(ctx: ViewContext): HTMLElement {
   );
 }
 
+/** One dimension's card — omitted entirely when it has no net-losing entries, so an empty dimension doesn't waste a section on nothing. */
+function focusSection(ctx: ViewContext, title: string, sub: string, entries: FocusEntry[]): HTMLElement | null {
+  if (!entries.length) return null;
+  const maxNet = entries[0].net;
+  return card({ title, sub },
+    h('div', { class: 'stack', style: { gap: '14px' } }, ...entries.map((e) => focusRow(ctx, e, maxNet))));
+}
+
 function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement {
   const fill = h('span', { style: { display: 'block', height: '100%', background: PALETTE.loss, borderRadius: 'inherit' } });
   applyStyle(fill, { width: `${Math.round((e.net / maxNet) * 100)}%` });
-  const name = e.key;
 
   return h('div', null,
     h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' } },
-      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', minWidth: '0' } },
-        // The primary action opens the games behind this row (H3) — the plain
-        // div this used to be was a dead end, the one thing every other
-        // "open the map" surface in the app already promised. A secondary
-        // "↗ Maps" keeps today's flash-jump to the aggregate ranking, for
-        // "how does this map look overall" rather than "which games".
-        inlineLink(name, {
-          class: 'row-name',
-          style: { fontSize: '13.5px' },
-          title: `Open your ${name} matches`,
-          onClick: () => ctx.navigate('matches', { map: name }),
-        }),
-        inlineLink('↗ Maps', {
-          class: 'u-dim',
-          style: { fontSize: '11px' },
-          title: `See ${name} on the Maps ranking`,
-          onClick: () => ctx.navigate('maps', { highlight: name }),
-        }),
-        trendArrow(e.trend),
+      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', minWidth: '0', flexWrap: 'wrap' } },
+        entryLink(ctx, e),
+        // H1: a map outside the current competitive pool still gets a row
+        // (history stays visible) but is flagged rather than treated as a
+        // live weakness — practicing it wouldn't move a real queue.
+        e.inPool === false ? h('span', { class: 'tag', title: 'Not in the current competitive map pool' }, 'Out of pool') : null,
+        e.dimension === 'map' && e.mode ? pill(e.mode, 'accent') : null,
+        trendPill(e),
       ),
       h('div', { style: { display: 'flex', gap: '12px', alignItems: 'baseline' } },
         h('span', { class: 'is-loss mono', style: { fontSize: '13px' } }, `${signed(-e.net)} net`),
         h('span', { class: 'mono', style: { color: wrColor(e.winrate) } }, pct(e.winrate)),
         h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${e.games}g`),
-        e.progress ? null : targetButton(ctx, name),
+        e.progress || e.inPool === false ? null : targetButton(ctx, e),
       ),
     ),
     h('div', { class: 'track track--slim' }, fill),
+    // H2: the per-map record explains WHY, not just that — most of a map's
+    // losses often trace to one hero, and that used to be invisible here.
+    e.dimension === 'map' ? heroRecordLine(ctx, e) : null,
     e.progress ? progressLine(e.progress) : null,
   );
+}
+
+/** The row's primary click target — where "open the games behind this" points, by dimension. */
+function entryLink(ctx: ViewContext, e: FocusEntry): HTMLElement {
+  if (e.dimension === 'map') {
+    // The primary action opens the games behind this row (H3) — the plain
+    // div this used to be was a dead end, the one thing every other
+    // "open the map" surface in the app already promised. A secondary
+    // "↗ Maps" keeps today's flash-jump to the aggregate ranking, for
+    // "how does this map look overall" rather than "which games".
+    return h('span', { style: { display: 'inline-flex', gap: '8px', alignItems: 'baseline' } },
+      inlineLink(e.key, {
+        class: 'row-name',
+        style: { fontSize: '13.5px' },
+        title: `Open your ${e.key} matches`,
+        onClick: () => ctx.navigate('matches', { map: e.key }),
+      }),
+      inlineLink('↗ Maps', {
+        class: 'u-dim',
+        style: { fontSize: '11px' },
+        title: `See ${e.key} on the Maps ranking`,
+        onClick: () => ctx.navigate('maps', { highlight: e.key }),
+      }),
+    );
+  }
+  if (e.dimension === 'hero') {
+    return inlineLink(e.key, {
+      class: 'row-name',
+      style: { fontSize: '13.5px' },
+      title: `Open the ${e.key} drawer`,
+      onClick: () => openHeroDrawer(ctx, e.key),
+    });
+  }
+  // role
+  return inlineLink(roleLabel(e.key), {
+    class: 'row-name',
+    style: { fontSize: '13.5px' },
+    title: `Open Trends scoped to ${roleLabel(e.key)}`,
+    onClick: () => { ctx.setFilter({ role: e.key }); ctx.navigate('trends'); },
+  });
+}
+
+/** "with Genji 1-4 · Tracer 0-2 · Sombra 1-0" — the top heroes behind a map
+ *  entry's record, per-game credit (H2's FocusEntry.heroes), each opening
+ *  that hero's own drawer. */
+function heroRecordLine(ctx: ViewContext, e: FocusEntry): HTMLElement | null {
+  if (!e.heroes?.length) return null;
+  return h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '4px' } },
+    'with ',
+    ...e.heroes.flatMap((hr, i) => [
+      i > 0 ? ' · ' : '',
+      inlineLink(`${hr.hero} ${hr.wins}-${hr.losses}`, {
+        style: { fontSize: '11px' },
+        title: `Open the ${hr.hero} drawer`,
+        onClick: () => openHeroDrawer(ctx, hr.hero),
+      }),
+    ]),
+  );
+}
+
+/** The recent-vs-earlier verdict as a small tinted readout — the point delta
+ *  alongside the arrow, same grammar {@link progressLine} already uses. */
+function trendPill(e: FocusEntry): HTMLElement | null {
+  if (!e.trend) return null;
+  const meta = TREND_META[e.trend];
+  const text = e.trendPts === undefined || e.trend === 'flat' ? meta.label : `${signed(e.trendPts)} pts lately`;
+  return h('span', { class: 'mono', style: { color: meta.color, fontSize: '11px' } }, `${meta.arrow} ${text}`);
 }
 
 /**
@@ -91,15 +163,18 @@ function progressLine(p: FocusProgress): HTMLElement {
   );
 }
 
-/** Quick-create a practice target for an entry that isn't tracked yet. */
-function targetButton(ctx: ViewContext, name: string): HTMLElement {
+/** Quick-create a practice target for an entry that isn't tracked yet — pre-fills the matching hero/role scope (H1) so the builder opens already scoped, not just named. */
+function targetButton(ctx: ViewContext, e: FocusEntry): HTMLElement {
+  const label = e.dimension === 'role' ? roleLabel(e.key) : e.key;
   return h('button', {
     class: 'btn btn--ghost',
     style: { padding: '3px 8px', fontSize: '10.5px' },
-    title: `Create a practice target for ${name}`,
+    title: `Create a practice target for ${label}`,
     on: {
       click: () => ctx.navigate('targets', {
-        prefillName: `Practice ${name}: warm up unranked + review one replay`,
+        prefillName: `Practice ${label}: warm up unranked + review one replay`,
+        ...(e.dimension === 'role' ? { prefillRole: e.key as Role } : {}),
+        ...(e.dimension === 'hero' ? { prefillHeroes: [e.key] } : {}),
       }),
     },
   }, '＋ target');

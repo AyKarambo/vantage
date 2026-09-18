@@ -9,6 +9,7 @@ import type { Result, Role, HeroStat, RosterPlayer, RoundSpan } from '../model';
 // `../model`, so this stays a leaf type import with no cycle back through the
 // rank engine (which itself reads `GameRecord` from here).
 import type { RankPosition } from '../rank/types';
+import type { MapMode } from '../maps';
 
 export type { HeroStat } from '../model';
 
@@ -207,8 +208,33 @@ export interface FocusEntry extends FocusItem {
   dimension: FocusDimension;
   /** Absent when the entry has too few games in range to split into halves. */
   trend?: FocusTrend;
+  /**
+   * The point delta behind {@link trend} (recent-half winrate − earlier-half,
+   * H2) — same number the map row's tinted pill and the Focus Trend line
+   * render, alongside the qualitative arrow.
+   */
+  trendPts?: number;
   /** Present when an active improvement target is linked to this entry. */
   progress?: FocusProgress;
+  /**
+   * The game mode a map entry sits in (H2), resolved in `dashboardData` with
+   * the same resolver Matches rows use. Map entries only.
+   */
+  mode?: MapMode;
+  /**
+   * Top 3 heroes played in a map entry's games, by game count, each with its
+   * OWN per-game win/loss record (H2) — deliberately per-game credit, not the
+   * Heroes screen's time-share credit, since a swap segment isn't "most of
+   * the game" on either hero. Map entries only.
+   */
+  heroes?: Array<{ hero: string; wins: number; losses: number }>;
+  /**
+   * Whether the entry's key is in the current competitive pool (H1) — only
+   * ever `false` for a map dimension entry tagged out of pool via master
+   * data; absent (heroes/roles, or when no lookup was supplied) reads as
+   * in-pool, matching master data's own "missing ⇒ active" convention.
+   */
+  inPool?: boolean;
 }
 
 /**

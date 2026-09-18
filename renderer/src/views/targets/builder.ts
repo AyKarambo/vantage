@@ -37,8 +37,9 @@ export interface BuilderHandle {
   /** Load an existing target into the builder (edit mode). */
   edit: (t: TargetSummary) => void;
   /** Load a template (or a Focus quick-create) into the builder — always
-   *  creates on save, even if the builder was mid-edit (AC 1–2). */
-  prefill: (t: { name: string; mode: TargetMode; rule: string }) => void;
+   *  creates on save, even if the builder was mid-edit (AC 1–2). `roleScope`/
+   *  `heroScope` (H1) seed the scope picker for a hero/role quick-create. */
+  prefill: (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }) => void;
 }
 
 // NOTE: save()'s rule template (`${stat} ${op} ${value}`) and loadRule()'s
@@ -160,7 +161,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     reveal();
   };
 
-  const prefill = (t: { name: string; mode: TargetMode; rule: string }): void => {
+  const prefill = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }): void => {
     // Always creates on save — abandon any in-progress edit (AC 2).
     state.editingId = null;
     loadRule(t);

@@ -10,7 +10,7 @@ import {
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
-import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
+import { DEFAULT_MASTER_DATA, makeMapActive, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
 import { mentalCosts, tiltBySessionPosition, tiltTrend } from './mentalAnalytics';
 import { progression } from './progression';
@@ -67,6 +67,7 @@ export function computeDashboard(
   // master data so an edited mode/season is honored everywhere; both default to
   // the built-in snapshot, so callers that pass nothing get today's behavior.
   const mapModeOf = makeMapMode(masterData.maps);
+  const isMapActive = makeMapActive(masterData.maps);
   const seasonStartsList = masterData.seasons.map((s) => s.start);
   // Vantage is competitive-only (spec D1): scope every count/stat/option to
   // competitive games ONCE, here, rather than re-filtering in each analytic.
@@ -185,11 +186,15 @@ export function computeDashboard(
     sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     calendar: calendar(games, 35),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
-    // The Focus screen's cross-dimension hub: ranked/trended over the FILTERED
-    // range (the list describes what you see), while the since-flagged progress
-    // of a linked target runs over the unfiltered history (like staleness —
-    // it is about the target's lifetime, not the current filter).
-    focusItems: linkFocusTargets(focusEntries(games), authoredTargets, all),
+    // The Focus screen's cross-dimension hub (H1: maps, heroes AND roles):
+    // ranked/trended over the FILTERED range (the list describes what you
+    // see), while the since-flagged progress of a linked target runs over the
+    // unfiltered history (like staleness — it is about the target's
+    // lifetime, not the current filter). `mode` (H2) is resolved here, not in
+    // focusEntries, since it needs the master-data map catalog focus.ts has
+    // no business depending on.
+    focusItems: linkFocusTargets(focusEntries(games, { isMapActive }), authoredTargets, all)
+      .map((e) => (e.dimension === 'map' ? { ...e, mode: mapModeOf(e.key) } : e)),
     // No games/row floor (H5) — the Heroes screen's own min-games chips (default
     // 1+) are the real filter, and its table wrap already scrolls; a hard-coded
     // 2-game floor + 24-row slice here used to quietly drop 1-game heroes from

@@ -124,9 +124,14 @@ account's per-role lines beneath it.
   A click-through drill-down drawer adds a role icon and a scope line stating which filters the
   numbers follow, per-map winrate (each map opening that map's own games on Matches), and recent
   games that open straight into that match's detail page.
-- **Focus** — the "what to work on" hub: your net-losing **maps** in one
-  deficit-ranked list, each with a trend arrow (improving/declining) and — once you
-  track it as a target — the winrate movement since you flagged it.
+- **Focus** — the "what to work on" hub: your net-losing **roles, heroes and maps**, each in
+  its own short section ranked by a sample-aware deficit — so a real, well-evidenced weakness
+  outranks a same-sized but noisy small sample. Every row carries a trend readout
+  (improving/declining, with the point delta) and — once you track it as a target — the
+  winrate movement since you flagged it; a map row also shows its top heroes' own W-L and an
+  "Out of pool" tag if it's outside the current competitive rotation. A hero row opens that
+  hero's drawer, a role row opens Trends scoped to it, and **＋ target** pre-fills the builder's
+  hero/role scope, not just the name.
 - **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
   winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
   and the performance drop when tilted — each sample-gated), a **tilt-rate trend** sparkline
@@ -215,8 +220,9 @@ account's per-role lines beneath it.
   rolling chart with table toggle), and actions (**Edit** pre-fills the builder, **Archive**,
   **Delete**). Rotate your focus with the **Active focus** panel (quick add/remove + "start a
   fresh focus"); active targets that go stale (past a configurable days/matches threshold) get a
-  rotate nudge. The **Focus** screen can create a map-practice target for a losing map in one
-  click (**＋ target**).
+  rotate nudge. The **Focus** screen can create a practice target for a losing map, hero or
+  role in one click (**＋ target**) — the builder opens with the matching hero/role scope
+  already selected, not just a prefilled name.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still

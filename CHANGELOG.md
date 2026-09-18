@@ -343,6 +343,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   games** chips either, so a 1-game hero now shows at the default 1+ and appears in the command
   palette's Hero entries, matching how Map entries already include every map. An **ⓘ** beside the
   chips spells out how the per-10/time-share/Time numbers are computed, in one place.
+- **Focus ranks roles and heroes too, not just maps.** Three short sections — Roles, Heroes,
+  Maps — each ranked by a sample-aware deficit score instead of raw net, so a real, well-evidenced
+  weakness (a bad winrate over a big sample) outranks a same-sized deficit that's really just a
+  small, noisy one. A map row now also shows its top heroes' own record ("with Genji 1-4 · Tracer
+  0-2") and, if it's outside the current competitive rotation, an **"Out of pool"** tag — the same
+  tag now appears on Overview's Top priority callout. A hero row opens that hero's drawer; a role
+  row opens Trends scoped to it. **＋ target** now pre-fills the builder's role/hero scope for a
+  hero or role entry, not just the name.
 
 ## 0.34.0 — 31 July 2026
 

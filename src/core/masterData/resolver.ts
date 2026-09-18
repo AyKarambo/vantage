@@ -13,3 +13,13 @@ export function makeMapMode(maps: readonly MapEntry[]): MapModeResolver {
   const table = new Map(maps.map((m) => [m.name, m.mode]));
   return (name: string) => table.get(name) ?? 'Unknown';
 }
+
+/**
+ * A map-name → in-pool resolver (H1), same convention as {@link makeMapMode}.
+ * A name not present in the catalog reads as in-pool — "missing ⇒ active"
+ * matches master data's own default for a map with no override.
+ */
+export function makeMapActive(maps: readonly MapEntry[]): (name: string) => boolean {
+  const table = new Map(maps.map((m) => [m.name, m.isActive]));
+  return (name: string) => table.get(name) ?? true;
+}

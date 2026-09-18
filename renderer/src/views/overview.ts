@@ -214,6 +214,10 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const points = toScatter(d.byMap, makeMapMode(d.masterData.maps));
   const focus = d.focusMaps.filter((f) => f.net > 0).slice(0, 3);
+  // H1: a map the master-data catalog marks out of the competitive pool still
+  // gets a row (it happened, it stays in the picture) but is flagged — same
+  // "Out of pool" read Focus's own map rows give it.
+  const isActive = new Map(d.masterData.maps.map((m) => [m.name, m.isActive]));
 
   const callouts = h('div', { class: 'scatter-callouts' },
     h('div', { style: { fontSize: '12px', fontWeight: '600', color: 'var(--loss-text)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' } }, 'Top priority'),
@@ -224,7 +228,11 @@ function scatterCard(ctx: ViewContext): HTMLElement {
         },
           h('span', { class: 'dot', style: { background: wrHsl(m.winrate) } }),
           h('div', { class: 'row-main' },
-            h('div', { class: 'row-name' }, m.key),
+            h('div', { class: 'row-name', style: { display: 'flex', alignItems: 'baseline', gap: '6px' } },
+              m.key,
+              isActive.get(m.key) === false
+                ? h('span', { class: 'tag', title: 'Not in the current competitive map pool' }, 'Out of pool')
+                : null),
             h('div', { class: 'row-meta' }, `${m.games} games · net ${signed(m.wins - m.losses)}`),
           ),
           h('span', { class: 'mono', style: { fontSize: '14px', color: wrColor(m.winrate) } }, pct(m.winrate)),

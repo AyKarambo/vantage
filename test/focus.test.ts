@@ -72,21 +72,24 @@ describe('focusEntries — maps-only', () => {
     expect(entries[0]).toMatchObject({ dimension: 'map', key: 'Ilios', net: 3 });
   });
 
-  it('ranks by net descending, ties broken by more games', () => {
+  it('ranks by the sample-aware deficit (H1) — an equal net at fewer games can outrank one at more games when its per-game loss rate is worse', () => {
     const games = [
-      ...run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], { map: 'P' }), // net 4, 6g
+      ...run(6, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win'], { map: 'P' }), // net 4, 6g, 83% loss rate
       ...run(4, ['Loss', 'Loss', 'Loss', 'Win'], { map: 'Q' }), // net 2, 4g
-      ...run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win'], { map: 'R' }), // net 4, 8g — ties P, wins on games
+      ...run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win'], { map: 'R' }), // net 4, 8g, 75% loss rate — ties P on raw net
     ];
-    const entries = focusEntries(games);
-    expect(entries.map((e) => e.key)).toEqual(['R', 'P', 'Q']);
+    const entries = focusEntries(games).filter((e) => e.dimension === 'map');
+    // P and R tie on raw net (4); P's worse per-game loss rate (5/6 vs 6/8)
+    // gives it the bigger Wilson-based deficit despite the smaller sample —
+    // net alone (the old rule) would have put R first.
+    expect(entries.map((e) => e.key)).toEqual(['P', 'R', 'Q']);
   });
 
-  it('caps the list at 12', () => {
-    // 13 net-losing maps (3 losses each) exceed the cap.
+  it('caps each dimension at 6, not the list overall (H1 — three short sections, not one long one)', () => {
+    // 13 net-losing maps (3 losses each) exceed the per-dimension cap.
     const games = Array.from({ length: 13 }, (_, m) => run(3, ['Loss'], { map: `Map-${m}` })).flat();
-    expect(focusEntries(games)).toHaveLength(12);
-    expect(focusEntries(games).every((e) => e.dimension === 'map')).toBe(true);
+    const mapEntries = focusEntries(games).filter((e) => e.dimension === 'map');
+    expect(mapEntries).toHaveLength(6);
   });
 });
 
@@ -141,16 +144,102 @@ describe('focusTrend', () => {
     expect(focusTrend(games)).toBe('improving');
   });
 
-  it('rides on focusEntries rows with enough games', () => {
+  it('rides on focusEntries rows with enough games, alongside the point delta behind it (H2 trendPts)', () => {
     const losses = [0, 1, 2, 3].map((i) => at(i, 'Loss', { map: 'Dorado' }));
     const wins = [4, 5, 6].map((i) => at(i, 'Win', { map: 'Dorado' }));
     const entry = focusEntries([...losses, ...wins]).find((e) => e.key === 'Dorado');
     expect(entry?.net).toBe(1);
     expect(entry?.trend).toBe('improving');
+    expect(entry?.trendPts).toBeGreaterThan(0); // recent half beat the earlier half
 
     const three = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Numbani' }));
     const noTrend = focusEntries(three).find((e) => e.key === 'Numbani');
     expect(noTrend?.trend).toBeUndefined();
+    expect(noTrend?.trendPts).toBeUndefined();
+  });
+});
+
+describe('focusEntries — hero and role dimensions (H1)', () => {
+  it('surfaces a net-losing hero once it reaches the 8-game floor', () => {
+    const games = run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win'], { heroes: ['Ana'] });
+    const ana = focusEntries(games).find((e) => e.dimension === 'hero' && e.key === 'Ana');
+    expect(ana).toMatchObject({ net: 4, games: 8, wins: 2, losses: 6 });
+  });
+
+  it('does not surface a hero below the 8-game floor', () => {
+    const games = run(7, ['Loss'], { heroes: ['Zarya'] });
+    expect(focusEntries(games).some((e) => e.dimension === 'hero')).toBe(false);
+  });
+
+  it('credits a swap game to EVERY hero played in it, in full — not split like the Heroes table\'s time-share credit', () => {
+    const games = run(8, ['Loss'], { heroes: ['Ana', 'Kiriko'] }); // every game is a 2-hero swap
+    const entries = focusEntries(games);
+    expect(entries.find((e) => e.dimension === 'hero' && e.key === 'Ana')).toMatchObject({ games: 8, losses: 8 });
+    expect(entries.find((e) => e.dimension === 'hero' && e.key === 'Kiriko')).toMatchObject({ games: 8, losses: 8 });
+  });
+
+  it('surfaces a net-losing role once it reaches the 8-game floor', () => {
+    const games = run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win', 'Win'], { role: 'tank' });
+    const tank = focusEntries(games).find((e) => e.dimension === 'role' && e.key === 'tank');
+    expect(tank).toMatchObject({ net: 2, games: 8 });
+  });
+
+  it('caps each dimension at 6 independently, not the combined list (three short sections)', () => {
+    const games = Array.from({ length: 7 }, (_, i) => run(8, ['Loss'], { heroes: [`Hero-${i}`] })).flat();
+    const heroEntries = focusEntries(games).filter((e) => e.dimension === 'hero');
+    expect(heroEntries).toHaveLength(6);
+  });
+
+  it('ranks in-pool rows above out-of-pool ones regardless of score (H1)', () => {
+    const games = [
+      ...run(3, ['Loss', 'Loss', 'Loss'], { map: 'Hanamura' }), // net 3, marked out of pool
+      ...run(3, ['Loss', 'Loss', 'Win'], { map: 'Numbani' }), // net 1, in pool — smaller deficit but sorts first
+    ];
+    const isMapActive = (m: string) => m !== 'Hanamura';
+    const entries = focusEntries(games, { isMapActive }).filter((e) => e.dimension === 'map');
+    expect(entries.map((e) => e.key)).toEqual(['Numbani', 'Hanamura']);
+    expect(entries.find((e) => e.key === 'Numbani')?.inPool).toBe(true);
+    expect(entries.find((e) => e.key === 'Hanamura')?.inPool).toBe(false);
+  });
+
+  it('defaults every entry to in-pool when no lookup is supplied', () => {
+    const games = run(3, ['Loss'], { map: 'Busan' });
+    const busan = focusEntries(games).find((e) => e.dimension === 'map');
+    expect(busan?.inPool).toBe(true);
+  });
+});
+
+describe('FocusEntry.heroes — per-map hero record (H2)', () => {
+  it('attaches each of the top heroes\' OWN per-game win/loss, sorted by game count', () => {
+    const games = [
+      ...run(3, ['Loss'], { map: 'Ilios', heroes: ['Ana'] }),
+      ...run(2, ['Win'], { map: 'Ilios', heroes: ['Kiriko'] }),
+      ...run(1, ['Loss'], { map: 'Ilios', heroes: ['Mercy'] }),
+    ];
+    const ilios = focusEntries(games).find((e) => e.dimension === 'map' && e.key === 'Ilios');
+    expect(ilios?.heroes).toEqual([
+      { hero: 'Ana', wins: 0, losses: 3 },
+      { hero: 'Kiriko', wins: 2, losses: 0 },
+      { hero: 'Mercy', wins: 0, losses: 1 },
+    ]);
+  });
+
+  it('caps the per-map record at the top 3 heroes by game count', () => {
+    const games = [
+      ...run(4, ['Loss'], { map: 'Busan', heroes: ['A'] }),
+      ...run(3, ['Loss'], { map: 'Busan', heroes: ['B'] }),
+      ...run(2, ['Loss'], { map: 'Busan', heroes: ['C'] }),
+      ...run(1, ['Loss'], { map: 'Busan', heroes: ['D'] }),
+    ];
+    const busan = focusEntries(games).find((e) => e.dimension === 'map' && e.key === 'Busan');
+    expect(busan?.heroes?.map((h) => h.hero)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('is absent (undefined) on hero and role entries — only maps carry a per-hero record', () => {
+    const games = run(8, ['Loss'], { heroes: ['Ana'], role: 'support' });
+    const entries = focusEntries(games);
+    expect(entries.find((e) => e.dimension === 'hero')?.heroes).toBeUndefined();
+    expect(entries.find((e) => e.dimension === 'role')?.heroes).toBeUndefined();
   });
 });
 
@@ -198,8 +287,13 @@ describe('linkFocusTargets', () => {
   }
   const at = (i: number, result: Result, p: Partial<GameRecord> = {}): GameRecord =>
     game({ result, timestamp: T0 + i * HOUR, ...p });
-  /** All entries are map entries now — a thin alias kept for readability. */
-  const entriesFor = (games: GameRecord[]) => focusEntries(games);
+  /**
+   * These linking tests are all about MAP entries specifically (some use
+   * hero-shaped names like "Ana"/"Mei" as decoys, purely to test token-run
+   * matching) — filtered so a hero/role entry that happens to cross its own
+   * floor on the same fixture (H1 added both dimensions) can't shift `[0]`.
+   */
+  const entriesFor = (games: GameRecord[]) => focusEntries(games).filter((e) => e.dimension === 'map');
 
   it('links by case-insensitive name substring and computes the since-flagged delta', () => {
     // Before the flag: 1W4L (20%). Since: 3W1L (75%). Flag at i=5. Net stays 1.
@@ -350,6 +444,20 @@ describe('dashboard focusItems payload', () => {
   it('is empty when nothing is net-losing', () => {
     const d = computeDashboard(run(4, ['Win'], { map: 'Esperanca' }), { days: 'all' }, demo);
     expect(d.focusItems).toEqual([]);
+  });
+
+  it('resolves the game mode onto map entries only, from the master-data catalog (H2)', () => {
+    const games = run(3, ['Loss'], { map: 'Ilios' }); // a built-in Control map
+    const d = computeDashboard(games, { days: 'all' }, demo);
+    const ilios = d.focusItems.find((e) => e.key === 'Ilios');
+    expect(ilios).toMatchObject({ dimension: 'map', mode: 'Control' });
+  });
+
+  it('tags a map outside the current competitive pool as out of pool (H1)', () => {
+    const games = run(3, ['Loss'], { map: 'Paris' }); // a legacy 2CP map, isActive:false in the default catalog
+    const d = computeDashboard(games, { days: 'all' }, demo);
+    const paris = d.focusItems.find((e) => e.key === 'Paris');
+    expect(paris?.inPool).toBe(false);
   });
 
   it('attaches trend and form to heroStats rows, keyed by the hero\'s own games (H6)', () => {

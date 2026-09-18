@@ -4,7 +4,7 @@
  * and notifies subscribers on change. Views render from a snapshot and never
  * fetch or persist directly.
  */
-import type { DashboardData, DashboardFilters, MatchFlagKey } from '../../src/shared/contract';
+import type { DashboardData, DashboardFilters, MatchFlagKey, Role } from '../../src/shared/contract';
 import { migrateLegacySeasonDays } from '../../src/core/season';
 import { bridge } from './bridge';
 import { relTime } from './format';
@@ -52,6 +52,10 @@ export interface ViewParams {
   /** Targets: prefill the builder with this name (self-rated) on open — the
    *  Focus screen's per-map "＋ target" quick-create. */
   prefillName?: string;
+  /** Targets: prefill the builder's role scope — Focus's per-role "＋ target" (H1). */
+  prefillRole?: Role;
+  /** Targets: prefill the builder's hero scope — Focus's per-hero "＋ target" (H1). */
+  prefillHeroes?: string[];
   /** playerHistory: the player whose shared-match history to show (a name/battleTag). */
   playerName?: string;
   /** targetDetail: the improvement target to drill into. */

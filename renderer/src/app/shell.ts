@@ -275,7 +275,7 @@ export class App {
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
-  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; map?: string; prefillName?: string; playerName?: string; targetId?: string; editTargetId?: string; epoch: number } | null = null;
+  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; map?: string; prefillName?: string; prefillRole?: string; prefillHeroes?: string[]; playerName?: string; targetId?: string; editTargetId?: string; epoch: number } | null = null;
   /** The snapshot the filter bar was last built for. Background refreshes patch
    *  `refreshing`/`status` without changing `data`, so re-rendering the bar then
    *  would tear down its live controls mid-click and swallow the click — the
@@ -548,6 +548,8 @@ export class App {
       flag: state.params.flag,
       map: state.params.map,
       prefillName: state.params.prefillName,
+      prefillRole: state.params.prefillRole,
+      prefillHeroes: state.params.prefillHeroes,
       playerName: state.params.playerName,
       targetId: state.params.targetId,
       editTargetId: state.params.editTargetId,
@@ -558,6 +560,7 @@ export class App {
       && last.matchId === key.matchId && last.highlight === key.highlight
       && last.day === key.day && last.flag === key.flag && last.map === key.map
       && last.prefillName === key.prefillName
+      && last.prefillRole === key.prefillRole && sameStrings(last.prefillHeroes, key.prefillHeroes)
       && last.playerName === key.playerName
       && last.targetId === key.targetId && last.editTargetId === key.editTargetId
       && last.epoch === key.epoch) return;
@@ -570,7 +573,9 @@ export class App {
     if (this.contentPressed && last && last.view === key.view && last.matchId === key.matchId
       && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
       && last.map === key.map
-      && last.prefillName === key.prefillName && last.playerName === key.playerName
+      && last.prefillName === key.prefillName
+      && last.prefillRole === key.prefillRole && sameStrings(last.prefillHeroes, key.prefillHeroes)
+      && last.playerName === key.playerName
       && last.targetId === key.targetId && last.editTargetId === key.editTargetId && last.epoch === key.epoch) {
       this.pendingContentRender = true;
       return;
@@ -1160,6 +1165,14 @@ export class App {
     // handler above refetches on return anyway.
     window.addEventListener('blur', releasePress);
   }
+}
+
+/** Value equality for the `prefillHeroes` (H1) render-memo key — a freshly
+ *  built array on every navigation would never `===` the previous one. */
+function sameStrings(a?: string[], b?: string[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
 }
 
 function routeKey(view: ViewId, matchId?: string, playerName?: string, targetId?: string): string {

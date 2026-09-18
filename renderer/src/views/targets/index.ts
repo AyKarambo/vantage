@@ -22,10 +22,14 @@ const consumedEditParams = new WeakSet<ViewParams>();
 
 export function targets(ctx: ViewContext): HTMLElement {
   const builder = builderCard(ctx);
-  // Focus's per-map "＋ target" quick-create lands here with a name to prefill —
-  // self-rated by default, same as a fresh builder's grading mode.
+  // Focus's per-map/hero/role "＋ target" quick-create lands here with a name
+  // to prefill — self-rated by default, same as a fresh builder's grading
+  // mode — and, for a hero/role entry (H1), the matching scope pre-selected.
   if (ctx.params.prefillName) {
-    builder.prefill({ name: ctx.params.prefillName, mode: 'self', rule: 'You grade it' });
+    builder.prefill({
+      name: ctx.params.prefillName, mode: 'self', rule: 'You grade it',
+      roleScope: ctx.params.prefillRole, heroScope: ctx.params.prefillHeroes,
+    });
   }
   // A detail page's Edit lands here with the target to re-open in the builder.
   // One navigation = one edit: a background refresh re-renders this view with
