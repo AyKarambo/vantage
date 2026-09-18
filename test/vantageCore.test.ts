@@ -5,7 +5,7 @@ import { mapMode } from '../src/core/maps';
 import { mentalSummary } from '../src/core/mental';
 import { progression, winrateToSr, tierOf } from '../src/core/progression';
 import { sampleTargets, type AuthoredTarget } from '../src/core/targets';
-import { computeDashboard, applyFilters, pendingReviewMatches } from '../src/core/dashboardData';
+import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, pendingReviewsRecent } from '../src/core/dashboardData';
 import { currentSeasonWindow } from '../src/core/season';
 import { isCompetitive } from '../src/core/matchFilter';
 import { generateSampleGames } from '../src/core/sampleData';
@@ -397,6 +397,46 @@ describe('computeDashboard', () => {
 
     const res = pendingReviewMatches([old, recent, graded], { days: 7 });
     expect(res.map((g) => g.matchId)).toEqual([recent.matchId, old.matchId]); // newest first, uncapped
+  });
+
+  describe('eligibleForNoRead (R1 bulk "mark older games as no-read")', () => {
+    const now = Date.now();
+    const day3 = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: now - 3 * 86400000 });
+    const day10 = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now - 10 * 86400000 });
+    const today = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now });
+    const pending = [today, day3, day10];
+
+    it('0 (no cutoff) returns every pending row', () => {
+      expect(eligibleForNoRead(pending, 0, now).map((g) => g.matchId).sort())
+        .toEqual([today, day3, day10].map((g) => g.matchId).sort());
+    });
+
+    it('only affects rows at or older than the cutoff', () => {
+      expect(eligibleForNoRead(pending, 7, now).map((g) => g.matchId)).toEqual([day10.matchId]);
+    });
+
+    it('a cutoff older than everything affects nothing', () => {
+      expect(eligibleForNoRead(pending, 30, now)).toEqual([]);
+    });
+  });
+
+  describe('pendingReviewsRecent (R1 sidebar badge)', () => {
+    const now = Date.now();
+
+    it('counts only rows within the last 7 days', () => {
+      const inWindow = game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now - 2 * 86400000 });
+      const outside = game({ result: 'Loss', map: 'Ilios', role: 'damage', timestamp: now - 10 * 86400000 });
+      expect(pendingReviewsRecent([inWindow, outside], now)).toBe(1);
+    });
+
+    it('never exceeds the full pending count', () => {
+      const all = [1, 2, 3].map((d) => game({ result: 'Win', map: 'Ilios', role: 'damage', timestamp: now - d * 86400000 }));
+      expect(pendingReviewsRecent(all, now)).toBe(all.length);
+    });
+
+    it('empty input → 0', () => {
+      expect(pendingReviewsRecent([], now)).toBe(0);
+    });
   });
 
   it('narrows to a specific season via { season: id } ([start, end) boundary)', () => {

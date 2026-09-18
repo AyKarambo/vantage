@@ -24,8 +24,10 @@ function makeDeps(announceChange?: () => void): DataProviderDeps {
       count: () => games.length,
       all: () => games,
       setReview: vi.fn(),
+      setReviews: vi.fn(),
       editManual: vi.fn(),
       clearReview: vi.fn(),
+      clearReviews: vi.fn(),
       addMany: () => ({ imported: 0 }),
       mergeImported: () => ({ merged: 0, skipped: 0 }),
     },
@@ -36,6 +38,7 @@ function makeDeps(announceChange?: () => void): DataProviderDeps {
       map: () => ({}),
     },
     placements: { allRuns: () => [], getRun: () => undefined },
+    masterDataStore: { all: () => ({ heroes: {}, maps: {}, seasons: {} }), replace: vi.fn() },
     notify: vi.fn(),
     ...(announceChange ? { announceChange } : {}),
   } as unknown as DataProviderDeps;
@@ -60,6 +63,17 @@ describe('DataProvider — onDataChanged announcement', () => {
     expect(announceChange).toHaveBeenCalledTimes(1);
   });
 
+  it('announces after a bulk "mark older games as no-read" (R1), and its Undo', () => {
+    const announceChange = vi.fn();
+    const provider = createDataProvider(makeDeps(announceChange));
+
+    provider.ignorePendingReviews({ filters: {}, minAgeDays: 0 });
+    expect(announceChange).toHaveBeenCalledTimes(1);
+
+    provider.clearReviews(['m1']);
+    expect(announceChange).toHaveBeenCalledTimes(2);
+  });
+
   it('does NOT announce for reads', () => {
     const announceChange = vi.fn();
     const provider = createDataProvider(makeDeps(announceChange));
@@ -67,6 +81,7 @@ describe('DataProvider — onDataChanged announcement', () => {
     provider.games();
     provider.getRanks();
     provider.isSample();
+    provider.previewPendingReviewIgnore({ filters: {}, minAgeDays: 0 });
 
     expect(announceChange).not.toHaveBeenCalled();
   });

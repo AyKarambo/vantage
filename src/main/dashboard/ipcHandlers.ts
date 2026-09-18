@@ -6,7 +6,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
-  AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, LogLevel, ManualMatchInput, PlayerListQuery,
+  AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, IgnorePendingReviewsInput, LogLevel, ManualMatchInput, PlayerListQuery,
   MatchEditInput, RankAnchorInput, RankEntryPreviewInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementDeclineInput,
@@ -207,6 +207,18 @@ export function registerDashboardIpc(provider: DataProvider): void {
 
   handle(ch.clearReview, (_e, matchId: string) => {
     provider.clearReview(matchId);
+  });
+
+  // Bulk "Mark older games as no-read" (R1): a live preview count, the write,
+  // and its Undo.
+  handle(ch.previewPendingReviewIgnore, (_e, input: IgnorePendingReviewsInput) =>
+    provider.previewPendingReviewIgnore(input),
+  );
+  handle(ch.ignorePendingReviews, (_e, input: IgnorePendingReviewsInput) =>
+    provider.ignorePendingReviews(input),
+  );
+  handle(ch.clearReviews, (_e, matchIds: string[]) => {
+    provider.clearReviews(matchIds);
   });
 
   // "Needs result" resolve: complete a held no-outcome match with a win/loss/draw.

@@ -219,8 +219,12 @@ export interface DashboardData {
   targets: TargetSummary[];
   /** Ungraded tracked games, newest first — ALWAYS unfiltered (the inbox source). */
   reviewInbox: MatchRow[];
-  /** Total ungraded count (the badge) — unfiltered and uncapped. */
+  /** Total ungraded count (the Review subtitle) — unfiltered and uncapped. */
   pendingReviews: number;
+  /** Of `pendingReviews`, how many landed in the last 7 days — the sidebar
+   *  badge (R1). The lifetime total only ever grows for an active player, so
+   *  it stopped meaning "things to do tonight"; this is the number that does. */
+  pendingReviewsRecent: number;
   /**
    * Played competitive matches GEP delivered without a win/loss, waiting for the
    * user to set a result in Review (the "Needs result" section). Held in a

@@ -296,6 +296,19 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   below now look like the drill-downs they are — an accent border, a lift on hover, a trailing
   arrow — instead of being visually identical to the hero drawer's plain, non-clickable stat grid.
 
+### Added
+
+- **Mark older games as no-read.** A deep Review backlog no longer has to be graded one card at
+  a time — pick an age cutoff (older than 1 day / 7 days / everything), see a live count of how
+  many that will clear, and confirm. It's a real bulk clear, not a delete: the games stay in your
+  history, just off the inbox and the badge, and a 12-second **Undo** puts every one of them
+  straight back if you change your mind.
+- **The sidebar's Review count is a recent queue, not a lifetime backlog.** It now shows how many
+  tracked games need your read from the **last 7 days** — the number that used to sit there only
+  ever grew for anyone playing regularly, which stopped meaning "anything to do tonight?" and
+  trained people to stop looking at it. Hover it for the full lifetime total; the Review screen's
+  own subtitle still states that in full.
+
 ## 0.34.0 — 31 July 2026
 
 ### Added

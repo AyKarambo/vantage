@@ -23,11 +23,12 @@ import type { MatchMental, MatchRow, PendingMatch, PlacementRunSummary, RankEntr
 import { matchInTargetScope, parseMeasuredRule } from '../../../src/core/targets';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
-import { badge, button, card, confirmButton, emptyState, resultPill } from '../components/primitives';
+import { badge, button, card, chip, confirmButton, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
 import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
+import { openPopover } from '../components/popover';
 import { store } from '../store';
 import { bridge } from '../bridge';
 import { registerShortcut } from '../shortcuts';
@@ -56,11 +57,18 @@ export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
   const pending = d.reviewInbox.filter((m) => !gradedThisSession.has(m.matchId));
+  // The subtitle states the TRUE, uncapped backlog (R1) — `pending.length` is
+  // capped at reviewInbox's 150 rows, which would silently understate a
+  // deeper backlog. `d.pendingReviews` isn't itself session-adjusted, so the
+  // same graded-this-session correction `pending` already applied is redone
+  // against it here.
+  const totalPending = Math.max(0, d.pendingReviews - (d.reviewInbox.length - pending.length));
   // No-outcome matches held for manual completion — filtered by the session set
   // so a just-resolved row disappears immediately, before the refetch lands.
   const needsResult = (d.pendingMatches ?? []).filter((m) => !resolvedThisSession.has(m.matchId));
 
-  const head = viewHead('Review', subtitle(pending.length, needsResult.length));
+  const head = viewHead('Review', subtitle(totalPending, needsResult.length),
+    pending.length ? noReadAction(ctx) : undefined);
   const needsResultSection = needsResult.length ? needsResultCard(needsResult) : null;
 
   if (!pending.length) {
@@ -171,6 +179,99 @@ function needsResultRow(m: PendingMatch): HTMLElement {
           `GEP: ${GEP_RESULT_LABEL[m.reportedResult]}`)
       : null,
     h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, ...buttons, dismiss),
+  );
+}
+
+/** Age-cutoff choices for {@link noReadAction} — `minAgeDays: 0` means every pending row. */
+const NO_READ_AGES: Array<{ label: string; minAgeDays: number }> = [
+  { label: 'Older than 1 day', minAgeDays: 1 },
+  { label: 'Older than 7 days', minAgeDays: 7 },
+  { label: 'All of them', minAgeDays: 0 },
+];
+
+/**
+ * "Mark older games as no-read" (R1) — the bulk exit from a backlog that
+ * would otherwise only shrink one card at a time. The IPC contract and its
+ * channel wiring shipped ahead of this button; this is what finally calls it.
+ */
+function noReadAction(ctx: ViewContext): HTMLElement {
+  const btn = button('Mark older as no-read', {
+    variant: 'ghost',
+    title: 'Bulk-clear old tracked games from this inbox without grading them',
+    onClick: () => openNoReadPopover(btn, ctx),
+  });
+  return btn;
+}
+
+function openNoReadPopover(anchor: HTMLElement, ctx: ViewContext): void {
+  let minAgeDays = NO_READ_AGES[0].minAgeDays;
+  let count: number | null = null;
+  let requestId = 0;
+
+  const refreshCount = (repaint: () => void): void => {
+    const id = ++requestId;
+    count = null;
+    repaint();
+    void bridge.previewPendingReviewIgnore({ filters: ctx.data.filters, minAgeDays }).then((r) => {
+      if (id !== requestId) return; // a newer age selection has since been chosen
+      count = r.count;
+      repaint();
+    });
+  };
+
+  openPopover(anchor, (close) => {
+    const body = h('div', { class: 'stack', style: { gap: '10px', minWidth: '220px' } });
+    const paint = (): void => {
+      render(body,
+        h('div', { class: 'u-muted', style: { fontSize: '11px' } }, 'Mark older games as no-read'),
+        h('div', { class: 'stack', style: { gap: '4px' } },
+          ...NO_READ_AGES.map((a) => chip(a.label, a.minAgeDays === minAgeDays, () => {
+            minAgeDays = a.minAgeDays;
+            refreshCount(paint);
+          }))),
+        h('div', { class: 'hint' },
+          count === null ? 'Counting…' : `This will clear ${count} game${count === 1 ? '' : 's'} from your inbox.`),
+        button('Mark as no-read', {
+          variant: 'danger',
+          disabled: count === null || count === 0,
+          onClick: () => {
+            close();
+            void applyNoRead(ctx, minAgeDays);
+          },
+        }),
+      );
+    };
+    refreshCount(paint);
+    paint();
+    return body;
+  });
+}
+
+/** The actual bulk write + refetch + Undo toast, once the popover confirms. */
+async function applyNoRead(ctx: ViewContext, minAgeDays: number): Promise<void> {
+  let matchIds: string[];
+  try {
+    ({ matchIds } = await bridge.ignorePendingReviews({ filters: ctx.data.filters, minAgeDays }));
+  } catch (err) {
+    toast(`Couldn't clear those games — ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  await store.refresh();
+  if (!matchIds.length) {
+    toast('Nothing to clear — those games were already graded or gone.');
+    return;
+  }
+  toast(
+    `Marked ${matchIds.length} game${matchIds.length === 1 ? '' : 's'} as no-read.`,
+    {
+      ttl: 12_000,
+      action: {
+        label: 'Undo',
+        run: () => {
+          void bridge.clearReviews(matchIds).then(() => store.refresh());
+        },
+      },
+    },
   );
 }
 

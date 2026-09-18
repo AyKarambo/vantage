@@ -20,7 +20,7 @@ import { activeMeasuredTargets, type AuthoredTarget } from '../../src/core/targe
 import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
-import { computeDashboard, applyFilters, pendingReviewMatches } from '../../src/core/dashboardData';
+import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
 import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
@@ -249,15 +249,15 @@ const dataset = (): GameRecord[] =>
 
 const findTarget = (id: string): AuthoredTarget | undefined => targets.find((t) => t.id === id);
 
-// Mirrors src/main/dataProvider.ts's eventual `eligibleForIgnore`: the pending
-// set matching the combined Role/account scope + the Review-only age cutoff,
-// computed fresh (not capped) so "Ignore all" can act on more than the 150
-// rendered rows just like the real app.
+// The pending set matching the combined Role/account scope + the Review-only
+// age cutoff, computed fresh (not capped) so "Ignore all" can act on more
+// than the 150 rendered rows just like the real app — the same two `core/`
+// functions `dataProvider.ts`'s real implementation calls (R1), so this
+// harness can never drift from what the app actually does.
 const eligibleForIgnore = (input: { filters: DashboardFilters; minAgeDays: number }): GameRecord[] => {
-  const now = Date.now();
   const seasonStarts = effectiveMasterData().seasons.map((s) => s.start);
-  return pendingReviewMatches(dataset(), input.filters, seasonStarts)
-    .filter((g) => input.minAgeDays <= 0 || g.timestamp <= now - input.minAgeDays * 86400000);
+  const pending = pendingReviewMatches(dataset(), input.filters, seasonStarts);
+  return eligibleForNoRead(pending, input.minAgeDays);
 };
 
 // Canned Notion picker data — the preview has no real Notion runtime, but the

@@ -183,7 +183,11 @@ account's per-role lines beneath it.
   always-visible inbox of ungraded games, independent of the global filters. A game that
   never should have been tracked can be **deleted** straight from its grading card instead
   of graded — distinct from the "Not a real match" dismiss above it, which drops a *held*
-  match that never entered history.
+  match that never entered history. A deep backlog doesn't have to be graded one card at a
+  time: **Mark older as no-read** bulk-clears everything past an age cutoff (1 day / 7 days /
+  all of it) with a live preview of how many that will affect, and a 12-second **Undo**. The
+  sidebar's Review count is scoped to the last 7 days — not the lifetime backlog, which would
+  only ever grow — with the full total in its tooltip.
 - **Targets** — build a target (self-rated ◎, or measured ⚡ which **auto-grades from your
   stats per 10 minutes played** — no manual read). The **Target library** card offers curated starting
   points grouped by **Mechanics · Macro · Strategy · Training**, each entry showing a one-line
