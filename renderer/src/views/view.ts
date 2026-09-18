@@ -2,7 +2,7 @@
 import { h } from '../dom';
 import type { DashboardData, DashboardFilters } from '../../../src/shared/contract';
 import type { ViewId, ViewParams } from '../store';
-import { FILTER_DEFAULTS, store } from '../store';
+import { DETAIL_PARENT, FILTER_DEFAULTS, store } from '../store';
 import { prefs, type FilterPresetPref } from '../prefs';
 import { roleLabel } from '../format';
 import { button, chip, select, type SelectOption } from '../components/primitives';
@@ -122,6 +122,18 @@ function summarizeFilters(f: Required<DashboardFilters>): string {
   return parts.join(' · ');
 }
 
+/**
+ * Stands in for {@link filterBar} on a view the global filters don't scope —
+ * same host, same row height, so hiding the real bar there doesn't yank the
+ * content column up by its height (K5). Says why in place of showing controls
+ * that would visibly do nothing.
+ */
+export function filterBarReason(text: string): HTMLElement {
+  return h('div', { class: 'filter-bar filter-bar--reason' },
+    h('span', { class: 'filter-label' }, text),
+  );
+}
+
 function filterField(label: string, value: string, options: SelectOption[], onChange: (v: string) => void): HTMLElement {
   return h('label', { class: 'filter-field' },
     h('span', { class: 'filter-label' }, label),
@@ -131,9 +143,17 @@ function filterField(label: string, value: string, options: SelectOption[], onCh
 
 /**
  * The one Back control — a `←`, rendered only while the session stack has a
- * resolvable previous screen. Every back button in the app is literally this
- * same node, so the drill-downs that build their own header rows stay in step
- * with {@link viewHead}.
+ * resolvable previous screen AND the current view is itself a drill-down (a
+ * {@link DETAIL_PARENT} key — a match, a player, or a target detail page).
+ * Every back button in the app is literally this same node, so the
+ * drill-downs that build their own header rows stay in step with
+ * {@link viewHead}.
+ *
+ * Without the drill-down check, every root screen wears a ← the moment the
+ * back stack holds anything at all — a plain sidebar click records the
+ * screen it left just like a real drill-down does, so a second sidebar
+ * click would otherwise carry the glyph too (K6). Esc / Alt+← / the mouse
+ * back button reach the same stack regardless of whether this renders.
  *
  * The glyph carries no destination text on purpose: where Back leads is
  * session-dependent, so a fixed "← Matches" would be a lie on exactly the
@@ -142,6 +162,7 @@ function filterField(label: string, value: string, options: SelectOption[], onCh
  * tooltip and the aria-label instead.
  */
 export function backControl(): HTMLButtonElement | null {
+  if (!(store.get().view in DETAIL_PARENT)) return null;
   const dest = store.backLabel();
   if (dest === null) return null;
   const el = button('←', {

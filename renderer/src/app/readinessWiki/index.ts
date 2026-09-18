@@ -11,6 +11,7 @@
 import { h, render } from '../../dom';
 import { openDrawer } from '../../components/overlay';
 import { segmented } from '../../components/primitives';
+import { inlineLink } from '../../components/inlineLink';
 import { ARTICLES, articleById } from './articles';
 import { scenarioLibrary } from './scenarioLibrary';
 import { personalizedArticle } from './personalized';
@@ -91,7 +92,7 @@ function breadcrumb(stack: WikiRoute[], nav: WikiNav): HTMLElement {
       ? h('button', { class: 'wiki-back', title: 'Back', on: { click: () => nav.back() } }, '‹ Back')
       : null,
     h('div', { class: 'wiki-trail' },
-      h('button', { class: 'inline-link wiki-crumb', on: { click: () => nav.home() } }, 'Guide'),
+      inlineLink('Guide', { class: 'wiki-crumb', onClick: () => nav.home() }),
       atRoot ? null : h('span', { class: 'wiki-crumb-sep' }, '›'),
       atRoot ? null : h('span', { class: 'wiki-crumb-current' }, routeTitle(route)),
     ),

@@ -6,6 +6,7 @@ import { pct } from '../format';
 import { PALETTE } from '../theme';
 import { sparkline } from '../charts/plots';
 import { badge, card, statBar, statBox } from '../components/primitives';
+import { inlineLink } from '../components/inlineLink';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { viewHead, type ViewContext } from './view';
 
@@ -219,10 +220,9 @@ function sessionCard(ctx: ViewContext): HTMLElement {
 function flagBox(ctx: ViewContext, count: number, label: string, flag: MatchFlagKey, valueClass?: string): HTMLElement {
   const value = valueClass ? h('span', { class: valueClass }, String(count)) : String(count);
   if (count <= 0) return statBox(value, label);
-  return h('button', {
-    class: 'inline-link',
+  return inlineLink(statBox(value, label), {
     style: { display: 'block', width: '100%', textAlign: 'left' },
     title: `Show the ${FLAG_LABELS[flag]}-flagged games`,
-    on: { click: () => ctx.navigate('matches', { flag }) },
-  }, statBox(value, label));
+    onClick: () => ctx.navigate('matches', { flag }),
+  });
 }

@@ -99,7 +99,7 @@ export function logViewer(_ctx: ViewContext): HTMLElement {
     },
   });
 
-  const view = h('div', { class: 'view' },
+  const view = h('div', { class: 'view view--fill' },
     viewHead('Logs', 'The release debug log — live from this session (last 1000 entries).',
       [filter, logLevelToggle(), followHost]),
     card({ class: 'card--flush', style: { padding: '0' } }, list),

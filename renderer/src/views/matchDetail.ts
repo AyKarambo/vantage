@@ -23,6 +23,7 @@ import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
+import { inlineLink } from '../components/inlineLink';
 import { scoreboard } from '../components/scoreboard';
 import { store } from '../store';
 import { gradedThisSession } from '../reviews';
@@ -852,11 +853,11 @@ function splitCell(wl: { wins: number; losses: number }, known: number): HTMLEle
 function encounterRow(p: PlayerEncounter, ctx: ViewContext): HTMLElement {
   return h('tr', null,
     h('td', null,
-      h('button', {
-        class: 'inline-link inline-link--strong',
+      inlineLink(p.name, {
+        strong: true,
         title: `See every game you have shared with ${p.name}`,
-        on: { click: () => ctx.navigate('playerHistory', { playerName: p.name }) },
-      }, p.name),
+        onClick: () => ctx.navigate('playerHistory', { playerName: p.name }),
+      }),
     ),
     h('td', { class: 'mono' }, String(p.encounters)),
     splitCell(p.sameTeam, p.relationKnown),

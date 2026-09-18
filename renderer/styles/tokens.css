@@ -116,6 +116,16 @@
   --warn-soft: rgba(214, 162, 79, 0.16);
   --warn-border: rgba(214, 162, 79, 0.5);
 
+  /* Layout ----------------------------------------------------------------
+     One shared content width (K5) instead of five screens each guessing
+     their own inline cap (760/720/980px, or none at all) — narrow for a
+     single-column form/detail read (Review, Targets, Notion), the default
+     for everything else, both centred so a screen doesn't sprawl edge to
+     edge on a wide monitor. `.view--wide` opts a table-dominant screen
+     (Heroes, Matches) out of the default instead of back to unbounded. */
+  --content-max: 1280px;
+  --content-max-narrow: 800px;
+
   /* Radius --------------------------------------------------------------- */
   --r-sm: 6px;
   --r-md: 9px;

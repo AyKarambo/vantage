@@ -64,7 +64,7 @@ export function review(ctx: ViewContext): HTMLElement {
   const needsResultSection = needsResult.length ? needsResultCard(needsResult) : null;
 
   if (!pending.length) {
-    return h('div', { class: 'view', style: { maxWidth: '760px' } },
+    return h('div', { class: 'view view--narrow' },
       head,
       activeStrip(active),
       needsResultSection,
@@ -72,7 +72,7 @@ export function review(ctx: ViewContext): HTMLElement {
     );
   }
 
-  return h('div', { class: 'view', style: { maxWidth: '760px' } },
+  return h('div', { class: 'view view--narrow' },
     head,
     activeStrip(active),
     needsResultSection,

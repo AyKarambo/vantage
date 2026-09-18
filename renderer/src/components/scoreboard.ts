@@ -9,6 +9,7 @@ import { h } from '../dom';
 import type { ScoreboardEntry } from '../../../src/shared/contract';
 import { fmt } from '../format';
 import { roleIcon } from './roleIcon';
+import { inlineLink } from './inlineLink';
 
 type StatKey = 'eliminations' | 'assists' | 'deaths' | 'damage' | 'healing' | 'mitigation';
 
@@ -106,11 +107,10 @@ function row(e: ScoreboardEntry, columns: string, hasPerks: boolean, best: Map<S
 function nameNode(e: ScoreboardEntry, onPlayer?: (name: string) => void): Node {
   const clickable = onPlayer && !e.isLocal && e.name && e.name !== 'Unknown';
   if (!clickable) return document.createTextNode(e.name);
-  return h('button', {
-    class: 'inline-link',
+  return inlineLink(e.name, {
     title: `See the matches you shared with ${e.name}`,
-    on: { click: (ev) => { ev.stopPropagation(); onPlayer!(e.name); } },
-  }, e.name);
+    onClick: (ev) => { ev.stopPropagation(); onPlayer!(e.name); },
+  });
 }
 
 function statCell(value: number | undefined, col: StatColumn, best: number | undefined): HTMLElement {

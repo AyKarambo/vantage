@@ -9,6 +9,8 @@ import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
 import { wrHsl } from '../theme';
 import { openPopover } from '../components/popover';
+import { clickableRow } from '../components/clickableRow';
+import { inlineLink } from '../components/inlineLink';
 import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 import { prefs, MATCH_COLUMNS_DEFAULT, type MatchColumnKey, type MatchColumnsPref, type MatchFieldMode } from '../prefs';
@@ -54,7 +56,7 @@ export function matches(ctx: ViewContext): HTMLElement {
   const scopeChip = day || flag ? drillDownChip(ctx, day, flag) : null;
   const columns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
 
-  return h('div', { class: 'view' },
+  return h('div', { class: 'view view--wide' },
     viewHead('Matches', `${rows.length} games in range · newest first · click a match for details`,
       customizeViewButton()),
     scopeChip,
@@ -271,11 +273,10 @@ function pillRow(pills: HTMLElement[]): HTMLElement {
 function heroLinks(m: MatchRow, ctx: ViewContext): HTMLElement {
   return h('span', null, ...m.heroes.flatMap((hero, i) => [
     i ? ', ' : '',
-    h('button', {
-      class: 'inline-link',
+    inlineLink(hero, {
       title: `Open ${hero}'s drill-down`,
-      on: { click: (e) => { e.stopPropagation(); openHeroDrawer(ctx, hero); } },
-    }, hero),
+      onClick: (e) => { e.stopPropagation(); openHeroDrawer(ctx, hero); },
+    }),
   ]));
 }
 
@@ -306,16 +307,16 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
     // wrapping onto an implicit second row (spec F1 layout fix). CSP-safe:
     // plain element-style assignment via the h() style option, no <style> tag.
     style: { gridTemplateColumns: matchRowGridTemplate(columnKeys.length) },
-    on: { click: open },
+    ...clickableRow(open),
   },
     h('div', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
     h('div', { class: 'row-main' },
       h('div', { class: 'row-name' },
-        h('button', {
-          class: 'inline-link inline-link--strong',
+        inlineLink(m.map, {
+          strong: true,
           title: `Find ${m.map} on the Maps screen`,
-          on: { click: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); } },
-        }, m.map),
+          onClick: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); },
+        }),
       ),
       metaLine,
     ),

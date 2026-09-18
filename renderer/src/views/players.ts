@@ -125,7 +125,7 @@ export function players(ctx: ViewContext): HTMLElement {
   const hadFocus = outgoing instanceof HTMLInputElement && outgoing.classList.contains('search-input');
   const caret = hadFocus ? outgoing.selectionStart : null;
 
-  const host = h('div', { class: 'view' });
+  const host = h('div', { class: 'view view--fill' });
   const tableHost = h('div', null, h('div', { class: 'hint' }, 'Loading players…'));
   const footNote = h('div', { class: 'hint', style: { marginTop: '8px' } });
   let sort = restoreSort();
