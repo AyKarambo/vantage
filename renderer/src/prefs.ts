@@ -58,6 +58,10 @@ interface PrefsShape {
   playerSort: HeroSortPref;
   /** Players table minimum-shared-games filter. */
   minPlayerGames: number;
+  /** Maps ranking minimum-games filter (H4). */
+  minMapGames: number;
+  /** Maps ranking mode filter (H4) — a `byMapType` key, or absent for "All". */
+  mapModeFilter: string;
   /** Last quick-log inputs (role only — map, hero, result stay fresh). */
   logPrefill: LogPrefillPref;
   /** Saved filter combinations. */

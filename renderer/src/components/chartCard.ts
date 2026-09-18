@@ -31,6 +31,8 @@ export function chartCard(
     initialSort?: { key: string; dir: 1 | -1 };
     /** Makes the Table view's rows clickable too (C7) — the same destination the chart's own point click opens, so switching Chart/Table never changes what a click does. */
     onRowClick?: (row: ChartTableRow) => void;
+    /** Extra controls rendered beside the Chart/Table toggle in the header (H4 — Maps' mode/min-games filter chips). */
+    extraActions?: Node;
   },
   chart: Node,
 ): HTMLElement {
@@ -64,6 +66,9 @@ export function chartCard(
   };
   paint();
 
-  const { columns: _c, rows: _r, initialSort: _s, onRowClick: _rc, ...cardOpts } = opts;
-  return card({ ...cardOpts, actions: toggleHost }, body);
+  const { columns: _c, rows: _r, initialSort: _s, onRowClick: _rc, extraActions, ...cardOpts } = opts;
+  const actions = extraActions
+    ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, extraActions, toggleHost)
+    : toggleHost;
+  return card({ ...cardOpts, actions }, body);
 }
