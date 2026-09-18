@@ -1,7 +1,7 @@
 ---
 slug: editable-master-data
 status: done
-updated: 2026-07-06
+updated: 2026-09-18
 ---
 
 # Spec: Editable & Updatable Master Data
@@ -54,6 +54,13 @@ is catalog data, not match/account data) and without a forced automatic overwrit
   the **OverFast API** (community, MIT, scrapes official Blizzard pages: `/heroes` →
   `key,name,role`; `/maps` → `name,gamemodes`), diffs vs current effective data, returns
   **additions + changes** (Resolved Q2).
+- **"Last checked" tracking (W1):** every successful fetch — regardless of whether it found
+  anything new — stamps `MasterDataConfig.lastCheckedAt` (epoch ms, `config.local.json`, main
+  process only; never `undefined` once checked once). The Settings card reads it via
+  `bridge.getMasterDataCheck()` and shows "Last checked `<relTime>`" / "Never checked" plus the
+  source name and a privacy line; a soft accent nudge appears once it's over 60 days old or
+  absent. Naming the source and stamping when it was last read closes the gap where "Update
+  from online source" said neither what it talked to nor when it last actually ran.
 - **Internal mode-mapping table** (Resolved Q6): a Vantage-owned lookup translating OverFast
   game-mode strings (`push`, `flashpoint`, …) → Vantage's `MapMode` union; anything unmapped
   falls to `Unknown` and is surfaced for the user to set.

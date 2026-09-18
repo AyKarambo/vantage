@@ -234,6 +234,27 @@
   color: var(--warn-text);
 }
 
+/* Settings section rail (W1) — a row of jump links onto General's cards. */
+.settings-rail {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 2px;
+}
+.settings-rail-item {
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.settings-rail-item:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 /* Badge --------------------------------------------------------------------- */
 .badge {
   font-family: var(--font-mono);
@@ -1208,6 +1229,19 @@ table.data tbody tr:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Settings → Coaching: one labelled block per editor (W1), instead of five
+   controls stacked with nothing saying which was which. */
+.coaching-block {
+  margin-top: 16px;
+}
+.coaching-block:first-child {
+  margin-top: 4px;
+}
+.coaching-block:not(:first-child) {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 
 /* Log viewer (Logs screen) --------------------------------------------------- */
