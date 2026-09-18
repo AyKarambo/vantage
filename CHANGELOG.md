@@ -534,6 +534,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   sides — "Worth keeping — +18 pts when you hit it (21 games)" or an honest "No effect yet";
   hitting something on near-total autopilot instead reads "Habit is set — rotate it out", ahead
   of any lift read.
+- **Measured targets suggest their own threshold from your own games.** The builder's Measured
+  pane now shows **"Your usual: …"** under the rule — your median for that stat over your last
+  30 games, honoring whatever role/hero scope you've set — with **Use median** / **Use +10%** /
+  **Use my average** buttons that write it straight into the threshold field; it updates live as
+  you change the stat or scope. The **Target library**'s measured entries get the same treatment
+  before Customize or Add saves them — a fixed "~9k/10 is a solid DPS floor at most ranks" is
+  equally wrong for a GM Genji and a Bronze Reaper, so both now personalize the number first when
+  you have the data for it, and **Add**'s toast says "— adjusted to your last 30 games" when it did.
 
 ## 0.34.0 — 31 July 2026
 

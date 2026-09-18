@@ -1,6 +1,6 @@
 import type { GameRecord } from '../../core/analytics';
 import type { Role } from '../../core/model';
-import type { AuthoredTarget } from '../../core/targets';
+import type { AuthoredTarget, ThresholdSuggestion } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
@@ -12,7 +12,7 @@ import type { PlacementRun } from '../../core/placements';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
-  IgnorePendingReviewsInput,
+  IgnorePendingReviewsInput, ThresholdSuggestionInput,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
@@ -50,6 +50,8 @@ export interface DataProvider {
   manualTargets(): AuthoredTarget[];
   /** Persist a new authored target. */
   saveTarget(input: AuthoredTargetInput): void;
+  /** The player's own median/75th-percentile value for a measured stat (R7) — the Measured builder pane's "Your usual: …" line. */
+  suggestThreshold(input: ThresholdSuggestionInput): ThresholdSuggestion | null;
   /** Persist a manually-logged match; returns its new id. */
   logMatch(input: ManualMatchInput): { matchId: string };
   /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */

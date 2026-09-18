@@ -7,7 +7,7 @@ import type { GradingSettings } from '../../core/gradingSettings';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, IgnorePendingReviewsInput, LogLevel, ManualMatchInput, PlayerListQuery,
-  MatchEditInput, RankAnchorInput, RankEntryPreviewInput, RendererErrorInput, Result, ReviewInput, TargetEditInput,
+  MatchEditInput, RankAnchorInput, RankEntryPreviewInput, RendererErrorInput, Result, ReviewInput, TargetEditInput, ThresholdSuggestionInput,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementDeclineInput,
   HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
@@ -130,6 +130,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.saveTarget, (_e, input: AuthoredTargetInput) => {
     provider.saveTarget(input);
   });
+  handle(ch.suggestThreshold, (_e, input: ThresholdSuggestionInput) => provider.suggestThreshold(input));
   handle(ch.saveReview, (_e, input: ReviewInput) => {
     provider.saveReview(input);
   });

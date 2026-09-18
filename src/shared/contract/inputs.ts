@@ -78,6 +78,15 @@ export interface AuthoredTargetInput {
   heroScope?: string[];
 }
 
+/** A personal-threshold suggestion request for the Measured builder pane (R7). */
+export interface ThresholdSuggestionInput {
+  stat: string;
+  account: string;
+  /** Role/hero scope, shared with the target itself (D) — the suggestion should reflect the same games the target will actually grade. */
+  roleScope?: Role;
+  heroScope?: string[];
+}
+
 /** An edit to an existing target — lifecycle state and accrued grades are kept. */
 export interface TargetEditInput {
   id: string;

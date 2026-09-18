@@ -13,16 +13,17 @@
  * resets it, matching the old behavior.
  */
 import { h, render } from '../../dom';
+import type { Role } from '../../../../src/shared/contract';
 import {
-  TARGET_CATEGORIES, TARGET_LIBRARY,
-  type TargetCategory, type TargetLibraryEntry,
+  TARGET_CATEGORIES, TARGET_LIBRARY, parseMeasuredRule, formatMeasuredRule, roundToStep,
+  type TargetCategory, type TargetLibraryEntry, type LibraryRole,
 } from '../../../../src/core/targets';
 import { badge, button, card, chip } from '../../components/primitives';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
 import { store } from '../../store';
 import type { ViewContext } from '../view';
-import type { BuilderHandle } from './builder';
+import { suggestionAccount, type BuilderHandle } from './builder';
 
 /** A single-select facet (R5): a role narrows to that role's entries plus the
  *  universal 'All Roles' ones; 'measured' cuts across role entirely. */
@@ -35,6 +36,16 @@ const FILTER_OPTIONS: Array<{ value: LibraryFilter; label: string }> = [
   { value: 'Support', label: 'Support' },
   { value: 'measured', label: 'Measured only' },
 ];
+
+/** A library entry's display role → the `Role` a threshold suggestion should scope to (R7) — only 'All Roles' stays unscoped. */
+function libraryRoleScope(role: LibraryRole): Role | undefined {
+  switch (role) {
+    case 'Tank': return 'tank';
+    case 'DPS': return 'damage';
+    case 'Support': return 'support';
+    case 'All Roles': return undefined;
+  }
+}
 
 export function libraryBrowserCard(ctx: ViewContext, builder: BuilderHandle): HTMLElement {
   const liveAuthored = ctx.data.isSample ? 0 : ctx.data.targets.filter((t) => !t.archivedAt).length;
@@ -55,18 +66,52 @@ export function libraryBrowserCard(ctx: ViewContext, builder: BuilderHandle): HT
     ctx.data.isSample ? [] : ctx.data.targets.filter((t) => !t.archivedAt).map((t) => t.name),
   );
 
-  // Saves the entry exactly as written — no detour through the builder
-  // (R5). The toast's Edit still routes through the normal editTargetId
-  // param (same as the detail page's own Edit), so it needs the fresh id —
-  // saveTarget itself doesn't return one, hence the refetch-then-find.
+  // A measured entry's fixed threshold replaced with the player's own median
+  // for that stat, when there's enough personal data to have one (R7) — the
+  // library's own thresholds are the same fixed number for everyone ("~9k/10
+  // is a solid DPS floor at most ranks"), equally wrong for a GM Genji and a
+  // Bronze Reaper. Self-rated entries, and a measured one with no personal
+  // data yet, pass through unchanged.
+  //
+  // The suggestion is scoped to the entry's own role (a "Tank: mitigation
+  // floor" queried unscoped would average in every Damage-role game's 0
+  // mitigation, dragging the median toward zero) — but the SAVED target
+  // stays unscoped, exactly like picking this entry always has: adding a
+  // role restriction here would be a second, unannounced behavior change
+  // (it'd start skipping off-role games at grading time too), not just a
+  // personalized number.
+  const personalize = async (entry: TargetLibraryEntry): Promise<{ rule: string; adjusted: boolean }> => {
+    if (entry.mode !== 'measured') return { rule: entry.rule, adjusted: false };
+    const account = suggestionAccount(ctx);
+    const parsed = parseMeasuredRule(entry.rule);
+    if (!account || !parsed) return { rule: entry.rule, adjusted: false };
+    const s = await bridge.suggestThreshold({ stat: parsed.stat, account, roleScope: libraryRoleScope(entry.role) });
+    if (!s) return { rule: entry.rule, adjusted: false };
+    return { rule: formatMeasuredRule(parsed.stat, parsed.op, roundToStep(s.median, parsed.stat)), adjusted: true };
+  };
+
+  // Loads the entry into the builder to review/adjust before saving — always
+  // creates, even mid-edit (AC 1–2). The builder's own "Your usual: …" line
+  // (R7) says the same thing the adjusted threshold already shows, once open.
+  const customizeEntry = (entry: TargetLibraryEntry): void => {
+    void personalize(entry).then(({ rule }) => builder.prefill({ ...entry, rule }));
+  };
+
+  // Saves the entry exactly as written (adjusted, R7) — no detour through the
+  // builder (R5). The toast's Edit still routes through the normal
+  // editTargetId param (same as the detail page's own Edit), so it needs the
+  // fresh id — saveTarget itself doesn't return one, hence the
+  // refetch-then-find.
   const addEntry = (entry: TargetLibraryEntry): void => {
-    void bridge.saveTarget({ name: entry.name, mode: entry.mode, rule: entry.rule }).then(async () => {
-      await store.refresh();
-      const fresh = store.get().data?.targets.find((t) => !t.archivedAt && t.name === entry.name);
-      toast(`Added "${entry.name}"`, {
-        action: fresh ? { label: 'Edit', run: () => ctx.navigate('targets', { editTargetId: fresh.id }) } : undefined,
-      });
-    });
+    void personalize(entry).then(({ rule, adjusted }) =>
+      bridge.saveTarget({ name: entry.name, mode: entry.mode, rule }).then(async () => {
+        await store.refresh();
+        const fresh = store.get().data?.targets.find((t) => !t.archivedAt && t.name === entry.name);
+        toast(`Added "${entry.name}"${adjusted ? ' — adjusted to your last 30 games' : ''}`, {
+          action: fresh ? { label: 'Edit', run: () => ctx.navigate('targets', { editTargetId: fresh.id }) } : undefined,
+        });
+      }),
+    );
   };
 
   const toggleChip = (label: string, title: string): HTMLElement =>
@@ -82,7 +127,7 @@ export function libraryBrowserCard(ctx: ViewContext, builder: BuilderHandle): HT
 
   const draw = (): void => {
     const sections = TARGET_CATEGORIES
-      .map((cat) => categorySection(cat, builder, matchesFilter, ownedNames, addEntry))
+      .map((cat) => categorySection(cat, customizeEntry, matchesFilter, ownedNames, addEntry))
       .filter((n): n is HTMLElement => n != null);
     render(host, card(
       { variant: 'raised', title: 'Target library', sub: 'curated starting points — pick one, make it yours' },
@@ -103,7 +148,7 @@ export function libraryBrowserCard(ctx: ViewContext, builder: BuilderHandle): HT
 
 function categorySection(
   cat: { id: TargetCategory; scope: string },
-  builder: BuilderHandle,
+  customizeEntry: (entry: TargetLibraryEntry) => void,
   matchesFilter: (entry: TargetLibraryEntry) => boolean,
   ownedNames: Set<string>,
   addEntry: (entry: TargetLibraryEntry) => void,
@@ -113,7 +158,7 @@ function categorySection(
   return h('div', { style: { marginBottom: '16px' } },
     h('div', { class: 'field-label' }, cat.id),
     h('div', { class: 'hint', style: { marginBottom: '8px' } }, cat.scope),
-    ...entries.map((entry) => libraryEntry(entry, builder, ownedNames.has(entry.name), addEntry)),
+    ...entries.map((entry) => libraryEntry(entry, customizeEntry, ownedNames.has(entry.name), addEntry)),
   );
 }
 
@@ -126,14 +171,14 @@ function categorySection(
  */
 function libraryEntry(
   entry: TargetLibraryEntry,
-  builder: BuilderHandle,
+  customizeEntry: (entry: TargetLibraryEntry) => void,
   owned: boolean,
   addEntry: (entry: TargetLibraryEntry) => void,
 ): HTMLElement {
   const customize = h('button', {
     class: 'library-entry',
     title: 'Load into the builder to customize before saving',
-    on: { click: () => builder.prefill(entry) },
+    on: { click: () => customizeEntry(entry) },
   },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '7px' } },
       h('span', { style: { fontWeight: '600', fontSize: '13px' } }, entry.name),
