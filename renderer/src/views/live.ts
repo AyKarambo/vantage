@@ -15,13 +15,18 @@
  * exactly the sort of fabrication guardrail #1 exists to prevent.
  */
 import { h, render } from '../dom';
-import type { LiveMatchPayload, PlayerRecord } from '../../../src/shared/contract';
+import type { DashboardData, LiveMatchPayload, PlayerRecord, TargetSummary } from '../../../src/shared/contract';
+import { dayPartAt } from '../../../src/core/analytics';
 import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
+import { getGepStatus, subscribeGepStatus } from '../gepStatus';
 import { scoreboard } from '../components/scoreboard';
-import { card, emptyState, pill } from '../components/primitives';
+import { button, card, emptyState, pill, resultPill } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
-import { fmt, relTime, RELATION_LABEL } from '../format';
+import { fmt, games, net, pct, relTime, RELATION_LABEL } from '../format';
+import { wrColor } from '../theme';
+import { readinessCard } from './overview';
+import { stopRuleLine } from '../components/stopRuleLine';
 import { viewHead, type ViewContext } from './view';
 
 export function live(ctx: ViewContext): HTMLElement {
@@ -89,11 +94,15 @@ export function live(ctx: ViewContext): HTMLElement {
       unsubscribe();
       window.removeEventListener('pointerup', release, true);
       window.removeEventListener('pointercancel', release, true);
+      unsubscribeGep();
       return;
     }
     refreshRecords(payload);
     paint();
   });
+  // Repaints the stale-feed card (S6) the moment the feed goes quiet or
+  // recovers, rather than waiting for the next unrelated live-match tick.
+  const unsubscribeGep = subscribeGepStatus(() => { if (host.isConnected) paint(); });
 
   refreshRecords(getLiveMatch());
   paint();
@@ -106,9 +115,24 @@ function sections(
   recordsLoading: boolean,
   ctx: ViewContext,
 ): Node[] {
-  if (!p?.live) return [viewHead('Live', idleSubtitle(p)), idleCard(p)];
+  if (!p?.live) {
+    // A very-recently-ended match gets its own card with a direct link to
+    // where it landed (S2); anything older falls back to the plain idle
+    // copy below — `endedAt` stays set until the next match starts, so
+    // without this a match from hours ago would still claim to have "just"
+    // finished.
+    const justFinished = p?.endedAt && Date.now() - p.endedAt < JUST_FINISHED_WINDOW_MS
+      ? justFinishedCard(p, ctx)
+      : null;
+    return [
+      viewHead('Live', idleSubtitle(p)),
+      justFinished ?? idleCard(p),
+      ...preQueueCards(ctx),
+    ];
+  }
   return [
     viewHead('Live', liveSubtitle(p)),
+    getGepStatus()?.state === 'stale' ? staleCard(ctx) : null,
     tallyCard(p),
     card({ variant: 'raised' },
       h('div', { class: 'review-section-label' }, 'Scoreboard'),
@@ -132,6 +156,19 @@ function idleSubtitle(p: LiveMatchPayload | null): string {
   return p?.endedAt ? `Last match ended ${relTime(p.endedAt)}` : 'Nothing in progress';
 }
 
+/** Prepended to the live-match branch while the feed has gone quiet (S6) —
+ *  the app-wide banner (shell.ts `renderGepBanner`) says the same thing on
+ *  every screen, but Live is where a stalled scoreboard actually needs the
+ *  context right next to it. */
+function staleCard(ctx: ViewContext): HTMLElement {
+  return card({ variant: 'raised' },
+    h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+      'No data from the game for a while — the scoreboard below may be behind. ',
+      inlineLink('Open Logs →', { onClick: () => ctx.navigate('logs') }),
+    ),
+  );
+}
+
 function idleCard(p: LiveMatchPayload | null): HTMLElement {
   return card({ variant: 'raised' }, emptyState(
     p?.endedAt
@@ -139,6 +176,140 @@ function idleCard(p: LiveMatchPayload | null): HTMLElement {
       : 'No match in progress. Queue up and this fills in live — the scoreboard, and who on it you’ve played with before.',
     true,
   ));
+}
+
+/** How long after a match ends {@link justFinishedCard} replaces the plain idle copy (S2). */
+const JUST_FINISHED_WINDOW_MS = 30 * 60_000;
+
+/**
+ * A direct link to the match that JUST ended, so alt-tabbing back doesn't land
+ * on a screen that cleared everything with nowhere to go (S2). Checks the
+ * review inbox first (unfiltered) since a fresh tracked game lands there,
+ * then the filtered match list, for a row timestamped at/after `endedAt`
+ * minus a small grace window for clock skew between the two writes.
+ */
+function justFinishedCard(p: LiveMatchPayload, ctx: ViewContext): HTMLElement {
+  const cutoff = p.endedAt! - 5 * 60_000;
+  const found = ctx.data.reviewInbox.find((m) => m.timestamp >= cutoff)
+    ?? ctx.data.matches.find((m) => m.timestamp >= cutoff);
+  if (!found) {
+    // The refetch this match triggers hasn't landed yet, or it fell outside
+    // the current filter scope — still say where it went instead of nothing.
+    return card({ variant: 'raised' },
+      emptyState('That match is over — it’s in Matches now.', true),
+      h('div', { style: { marginTop: '10px' } },
+        button('Open Matches →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('matches') }),
+      ),
+    );
+  }
+  const inInbox = ctx.data.reviewInbox.some((m) => m.matchId === found.matchId);
+  return card({ variant: 'raised' },
+    h('div', { class: 'review-section-label' }, 'Just finished'),
+    h('div', { class: 'row', style: { padding: '2px 0' } },
+      resultPill(found.result),
+      h('div', { class: 'row-main' },
+        h('div', { class: 'row-name' }, found.map),
+        h('div', { class: 'row-meta' }, found.heroes.join(', ') || '—'),
+      ),
+    ),
+    h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px' } },
+      button('Open match →', { variant: 'soft', onClick: () => ctx.navigate('matchDetail', { matchId: found.matchId }) }),
+      inInbox ? button('Grade it on Review →', { variant: 'soft', onClick: () => ctx.navigate('review') }) : null,
+    ),
+  );
+}
+
+/**
+ * The idle screen's "before you queue" briefing (S1): everything a player
+ * would otherwise gather from four different screens before their next
+ * game, assembled from data the dashboard snapshot already carries — no new
+ * IPC. Live is filterless (`FILTERLESS_VIEWS`), so these read the unscoped
+ * shape of each field rather than pretending the hidden filter bar applies.
+ */
+function preQueueCards(ctx: ViewContext): HTMLElement[] {
+  const d = ctx.data;
+  const cards: HTMLElement[] = [];
+
+  const sensor = getGepStatus()?.sensor;
+  if (d.isSample || sensor !== 'gep') {
+    cards.push(card({ variant: 'raised' },
+      h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+        d.isSample
+          ? 'You’re on demo data — this screen only fills in from Overwatch’s own game feed, so sample data never produces a live match. '
+          : 'Live tracking needs Overwolf’s Game Events feed and Dev Mode approval. ',
+        inlineLink('What live tracking needs →', { onClick: () => ctx.navigate('faq') }),
+      ),
+    ));
+  }
+
+  cards.push(beforeYouQueueCard(d, ctx));
+  const rc = readinessCard(ctx);
+  if (rc) cards.push(rc);
+  const priority = d.focusMaps.filter((f) => f.net > 0).slice(0, 3);
+  if (priority.length) cards.push(priorityCard(priority, ctx));
+
+  return cards;
+}
+
+/** This sitting, the time-of-day read, and the targets worth executing tonight. */
+function beforeYouQueueCard(d: DashboardData, ctx: ViewContext): HTMLElement {
+  const s = d.session;
+  const active = d.targets.filter((t) => t.isActive);
+  const dayPart = dayPartAt(new Date().getHours());
+  const window = d.timeOfDay.find((g) => g.key === dayPart);
+
+  return card({ variant: 'raised', title: 'Before you queue' },
+    s
+      ? h('div', { class: 'row', style: { padding: '2px 0', cursor: 'pointer' }, on: { click: () => ctx.navigate('matches', { day: s.date }) } },
+          h('div', { class: 'row-main' },
+            h('div', { class: 'row-name' }, `${s.wins}W ${s.losses}L this sitting`),
+            h('div', { class: 'row-meta' }, `${net(s.wins - s.losses)} · ${s.topMaps[0]?.key ?? 'no repeats yet'}`),
+          ),
+          h('span', { class: 'u-dim', style: { fontSize: '11px' } }, 'Open today’s matches →'),
+        )
+      : h('div', { class: 'hint' }, 'No games yet today — this fills in once you’ve logged your first.'),
+    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+      window && window.wins + window.losses >= 5
+        ? `It’s ${dayPart.toLowerCase()} — you’re ${pct(window.winrate)} over ${window.wins + window.losses} decided ${dayPart.toLowerCase()} games.`
+        : `It’s ${dayPart.toLowerCase()} — not enough ${dayPart.toLowerCase()} games yet to say how you do then.`),
+    stopRuleLine(ctx),
+    active.length
+      ? h('div', { class: 'stack', style: { gap: '6px', marginTop: '10px' } },
+          h('div', { class: 'u-muted', style: { fontSize: '11px' } }, 'Focus this game'),
+          ...active.slice(0, 3).map((t) => targetRow(t, ctx)),
+        )
+      : null,
+  );
+}
+
+function targetRow(t: TargetSummary, ctx: ViewContext): HTMLElement {
+  return h('div', {
+    class: 'row',
+    style: { padding: '2px 0', cursor: 'pointer' },
+    on: { click: () => ctx.navigate('targetDetail', { targetId: t.id }) },
+  },
+    h('div', { class: 'row-main', style: { fontSize: '12.5px' } }, t.name),
+    h('span', { class: 'mono', style: { fontSize: '12px' } }, t.attempts ? pct(t.hitRate) : 'New'),
+  );
+}
+
+/** The season's net-losing maps — the same read as Overview's scatter callout,
+ *  compacted to a plain card since Live has no scatter chart to sit beside. */
+function priorityCard(items: DashboardData['focusMaps'], ctx: ViewContext): HTMLElement {
+  return card({ variant: 'raised', title: 'Top priority' },
+    h('div', { class: 'stack', style: { gap: '8px' } },
+      ...items.map((m) => h('div', {
+        class: 'row', style: { cursor: 'pointer' },
+        on: { click: () => ctx.navigate('maps', { highlight: m.key }) },
+      },
+        h('div', { class: 'row-main' },
+          h('div', { class: 'row-name' }, m.key),
+          h('div', { class: 'row-meta' }, `${games(m.games)} · ${net(m.wins - m.losses)}`),
+        ),
+        h('span', { class: 'mono', style: { fontSize: '13px', color: wrColor(m.winrate) } }, pct(m.winrate)),
+      )),
+    ),
+  );
 }
 
 /**

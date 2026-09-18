@@ -50,13 +50,15 @@ export function statBar(o: {
   /** Widen the value column past the default 34px when the value is more than a
    *  short number (e.g. a "rate · count" pair) that would otherwise wrap. */
   valueWidth?: number;
+  /** Explains what this specific bar means (e.g. Mental's Calm/Tilted formulas). */
+  title?: string;
 }): HTMLElement {
   const fill = h('div', { class: 'track-fill' });
   applyStyle(fill, { width: `${Math.round(Math.max(0, Math.min(1, o.frac)) * 100)}%`, background: o.color ?? PALETTE.accent });
   const valueStyle: Record<string, string> = {};
   if (o.color) valueStyle.color = o.color;
   if (o.valueWidth) valueStyle.width = `${o.valueWidth}px`;
-  return h('div', { class: 'statbar' },
+  return h('div', { class: 'statbar', title: o.title },
     h('span', { class: 'statbar-label' }, o.label),
     h('div', { class: `track${o.slim ? ' track--slim' : ''}` }, fill),
     h('span', { class: 'statbar-value', style: Object.keys(valueStyle).length ? valueStyle : undefined }, o.valueText),

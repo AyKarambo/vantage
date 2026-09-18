@@ -413,6 +413,11 @@
 .gep-banner.is-update {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
+/* The feed going quiet mid-match is a caution, not an outage — --warn rather
+   than --loss, and independent of whichever winrate scheme is active (K4). */
+.gep-banner.is-stale {
+  background: var(--warn-soft);
+}
 .gep-banner-text {
   flex: 1;
   min-width: 0;
@@ -916,6 +921,27 @@
   color: var(--muted-2);
   font-size: 10.5px;
   margin-top: 2px;
+}
+/* A clickable stat box (Mental's non-zero flag boxes) — distinguished from a
+   plain read-only one by an accent border, a lift on hover, and a trailing
+   arrow, instead of looking identical to the hero drawer's inert stat grid.
+   The modifier lands on the `inlineLink` wrapper around the box (a
+   non-selectable `.stat-box` would defeat the point), so it styles its
+   `.stat-box` child rather than itself. */
+.stat-box--link {
+  cursor: pointer;
+}
+.stat-box--link .stat-box {
+  border-color: var(--accent-border);
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.stat-box--link:hover .stat-box {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.stat-box--link .stat-box-label::after {
+  content: ' →';
+  color: var(--accent-text);
 }
 
 /* Status bar ---------------------------------------------------------------- */

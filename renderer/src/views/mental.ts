@@ -7,6 +7,7 @@ import { PALETTE } from '../theme';
 import { sparkline } from '../charts/plots';
 import { badge, card, statBar, statBox } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
+import { stopRuleLine } from '../components/stopRuleLine';
 import { breakReminderEditor } from '../components/breakReminderEditor';
 import { viewHead, type ViewContext } from './view';
 
@@ -29,10 +30,19 @@ export function mental(ctx: ViewContext): HTMLElement {
     // (align-items: start) — so no card is stretched to a row's height and left
     // half-empty.
     h('div', { class: 'grid-2', style: { alignItems: 'start' } },
-      card({ title: 'State', actions: badge('◎ manual', 'manual') },
+      card({ title: 'State', sub: 'two independent 0–100 reads, not a split', actions: badge('◎ manual', 'manual') },
         h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
-          statBar({ label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: String(m.calm) }),
-          statBar({ label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss, valueText: String(m.tilted) }),
+          statBar({
+            label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: `${m.calm}%`,
+            title: 'Calm — blends not-tilted games with positive-comms games',
+          }),
+          statBar({
+            label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss,
+            valueText: inlineLink(`${m.tilted}%`, {
+              title: `Tilted — ${m.flags.tilt} of ${ctx.data.overall.games} games flagged tilted`,
+              onClick: () => ctx.navigate('matches', { flag: 'tilt' }),
+            }),
+          }),
         ),
         breakReminderEditor(ctx),
       ),
@@ -66,20 +76,20 @@ export function mental(ctx: ViewContext): HTMLElement {
  */
 function costsCard(ctx: ViewContext): HTMLElement {
   const c = ctx.data.mentalCosts;
-  return card({ title: 'What it costs you', sub: 'winrate by mental state, sample-gated' },
+  return card({ title: 'What it costs you', sub: `winrate points lost on the bad side · needs ≥${COST_MIN_SAMPLE} decided games each side` },
     h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
-      taxRow('Tilt tax', c.tilt.calm, 'calm', c.tilt.tilted, 'tilted'),
-      taxRow('Comms tax', c.comms.positive, 'positive', c.comms.abusive, 'abusive'),
-      taxRow('Toxic mates', c.toxic.without, 'without', c.toxic.with, 'with'),
-      leaverRow(c.leaver),
+      taxRow(ctx, 'Tilt tax', c.tilt.calm, 'calm', c.tilt.tilted, 'tilted', 'tilt'),
+      taxRow(ctx, 'Comms tax', c.comms.positive, 'positive', c.comms.abusive, 'abusive', 'abusive'),
+      taxRow(ctx, 'Toxic mates', c.toxic.without, 'without', c.toxic.with, 'with', 'toxicMates'),
+      leaverRow(ctx, c.leaver),
       perfRow(c.performance),
     ),
   );
 }
 
 /** Label + right-aligned verdict on one line, a dim detail line under it. */
-function costRow(label: string, verdict: Node | string, detail: string): HTMLElement {
-  return h('div', null,
+function costRow(label: string, verdict: Node | string, detail: Node | string, title?: string): HTMLElement {
+  return h('div', { title },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' } },
       h('span', { style: { fontSize: '12.5px' } }, label),
       h('span', { class: 'mono', style: { fontSize: '12px' } }, verdict),
@@ -95,16 +105,27 @@ function costVerdict(cost: number, unit = ' pts'): Node | string {
   return 'even';
 }
 
-/** A two-sided winrate split row (good side vs bad side), gated on both samples. */
-function taxRow(label: string, good: WinrateSide, goodLabel: string, bad: WinrateSide, badLabel: string): HTMLElement {
+/** A two-sided winrate split row (good side vs bad side), gated on both
+ *  samples. `badFlag`, when given, makes the bad-side percentage a link into
+ *  Matches scoped to that flag — "show me those games" right next to the
+ *  number that names them. */
+function taxRow(
+  ctx: ViewContext, label: string,
+  good: WinrateSide, goodLabel: string, bad: WinrateSide, badLabel: string,
+  badFlag?: MatchFlagKey,
+): HTMLElement {
   if (good.decided < COST_MIN_SAMPLE || bad.decided < COST_MIN_SAMPLE) {
     return costRow(label,
       h('span', { class: 'u-dim' }, 'needs data'),
       `${good.decided}/${COST_MIN_SAMPLE} ${goodLabel} · ${bad.decided}/${COST_MIN_SAMPLE} ${badLabel} decided games`);
   }
   const cost = Math.round((good.winrate - bad.winrate) * 100);
+  const badPct = badFlag
+    ? inlineLink(pct(bad.winrate), { title: `Show the ${badLabel} games`, onClick: () => ctx.navigate('matches', { flag: badFlag }) })
+    : pct(bad.winrate);
   return costRow(label, costVerdict(cost),
-    `${pct(good.winrate)} ${goodLabel} · ${pct(bad.winrate)} ${badLabel}`);
+    h('span', null, `${pct(good.winrate)} ${goodLabel} · `, badPct, ` ${badLabel}`),
+    `${pct(good.winrate)} ${goodLabel} − ${pct(bad.winrate)} ${badLabel} = ${cost} winrate points`);
 }
 
 /**
@@ -112,14 +133,17 @@ function taxRow(label: string, good: WinrateSide, goodLabel: string, bad: Winrat
  * leaver-free games; the enemy side is reported separately (its swing should
  * be positive — a my-team cost must never hide behind it).
  */
-function leaverRow(l: { none: WinrateSide; myTeam: WinrateSide; enemy: WinrateSide }): HTMLElement {
+function leaverRow(ctx: ViewContext, l: { none: WinrateSide; myTeam: WinrateSide; enemy: WinrateSide }): HTMLElement {
   const side = (s: WinrateSide): string => (s.decided >= COST_MIN_SAMPLE ? pct(s.winrate) : `— (${s.decided}g)`);
-  const detail = `${side(l.myTeam)} my team · ${side(l.none)} none · ${side(l.enemy)} enemy`;
   if (l.myTeam.decided < COST_MIN_SAMPLE || l.none.decided < COST_MIN_SAMPLE) {
+    const detail = `${side(l.myTeam)} my team · ${side(l.none)} none · ${side(l.enemy)} enemy`;
     return costRow('Leaver swing', h('span', { class: 'u-dim' }, 'needs data'), detail);
   }
   const cost = Math.round((l.none.winrate - l.myTeam.winrate) * 100);
-  return costRow('Leaver swing', costVerdict(cost), detail);
+  const myTeamLink = inlineLink(side(l.myTeam), { title: 'Show the my-team-leaver games', onClick: () => ctx.navigate('matches', { flag: 'leaver' }) });
+  return costRow('Leaver swing', costVerdict(cost),
+    h('span', null, myTeamLink, ' my team · ', side(l.none), ' none · ', side(l.enemy), ' enemy'),
+    `${side(l.none)} none − ${side(l.myTeam)} my team = ${cost} winrate points`);
 }
 
 /** The performance drop when tilted (0–100 self-rating), gated on rated games. */
@@ -130,8 +154,9 @@ function perfRow(p: { calm: RatedSide; tilted: RatedSide }): HTMLElement {
       `${p.calm.rated}/${COST_MIN_SAMPLE} calm · ${p.tilted.rated}/${COST_MIN_SAMPLE} tilted rated games`);
   }
   const drop = Math.round(p.calm.avg - p.tilted.avg);
-  return costRow('Performance when tilted', costVerdict(drop, ''),
-    `self-rating ${p.calm.avg} calm · ${p.tilted.avg} tilted`);
+  return costRow('Performance when tilted', h('span', null, costVerdict(drop, ''), ' / 100 self-rating'),
+    `${p.calm.avg} calm · ${p.tilted.avg} tilted`,
+    `mean self-rating ${p.calm.avg} calm vs ${p.tilted.avg} tilted`);
 }
 
 // ---- Trends & session triggers ------------------------------------------------
@@ -212,15 +237,20 @@ function sessionCard(ctx: ViewContext): HTMLElement {
         : sampled
           ? 'No tilt flagged at any position in this range — nothing to call a stop point from.'
           : `Not enough games per position yet (${COST_MIN_SAMPLE} needed) to call a stop point.`),
+    stopRuleLine(ctx),
   );
 }
 
 /** A "Flags this range" stat box; clickable when its count is non-zero, opening
- *  Matches scoped to that flag. Zero counts stay plain (nothing to drill into). */
+ *  Matches scoped to that flag. A zero count is dimmed rather than styled like
+ *  the clickable ones — `.stat-box--link` (accent border, hover lift, trailing
+ *  arrow) is what actually distinguishes a drill-down from the hero drawer's
+ *  identical-looking, inert stat grid. */
 function flagBox(ctx: ViewContext, count: number, label: string, flag: MatchFlagKey, valueClass?: string): HTMLElement {
   const value = valueClass ? h('span', { class: valueClass }, String(count)) : String(count);
-  if (count <= 0) return statBox(value, label);
+  if (count <= 0) return h('div', { class: 'u-dim' }, statBox(value, label));
   return inlineLink(statBox(value, label), {
+    class: 'stat-box--link',
     style: { display: 'block', width: '100%', textAlign: 'left' },
     title: `Show the ${FLAG_LABELS[flag]}-flagged games`,
     onClick: () => ctx.navigate('matches', { flag }),

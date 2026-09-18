@@ -33,7 +33,7 @@ export { streak, currentSession, calendar, heroDetail, groupByDay, sessionRecap 
 export type { DayGroup, SessionRecap } from './session';
 
 // Temporal splits (time of day, session position, fade detection)
-export { byTimeOfDay, bySessionPosition, sessionPositionGroups, sessionFade } from './temporal';
+export { byTimeOfDay, dayPartAt, bySessionPosition, sessionPositionGroups, sessionFade } from './temporal';
 export type { SessionFade, SessionPositionOpts } from './temporal';
 
 // Collapse a match's several target grades into one (floor-of-average)

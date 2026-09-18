@@ -875,15 +875,19 @@ export class App {
   /**
    * The app-wide GEP banner (top of content), mutated in place so it never tears
    * down the active view. Shows a "restart to apply" prompt when a fixed GEP
-   * package is staged, otherwise an outage explanation while Overwolf's service is
-   * degraded/down. Hidden when the service is ok/unknown and nothing is staged —
-   * an outage is never asserted without an authoritative feed reading.
+   * package is staged, an outage explanation while Overwolf's service is
+   * degraded/down, or — lowest priority, since the other two are the more
+   * actionable Overwolf-side reads — a heads-up that the feed has gone quiet
+   * mid-match (S6), so a stalled scoreboard on Live doesn't read as broken.
+   * Hidden when none of that applies — an outage is never asserted without an
+   * authoritative feed reading.
    */
   private renderGepBanner(): void {
     const s = getGepStatus();
     const outage = s?.serviceStatus === 'down' || s?.serviceStatus === 'degraded';
     const staged = Boolean(s?.updateStaged);
-    if (!outage && !staged) {
+    const stale = s?.state === 'stale';
+    if (!outage && !staged && !stale) {
       this.gepBanner.className = 'gep-banner hidden';
       render(this.gepBanner);
       return;
@@ -900,42 +904,69 @@ export class App {
       );
       return;
     }
-    this.gepBanner.className = 'gep-banner is-outage';
+    if (outage) {
+      this.gepBanner.className = 'gep-banner is-outage';
+      render(this.gepBanner,
+        h('span', { class: 'gep-banner-text' },
+          s?.serviceMessage
+            ? `Overwatch game events are down — Overwolf: ${s.serviceMessage}. Vantage resumes tracking automatically when it's fixed.`
+            : "Overwatch game events are down on Overwolf's side (not a Vantage bug). Vantage resumes tracking automatically once it's fixed."),
+        h('button', {
+          class: 'gep-banner-link',
+          title: 'Open Overwolf’s game-events status page',
+          on: { click: () => void bridge.openExternal('https://support.overwolf.com/support/solutions/9000115816') },
+        }, 'Overwolf status ↗'),
+      );
+      return;
+    }
+    this.gepBanner.className = 'gep-banner is-stale';
     render(this.gepBanner,
       h('span', { class: 'gep-banner-text' },
-        s?.serviceMessage
-          ? `Overwatch game events are down — Overwolf: ${s.serviceMessage}. Vantage resumes tracking automatically when it's fixed.`
-          : "Overwatch game events are down on Overwolf's side (not a Vantage bug). Vantage resumes tracking automatically once it's fixed."),
+        'No data from the game for a while — the scoreboard on Live may be behind. Vantage keeps listening; this clears itself once events resume.'),
       h('button', {
         class: 'gep-banner-link',
-        title: 'Open Overwolf’s game-events status page',
-        on: { click: () => void bridge.openExternal('https://support.overwolf.com/support/solutions/9000115816') },
-      }, 'Overwolf status ↗'),
+        title: 'Open the log viewer',
+        on: { click: () => store.setView('logs') },
+      }, 'Open Logs →'),
     );
   }
 
-  /** Click-for-details: live-updating popover with the feed's vitals. */
+  /**
+   * Click-for-details: live-updating popover with the feed's vitals (S6).
+   * `lastError` leads, in a warning tone, since a reader scanning top-down for
+   * "what's wrong" used to find it dead last; a footer of next steps replaces
+   * what was otherwise a diagnostic dead end.
+   */
   private openGepPopover(anchor: HTMLElement): void {
     const body = h('div', { class: 'gep-popover' });
     const paint = (): void => {
       const s = getGepStatus();
-      const rows: Array<[string, string]> = s
+      const rows: Array<[string, string, boolean?]> = s
         ? [
+            ...(s.lastError ? [['Last error', s.lastError, true] as [string, string, boolean]] : []),
             ['State', gepLabelText(s)],
+            ['Source', s.sensor === 'gep' ? 'Overwolf GEP' : 'Counterwatch'],
+            ...(s.gepPackageVersion ? [['GEP package', s.gepPackageVersion] as [string, string]] : []),
             ['Last event', s.lastEventAt ? relTime(s.lastEventAt) : '—'],
             ['Events this session', String(s.eventsThisSession)],
             ['Match in progress', s.matchInProgress ? 'Yes' : 'No'],
-            ['Feed attached', s.attachedAt ? relTime(s.attachedAt) : 'Not attached'],
-            ...(s.lastError ? [['Last error', s.lastError] as [string, string]] : []),
+            ['Attached', s.attachedAt ? `${relTime(s.attachedAt)} ago` : 'Not attached'],
           ]
         : [['State', 'Unknown — no status received yet']];
       render(body,
         h('div', { class: 'gep-popover-title' }, 'Game feed'),
-        ...rows.map(([k, v]) =>
-          h('div', { class: 'gep-popover-row' },
+        ...rows.map(([k, v, warn]) =>
+          h('div', { class: `gep-popover-row${warn ? ' is-warn' : ''}` },
             h('span', { class: 'u-muted' }, k),
             h('span', { class: 'mono' }, v),
           ),
+        ),
+        h('div', { class: 'gep-popover-actions' },
+          h('button', { class: 'gep-banner-link', on: { click: () => store.setView('logs') } }, 'Logs →'),
+          h('button', { class: 'gep-banner-link', on: { click: () => store.setView('settings') } }, 'Alerts…'),
+          s?.matchInProgress
+            ? h('button', { class: 'gep-banner-link', on: { click: () => store.setView('live') } }, 'Open Live →')
+            : null,
         ),
       );
     };

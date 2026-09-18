@@ -7,6 +7,7 @@ import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
+import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
 import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
@@ -260,15 +261,22 @@ function bottomRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const m = d.mental;
   const r = d.breakReminder;
-  const mental = card({ title: 'Mental', style: { flex: '1' } },
+  const mental = card({ title: 'Mental', sub: 'two independent 0–100 reads, not a split', style: { flex: '1' } },
     h('div', { class: 'stack', style: { gap: '9px' } },
-      statBar({ label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: String(m.calm) }),
-      statBar({ label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss, valueText: String(m.tilted) }),
+      statBar({
+        label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: `${m.calm}%`,
+        title: 'Calm — blends not-tilted games with positive-comms games',
+      }),
+      statBar({
+        label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss, valueText: `${m.tilted}%`,
+        title: `Tilted — ${m.flags.tilt} of ${d.overall.games} games flagged tilted`,
+      }),
     ),
     h('div', { class: 'hint', style: { marginTop: '11px', lineHeight: '1.45' } },
       r.enabled
         ? h('span', null, 'Break reminder is ', h('span', { class: 'is-win' }, 'on'), ` after ${r.afterLosses} losses.`)
         : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Mental.')),
+    stopRuleLine(ctx),
   );
 
   return h('div', { class: 'overview-bottom' }, activityCard(ctx), mental, readinessCard(ctx));
@@ -296,8 +304,9 @@ const READINESS_META: Record<string, { label: string; color: string }> = {
   'insufficient-data': { label: 'Not enough data', color: PALETTE.muted },
 };
 
-/** Compact readiness teaser — only when the feature is on; deep-links to the screen. */
-function readinessCard(ctx: ViewContext): HTMLElement | null {
+/** Compact readiness teaser — only when the feature is on; deep-links to the
+ *  screen. Exported for the Live screen's idle "before you queue" briefing (S1). */
+export function readinessCard(ctx: ViewContext): HTMLElement | null {
   const d = ctx.data;
   if (!d.readinessSettings.enabled) return null;
   const r = d.readiness;

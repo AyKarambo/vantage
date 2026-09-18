@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { byTimeOfDay, bySessionPosition, sessionPositionGroups, sessionFade } from '../src/core/analytics';
+import { byTimeOfDay, dayPartAt, bySessionPosition, sessionPositionGroups, sessionFade } from '../src/core/analytics';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 
@@ -60,6 +60,20 @@ describe('byTimeOfDay', () => {
 
   it('empty input → empty output', () => {
     expect(byTimeOfDay([])).toEqual([]);
+  });
+});
+
+describe('dayPartAt', () => {
+  it('agrees with byTimeOfDay\'s own bucketing at every boundary', () => {
+    expect(dayPartAt(5)).toBe('Morning');
+    expect(dayPartAt(11)).toBe('Morning');
+    expect(dayPartAt(12)).toBe('Afternoon');
+    expect(dayPartAt(16)).toBe('Afternoon');
+    expect(dayPartAt(17)).toBe('Evening');
+    expect(dayPartAt(21)).toBe('Evening');
+    expect(dayPartAt(22)).toBe('Night');
+    expect(dayPartAt(4)).toBe('Night');
+    expect(dayPartAt(0)).toBe('Night');
   });
 });
 
