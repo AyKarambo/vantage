@@ -1,6 +1,6 @@
 /** Trends — winrate over time, splits by role/mode/account, and when you play. */
 import { h } from '../dom';
-import type { Group, PerformanceStats, Role, RankSeriesPoint, StreakStats } from '../../../src/shared/contract';
+import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, StreakStats, TrendGroup } from '../../../src/shared/contract';
 import { sessionFade } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
@@ -8,6 +8,7 @@ import { horizontalBars, lineChart, ratingChart, rankChart, type WrPoint, type R
 import { card, emptyState, statBox } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { clickableRow } from '../components/clickableRow';
+import { PALETTE } from '../theme';
 import { pct } from '../format';
 import { viewHead, type ViewContext } from './view';
 
@@ -27,15 +28,17 @@ export function trends(ctx: ViewContext): HTMLElement {
         { key: 'label', label: byWeek ? 'Week' : 'Day' },
         { key: 'winrate', label: 'WR', render: (v) => pct(v as number) },
         { key: 'games', label: 'Games' },
+        { key: 'rolling', label: byWeek ? '7w avg' : '7d avg', render: (v) => pct(v as number) },
       ],
       // Raw winrate (0..1), not a pre-formatted '54%' string (K1) — `render`
       // above formats it, so sorting the WR column compares numbers, not text.
-      rows: d.trend.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })),
+      rows: d.trend.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games, rolling: g.rolling })),
       // Chronological, oldest first — the order the table already opened in.
       initialSort: { key: 'label', dir: 1 },
       ...(openDay ? { onRowClick: (row) => openDay(row.label as string) } : {}),
     },
     h('div', null,
+      momentumStrip(d.momentum, byWeek),
       lineChart(d.trend.map(toPoint), openDay),
       extremesRow(ctx, d.extremes),
     )),
@@ -148,7 +151,25 @@ function breakdownOrdered(groups: Group[]): HTMLElement {
   return horizontalBars(groups.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })), { compact: true });
 }
 
-const toPoint = (g: Group): WrPoint => ({ label: g.key, winrate: g.winrate, games: g.games });
+const toPoint = (g: TrendGroup): WrPoint => ({ label: g.key, winrate: g.winrate, games: g.games, rolling: g.rolling });
+
+/**
+ * The momentum read (C6): the trailing window vs. the one before it, in
+ * numbers — Trends, the screen named after the trend, otherwise made you
+ * eyeball the bold line to answer "am I actually improving?". Absent below
+ * the sample floor (`d.momentum` is null) rather than a misleading "–" triple.
+ */
+function momentumStrip(m: Momentum | null, byWeek: boolean): HTMLElement | null {
+  if (!m) return null;
+  const span = byWeek ? m.days / 7 : m.days;
+  const unit = byWeek ? (span === 1 ? 'week' : 'weeks') : (span === 1 ? 'day' : 'days');
+  const deltaColor = m.deltaPts > 0 ? PALETTE.win : m.deltaPts < 0 ? PALETTE.loss : PALETTE.muted;
+  return h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '10px' } },
+    statBox(pct(m.recent.winrate), `last ${span} ${unit} · ${m.recent.games}g`),
+    statBox(pct(m.previous.winrate), `previous ${span} ${unit} · ${m.previous.games}g`),
+    statBox(h('span', { style: { color: deltaColor } }, `${signed(m.deltaPts)} pts`), 'change'),
+  );
+}
 
 /**
  * "Best / worst day" (C7) — the single calendar day, anywhere in range, with
@@ -197,13 +218,14 @@ function performanceCard(ctx: ViewContext, p: PerformanceStats): HTMLElement {
       // the table used to do implicitly for every numeric column before K1.
       { key: 'avg', label: 'Avg rating', render: (v) => (v == null ? '–' : String(Math.round(v as number))) },
       { key: 'games', label: 'Rated' },
+      { key: 'rolling', label: '7d avg', render: (v) => (v == null ? '–' : String(Math.round(v as number))) },
     ],
-    rows: p.trend.map((t) => ({ label: t.date, avg: t.avg, games: t.games })),
+    rows: p.trend.map((t) => ({ label: t.date, avg: t.avg, games: t.games, rolling: t.rolling })),
     initialSort: { key: 'label', dir: 1 },
     onRowClick: (row) => openDay(row.label as string),
   },
   h('div', null,
-    ratingChart(p.trend.map((t) => ({ label: t.date, rating: t.avg, games: t.games })), openDay),
+    ratingChart(p.trend.map((t) => ({ label: t.date, rating: t.avg, games: t.games, rolling: t.rolling })), openDay),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '10px' } },
       statBox(p.winAvg !== null ? String(p.winAvg) : '–', 'avg rating on wins'),
       statBox(p.lossAvg !== null ? String(p.lossAvg) : '–', 'avg rating on losses'),

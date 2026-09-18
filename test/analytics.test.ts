@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  winLoss, byMap, byRole, byHero, focusBy, trend, heroStats, heroDetail, weightedWinLoss, type GameRecord,
+  winLoss, byMap, byRole, byHero, focusBy, trend, heroStats, heroDetail, weightedWinLoss, rollingWinrate, windowCompare, type GameRecord,
 } from '../src/core/analytics';
 import { generateSampleGames } from '../src/core/sampleData';
 import { PLAYED_TIME_ESTIMATE, setupMinutes } from '../src/core/playedTime';
@@ -172,6 +172,71 @@ describe('trend', () => {
     ];
     const t = trend(games, 'day');
     expect(t.map((x) => x.key)).toEqual(['2026-06-01', '2026-06-02']);
+  });
+});
+
+describe('rollingWinrate (C6)', () => {
+  const bucket = (key: string, wins: number, losses: number) =>
+    ({ key, games: wins + losses, wins, losses, draws: 0, winrate: wins + losses ? wins / (wins + losses) : 0 });
+
+  it('sums over the trailing calendar window, not the last N array entries', () => {
+    // trend buckets are sparse (only days with games exist), so a gap must
+    // actually drop out of the window rather than just shifting an index.
+    const buckets = [bucket('2026-06-01', 2, 0), bucket('2026-06-02', 1, 1), bucket('2026-06-10', 1, 4)];
+    const out = rollingWinrate(buckets, 'day', 7);
+    // 06-02's trailing 7 days (05-27..06-02) reach back to 06-01.
+    expect(out[1].rolling).toBeCloseTo(3 / 4);
+    // 06-10's trailing 7 days (06-04..06-10) are 8 days past 06-01/02 — excluded.
+    expect(out[2].rolling).toBeCloseTo(1 / 5);
+  });
+
+  it('is game-weighted, not bucket-weighted', () => {
+    const buckets = [bucket('2026-06-01', 1, 0), bucket('2026-06-02', 1, 11)];
+    const out = rollingWinrate(buckets, 'day', 7);
+    // An unweighted per-bucket mean would read (100% + 1/12) / 2 ≈ 54%.
+    expect(out[1].rolling).toBeCloseTo(2 / 13);
+  });
+
+  it('falls back to 0 for an all-draws window, matching winLoss’s own convention', () => {
+    expect(rollingWinrate([bucket('2026-06-01', 0, 0)], 'day')[0].rolling).toBe(0);
+  });
+
+  it('uses 7 ISO weeks as the trailing window in weekly mode', () => {
+    const buckets = [bucket('2026-W01', 3, 0), bucket('2026-W10', 1, 1)];
+    const out = rollingWinrate(buckets, 'week', 7);
+    expect(out[0].rolling).toBe(1);
+    // W10 is 9 weeks past W01 — well outside a trailing 7-week window.
+    expect(out[1].rolling).toBeCloseTo(0.5);
+  });
+});
+
+describe('windowCompare (C6)', () => {
+  const day = 86_400_000;
+  const now = Date.parse('2026-06-30T12:00:00Z');
+  const at = (daysAgo: number) => now - daysAgo * day;
+  const g = (result: Result, daysAgo: number) => game({ result, map: 'A', role: 'damage', timestamp: at(daysAgo) });
+
+  it('compares the trailing window against the one before it', () => {
+    const recent = Array.from({ length: 6 }, (_, i) => g('Win', i));
+    const previous = Array.from({ length: 6 }, (_, i) => g('Loss', 8 + i));
+    const m = windowCompare([...recent, ...previous], now, 7);
+    expect(m).toMatchObject({ days: 7, deltaPts: 100 });
+    expect(m!.recent).toMatchObject({ wins: 6, losses: 0 });
+    expect(m!.previous).toMatchObject({ wins: 0, losses: 6 });
+  });
+
+  it('is null when either window falls short of the sample floor', () => {
+    const games = Array.from({ length: 3 }, (_, i) => g('Win', i));
+    expect(windowCompare(games, now, 7)).toBeNull();
+  });
+
+  it('puts the boundary instant in the previous window, not the recent one', () => {
+    const boundary = g('Win', 7);
+    const recentFiller = Array.from({ length: 5 }, (_, i) => g('Win', i));
+    const previousFiller = Array.from({ length: 4 }, (_, i) => g('Loss', 8 + i));
+    const m = windowCompare([boundary, ...recentFiller, ...previousFiller], now, 7)!;
+    expect(m.recent.games).toBe(5);
+    expect(m.previous.games).toBe(5);
   });
 });
 

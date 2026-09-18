@@ -3,7 +3,7 @@
  * account, hero, mode or time bucket — the building blocks of every dashboard
  * chart. Pure and I/O-free — consumed by both main and the browser preview.
  */
-import type { GameRecord, WinLoss, Group, FocusItem } from './types';
+import type { GameRecord, WinLoss, Group, FocusItem, TrendGroup, Momentum } from './types';
 import { heroTimeShares } from '../playedTime';
 
 // --- core aggregation -------------------------------------------------------
@@ -193,7 +193,69 @@ export function dayKey(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
+/**
+ * Game-weighted, calendar-true rolling winrate over {@link trend}'s buckets
+ * (C6). `trend` is sparse — only days/weeks with games exist — so a naive
+ * "average the last N array entries" smoother compresses across a quiet
+ * stretch (three-evenings-a-week play made a "7-day" line span ~2.5 calendar
+ * weeks) and, unweighted per bucket, lets a 1-game day move it as much as a
+ * 12-game day. This instead sums wins/losses over every bucket whose period
+ * start falls within the trailing `window` periods (7 calendar days in daily
+ * mode, 7 ISO weeks in weekly mode) of the current bucket — a real calendar
+ * window, weighted by the games actually behind it.
+ */
+export function rollingWinrate(buckets: Group[], bucket: 'day' | 'week', window = 7): TrendGroup[] {
+  const periodMs = (bucket === 'day' ? 1 : 7) * 86_400_000;
+  const starts = buckets.map((b) => bucketStart(b.key, bucket));
+  const out: TrendGroup[] = [];
+  let lo = 0, wins = 0, losses = 0;
+  for (let i = 0; i < buckets.length; i++) {
+    wins += buckets[i].wins;
+    losses += buckets[i].losses;
+    const windowStart = starts[i] - (window - 1) * periodMs;
+    while (starts[lo] < windowStart) {
+      wins -= buckets[lo].wins;
+      losses -= buckets[lo].losses;
+      lo++;
+    }
+    const decided = wins + losses;
+    out.push({ ...buckets[i], rolling: decided ? wins / decided : 0 });
+  }
+  return out;
+}
+
+/** Games behind a bucket's own rolling window before it clears the sample floor for {@link windowCompare}. */
+const MOMENTUM_MIN_DECIDED = 5;
+
+/**
+ * The winrate-chart momentum read (C6): the trailing `days`-long window
+ * ending at `now` compared against the `days`-long window before it —
+ * decided games only, so a couple of games can't manufacture a swing. Null
+ * when either window falls short of the sample floor (the strip then reads
+ * "–" rather than a number nobody should trust).
+ */
+export function windowCompare(games: GameRecord[], now: number, days = 7): Momentum | null {
+  const windowMs = days * 86_400_000;
+  const between = (start: number, end: number) => games.filter((g) => g.timestamp > start && g.timestamp <= end);
+  const recent = winLoss(between(now - windowMs, now));
+  const previous = winLoss(between(now - 2 * windowMs, now - windowMs));
+  if (recent.wins + recent.losses < MOMENTUM_MIN_DECIDED || previous.wins + previous.losses < MOMENTUM_MIN_DECIDED) {
+    return null;
+  }
+  return { days, recent, previous, deltaPts: Math.round((recent.winrate - previous.winrate) * 100) };
+}
+
 // --- helpers ----------------------------------------------------------------
+
+/** The UTC start-of-period timestamp a `trend`/{@link rollingWinrate} bucket key names — the inverse of `bucketLabel`. */
+function bucketStart(key: string, bucket: 'day' | 'week'): number {
+  if (bucket === 'day') return Date.parse(key);
+  const [year, week] = key.split('-W').map(Number);
+  const jan4 = Date.UTC(year, 0, 4);
+  const jan4Weekday = new Date(jan4).getUTCDay() || 7;
+  const week1Monday = jan4 - (jan4Weekday - 1) * 86_400_000;
+  return week1Monday + (week - 1) * 7 * 86_400_000;
+}
 
 function bucketLabel(ts: number, bucket: 'day' | 'week'): string {
   const d = new Date(ts);

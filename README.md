@@ -163,14 +163,17 @@ account's per-role lines beneath it.
   you have a rank anchor for, plotted by real date so a stretch with no known rank (an open
   placement run, a pre-reset match) shows as a real gap rather than a guessed interpolation; a
   hollow point marks a reconstructed (rather than recorded or replayed) rank. Then winrate over
-  time (with a rolling average alongside the daily/weekly line so the
-  general direction reads through the noise — in daily mode, click a point or its table row to
-  open that day's matches, and a **best day / worst day** pair beneath the chart does the same),
-  splits by role/account, **when you win** (time-of-day
+  time — a **momentum strip** states the trailing window vs. the one before it in numbers
+  (winrate · games each side, signed point change), and the bold line is a real calendar-true,
+  game-weighted rolling average (not just the last 7 *points* averaged unweighted — a schedule
+  of a few evenings a week no longer stretches "7-day" across two and a half calendar weeks,
+  and a 1-game day no longer swings it as much as a 12-game one); in daily mode, click a point
+  or its table row to open that day's matches, and a **best day / worst day** pair beneath the
+  chart does the same. Then splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and
-  **your self-rating over time** (the 0–100 performance slider with a
-  rolling average plus the avg-rating-on-wins vs -losses split — does your self-read track
+  **your self-rating over time** (the 0–100 performance slider with the same real rolling
+  average plus the avg-rating-on-wins vs -losses split — does your self-read track
   results, or your play? — also click-through to that day's matches). Per-hero and per-map
   average self-ratings also appear as **RTG** columns on the Heroes and Maps tables.
 - **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea

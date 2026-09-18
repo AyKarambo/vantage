@@ -4,9 +4,7 @@ import { PALETTE } from '../../theme';
 import { pct } from '../../format';
 import { svgEl, svgRoot, svgText } from '../svg';
 import { tooltipLayer } from '../tooltip';
-import { emptyChart, rollingMean, type WrPoint } from './shared';
-
-const ROLLING_WINDOW = 7;
+import { emptyChart, type WrPoint } from './shared';
 
 /**
  * Winrate trend over time. Returns an HTML wrapper (SVG + tooltip layer).
@@ -45,9 +43,11 @@ export function lineChart(points: WrPoint[], onSelect?: (label: string) => void)
   points.forEach((p, i) => (path += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(p.winrate) + ' '));
   s.appendChild(svgEl('path', { d: path, fill: 'none', stroke: PALETTE.accent, 'stroke-width': 1.5, opacity: 0.55, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
 
-  const avg = rollingMean(points.map((p) => p.winrate), ROLLING_WINDOW);
+  // Calendar-true, game-weighted (C6) — precomputed in core (`rollingWinrate`)
+  // over every bucket in the trailing window, not just the last N array
+  // entries, since `points` is sparse (only days/weeks with games exist).
   let smooth = '';
-  avg.forEach((v, i) => (smooth += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(v) + ' '));
+  points.forEach((p, i) => (smooth += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(p.rolling ?? p.winrate) + ' '));
   s.appendChild(svgEl('path', { d: smooth, fill: 'none', stroke: PALETTE.accentBright, 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
 
   const tips = tooltipLayer(wrap);

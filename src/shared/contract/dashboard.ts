@@ -6,7 +6,7 @@
 import type { Role, Result } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
@@ -206,7 +206,10 @@ export interface DashboardData {
   byMap: Group[];
   byMapType: Group[];
   byHero: Group[];
-  trend: Group[];
+  /** Winrate over time, each bucket carrying its own trailing rolling winrate (C6). */
+  trend: TrendGroup[];
+  /** The winrate-chart momentum strip (C6): trailing window vs. the one before it, over the same filtered games as `trend`. Null below the sample floor. */
+  momentum: Momentum | null;
   /** Winrate per local day-part (Morning/Afternoon/Evening/Night). */
   timeOfDay: Group[];
   /** Winrate by game number within a session ('1'..'5', '6+'). */
