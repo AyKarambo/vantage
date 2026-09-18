@@ -308,6 +308,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   ever grew for anyone playing regularly, which stopped meaning "anything to do tonight?" and
   trained people to stop looking at it. Hover it for the full lifetime total; the Review screen's
   own subtitle still states that in full.
+- **See the climb.** Trends now plots rank over time — one line per tracked account/role, above
+  everything else on the screen. It's drawn from what you already recorded (rank snapshots and
+  every SR change), not a guess: a stretch with no known rank — an open placement run, a match
+  before a rank reset — shows up as a real gap in the line rather than a smoothed-over guess, and
+  a hollow point marks one reconstructed from your history rather than recorded or calculated
+  directly. The Overview Rank tile now also states how much you've moved since your anchor
+  (`▴ +38% since anchor · 16% in division`), not just which direction the arrow points.
 
 ## 0.34.0 — 31 July 2026
 

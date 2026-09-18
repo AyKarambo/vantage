@@ -28,6 +28,7 @@ export type {
   ReadinessDriver, ReadinessRegime, ReadinessSubscore, ReadinessSubscores,
 } from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
+export type { RankSeriesPoint } from '../../core/rank/series';
 export type { SessionSettings } from '../../core/sessionSettings';
 export type { GradingSettings } from '../../core/gradingSettings';
 
