@@ -604,6 +604,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   so, with a progress readout for your closest map. Trends' "log more games" lines on Time of day and
   Game # in session now state the real gate and your progress toward it, and stop blaming sample size
   once there's actually enough data and the honest answer is just "no pattern found."
+- **Matches says when the list is capped, and lets you reach older games.** A busy range past 150
+  games used to show "150 games in range" while the status bar right beside it said the true, larger
+  number — now the header reads "Showing the 150 most recent of 412 games in range," a **"Show older
+  games"** button appears under the list, and clicking it loads the next 150 without losing your
+  place. A match's detail page couldn't even be reached past game #150 before; its own "n / 150"
+  stepper now reads "n / 150 loaded" so it's honest about what's actually loaded there too.
 
 ## 0.34.0 — 31 July 2026
 

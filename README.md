@@ -73,7 +73,10 @@ account's per-role lines beneath it.
 - **Matches** — the recent game log, grouped **by day or by sitting** (a "By day / By sitting"
   toggle, S4) — sitting grouping follows the same gap-based boundary as the sidebar's Current
   session card, so a sitting spanning midnight stays one block instead of splitting across two
-  day headers; click any row for a full **match detail page**
+  day headers. A range past 150 games says so honestly ("Showing the 150 most recent of 412
+  games in range") instead of a bare count that used to disagree with the status bar right next
+  to it, with a **"Show older games"** button to load the next 150 without losing your place
+  (M1); click any row for a full **match detail page**
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
   support ×2, per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
   wall-clock duration — the fight time those rates divide by, marked *est.* on older captures

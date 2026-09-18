@@ -5,13 +5,13 @@ import {
   PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerMatchHistory, playerRecords,
   selectPlayers, type PlayerDirectory,
 } from '../../core/playerIndex';
-import { computeDashboard, applyFilters } from '../../core/dashboardData';
+import { computeDashboard, applyFilters, selectMatches, toMatchRow } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
 import { enteringRanks, rankKey } from '../../core/rank';
 import type {
-  DashboardFilters, DashboardData, HeroDetail, MatchDetail, PlayerList, PlayerListQuery,
+  DashboardFilters, DashboardData, HeroDetail, MatchDetail, MatchRow, PlayerList, PlayerListQuery,
   PlayerMatchHistory, PlayerRecord,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
@@ -129,6 +129,29 @@ export function matchDetailRead(
     // report a per-match rank built from ±% every other surface is holding back.
     suppressedMatchIds(games, provider.placementRuns()),
   );
+}
+
+/**
+ * "Show older games" (M1) — the next page of the same filtered, competitive-
+ * only match list `dashboardRead`'s own `matches` field caps at `MATCHES_PAGE_SIZE`
+ * rows. `before` is the oldest timestamp already shown, so the page never
+ * re-includes a row the caller already has. Builds each row the same way
+ * `computeDashboard` does (same active-measured set, partial-credit margin,
+ * and placement-suppression mask, all cheap to recompute) so a loaded-older
+ * row can never render differently from one that arrived on the first page.
+ */
+export function matchesPageRead(
+  provider: DataProvider,
+  input: { filters?: DashboardFilters; before: number; limit: number },
+): MatchRow[] {
+  const masterData = provider.effectiveMasterData();
+  const mapModeOf = makeMapMode(masterData.maps);
+  const activeMeasured = activeMeasuredTargets(provider.manualTargets());
+  const margin = provider.getGrading().partialMargin;
+  const suppressed = suppressedMatchIds(competitiveOnly(provider.games()), provider.placementRuns());
+  const games = filteredCompetitiveGames(provider, input.filters);
+  const { rows } = selectMatches(games, { before: input.before, limit: input.limit });
+  return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }
 
 /**

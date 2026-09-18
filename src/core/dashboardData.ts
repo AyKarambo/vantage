@@ -264,6 +264,12 @@ export function computeDashboard(
     // both the table and the palette's Hero entries before the renderer ever saw them.
     heroStats: heroStatsWithDelta,
     matches: recentMatches(games, mapModeOf, activeMeasured, margin, suppressed),
+    // The TRUE filtered count, uncapped (M1) — `matches` itself silently caps
+    // at ROW_CAP, but the Matches header, the detail stepper and the status
+    // bar all used to state or imply the uncapped number regardless, so a
+    // busy range (150+ games) read a header count that flatly disagreed with
+    // the status bar right next to it.
+    matchesTotal: games.length,
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),
     tiltTrend: tiltTrend(games),
@@ -452,15 +458,32 @@ export function eligibleForNoRead(
 
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */
 const ROW_CAP = 150;
+/** Exposed for `matchesPage` (M1) — the "Show older games" page shares the same page size. */
+export { ROW_CAP as MATCHES_PAGE_SIZE };
+
+/**
+ * Filter (older than a cutoff, when given) → sort newest-first → cap — the
+ * "Show older games" page behind `matches.ts`'s own row cap (M1). Mirrors
+ * `selectPlayers`' filter → sort → cap shape: `matched` is taken from the
+ * SAME sorted array the page is sliced from, so a page and its denominator
+ * can never disagree.
+ */
+export function selectMatches(
+  games: readonly GameRecord[],
+  sel: { before?: number; limit: number },
+): { rows: GameRecord[]; matched: number } {
+  const before = sel.before;
+  const eligible = before != null ? games.filter((g) => g.timestamp < before) : [...games];
+  eligible.sort((a, b) => b.timestamp - a.timestamp);
+  return { rows: eligible.slice(0, sel.limit), matched: eligible.length };
+}
 
 function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow[] {
-  return [...games]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, ROW_CAP)
+  return selectMatches(games, { limit: ROW_CAP }).rows
     .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }
 
-function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow {
+export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow {
   const flags = rowFlags(g);
   const measuredGrades = activeMeasured.length ? measuredGradesForMatch(g, activeMeasured, margin) : undefined;
   // The player's stored self-grades stay with the match (unlike the live-computed

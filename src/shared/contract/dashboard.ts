@@ -266,6 +266,8 @@ export interface DashboardData {
   focusItems: FocusEntry[];
   heroStats: HeroSummary[];
   matches: MatchRow[];
+  /** The true filtered match count, uncapped — `matches` itself caps at 150 rows (M1). */
+  matchesTotal: number;
   mental: MentalSummary;
   /** "What it costs you" splits (tilt/comms/toxic/leaver/performance) over the FILTERED range. */
   mentalCosts: MentalCosts;

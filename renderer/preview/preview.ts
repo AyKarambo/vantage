@@ -20,7 +20,7 @@ import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } 
 import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
-import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead } from '../../src/core/dashboardData';
+import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
 import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
@@ -447,6 +447,12 @@ const mock: OwStatsApi = {
     const games = dataset();
     const eff = effectiveMasterData();
     return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin);
+  },
+  matchesPage: async (input: { filters?: DashboardFilters; before: number; limit: number }) => {
+    const eff = effectiveMasterData();
+    const filtered = applyFilters(dataset(), input.filters ?? {}, eff.seasons.map((s) => s.start));
+    const { rows } = selectMatches(filtered, { before: input.before, limit: input.limit });
+    return rows.map((g) => toMatchRow(g, makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin));
   },
   playerHistory: async (name: string) => {
     // Same composition as `reads.playerHistoryRead`, so the harness shows the
