@@ -268,27 +268,34 @@ account's per-role lines beneath it.
   given match folds into one muted line instead of a dead row each, and the active-targets
   strip badges a measured target **auto**, a self-rated one **manual**, matching how the
   cards below already read.
-- **Targets** — build a target (self-rated ◎, or measured ⚡ which **auto-grades from your
-  stats per 10 minutes played** — no manual read). The **Target library** card offers curated starting
-  points grouped by **Mechanics · Macro · Strategy · Training**, each entry showing a one-line
-  coaching blurb and role tag — pick one and it prefills the builder. A measured stat within a
+- **Targets** — with a live set already in place, the page opens on your **Active focus** and
+  **Your targets** — "does it move your winrate?" — first, not a pre-filled form: the builder
+  collapses behind a **"＋ New target"** button and starts on a genuinely blank name field when
+  you do open it (build a target self-rated ◎, or measured ⚡ which **auto-grades from your
+  stats per 10 minutes played** — no manual read). The **Target library** card offers curated
+  starting points grouped by **Mechanics · Macro · Strategy · Training**, filterable by a
+  **All / Tank / DPS / Support / Measured only** chip row; each entry shows a one-line coaching
+  blurb and role tag, and you either **Customize** it (loads into the builder to review first)
+  or hit its one-click **Add** to save it exactly as written — with a toast offering **Edit** —
+  and an entry you already have marks itself **"✓ in your targets"**. A measured stat within a
   **configurable partial-credit margin** of its threshold (default 20%, in Settings → General →
   Coaching) scores **Partial** rather than Missed. Any target — self-rated or measured — can be
-  **scoped to a role and/or one or more heroes**, so it only applies to games it's actually
-  relevant to: a scoped-out match skips a measured target's auto-grade and hides a self-rated
-  target from Review entirely, for both auto-tracked and hand-logged games alike. Each target
-  carries a small **goal-flag** icon for at-a-glance identification. Measured
-  thresholds take **scroll-to-adjust** (per-stat steps, hold Shift for bigger jumps). The
-  **Targets list** shows each target in plain language — name, grading mode, hit-rate, and one status
-  sentence (e.g. "Paying off — you win more when you hit it.") — with an **Active** toggle;
-  click any row to open its **detail page** (back button, Escape), which carries the full
-  breakdown: the rule, win-when-hit/when-missed, the **Focus Trend** panel (before/after winrate,
-  rolling chart with table toggle), and actions (**Edit** pre-fills the builder, **Archive**,
-  **Delete**). Rotate your focus with the **Active focus** panel (quick add/remove + "start a
-  fresh focus"); active targets that go stale (past a configurable days/matches threshold) get a
-  rotate nudge. The **Focus** screen can create a practice target for a losing map, hero or
-  role in one click (**＋ target**) — the builder opens with the matching hero/role scope
-  already selected, not just a prefilled name.
+  **scoped to a role and/or one or more heroes** (collapsed behind a one-line "Applies to: …"
+  summary until you hit **Change**, since the full picker otherwise pushes Save off-screen), so
+  it only applies to games it's actually relevant to: a scoped-out match skips a measured
+  target's auto-grade and hides a self-rated target from Review entirely, for both auto-tracked
+  and hand-logged games alike. Each target carries a small **goal-flag** icon for at-a-glance
+  identification. Measured thresholds take **scroll-to-adjust** (per-stat steps, hold Shift for
+  bigger jumps). The **Targets list** shows each target in plain language — name, grading mode,
+  hit-rate, and one status sentence (e.g. "Paying off — you win more when you hit it.") — with
+  an **Active** toggle; click any row to open its **detail page** (back button, Escape), which
+  carries the full breakdown: the rule, win-when-hit/when-missed, the **Focus Trend** panel
+  (before/after winrate, rolling chart with table toggle), and actions (**Edit** pre-fills the
+  builder, **Archive**, **Delete**). Rotate your focus with the **Active focus** panel (quick
+  add/remove + an undoable **"start a fresh focus"**, toast with **Undo**); active targets that
+  go stale (past a configurable days/matches threshold) get a rotate nudge. The **Focus** screen
+  can create a practice target for a losing map, hero or role in one click (**＋ target**) — the
+  builder opens with the matching hero/role scope already selected, not just a prefilled name.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still

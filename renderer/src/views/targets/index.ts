@@ -8,7 +8,8 @@
  */
 import { h } from '../../dom';
 import type { ViewParams } from '../../store';
-import { card, emptyState } from '../../components/primitives';
+import { store } from '../../store';
+import { button, card, emptyState } from '../../components/primitives';
 import { viewHead, type ViewContext } from '../view';
 import { builderCard } from './builder';
 import { activeSetCard } from './activeSet';
@@ -20,14 +21,33 @@ import { libraryBrowserCard } from './libraryBrowser';
  *  so object identity is exactly "one edit per navigation". */
 const consumedEditParams = new WeakSet<ViewParams>();
 
+/**
+ * Set once the player explicitly opens the collapsed builder via
+ * "＋ New target" (R5) — stays true for the rest of the session (mirrors
+ * `gradedThisSession` elsewhere) so a `store.rerender()` triggered by
+ * something else doesn't collapse an in-progress, unsaved target out from
+ * under the player.
+ */
+let builderManuallyOpened = false;
+
 export function targets(ctx: ViewContext): HTMLElement {
-  const builder = builderCard(ctx);
+  // Real mode with no authored targets shows an honest empty state (not the
+  // demo sample library, and not an empty "Your targets" shell) — and is the
+  // only case that still opens the builder first: a returning player with a
+  // live set gets their own targets on screen immediately instead of a
+  // pre-filled form (R5), with everything below computed the same way.
+  const noTargets = !ctx.data.isSample && ctx.data.targets.length === 0;
+  const willPrefill = ctx.params.prefillName != null;
+  const willEdit = ctx.params.editTargetId != null && !consumedEditParams.has(ctx.params);
+  const startOpen = noTargets || willPrefill || willEdit || builderManuallyOpened;
+
+  const builder = builderCard(ctx, { startOpen });
   // Focus's per-map/hero/role "＋ target" quick-create lands here with a name
   // to prefill — self-rated by default, same as a fresh builder's grading
   // mode — and, for a hero/role entry (H1), the matching scope pre-selected.
-  if (ctx.params.prefillName) {
+  if (willPrefill) {
     builder.prefill({
-      name: ctx.params.prefillName, mode: 'self', rule: 'You grade it',
+      name: ctx.params.prefillName!, mode: 'self', rule: 'You grade it',
       roleScope: ctx.params.prefillRole, heroScope: ctx.params.prefillHeroes,
     });
   }
@@ -35,22 +55,30 @@ export function targets(ctx: ViewContext): HTMLElement {
   // One navigation = one edit: a background refresh re-renders this view with
   // the SAME params object, and replaying builder.edit() then would force the
   // builder back into edit mode — the silent-overwrite trap (review finding).
-  if (ctx.params.editTargetId && !consumedEditParams.has(ctx.params)) {
+  if (willEdit) {
     consumedEditParams.add(ctx.params);
     const editing = ctx.data.targets.find((t) => t.id === ctx.params.editTargetId);
     if (editing) builder.edit(editing);
   }
-  // Real mode with no authored targets shows an honest empty state (not the
-  // demo sample library, and not an empty "Your targets" shell).
-  const noTargets = !ctx.data.isSample && ctx.data.targets.length === 0;
+
+  // Collapsed into a single action rather than always on screen (R5) — once
+  // there's a real set to show, "how are my targets doing" is the page's
+  // actual daily question, not "here's a blank form".
+  const newTargetAction = startOpen
+    ? undefined
+    : button('＋ New target', {
+        variant: 'soft',
+        onClick: () => { builderManuallyOpened = true; store.rerender(); },
+      });
+
+  const emptyStateCard = card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
+    emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true));
+
   return h('div', { class: 'view view--narrow' },
-    viewHead('Improvement Target', 'Self-rated by default, measurable if you want — pick per target'),
-    builder.el,
-    activeSetCard(ctx),
+    viewHead('Improvement Target', 'Self-rated by default, measurable if you want — pick per target', newTargetAction),
     noTargets
-      ? card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
-          emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true))
-      : libraryCard(ctx),
+      ? [builder.el, activeSetCard(ctx), emptyStateCard]
+      : [activeSetCard(ctx), libraryCard(ctx), builder.el],
     libraryBrowserCard(ctx, builder),
   );
 }

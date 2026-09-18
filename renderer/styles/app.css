@@ -892,9 +892,20 @@
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
+/* One row = the Customize button plus a trailing Add/owned marker (R5). */
+.library-entry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.library-entry-trailing {
+  flex-shrink: 0;
+  margin-top: 8px;
+}
 .library-entry {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 8px 10px;
   background: transparent;
   border: 1px solid transparent;

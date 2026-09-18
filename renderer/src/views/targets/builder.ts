@@ -12,6 +12,8 @@ import { badge, button, card, segmented, select } from '../../components/primiti
 import { attachStepper } from '../../components/wheelStepper';
 import { paintHeroChips } from '../../components/heroPicker';
 import { roleIcon } from '../../components/roleIcon';
+import { roleLabel } from '../../format';
+import { inlineLink } from '../../components/inlineLink';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
@@ -34,11 +36,12 @@ export interface BuilderState {
 
 export interface BuilderHandle {
   el: HTMLElement;
-  /** Load an existing target into the builder (edit mode). */
+  /** Load an existing target into the builder (edit mode). Opens the card if it was collapsed. */
   edit: (t: TargetSummary) => void;
   /** Load a template (or a Focus quick-create) into the builder — always
    *  creates on save, even if the builder was mid-edit (AC 1–2). `roleScope`/
-   *  `heroScope` (H1) seed the scope picker for a hero/role quick-create. */
+   *  `heroScope` (H1) seed the scope picker for a hero/role quick-create.
+   *  Opens the card if it was collapsed. */
   prefill: (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }) => void;
 }
 
@@ -46,10 +49,13 @@ export interface BuilderHandle {
 // `parseMeasuredRule` (shared with core scoring/auto-grading) are the two halves
 // of one round-trip — the format is owned by `src/core/targets/measured.ts` so it
 // cannot drift between writing, reading, and auto-grading.
-export function builderCard(ctx: ViewContext): BuilderHandle {
+export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): BuilderHandle {
   const state: BuilderState = {
     editingId: null,
-    name: 'Trade before you die',
+    // Blank, not a real-looking sample name (R5) — a returning player who
+    // never even looked at this field used to be one accidental Save away
+    // from a target literally named "Trade before you die".
+    name: '',
     mode: 'self',
     saved: false,
     stat: 'Deaths',
@@ -58,6 +64,10 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
     roleScope: undefined,
     heroScope: undefined,
   };
+  // Collapsed by default once the player already has a set (R5) — the builder
+  // used to always be the first thing on the screen, pushing "how are my
+  // targets doing" (the page's actual daily question) below the fold.
+  let open = opts.startOpen;
   const host = h('div');
 
   const save = (): void => {
@@ -76,6 +86,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
   };
 
   const draw = (): void => {
+    if (!open) { render(host); return; }
     const gradeBlock = h('div');
     const footer = h('div');
     const dirty = (): void => { state.saved = false; drawFooter(); };
@@ -155,6 +166,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
   };
 
   const edit = (t: TargetSummary): void => {
+    open = true;
     state.editingId = t.id;
     loadRule(t);
     draw();
@@ -162,6 +174,7 @@ export function builderCard(ctx: ViewContext): BuilderHandle {
   };
 
   const prefill = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }): void => {
+    open = true;
     // Always creates on save — abandon any in-progress edit (AC 2).
     state.editingId = null;
     loadRule(t);
@@ -231,10 +244,44 @@ export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange
   );
 }
 
-/** Role + hero scope picker (D) — restricts grading to a role and/or one or more
- *  heroes. Shared by both self-rated and measured targets; the scope is stored
- *  identically regardless of grading mode. */
+/**
+ * Role + hero scope, collapsed by default behind a one-line summary (R5) —
+ * with "Any role" selected the full picker paints every hero in the game
+ * (`paintHeroChips`'s openQ fallback), which used to be what filled the
+ * whole viewport before Save was even visible, for a field most targets
+ * never touch. Starts expanded when the loaded target already carries a
+ * scope; otherwise a "Change" link reveals the untouched {@link scopePickers}.
+ */
 function scopeBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
+  const host = h('div');
+  let expanded = state.roleScope != null || (state.heroScope?.length ?? 0) > 0;
+
+  const summaryRow = (): HTMLElement => {
+    const rolePart = state.roleScope ? roleLabel(state.roleScope) : 'any role';
+    const heroPart = state.heroScope?.length ? state.heroScope.join(', ') : 'any hero';
+    return h('div', {
+      class: 'hint',
+      style: { marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
+    },
+      state.roleScope ? roleIcon(state.roleScope, { size: 13 }) : null,
+      h('span', null, `Applies to: ${rolePart}, ${heroPart}`),
+      h('span', null, '·'),
+      inlineLink('Change', { onClick: () => { expanded = true; draw(); } }),
+    );
+  };
+
+  const draw = (): void => {
+    render(host, expanded ? scopePickers(state, heroes, onChange) : summaryRow());
+  };
+  draw();
+  return host;
+}
+
+/** The role/hero picker (D) itself — restricts grading to a role and/or one
+ *  or more heroes. Shared by both self-rated and measured targets; the scope
+ *  is stored identically regardless of grading mode. Unchanged by the R5
+ *  disclosure above it — only when it's shown changed, not what it shows. */
+function scopePickers(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
   const heroHost = h('div');
   const heroSelected = new Set<string>(state.heroScope ?? []);
   const paintHeroes = (): void => {
