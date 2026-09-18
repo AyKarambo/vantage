@@ -11,8 +11,8 @@ type Child = Node | string | number | null | undefined | false;
 export type PillState = 'win' | 'loss' | 'draw' | 'accent';
 
 /** Small coloured label; `mono` renders the text in the monospace stat font. */
-export function pill(text: Child, state?: PillState, opts: { mono?: boolean } = {}): HTMLElement {
-  return h('span', { class: `pill${state ? ' is-' + state : ''}${opts.mono ? ' is-mono' : ''}` }, text);
+export function pill(text: Child, state?: PillState, opts: { mono?: boolean; title?: string } = {}): HTMLElement {
+  return h('span', { class: `pill${state ? ' is-' + state : ''}${opts.mono ? ' is-mono' : ''}`, title: opts.title }, text);
 }
 
 /** Canonical match-result mappings, shared by every screen that colours a result. */

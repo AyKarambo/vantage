@@ -8,8 +8,8 @@
 import { h } from '../../dom';
 import type { TargetSummary } from '../../../../src/shared/contract';
 import { targetStatusSentence } from '../../../../src/core/targets';
-import { pct } from '../../format';
-import { badge, button, card, chip } from '../../components/primitives';
+import { pct, signed } from '../../format';
+import { badge, button, card, chip, pill, type PillState } from '../../components/primitives';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 import { confirmDelete } from './shared';
@@ -49,6 +49,7 @@ function targetRow(t: TargetSummary, ctx: ViewContext): HTMLElement {
         h('div', { class: 'hint', style: { fontSize: '11.5px', marginTop: '3px', lineHeight: '1.45' } }, targetStatusSentence(t)),
       ),
       activeToggle(t, ctx),
+      liftChip(t),
       h('div', { style: { textAlign: 'right', width: '56px', flex: '0 0 auto' } },
         h('div', { class: 'mono', style: { fontSize: '16px', fontWeight: '600' } }, t.attempts ? pct(t.hitRate) : 'New'),
         h('div', { class: 'u-dim', style: { fontSize: '10px' } }, `${t.hits} / ${t.attempts}`),
@@ -56,6 +57,25 @@ function targetRow(t: TargetSummary, ctx: ViewContext): HTMLElement {
       h('span', { class: 'u-dim', style: { fontSize: '12px', flex: '0 0 auto' } }, 'Details ›'),
     ),
   );
+}
+
+/**
+ * Signed winrate-lift pill next to the hit-rate (R6) — `winWhenHit −
+ * winWhenMissed`, coloured like a real result (green worth keeping, red
+ * hurts, muted in between) rather than left as a bare percentage pair the
+ * player has to subtract themselves. Only shown once both sides have at
+ * least one decided (Win/Loss) game — with a side at zero, the number
+ * behind it is the player's baseline, not a measured read, and showing a
+ * lift built from that would be the exact fabrication this was meant to fix.
+ */
+function liftChip(t: TargetSummary): HTMLElement | null {
+  if (!t.hitDecided || !t.missDecided) return null;
+  const lift = t.winWhenHit - t.winWhenMissed;
+  const state: PillState = lift >= 0.05 ? 'win' : lift <= -0.05 ? 'loss' : 'draw';
+  return pill(`${signed(Math.round(lift * 100))} pts when hit`, state, {
+    mono: true,
+    title: `${pct(t.winWhenHit)} when hit · ${pct(t.winWhenMissed)} when missed`,
+  });
 }
 
 /** The Active chip (graded on Review), stopPropagation-wrapped so toggling it

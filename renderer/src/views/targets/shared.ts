@@ -12,13 +12,24 @@ import { openModal } from '../../components/overlay';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
-/** One labelled winrate track (win when hit / when missed). */
-export function winSplit(label: string, frac: number, barColor: string, textColor: string): HTMLElement {
-  const fill = h('div', { class: 'track-fill', style: { width: `${Math.round(frac * 100)}%`, background: barColor } });
+/**
+ * One labelled winrate track (win when hit / when missed). `decided` is how
+ * many DECIDED (Win/Loss) games actually back `frac` (R6) — with none, `frac`
+ * is the player's baseline, not a measured read, so the track stays empty
+ * and the label reads "— · no games yet" instead of drawing a confident-
+ * looking bar for nothing. Otherwise it states the sample size alongside the
+ * rate ("62% · 12 games"), not just the bare percentage.
+ */
+export function winSplit(label: string, frac: number, decided: number, barColor: string, textColor: string): HTMLElement {
+  const fill = decided ? h('div', { class: 'track-fill', style: { width: `${Math.round(frac * 100)}%`, background: barColor } }) : null;
+  const text = decided ? `${pct(frac)} · ${decided} game${decided === 1 ? '' : 's'}` : '— · no games yet';
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' } },
     h('span', { style: { fontSize: '10px', color: 'var(--muted-2)', width: '82px', flex: '0 0 auto' } }, label),
     h('div', { class: 'track track--slim' }, fill),
-    h('span', { class: 'mono', style: { fontSize: '10.5px', color: textColor, width: '30px', textAlign: 'right', flex: '0 0 auto' } }, pct(frac)),
+    h('span', {
+      class: decided ? 'mono' : 'mono u-dim',
+      style: { fontSize: '10.5px', color: decided ? textColor : undefined, textAlign: 'right', flex: '0 0 auto', whiteSpace: 'nowrap' },
+    }, text),
   );
 }
 

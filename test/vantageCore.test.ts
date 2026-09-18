@@ -143,6 +143,11 @@ describe('sampleTargets', () => {
       expect(t.hits).toBeLessThanOrEqual(t.attempts);
       expect(t.spark.length).toBe(8);
       expect(['self', 'measured']).toContain(t.mode);
+      // R6: the synthetic model has no draws, so every attempt decides —
+      // demo copy (the lift chip, the status sentence) reads the same as a
+      // real target's instead of silently reading as "no games yet".
+      expect(t.hitDecided).toBe(t.hits);
+      expect(t.missDecided).toBe(t.attempts - t.hits);
     }
   });
 });

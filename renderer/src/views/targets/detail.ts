@@ -56,8 +56,10 @@ function headerCard(t: TargetSummary, ctx: ViewContext): HTMLElement {
         h('div', { class: 'u-dim', style: { fontSize: '10px' } }, `${t.hits} / ${t.attempts}`),
       ),
     ),
-    winSplit('win when hit', t.winWhenHit, PALETTE.win, PALETTE.winText),
-    winSplit('when missed', t.winWhenMissed, 'rgba(255,255,255,0.16)', PALETTE.muted),
+    winSplit('win when hit', t.winWhenHit, t.hitDecided, PALETTE.win, PALETTE.winText),
+    winSplit('when missed', t.winWhenMissed, t.missDecided, 'rgba(255,255,255,0.16)', PALETTE.muted),
+    h('div', { class: 'hint', style: { marginTop: '6px' } },
+      'Your winrate in games where you hit this target vs games where you didn’t.'),
     actionsRow(t, ctx),
   );
 }
