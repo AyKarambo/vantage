@@ -263,7 +263,12 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // track stood going in, straight away. Logged without one, there is
       // nothing to snapshot until a ±% is added on Review.
       if (input.srDelta != null) syncRankAtStart(deps, matchId);
-      deps.notify('Match logged', `${input.result} · ${input.map}`);
+      // L3: no OS banner for a hand-logged match — the player is already
+      // looking at Vantage (they just typed it in a second ago), and the
+      // renderer's own post-save toast already says more (account, role,
+      // ±%, Undo) than this ever did. This was, in fact, the app's ONLY
+      // "Match logged" OS notification — an auto-tracked (GEP) match never
+      // fired one at all, so nothing here needs preserving for that path.
       return { matchId };
     },
     editMatch: (input: MatchEditInput) => {

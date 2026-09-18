@@ -9,7 +9,7 @@
  * targets inline.
  */
 import { h, render } from '../dom';
-import { time, roleLabel } from '../format';
+import { time, roleLabel, signed } from '../format';
 import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -21,6 +21,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
+import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from './placementComplete';
 import { maybeOfferPlacements } from './placementOffer';
 import { srEntryMode } from '../../../src/core/placements';
@@ -335,14 +336,24 @@ function buildForm(
         // all season. Main decides whether an offer is actually due.
         placementOfferFor = { account: state.account, role: state.role };
       }
+      prefs.set('logPrefill', { role: state.role, account: state.account });
+      // L3: names what was actually stored (account/role/±%), not just the
+      // result and map — a mis-logged game used to cost Matches → row → ⋯ →
+      // Delete → confirm to fix. Undo is omitted when this save also anchored
+      // a rank or wrote a placement prediction (anchoring/mode==='placement'),
+      // since deleteMatch only unwinds the match record itself.
+      const srText = srDelta != null && Number.isFinite(srDelta) ? ` · ${signed(Math.round(srDelta))}%` : '';
+      const canUndo = !anchoring && mode !== 'placement';
+      toast(
+        `Match logged — ${state.result} · ${map} · ${state.account} ${roleLabel(state.role)}${srText}`,
+        canUndo ? { action: { label: 'Undo', run: () => void deleteMatch({ matchId, map }, () => {}) } } : undefined,
+      );
     } catch {
       toast('Save failed — nothing was logged. Try again.');
       return false;
     } finally {
       saving = false;
     }
-    prefs.set('logPrefill', { role: state.role, account: state.account });
-    toast(`Match logged — ${state.result} · ${map}`);
     ctx.refresh();
     return true;
   };

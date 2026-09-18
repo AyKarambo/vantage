@@ -288,7 +288,11 @@ account's per-role lines beneath it.
   the **comms** tone on a colour switch (**positive / banter / abusive** — the same switch now backs
   Review and the match editor), rate your own **performance** on a 0-100 slider (colored on the same
   red→green scale as winrate elsewhere; also editable later from Review or a match's detail page), and
-  grade active improvement targets inline.
+  grade active improvement targets inline. Saving shows a toast naming what was actually stored —
+  "Match logged — Loss · Oasis · Climb Damage · −25%" — with an **Undo** (omitted when the save also
+  anchored a first rank or wrote a placement prediction, since undo only unwinds the match record
+  itself); no OS notification fires for a hand-logged match, since you're already looking at the toast
+  that just said more than it ever did.
   Vantage then **calculates your live rank** from that anchor plus each logged %, including Overwatch
   **rank protection** (a loss that would drop below 0% holds the division and keeps the true negative
   carry — matching the game's own negative display — until a win or draw pays it back above 0%; only
