@@ -4,6 +4,7 @@
  * Keyboard: ↑/↓ move, Enter/Tab picks, Escape closes the list (not the modal).
  */
 import { h, render } from '../dom';
+import { fuzzyRank, resolveNearMiss } from '../fuzzy';
 
 export interface TypeaheadOpts {
   value?: string;
@@ -25,6 +26,14 @@ export interface TypeaheadOpts {
   strict?: boolean;
   /** Items in this set render visually muted/deprioritized in the list. */
   mutedItems?: ReadonlySet<string>;
+  /**
+   * Strict mode only: called on blur when the typed text resolves to neither
+   * an exact match nor a single confident near-miss — lets the caller surface
+   * its inline error immediately (see mapPicker's `mapError`) instead of only
+   * after a Save attempt. The input keeps the typed text and gets `is-invalid`
+   * rather than silently reverting to the last committed value.
+   */
+  onInvalid?: (typed: string) => void;
 }
 
 export function typeahead(opts: TypeaheadOpts): HTMLElement {
@@ -80,11 +89,13 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
       browsing = true;
     } else {
       const pool = opts.searchSuggestions ?? opts.suggestions;
-      const starts = pool.filter((s) => s.toLowerCase().startsWith(q));
-      const contains = pool.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
-      const combined = [...starts, ...contains];
-      // Stable sort: muted entries sink to the end, preserving starts-before-
-      // contains ordering within each bucket.
+      // Fuzzy subsequence ranking (word-start/prefix-bonused), not plain
+      // startsWith/includes — a skipped apostrophe or accent ("kings row",
+      // "esperanca") now surfaces its match while typing, not only as a
+      // last-resort resolve on blur (strict mode; see resolveNearMiss below).
+      const combined = fuzzyRank(q, pool, (s) => s);
+      // Stable: muted entries sink to the end, preserving fuzzy-score order
+      // within each bucket.
       const ranked = opts.mutedItems
         ? [...combined.filter((s) => !opts.mutedItems!.has(s)), ...combined.filter((s) => opts.mutedItems!.has(s))]
         : combined;
@@ -122,16 +133,30 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
       closeList();
       if (!opts.strict) return;
       const pool = opts.searchSuggestions ?? opts.suggestions;
-      const q = input.value.trim().toLowerCase();
-      const exact = pool.find((s) => s.toLowerCase() === q);
-      if (exact) {
-        committed = exact;
-        input.value = exact;
-        opts.onChange(exact);
-      } else if (input.value !== committed) {
-        input.value = committed;
-        opts.onChange(committed);
+      const typed = input.value.trim();
+      if (!typed) {
+        // Empty is always valid ("no map chosen yet") — never flagged invalid.
+        input.classList.remove('is-invalid');
+        if (input.value !== committed) { input.value = committed; opts.onChange(committed); }
+        return;
       }
+      const exact = pool.find((s) => s.toLowerCase() === typed.toLowerCase());
+      // A near-miss — a missing apostrophe, a dropped accent — resolves onto
+      // its one confident match rather than being treated as invalid.
+      const resolved = exact ?? resolveNearMiss(typed, pool);
+      if (resolved) {
+        committed = resolved;
+        input.value = resolved;
+        opts.onChange(resolved);
+        input.classList.remove('is-invalid');
+        return;
+      }
+      // Genuinely unresolved: keep exactly what was typed (reverting it here
+      // used to make a real near-miss vanish with no explanation, leaving a
+      // disabled Save button as the only clue) and flag it so the caller's
+      // own inline hint can fire immediately instead of waiting for Save.
+      input.classList.add('is-invalid');
+      opts.onInvalid?.(input.value);
     }, 100);
   });
 

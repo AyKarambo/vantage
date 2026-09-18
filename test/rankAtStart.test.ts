@@ -172,6 +172,50 @@ describe('rankAtStart — the snapshot', () => {
     provider.editMatch({ matchId: 'm-1', srDelta: 15 } as never);
     expect(at('m-1')!.rankAtStart).toEqual({ tier: 'Gold', division: 3, progressPct: 40 });
   });
+
+  it('re-syncs on a played-time edit alone, with no ±% touched', () => {
+    // A corrected timestamp can move a match to a different point in the
+    // track's timeline (a different neighbour, possibly a different track
+    // entirely if it crosses another match) — the snapshot must follow even
+    // when srDelta itself is untouched.
+    const { provider, at } = harness([g(1)], anchor());
+    provider.saveReview(review('m-1', 20) as never);
+    const before = at('m-1')!.rankAtStart;
+    provider.editMatch({ matchId: 'm-1', playedAt: g(1).timestamp + MINUTE } as never);
+    expect(at('m-1')!.rankAtStart).toEqual(before); // same (only) match on the track — same snapshot
+    expect(at('m-1')!.timestamp).toBe(g(1).timestamp + MINUTE);
+  });
+});
+
+describe('editMatch — playedAt', () => {
+  it('moves a hand-logged match\'s timestamp', () => {
+    const { provider, at } = harness([g(1)]);
+    const moved = g(1).timestamp + 5 * MINUTE;
+    provider.editMatch({ matchId: 'm-1', playedAt: moved } as never);
+    expect(at('m-1')!.timestamp).toBe(moved);
+  });
+
+  it('clamps a future playedAt to now, same as the initial backfill', () => {
+    const { provider, at } = harness([g(1)]);
+    const before = Date.now();
+    provider.editMatch({ matchId: 'm-1', playedAt: Date.now() + 3_600_000 } as never);
+    expect(at('m-1')!.timestamp).toBeGreaterThanOrEqual(before);
+    expect(at('m-1')!.timestamp).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('is IGNORED on an auto-tracked match — a GEP timestamp is the game\'s own record', () => {
+    const { provider, at } = harness([g(1, { source: 'gep' })]);
+    const original = g(1).timestamp;
+    provider.editMatch({ matchId: 'm-1', playedAt: original + 5 * MINUTE } as never);
+    expect(at('m-1')!.timestamp).toBe(original);
+  });
+
+  it('leaves the timestamp alone when omitted', () => {
+    const { provider, at } = harness([g(1)]);
+    const original = g(1).timestamp;
+    provider.editMatch({ matchId: 'm-1', result: 'Loss' } as never);
+    expect(at('m-1')!.timestamp).toBe(original);
+  });
 });
 
 describe('rankEnteringMatch', () => {

@@ -8,9 +8,9 @@
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, rankLabel, relTime, roleLabel, signed } from '../format';
+import { fmt, rankLabel, relTime, roleLabel, signed, toDatetimeLocal } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
-import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
+import { badge, button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { srEntryMode } from '../../../src/core/placements';
@@ -18,7 +18,7 @@ import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../com
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
-import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
+import { mapPicker, resolveMapName, mapErrorText, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
@@ -449,7 +449,12 @@ function buildMatchEditor(
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
   const isComp = classifyGameType(d.gameType) === 'competitive';
+  const isManual = d.source !== 'gep';
   const state = { result: d.result, role: d.role, map: d.map };
+  // Editable only for a hand-logged match — a GEP timestamp is the game's own
+  // record and stays locked, same as the other auto-tracked facts. Starts at
+  // the match's own recorded instant; `undefined` on save means "unchanged".
+  let playedAt: number | undefined;
   // Full hero set (a hand-logged match can have several) — a role-filtered chip
   // grid, so editing never collapses the list to just the first hero.
   const heroes = new Set<string>(d.heroes);
@@ -536,7 +541,7 @@ function buildMatchEditor(
     const paintEditorHeroes = (): void => {
       const limit = prefs.get('suggestedHeroCount') ?? DEFAULT_SUGGESTED_HEROES;
       const shortlist = (mostPlayed[d.account]?.[state.role] ?? []).slice(0, limit);
-      paintHeroChips(heroEditHost, heroes, state.role, ctx.data.masterData.heroes, { shortlist, search: true });
+      paintHeroChips(heroEditHost, heroes, state.role, ctx.data.masterData.heroes, { shortlist, limit, search: true });
     };
     paintEditorHeroes();
 
@@ -564,6 +569,7 @@ function buildMatchEditor(
         maps,
         recentMaps: ctx.data.matches.map((m) => m.map),
         onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
+        onInvalid: (typed) => { mapError.textContent = mapErrorText(typed); mapError.classList.remove('hidden'); },
       }),
     );
     mapField.append(mapError);
@@ -592,6 +598,25 @@ function buildMatchEditor(
       field(optionalLabel('Heroes', '— tap all you played'), heroEditHost),
       // No Mode control — Vantage is competitive-only (spec D1); matches stay
       // competitive, mirroring the quick-log's removed mode picker.
+      // Played time is editable only for a hand-logged match: a backfilled
+      // time can be wrong the same way any other typed field can, and until
+      // now there was no way to fix it after the fact.
+      isManual
+        ? field(optionalLabel('Played', '— when this match actually ended'),
+            h('input', {
+              type: 'datetime-local', class: 'vt-input mono', max: toDatetimeLocal(Date.now()),
+              value: toDatetimeLocal(d.timestamp),
+              on: {
+                change: (e) => {
+                  const v = (e.target as HTMLInputElement).value;
+                  if (!v) return;
+                  const at = Date.parse(v);
+                  if (Number.isNaN(at)) return;
+                  playedAt = Math.min(at, Date.now());
+                },
+              },
+            }))
+        : null,
     );
 
     // SR block from the shared srControls, with the log card's labels. Change
@@ -671,9 +696,7 @@ function buildMatchEditor(
       // Same guard as the log card: only a resolved, known map may save.
       const resolved = resolveMap();
       if (!resolved) {
-        mapError.textContent = state.map.trim()
-          ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
-          : 'Pick the map — start typing and choose from the list.';
+        mapError.textContent = mapErrorText(state.map);
         mapError.classList.remove('hidden');
         return;
       }
@@ -702,6 +725,9 @@ function buildMatchEditor(
         // number sets, null clears — performance applies to any match, comp or not.
         performance: performance ?? null,
         grades,
+        // undefined (the field was never touched) leaves the stored instant
+        // alone; main ignores this anyway for an auto-tracked match.
+        ...(playedAt !== undefined ? { playedAt } : {}),
       });
       // A track with no anchor yet: the entered rank defines where tracking
       // starts, since there is no rank-before for it to be a change from.
@@ -748,37 +774,52 @@ function buildMatchEditor(
     const saveBtn = button('Save', { variant: 'primary', onClick: save });
     updateSaveEnabled();
 
+    // Header mirrors the log card's: title, a provenance badge (⚡ auto / ◎
+    // manual, plus "edited" for a hand-corrected auto-tracked match) where the
+    // log card shows its manual-time badge, and the same ✕ — Escape/backdrop
+    // already closed this dialog, but neither is a visible affordance.
+    const header = h('div', { class: 'log-header', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
+      h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600', flex: '0 0 auto' } }, 'Edit match'),
+      h('div', { class: 'u-muted', style: { fontSize: '12px', flex: '1 1 auto', textAlign: 'center' } },
+        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)}`),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', flex: '0 0 auto' } },
+        badge(`${d.source === 'gep' ? '⚡ auto' : '◎ manual'}${d.factsEditedAt != null ? ' · edited' : ''}`, d.source === 'gep' ? 'auto' : 'manual'),
+        h('button', { class: 'overlay-close', on: { click: close } }, '✕'),
+      ),
+    );
+
     // tabindex -1: focusable via script (for the mount-time focus below) but not
     // part of the natural Tab order — mirrors the log card's keyboard handling.
-    // Field order and label convention are the log card's (its Account/Played
-    // fields are log-only): Result, Map, Role, Heroes, Skill rating,
-    // Performance, Comms, Flags, Targets.
-    const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', outline: 'none' } },
-      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
-      h('div', { class: 'u-muted', style: { fontSize: '12px' } },
-        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}${d.factsEditedAt != null ? ' · edited' : ''}`),
-      // Two columns mirroring the log card: match facts + Skill rating on the
-      // left, the manual self-report (Performance / Comms / Flags / Targets) on
-      // the right. Collapses to one column on a narrow viewport (shared .log-grid).
-      h('div', { class: 'log-grid' },
-        h('div', { class: 'log-col' },
-          factsBlock,
-          srBlock,
-        ),
-        h('div', { class: 'log-col' },
-          field(optionalLabel('Performance', '— how did you play?'),
-            performanceSlider(performance, (v) => (performance = v))),
-          field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
-          field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
-          field(optionalLabel('Targets', '— grade now or later on Review'),
-            h('div', { class: 'stack', style: { gap: '11px' } },
-              ...(rows.length
-                ? rows.map((r) => r.el)
-                : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
-            )),
+    // Field order and label convention are the log card's (its Account field
+    // is log-only): Result, Map, Role, Heroes, Played (manual only), Skill
+    // rating, Performance, Comms, Flags, Targets.
+    const root = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
+      h('div', { style: { padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' } },
+        // Two columns mirroring the log card: match facts + Skill rating on the
+        // left, the manual self-report (Performance / Comms / Flags / Targets) on
+        // the right. Collapses to one column on a narrow viewport (shared .log-grid).
+        h('div', { class: 'log-grid' },
+          h('div', { class: 'log-col' },
+            factsBlock,
+            srBlock,
+          ),
+          h('div', { class: 'log-col' },
+            field(optionalLabel('Performance', '— how did you play?'),
+              performanceSlider(performance, (v) => (performance = v))),
+            field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
+            field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
+            field(optionalLabel('Targets', '— grade now or later on Review'),
+              h('div', { class: 'stack', style: { gap: '11px' } },
+                ...(rows.length
+                  ? rows.map((r) => r.el)
+                  : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+              )),
+          ),
         ),
       ),
-      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
+      // Sticky footer, same treatment as the log card's (.log-actions) so both
+      // dialogs behave alike and Save stays reachable without scrolling first.
+      h('div', { class: 'log-actions' },
         saveBtn,
         button('Cancel', { variant: 'ghost', onClick: close }),
         h('span', { style: { flex: '1' } }),
@@ -787,9 +828,20 @@ function buildMatchEditor(
     );
 
     // W/L/D drive the result chooser (every match is editable now) — the same
-    // shared binding as the log card. openModal appends the panel after build
-    // returns, so defer the focus to the next frame once it's actually in the DOM.
+    // shared binding as the log card. Enter saves (mirrors the log card too;
+    // Ctrl+Enter has no "and next" equivalent here, so it's plain Enter only),
+    // except from a focused button (native click) or while the typeahead's own
+    // list is open (it swallows Enter itself to pick the highlighted item).
     bindResultKeys(root, resultRow);
+    root.addEventListener('keydown', (e) => {
+      const t = e.target as HTMLElement;
+      if (e.key === 'Enter' && !e.repeat && !(t instanceof HTMLButtonElement)) {
+        e.preventDefault();
+        save();
+      }
+    });
+    // openModal appends the panel after build returns, so defer the focus to
+    // the next frame once it's actually in the DOM.
     requestAnimationFrame(() => root.focus());
     return root;
   }, { panelClass: 'modal-card--wide' });

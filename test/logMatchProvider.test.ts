@@ -12,7 +12,7 @@ function harness() {
     getConfig: () => ({ accounts: { main: 'Main' } }),
     notify: vi.fn(),
   } as unknown as DataProviderDeps;
-  return { provider: createDataProvider(deps), recorded };
+  return { provider: createDataProvider(deps), recorded, notify: deps.notify as unknown as ReturnType<typeof vi.fn> };
 }
 
 const input = (extra: Partial<ManualMatchInput> = {}): ManualMatchInput => ({
@@ -71,6 +71,18 @@ describe('logMatch — heroes & comms', () => {
     const { provider, recorded } = harness();
     provider.logMatch(input({ mental: { comms: 'abusive' } }));
     expect(recorded[0].mental?.comms).toBe('abusive');
+  });
+});
+
+describe('logMatch — no OS notification (L3)', () => {
+  // A hand log is typed while looking straight at the form it was typed
+  // into — the card's own post-save toast is the one feedback channel now;
+  // a Windows banner for something the player is already watching was
+  // redundant, not reassuring. See dataProvider.ts's logMatch.
+  it('never fires the OS notification for a hand-logged match', () => {
+    const { provider, notify } = harness();
+    provider.logMatch(input());
+    expect(notify).not.toHaveBeenCalled();
   });
 });
 

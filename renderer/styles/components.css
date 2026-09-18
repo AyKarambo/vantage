@@ -227,6 +227,30 @@
   color: var(--mid-text);
 }
 
+/* Open Queue's hero picker — every hero, grouped by role (heroPicker.ts) so a
+   40-chip flat grid doesn't read as one undifferentiated wall. */
+.hero-role-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hero-role-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.hero-role-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Badge --------------------------------------------------------------------- */
 .badge {
   font-family: var(--font-mono);
@@ -817,6 +841,39 @@ table.data tbody tr:hover {
     grid-template-columns: 1fr;
   }
 }
+/* Sticky chrome: the card itself is the scroll container (.modal-card has
+   max-height + overflow-y: auto), so the header and the actions footer stick
+   to its top/bottom rather than scrolling away — Save / Save & next stay
+   reachable without scrolling the default-height window first. */
+.log-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+}
+.log-header-account {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+.log-header-account .vt-select {
+  padding: 5px 9px;
+  font-size: 12px;
+  max-width: 100%;
+}
+.log-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+}
 .drawer-panel {
   width: 440px;
   max-width: 92vw;
@@ -913,6 +970,12 @@ table.data tbody tr:hover {
 .vt-select option {
   background: #17171d;
   color: var(--text);
+}
+/* The strict map combobox on a near-miss it couldn't confidently resolve
+   (typeahead.ts) — the text stays exactly as typed rather than silently
+   reverting, and this border is the immediate cue something needs fixing. */
+.vt-input.is-invalid {
+  border-color: var(--danger);
 }
 
 /* Text input ---------------------------------------------------------------- */

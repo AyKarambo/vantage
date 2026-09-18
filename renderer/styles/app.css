@@ -39,6 +39,9 @@
   background: var(--grad-accent);
 }
 .titlebar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   -webkit-app-region: no-drag;
 }
 .titlebar-search {
@@ -55,6 +58,32 @@
 }
 .titlebar-search:hover {
   border-color: var(--border-strong);
+}
+/* The primary write action — its own button beside Search rather than one
+   combined pill, so it's reachable in one click from anywhere (issue: Log
+   match had no direct route outside Overview). Accent-tinted to read as the
+   one titlebar control that *does* something rather than opens a search. */
+.titlebar-log {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+  padding: 4px 10px 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-text);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.titlebar-log:hover {
+  background: var(--accent-soft-2);
+  border-color: var(--accent);
+}
+.titlebar-log .kbd {
+  color: var(--accent-text-2);
+  border-color: var(--accent-border);
+  background: rgba(124, 108, 245, 0.12);
 }
 .kbd {
   font-family: var(--font-mono);

@@ -9,11 +9,11 @@
  * targets inline.
  */
 import { h, render } from '../dom';
-import { time, roleLabel } from '../format';
+import { time, roleLabel, toDatetimeLocal } from '../format';
 import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { mapPicker, resolveMapName } from '../components/mapPicker';
+import { mapPicker, resolveMapName, mapErrorText } from '../components/mapPicker';
 import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
@@ -21,9 +21,10 @@ import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
+import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from './placementComplete';
 import { maybeOfferPlacements } from './placementOffer';
-import { srEntryMode } from '../../../src/core/placements';
+import { srEntryMode, type SrEntryMode } from '../../../src/core/placements';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import type {
@@ -33,7 +34,6 @@ import type { ViewContext } from '../views/view';
 
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 
-/** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
 /** "Played" backfill choices — end-of-game time relative to now, in minutes. */
 const PLAYED_OFFSETS: Array<{ label: string; minutes: number }> = [
   { label: 'Just now', minutes: 0 },
@@ -81,6 +81,14 @@ interface LogState {
 /** Fields carried into the next form by "Save & next" (same sitting, so heroes usually hold). */
 export interface LogCarry {
   heroes?: string[];
+  /**
+   * The previous match's played-at instant, when it was itself backfilled —
+   * "Save & next" for a missed session should default the next form's Played
+   * time forward from there, not to "Just now", so a run of forgotten games
+   * doesn't collapse to one timestamp. The next form still lets the player
+   * nudge it further via the "Other…" picker.
+   */
+  playedAt?: number;
 }
 
 // Cheatsheet entries only — the dialog binds these keys itself (the global
@@ -144,9 +152,11 @@ function buildForm(
     : [{ value: 'You', label: 'You' }];
   const prefill = prefs.get('logPrefill');
   // Prefill Account/Role from the active dashboard filter when it names a specific
-  // value — logging while scoped to an account/role should target it — otherwise
-  // fall back to the last-logged values. Role only when the log form can represent
-  // it (Tank/Damage/Support; Open Queue isn't a log option).
+  // value — logging while scoped to an account/role should target it (Open Queue
+  // included: it's one of the four ROLE_LABELS options below) — otherwise fall
+  // back to the last-logged values. The membership check is defensive: a filter
+  // value that isn't one of those four (a stale persisted filter, say) is left
+  // unseeded rather than cast through regardless.
   const { account: filterAccount, role: filterRole } = ctx.data.filters;
   const seededAccount = filterAccount !== 'all' ? accountOptions.find((o) => o.value === filterAccount)?.value : undefined;
   const defaultAccount = seededAccount ?? accountOptions.find((o) => o.value === prefill?.account)?.value ?? accountOptions[0].value;
@@ -196,7 +206,10 @@ function buildForm(
     anchorPct: '',
     predTier: initialPrediction.tier,
     predDivision: initialPrediction.division,
-    playedAt: null,
+    // "Save & next" carries the previous match's own instant forward (L5) —
+    // a run of matches backfilled the next morning shouldn't collapse to one
+    // timestamp just because only the first form got told the real time.
+    playedAt: carry?.playedAt ?? null,
     performance: undefined,
   };
 
@@ -245,14 +258,19 @@ function buildForm(
     placementOfferFor = undefined;
     const map = resolveMap();
     if (!map) {
-      mapError.textContent = state.map.trim()
-        ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
-        : 'Pick the map — start typing and choose from the list.';
+      mapError.textContent = mapErrorText(state.map);
       mapError.classList.remove('hidden');
       return false;
     }
     state.map = map;
     saving = true;
+    // Hoisted out of the try block: the post-save toast (below, after the
+    // try/catch) needs the actual mode/anchoring/±% this save recorded, to
+    // both word the summary honestly and know whether Undo can fully revert it.
+    let matchId = '';
+    let mode: SrEntryMode = 'full';
+    let anchoring = false;
+    let srDelta: number | undefined;
     try {
       // A placement run pre-empts the normal SR entry only while it is still
       // COUNTING: during placements the game reports no ±% and there's no
@@ -263,7 +281,7 @@ function buildForm(
       // number is lost for good (suppression masks a stored value; it cannot
       // invent one). See core/placements/entryMode.
       const run = openRun(state.account, state.role);
-      const mode = srEntryMode(run);
+      mode = srEntryMode(run);
       // "Set current rank" is an input aid, not a second kind of record: the
       // picker already translated the entered rank into a ±% (rankEntry →
       // rankEntryPreview), so the match carries a plain srDelta either way. The
@@ -275,14 +293,14 @@ function buildForm(
       // still the pre-run one. A player entering the rank the game just revealed
       // would have the entire season-reset gap stored as one match's ±%.
       const setCurrent = mode === 'full' && state.srMode === 'set-current';
-      const anchoring = setCurrent && state.rankPreview?.anchored === false;
+      anchoring = setCurrent && state.rankPreview?.anchored === false;
       // Vantage is competitive-only (spec D1) — manual logs always report as such.
-      const srDelta = mode === 'placement' || anchoring
+      srDelta = mode === 'placement' || anchoring
         ? undefined
         : setCurrent
           ? (state.rankPreview?.anchored ? state.rankPreview.srDelta : undefined)
           : (state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined);
-      const { matchId } = await bridge.logMatch({
+      ({ matchId } = await bridge.logMatch({
         result: state.result,
         role: state.role,
         map,
@@ -294,7 +312,7 @@ function buildForm(
         ...(state.performance != null ? { performance: state.performance } : {}),
         ...(Object.keys(grades).length ? { grades } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
-      });
+      }));
       // Anchoring only happens for a track that has none yet — the first rank
       // you enter defines where tracking starts (a negative % is preserved as a
       // rank-protection carry). An anchored track never re-anchors from here;
@@ -341,20 +359,50 @@ function buildForm(
       saving = false;
     }
     prefs.set('logPrefill', { role: state.role, account: state.account });
-    toast(`Match logged — ${state.result} · ${map}`);
+    const deltaText = srDelta != null && Number.isFinite(srDelta) ? ` · ${srDelta > 0 ? '+' : ''}${srDelta}%` : '';
+    const summary = `Match logged — ${state.result} · ${map} · ${state.account} ${roleLabel(state.role)}${deltaText}`;
+    // Undo removes the recorded game (matchActions.deleteMatch), but cannot
+    // unwind a first-time rank anchor or a written placement prediction — so
+    // it's only offered when this save was an ordinary game with neither.
+    const savedMatchId = matchId;
+    const undoable = !anchoring && mode !== 'placement';
+    toast(summary, undoable
+      ? { ttl: 10_000, action: { label: 'Undo', run: () => void deleteMatch({ matchId: savedMatchId, map }, () => {}) } }
+      : {});
     ctx.refresh();
     return true;
   };
 
   const timeBadgeHost = h('span');
   const paintTime = (): void => {
-    render(timeBadgeHost, badge(`◎ manual · ${time(state.playedAt ?? Date.now())}`, 'manual'));
+    // A backfill across midnight (the "Other…" custom time in the Played row
+    // below) would otherwise show only hh:mm and read as today — the date
+    // joins the badge whenever the picked instant isn't today.
+    const at = state.playedAt ?? Date.now();
+    const sameDay = new Date(at).toDateString() === new Date().toDateString();
+    const label = sameDay ? time(at) : `${new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${time(at)}`;
+    render(timeBadgeHost, badge(`◎ manual · ${label}`, 'manual'));
   };
   paintTime();
 
-  const header = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
-    h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, 'Log match'),
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+  // Sticky top: the header (with the card's one true close control) stays
+  // visible while the two-column body scrolls under it at the default window
+  // height — see .modal-card's own scroll container in components.css.
+  const header = h('div', { class: 'log-header', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
+    h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600', flex: '0 0 auto' } }, 'Log match'),
+    // Account moved here from the two-column body (L2): it's set once per
+    // sitting and rarely touched mid-form, so it no longer competes with the
+    // fields touched on every log for the left column's height.
+    h('div', { class: 'log-header-account' },
+      select(accountOptions, state.account, (v) => {
+        state.account = v;
+        if (state.srMode === 'set-current') seedAnchorFromRanks();
+        seedPrediction();
+        paintRank();
+        paintHeroes();
+      }),
+    ),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', flex: '0 0 auto' } },
       timeBadgeHost,
       h('button', { class: 'overlay-close', on: { click: close } }, '✕'),
     ),
@@ -372,19 +420,6 @@ function buildForm(
     },
   });
 
-  const accountField = field('Account',
-    // Account scopes both the rank (per account+role) and the hero-picker
-    // shortlist (per-account most-played) — repaint both. Re-seed the Set-current
-    // rank picker too, if it's the active mode, so it reflects the new account.
-    select(accountOptions, state.account, (v) => {
-      state.account = v;
-      if (state.srMode === 'set-current') seedAnchorFromRanks();
-      seedPrediction();
-      paintRank();
-      paintHeroes();
-    }),
-  );
-
   const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
   const mapField = field('Map',
     mapPicker({
@@ -392,6 +427,10 @@ function buildForm(
       maps: ctx.data.masterData.maps,
       recentMaps: ctx.data.matches.map((m) => m.map),
       onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
+      // Surfaces the same hint Save's own validation shows, immediately on
+      // blur rather than only after a Save attempt — a typo or a near-miss
+      // the fuzzy resolver couldn't call confidently now says so right away.
+      onInvalid: (typed) => { mapError.textContent = mapErrorText(typed); mapError.classList.remove('hidden'); },
     }),
   );
   mapField.append(mapError);
@@ -409,16 +448,62 @@ function buildForm(
     }),
   );
 
+  // Compact row under the header (L2) rather than inside either column — it's
+  // touched on the rare backfill, not every log, so it no longer competes with
+  // Map/Role/Heroes for the left column's height. "Other…" (L5) reveals a
+  // datetime picker for a backfill more than 2h old — a session logged the
+  // next morning, or three hours ago, could not be placed honestly before.
+  const OTHER_LABEL = 'Other…';
+  const customTimeHost = h('div', { class: 'hidden' });
+  const paintCustomTimeVisibility = (show: boolean): void => { customTimeHost.classList.toggle('hidden', !show); };
+  const customTimeInput = h('input', {
+    type: 'datetime-local', class: 'vt-input mono', max: toDatetimeLocal(Date.now()),
+    on: {
+      change: (e) => {
+        const v = (e.target as HTMLInputElement).value;
+        if (!v) return;
+        const at = Date.parse(v);
+        if (Number.isNaN(at)) return;
+        state.playedAt = Math.min(at, Date.now());
+        paintTime();
+      },
+    },
+  });
+  customTimeHost.append(customTimeInput);
+  // A carried playedAt (Save & next after a backfill) starts the picker on
+  // "Other…" with the carried instant already showing, rather than silently
+  // reverting to "Just now" and losing what the player just told the form.
+  const carriedOffset = state.playedAt != null
+    ? PLAYED_OFFSETS.find((o) => Math.abs((Date.now() - o.minutes * 60_000) - state.playedAt!) < 60_000)
+    : undefined;
+  if (state.playedAt != null && !carriedOffset) {
+    customTimeInput.value = toDatetimeLocal(state.playedAt);
+    paintCustomTimeVisibility(true);
+  }
   const playedField = field(
     optionalLabel('Played', '— backfill a game you forgot to log'),
-    choiceSegment(PLAYED_OFFSETS.map((o) => o.label), PLAYED_OFFSETS[0].label, (v) => {
-      // Snapshot the absolute timestamp at click time — "Just now" stays null so
-      // both the badge and the eventual save reflect the moment actually chosen,
-      // not a live-recomputed offset that would drift while the form sits open.
-      const minutes = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
-      state.playedAt = minutes > 0 ? Date.now() - minutes * 60_000 : null;
-      paintTime();
-    }),
+    h('div', { class: 'stack', style: { gap: '8px' } },
+      choiceSegment(
+        [...PLAYED_OFFSETS.map((o) => o.label), OTHER_LABEL],
+        carriedOffset?.label ?? (state.playedAt != null ? OTHER_LABEL : PLAYED_OFFSETS[0].label),
+        (v) => {
+          if (v === OTHER_LABEL) {
+            customTimeInput.value = toDatetimeLocal(state.playedAt ?? Date.now());
+            paintCustomTimeVisibility(true);
+            return;
+          }
+          paintCustomTimeVisibility(false);
+          // Snapshot the absolute timestamp at click time — "Just now" stays
+          // null so both the badge and the eventual save reflect the moment
+          // actually chosen, not a live-recomputed offset that would drift
+          // while the form sits open.
+          const minutes = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
+          state.playedAt = minutes > 0 ? Date.now() - minutes * 60_000 : null;
+          paintTime();
+        },
+      ),
+      customTimeHost,
+    ),
   );
 
   // Multi-hero picker: a role-filtered chip grid (union with anything already
@@ -428,7 +513,7 @@ function buildForm(
   const paintHeroes = (): void => {
     const limit = prefs.get('suggestedHeroCount') ?? DEFAULT_SUGGESTED_HEROES;
     const shortlist = (mostPlayed[state.account]?.[state.role] ?? []).slice(0, limit);
-    paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes, { shortlist, search: true });
+    paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes, { shortlist, limit, search: true });
   };
   paintHeroes();
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
@@ -562,8 +647,14 @@ function buildForm(
     void persist().then((ok) => {
       if (!ok) return;
       close();
-      // Same sitting → the heroes usually hold; map/result never do.
-      const openNext = (): void => openLogMatch(ctx, { heroes: [...state.heroes] });
+      // Same sitting → the heroes usually hold; map/result never do. A
+      // backfilled time carries forward too (L5) — only when it was actually
+      // backfilled (non-null): "Just now" needs no carrying, the next form's
+      // own default already says the same thing.
+      const openNext = (): void => openLogMatch(ctx, {
+        heroes: [...state.heroes],
+        ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
+      });
       // A completing match gets the reveal-rank confirmation first rather
       // than stacking a second modal under/over it — "next" chains onto its
       // confirm. A Cancel here means "I'll finish this later", so it stays
@@ -587,11 +678,13 @@ function buildForm(
     });
   };
 
+  // 'Ctrl ⏎' rather than the macOS '⌃⏎' glyph — this is a Windows-only app,
+  // and every other key hint in the app already reads 'Ctrl K' / 'Ctrl L'.
   const saveBtn = button('Save ⏎', { variant: 'primary', class: 'btn--block', onClick: saveAndClose });
-  const saveNextBtn = button('Save & next  ⌃⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext });
+  const saveNextBtn = button('Save & next  Ctrl ⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext });
   saveButtons.push(saveBtn, saveNextBtn);
   updateSaveEnabled();
-  const actions = h('div', { style: { display: 'flex', gap: '10px', paddingTop: '2px' } }, saveBtn, saveNextBtn);
+  const actions = h('div', { class: 'log-actions' }, saveBtn, saveNextBtn);
 
   const performanceBlock = field(
     optionalLabel('Performance', '— how did you play?'),
@@ -605,14 +698,21 @@ function buildForm(
   // part of the natural Tab order.
   const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
+      // Full width, not inside either column (L2): Played is touched on the
+      // rare backfill, not on every log, so it no longer taxes the left
+      // column's height the way it did wedged between Role and Heroes.
+      playedField,
       h('div', { class: 'log-grid' },
         h('div', { class: 'log-col' },
-          field('Result', resultRow), accountField, mapField, roleField, playedField, heroField, rankHost),
+          field('Result', resultRow), mapField, roleField, heroField, rankHost),
         h('div', { class: 'log-col' },
           performanceBlock, commsBlock, flagsBlock, targetsBlock),
       ),
-      actions,
     ),
+    // Sticky footer, outside the padded body: stays visible at the bottom of
+    // the card's own scroll container (.modal-card) so Save / Save & next are
+    // always reachable, even before the body has been scrolled at all.
+    actions,
   );
 
   // Keyboard flow: W/L/D pick the result when not typing (shared binding);

@@ -189,7 +189,7 @@ export class HistoryStore {
    */
   editManual(
     matchId: string,
-    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review'>> &
+    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review' | 'timestamp'>> &
       { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null;
         rankAtStart?: GameRecord['rankAtStart'] | null },
   ): boolean {

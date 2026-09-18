@@ -23,6 +23,8 @@ export interface MapPickerOpts {
   /** Map names from match history, newest first (duplicates fine) — ranks browse mode. */
   recentMaps: readonly string[];
   onChange: (value: string) => void;
+  /** Fires on blur when the typed text couldn't be resolved to any map — see {@link ../components/typeahead}'s `onInvalid`. */
+  onInvalid?: (typed: string) => void;
 }
 
 /**
@@ -35,6 +37,19 @@ export function resolveMapName(raw: string, maps: ReadonlyArray<MapPickerEntry>)
   const q = raw.trim().toLowerCase();
   if (!q) return null;
   return maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
+}
+
+/**
+ * The map field's validation hint — shared by the log card and the match
+ * editor (both call it from their own Save guard, and from the picker's
+ * `onInvalid` so the same message appears immediately rather than only after
+ * a Save attempt) so the wording can't drift between the two surfaces.
+ */
+export function mapErrorText(typed: string): string {
+  const t = typed.trim();
+  return t
+    ? `"${t}" isn't a known map — pick one from the list.`
+    : 'Pick the map — start typing and choose from the list.';
 }
 
 /**
@@ -66,5 +81,6 @@ export function mapPicker(opts: MapPickerOpts): HTMLElement {
     showOnFocus: true,
     inputClass: 'vt-input',
     onChange: opts.onChange,
+    onInvalid: opts.onInvalid,
   });
 }

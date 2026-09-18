@@ -258,7 +258,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // track stood going in, straight away. Logged without one, there is
       // nothing to snapshot until a ±% is added on Review.
       if (input.srDelta != null) syncRankAtStart(deps, matchId);
-      deps.notify('Match logged', `${input.result} · ${input.map}`);
+      // No OS notification here — a hand log is typed while looking straight at
+      // the form it was just typed into, so the card's own post-save toast (see
+      // log-match.ts persist()) is the honest single feedback channel; a
+      // Windows banner for something the player is already watching happen was
+      // redundant, not reassuring.
       return { matchId };
     },
     editMatch: (input: MatchEditInput) => {
@@ -293,6 +297,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // The manual layer applies to any match. srDelta: number sets it, null
       // clears it (editManual deletes on null), undefined leaves it unchanged.
       if (input.mental !== undefined) patch.mental = input.mental;
+      // A corrected played-at instant — hand-logged matches only, same rule as
+      // the other game facts above; a GEP timestamp is the game's own record.
+      // Clamped to the past exactly like the initial backfill in logMatch, so a
+      // skewed clock (or a future date picked by mistake) can't poison history.
+      if (input.playedAt !== undefined && isManual) patch.timestamp = Math.min(input.playedAt, Date.now());
       // Rank movement arrives as a plain srDelta, always. "Set current rank" is
       // an input aid the renderer resolves through `rankEntryPreview` before
       // saving, so there is no absolute-rank branch to maintain here.
@@ -317,7 +326,9 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // it — and can move the match's role/timestamp, which changes which track
       // and which neighbour the snapshot comes from. Re-syncing here covers all
       // of those; it is a no-op when a snapshot already stands.
-      if (patch.srDelta !== undefined || input.role !== undefined) syncRankAtStart(deps, input.matchId);
+      if (patch.srDelta !== undefined || input.role !== undefined || patch.timestamp !== undefined) {
+        syncRankAtStart(deps, input.matchId);
+      }
     },
     deleteMatch: (matchId) => {
       // Gated behind a renderer confirm: drop the history row outright — the

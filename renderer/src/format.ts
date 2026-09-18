@@ -66,6 +66,17 @@ export function dateLong(ts = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+/**
+ * Epoch ms → the local `datetime-local` input value format (`YYYY-MM-DDTHH:mm`,
+ * in the browser's own timezone — `toISOString` would silently shift to UTC).
+ * Shared by the log card's custom "Played" time and the match editor's.
+ */
+export function toDatetimeLocal(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** Greeting appropriate to the local hour. */
 export function greeting(now = new Date()): string {
   const h = now.getHours();

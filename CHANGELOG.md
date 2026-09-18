@@ -17,8 +17,34 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Added
+
+- **A global Log match shortcut — `Ctrl+L`, from anywhere.** A `+ Log match` button now sits
+  in the titlebar too, beside search. Logging a match used to mean the palette, then typing or
+  picking it, every time you weren't on Overview.
+- **The map field fuzzy-resolves a near-miss.** Type `kings row` or `esperanca` and tab away —
+  it now resolves to the real name instead of silently going blank. Anything genuinely
+  ambiguous keeps exactly what you typed and says so immediately, not just after Save.
+- **A custom Played time.** Beyond the 30m/1h/2h chips, "Other…" opens a date/time picker for
+  an older backfill, and the match editor can now correct a hand-logged match's time after the
+  fact (a GEP-tracked match's timestamp still isn't touchable — it's the game's own record).
+- **The wheel nudge on skill-rating fields takes Shift for ±10**, and it's now discoverable —
+  every SR/% field, including the placement-completion dialog's, says so in its tooltip.
+
 ### Changed
 
+- **The log card and match editor fit without scrolling first.** Their header and Save row
+  now stay on screen while the two-column body scrolls under them, Account moved into the
+  header (it's set once per sitting, not touched on every log), and Played moved to its own
+  row so the fields you touch every time aren't squeezed between it and Role. The editor picked
+  up the log card's close ✕, provenance badge, and `Enter`-to-save to match.
+- **A logged match's toast now says what actually happened** — account, role, the ±% recorded —
+  with **Undo** (skipped only for a save that also set a first-time rank anchor or a placement
+  prediction, since a plain delete can't unwind those). A hand-logged match no longer also pops
+  a Windows notification for something you just watched yourself type.
+- **Open Queue's hero picker groups by role** instead of one flat 40-chip wall, and a fresh
+  account or role — no most-played history yet — now shows a full, usable grid instead of an
+  empty one.
 - **Ranks are written short where the screen is tight** — `G3`, `GM4`, `C2`, first letter plus the
   division (`GM` for Grandmaster). You'll see it in the sidebar, the Rank tile on Overview, the
   account switcher, the per-role chips in Settings, and the *Rank at start* column on Matches.

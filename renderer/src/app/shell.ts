@@ -18,7 +18,7 @@ import { initShortcuts, overlayCapturing, registerShortcut, shortcutGroups } fro
 import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
 import { openModal } from '../components/overlay';
-import { mountToastHost } from '../components/toast';
+import { mountToastHost, toast } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { pct, relTime, roleLabel, signed } from '../format';
@@ -314,6 +314,13 @@ export class App {
   private onGameLogged(payload: GameLoggedPayload): void {
     if (shouldAutoSwitch(store.get().filters.account, payload)) {
       store.setFilters({ account: payload.account }); // persists + refreshes
+      // Only for a hand-typed log: the player just chose that account in the
+      // form, so a silent whole-dashboard account switch right afterward is
+      // easy to miss and easy to mistake for stale data. A live-tracked match
+      // switches the same way, but the player is mid-game and about to alt-tab
+      // back to a screen that already reflects it — no extra notice earns its
+      // keep there.
+      if (payload.source === 'manual') toast(`Now showing ${payload.account}.`);
     } else {
       void store.refresh();
     }
@@ -376,7 +383,11 @@ export class App {
       h('div', { class: 'titlebar-brand' }, h('span', { class: 'brand-mark' }), 'Vantage'),
       h('div', { class: 'titlebar-center' },
         h('button', { class: 'titlebar-search', on: { click: () => this.openPalette() } },
-          h('span', { class: 'kbd' }, 'Ctrl K'), 'Search or log a match'),
+          h('span', { class: 'kbd' }, 'Ctrl K'), 'Search'),
+        h('button', {
+          class: 'titlebar-log', title: 'Log a match (Ctrl L)',
+          on: { click: () => openLogMatch(this.context()) },
+        }, '+ Log match', h('span', { class: 'kbd' }, 'Ctrl L')),
       ),
       h('div', { class: 'titlebar-controls' },
         control('—', 'win-btn--min', () => bridge.window.minimize()),
@@ -914,7 +925,7 @@ export class App {
     openPalette(ctx, {
       nav: NAV.flatMap((g) => g.items.map((i) => ({ id: i.id, label: i.label }))),
       actions: [
-        { label: 'Log match', hint: 'record a game manually', run: () => openLogMatch(ctx) },
+        { label: 'Log match', hint: 'Ctrl L · record a game manually', run: () => openLogMatch(ctx) },
         { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
         { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
         { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
@@ -972,6 +983,13 @@ export class App {
     registerShortcut({
       combo: 'ctrl+k', description: 'Command palette — search, actions, log a match', group: 'Global',
       allowInInput: true, run: () => this.openPalette(),
+    });
+    registerShortcut({
+      combo: 'ctrl+l', description: 'Log a match', group: 'Global',
+      // allowInInput so it reaches from a search box on Matches/Players like
+      // Ctrl B does; overlayCapturing keeps it from stacking a second dialog
+      // over an already-open one (including the palette or itself).
+      allowInInput: true, when: () => !overlayCapturing(), run: () => openLogMatch(this.context()),
     });
     registerShortcut({ combo: '?', description: 'This cheatsheet', group: 'Global', run: () => this.openCheatsheet() });
     registerShortcut({

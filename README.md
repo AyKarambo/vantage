@@ -80,13 +80,19 @@ account's per-role lines beneath it.
   history and every stat recomputes without it. The confirmation offers **Undo**, which
   restores the real record (same id, same ⚡ provenance, same grades) rather than re-logging
   a copy; that window closes when the message does, and doesn't survive a restart.
-  The editor mirrors the Log match card — the same shared controls, wording and field
+  The editor mirrors the Log match card — the same header (a close ✕, and a badge naming
+  ⚡ auto / ◎ manual provenance plus an *edited* marker where the card shows its own manual-time
+  badge), the same sticky Save row, the same shared controls, wording and field
   order: colour-coded **W/L/D** (the `W`/`L`/`D` keys work here too), the **locked map
-  combobox** (type to search, recent maps first), the **most-played hero shortlist**
-  with search, the **mouse-wheel nudge** on the SR field, the **three-state comms**
+  combobox** (type to search, recent maps first, fuzzy-resolved the same way), the
+  **most-played hero shortlist** with search, the **mouse-wheel nudge** (±1, **Shift for ±10**)
+  on the SR field, the **three-state comms**
   switch (positive / banter / abusive), and a **"Set current rank"** mode — enter the
   rank you ended at and Vantage **back-calculates that match's SR %** (your live anchor
-  is left as-is; switching role re-seeds the prefilled rank). Competitive
+  is left as-is; switching role re-seeds the prefilled rank). `Enter` saves here too. A
+  hand-logged match also gets a **Played** field — the only place its backfilled time can be
+  corrected after the fact; a GEP-tracked match's timestamp is the game's own record and stays
+  locked. Competitive
   progress shows the rank you held **after that specific match**: forward-calculated for
   matches at/after your anchor, and **reconstructed backward** (best-effort) for older
   ones, so a past game no longer just echoes today's rank.
@@ -204,26 +210,42 @@ account's per-role lines beneath it.
   fresh focus"); active targets that go stale (past a configurable days/matches threshold) get a
   rotate nudge. The **Focus** screen can create a map-practice target for a losing map in one
   click (**＋ target**).
-- **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
+- **Log match** — the quick-capture card that opens after a game (**Ctrl+L** from anywhere, or the
+  titlebar's **+ Log match** button), built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
-  listed first), but the field can only ever hold a real map name; a rotated-out map is still
-  reachable by typing its name (shown muted, deprioritized), just not offered by default. `Enter`
-  saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's the same
-  sitting). Forgot to log during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h
-  into the past so session analytics stay honest. Pick the **account** and **role** (Tank / Damage /
-  Support / **Open Queue**); the **hero picker defaults to your most-played heroes** for that
-  role and account (chip grid, same tap-to-toggle as before) — **search** reaches any hero outside
-  the shortlist, and how many heroes it suggests is configurable in **Settings › Quick Log**
-  (default 6). Every logged match is competitive, so there's no mode picker. The **skill-rating**
-  field **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge**
-  (±1) — or flip it to **"Set current rank"** to enter your rank directly (**prefilled from the rank
-  already tracked** for that account+role, if any — also wheel-adjustable) and let Vantage work out
-  the change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
-  Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy), set
-  the **comms** tone on a colour switch (**positive / banter / abusive** — the same switch now backs
-  Review and the match editor), rate your own **performance** on a 0-100 slider (colored on the same
-  red→green scale as winrate elsewhere; also editable later from Review or a match's detail page), and
-  grade active improvement targets inline.
+  listed first, ranked by fuzzy match so a missing apostrophe or accent still finds the right map
+  while typing), but the field can only ever hold a real map name; a rotated-out map is still
+  reachable by typing its name (shown muted, deprioritized), just not offered by default. A close
+  near-miss you tab away from (`kings row`, `esperanca`) **resolves itself** onto the one map it
+  clearly means rather than silently emptying the field — anything genuinely ambiguous stays exactly
+  as typed with an inline "isn't a known map" hint, right away rather than only after Save. `Enter`
+  saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes — and a backfilled
+  time — over; it's the same sitting). The header and the Save row **stay on screen** while the rest
+  of the card scrolls, so they're always reachable at the default window height. Forgot to log
+  during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h into the past, or pick
+  **"Other…"** for any exact date/time (also editable afterward from the match editor, hand-logged
+  matches only); session analytics stay honest either way, and the badge names the date whenever
+  it isn't today. Pick the **account** (its own field in the header, alongside the time badge) and
+  **role** (Tank / Damage / Support / **Open Queue** — Open Queue's hero grid groups by role so
+  40 heroes don't read as one wall); the **hero picker defaults to your most-played heroes** for
+  that role and account (chip grid, same tap-to-toggle as before, topped up with the rest of the
+  roster alphabetically the first time you log a fresh account or role so the grid is never empty) —
+  **search** reaches any hero outside the shortlist, and how many heroes it suggests is configurable
+  in **Settings › Quick Log** (default 6). Every logged match is competitive, so there's no mode
+  picker. The **skill-rating** field **presets from the result** (+25 on a win, −25 on a loss) and
+  takes a **mouse-wheel nudge** (±1, **Shift for ±10**) — or flip it to **"Set current rank"** to
+  enter your rank directly (**prefilled from the rank already tracked** for that account+role, if
+  any — also wheel-adjustable) and let Vantage work out the change (handy when you forgot to track a
+  few). A **negative %** there (or in Settings › Accounts) means you're **in rank protection**. Flag
+  the **leaver** by team (my team / enemy), set the **comms** tone on a colour switch (**positive /
+  banter / abusive** — the same switch now backs Review and the match editor), rate your own
+  **performance** on a 0-100 slider (colored on the same red→green scale as winrate elsewhere; also
+  editable later from Review or a match's detail page), and grade active improvement targets inline.
+  Saving shows a full summary — account, role, the ±% recorded — with **Undo** (skipped only when the
+  save also set a first-time rank anchor or a placement prediction, which a plain delete can't
+  unwind); nothing else pops an OS notification for a match you just watched yourself log (the
+  match editor, reachable from any match's detail page, mirrors this card closely — see *Matches*
+  below for exactly how).
   Vantage then **calculates your live rank** from that anchor plus each logged %, including Overwatch
   **rank protection** (a loss that would drop below 0% holds the division and keeps the true negative
   carry — matching the game's own negative display — until a win or draw pays it back above 0%; only
@@ -290,7 +312,9 @@ bar — the account switcher in the top-left already covers "which account", and
 applies. **Role icons appear app-wide** (filter bar, scoreboard, hero picker) so
 tank/damage/support is always visually distinguishable at a glance. Quality-of-life
 throughout: **Ctrl+K command palette** (jump to any screen, run actions, find a
-map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` and `Ctrl+0` screens — each digit is
+map/hero/recent match) and **Ctrl+L** (jump straight to Log match from anywhere — a titlebar
+button sits right beside the search pill for the same shortcut), keyboard shortcuts (`Ctrl+1–9`
+and `Ctrl+0` screens — each digit is
 pinned to its screen rather than to sidebar position, so adding one never renumbers the rest;
 `Esc`, `Alt+←` or the mouse back button to go **back** to the previous screen
 you were actually on, `?` cheatsheet, `←/→`
