@@ -15,7 +15,7 @@ import type { PlacementRunSummary, Role } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { button } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { placementPicker } from '../components/srControls';
+import { placementPicker, nudgedInput } from '../components/srControls';
 import { field, optionalLabel } from '../components/formField';
 import { roleLabel } from '../format';
 
@@ -51,11 +51,9 @@ export function openPlacementComplete(opts: {
       onDivision: (v) => (state.division = v),
     });
 
-    const pctInput = h('input', {
-      class: 'vt-input mono', type: 'number', step: '1', value: state.pct,
-      placeholder: 'usually blank or 0',
-      on: { input: (e) => (state.pct = (e.target as HTMLInputElement).value) },
-    }) as HTMLInputElement;
+    // L2: the shared wheel-nudged input (±1, Shift for ±5) — this field used
+    // to be a bare number input with no nudge at all.
+    const pctInput = nudgedInput(state.pct, 'usually blank or 0', (v) => (state.pct = v));
 
     const confirm = (): void => {
       const pct = state.pct.trim();

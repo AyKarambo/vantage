@@ -879,6 +879,14 @@ table.data tbody tr:focus-visible {
   padding: 6px 9px;
   font-size: 12px;
 }
+/* Log match header's compact Account select (L2) — the field left the padded
+   body for the header row, so it needs the filter bar's tighter sizing, not
+   a full-width form field's. */
+.log-header-account {
+  padding: 5px 8px;
+  font-size: 11.5px;
+  max-width: 110px;
+}
 
 /* Overlays: modal + drawer -------------------------------------------------- */
 .overlay {

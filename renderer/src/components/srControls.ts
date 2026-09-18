@@ -44,10 +44,15 @@ export function srModeToggle(value: SrMode, onChange: (v: SrMode) => void): HTML
   });
 }
 
-/** A signed number input styled like the rest of the form, with the ±1 wheel nudge. */
-function nudgedInput(value: string, placeholder: string, onChange: (v: string) => void): HTMLInputElement {
+/**
+ * A signed number input styled like the rest of the form, with the wheel nudge
+ * (±1, Shift for ±5, L2) — shared by every SR/%-into-division field, including
+ * the placement-completion dialog's (`placementComplete.ts`).
+ */
+export function nudgedInput(value: string, placeholder: string, onChange: (v: string) => void): HTMLInputElement {
   const el = h('input', {
     class: 'vt-input mono', type: 'number', step: '1', value, placeholder,
+    title: 'Scroll to nudge ±1 · Shift for ±5',
     on: { input: (e) => onChange((e.target as HTMLInputElement).value) },
   }) as HTMLInputElement;
   attachWheelNudge(el, () => el.value, onChange);

@@ -271,14 +271,17 @@ account's per-role lines beneath it.
   listed first), but the field can only ever hold a real map name; a rotated-out map is still
   reachable by typing its name (shown muted, deprioritized), just not offered by default. `Enter`
   saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's the same
-  sitting). Forgot to log during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h
-  into the past so session analytics stay honest. Pick the **account** and **role** (Tank / Damage /
-  Support / **Open Queue**); the **hero picker defaults to your most-played heroes** for that
-  role and account (chip grid, same tap-to-toggle as before) — **search** reaches any hero outside
-  the shortlist, and how many heroes it suggests is configurable in **Settings › Quick Log**
-  (default 6). Every logged match is competitive, so there's no mode picker. The **skill-rating**
+  sitting). The header and the Save row **stay on screen** (L2 — sticky top/bottom within the
+  card) on a card taller than the window, instead of scrolling the Save button out of view. The
+  compact **account** select lives in the header (rarely changed mid-session); pick your **role**
+  (Tank / Damage / Support / **Open Queue**); the **hero picker defaults to your most-played
+  heroes** for that role and account (chip grid, same tap-to-toggle as before) — **search** reaches
+  any hero outside the shortlist, and how many heroes it suggests is configurable in **Settings ›
+  Quick Log** (default 6). Every logged match is competitive, so there's no mode picker. Forgot to
+  log during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h into the past so
+  session analytics stay honest. The **skill-rating**
   field **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge**
-  (±1) — or flip it to **"Set current rank"** to enter your rank directly (**prefilled from the rank
+  (±1, **Shift for ±5**) — or flip it to **"Set current rank"** to enter your rank directly (**prefilled from the rank
   already tracked** for that account+role, if any — also wheel-adjustable) and let Vantage work out
   the change (handy when you forgot to track a few). A **negative %** there (or in Settings ›
   Accounts) means you're **in rank protection**. Flag the **leaver** by team (my team / enemy), set

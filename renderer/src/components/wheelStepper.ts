@@ -37,17 +37,28 @@ export function attachStepper(el: HTMLInputElement, opts: StepperOpts): void {
 }
 
 /**
+ * SR/% is its own scale (typically ±25 per game, not the per-stat thresholds
+ * {@link COARSE_FACTOR} tunes for measured targets), so the coarse wheel step
+ * here is its own constant, not a reuse of that one.
+ */
+const SR_COARSE_STEP = 5;
+
+/**
  * The simple ±1-per-tick nudge for a signed numeric text field — shared by the
  * log-match SR/% inputs and the match-detail editor so the two surfaces can't
  * drift. No lower clamp (SR deltas and rank-protection % can go negative).
  * `passive:false` + preventDefault so the modal never scrolls under the pointer.
+ * Shift steps by {@link SR_COARSE_STEP} instead of 1 (L2) — a full SR swing is
+ * commonly ±25, and 65 ticks of ±1 from a Win/Loss preset to correct it was the
+ * only way there.
  */
 export function attachWheelNudge(el: HTMLInputElement, get: () => string, set: (v: string) => void): void {
   el.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
-      const next = String((Number(get()) || 0) + (e.deltaY < 0 ? 1 : -1));
+      const step = e.shiftKey ? SR_COARSE_STEP : 1;
+      const next = String((Number(get()) || 0) + step * (e.deltaY < 0 ? 1 : -1));
       set(next);
       el.value = next;
     },
