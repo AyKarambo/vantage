@@ -26,6 +26,9 @@ export function maps(ctx: ViewContext): HTMLElement {
         { key: 'map', label: 'Map' },
         { key: 'winrate', label: 'WR', render: (v) => pct(v as number) },
         { key: 'net', label: 'Net', render: (v) => signed(v as number) },
+        // Net SR (C2) beside net wins — a 3-loss map that cost −60% is a more
+        // urgent fix than one that cost −45%, and the data was already on disk.
+        { key: 'sr', label: '±SR', render: (v) => (v == null ? '—' : `${signed(Math.round(v as number))}%`) },
         { key: 'games', label: 'Games' },
         { key: 'rating', label: 'RTG', render: (v) => fmt(v as number | null) }, // matches Heroes' casing (K7)
       ],
@@ -36,6 +39,7 @@ export function maps(ctx: ViewContext): HTMLElement {
         map: m.key,
         winrate: m.winrate,
         net: m.wins - m.losses,
+        sr: m.srNet ?? null,
         games: m.games,
         rating: d.performance.byMap.find((b) => b.key === m.key)?.avg ?? null,
       })),
@@ -63,12 +67,15 @@ export function maps(ctx: ViewContext): HTMLElement {
 }
 
 function modeCard(g: Group): HTMLElement {
+  // Net SR (C2) beside net wins, when the mode logged any — "+3 net" alone
+  // doesn't say whether those three losses cost 5% or 50%.
+  const valueText = g.srNet !== undefined ? `${signed(g.wins - g.losses)} · ${signed(Math.round(g.srNet))}%` : signed(g.wins - g.losses);
   return card({ style: { padding: '13px 15px' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '9px' } },
       h('div', { style: { fontWeight: '600', fontSize: '13.5px' } }, g.key),
       h('div', { class: 'mono', style: { fontSize: '15px', color: wrColor(g.winrate) } }, pct(g.winrate)),
     ),
-    statBar({ label: `${g.games}g`, frac: g.winrate, color: wrColor(g.winrate), valueText: signed(g.wins - g.losses) }),
+    statBar({ label: `${g.games}g`, frac: g.winrate, color: wrColor(g.winrate), valueText }),
   );
 }
 

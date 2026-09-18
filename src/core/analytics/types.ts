@@ -163,6 +163,15 @@ export interface WinLoss {
   draws: number;
   /** Wins / decided games (draws excluded), 0..1. */
   winrate: number;
+  /**
+   * Net SR change (C2) over the games behind this bucket that logged one —
+   * suppressed (placement-run) games are excluded, since a placement's SR
+   * swing isn't comparable to a normal match's. Absent when nothing in the
+   * bucket logged a delta, so "—" never reads as a real 0.
+   */
+  srNet?: number;
+  /** How many games (unweighted count, even on a time-share-credited bucket) contributed to {@link srNet}. */
+  srLogged?: number;
 }
 
 /** A WinLoss bucket labeled by its grouping key (map, role, hero, …). */

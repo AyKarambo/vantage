@@ -6,7 +6,7 @@
  * targets so the screen can show whether focusing is actually working. Pure
  * and I/O-free — consumed by dashboardData.
  */
-import { focusBy, winLoss } from './grouping';
+import { focusBy, srSum, winLoss } from './grouping';
 import { wilson } from '../targets/wilson';
 import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm, WinLoss } from './types';
 import type { AuthoredTarget } from '../targets/types';
@@ -59,6 +59,8 @@ export interface FocusEntriesOptions {
    * data's own "missing isActive ⇒ active" convention.
    */
   isMapActive?: (map: string) => boolean;
+  /** Placement-run match ids to exclude from every dimension's net-SR sum (C2) — passed through to `groupBy`/`focusBy`. */
+  suppressed?: ReadonlySet<string>;
 }
 
 /**
@@ -92,14 +94,14 @@ export function focusEntries(games: GameRecord[], opts: FocusEntriesOptions = {}
       .map(withTrend);
 
   const mapEntries = rank(
-    withDimension(focusByMap(games), 'map').map((e) => ({
+    withDimension(focusByMap(games, opts.suppressed), 'map').map((e) => ({
       ...e,
       heroes: topHeroesFor(focusGamesFor(games, 'map', e.key)),
       inPool: opts.isMapActive ? opts.isMapActive(e.key) : true,
     })),
   );
-  const heroEntries = rank(withDimension(focusByHero(games), 'hero'));
-  const roleEntries = rank(withDimension(focusBy(games, (g) => g.role, ROLE_MIN_GAMES), 'role'));
+  const heroEntries = rank(withDimension(focusByHero(games, opts.suppressed), 'hero'));
+  const roleEntries = rank(withDimension(focusBy(games, (g) => g.role, ROLE_MIN_GAMES, { suppressed: opts.suppressed }), 'role'));
 
   return [...roleEntries, ...heroEntries, ...mapEntries];
 }
@@ -219,8 +221,8 @@ export function linkFocusTargets(
  * Map variant of {@link focusBy} that drops the 'Unknown' placeholder bucket
  * (games logged without a map id) — a placeholder can't be practiced.
  */
-function focusByMap(games: GameRecord[]): FocusItem[] {
-  return focusBy(games, (g) => g.map, MAP_MIN_GAMES).filter((g) => g.key !== 'Unknown');
+function focusByMap(games: GameRecord[], suppressed?: ReadonlySet<string>): FocusItem[] {
+  return focusBy(games, (g) => g.map, MAP_MIN_GAMES, { suppressed }).filter((g) => g.key !== 'Unknown');
 }
 
 /**
@@ -230,7 +232,7 @@ function focusByMap(games: GameRecord[]): FocusItem[] {
  * result, the same "which games count toward this entry" rule
  * {@link focusGamesFor} already applies to hero rows elsewhere.
  */
-function focusByHero(games: GameRecord[]): FocusItem[] {
+function focusByHero(games: GameRecord[], suppressed?: ReadonlySet<string>): FocusItem[] {
   const buckets = new Map<string, GameRecord[]>();
   for (const g of games) {
     for (const hero of g.heroes) {
@@ -240,7 +242,7 @@ function focusByHero(games: GameRecord[]): FocusItem[] {
   return [...buckets.entries()]
     .map(([key, gs]) => {
       const wl = winLoss(gs);
-      return { key, ...wl, net: wl.losses - wl.wins };
+      return { key, ...wl, net: wl.losses - wl.wins, ...srSum(gs.map((game) => ({ game, weight: 1 })), suppressed) };
     })
     .filter((e) => e.games >= HERO_MIN_GAMES)
     .sort((a, b) => b.net - a.net);

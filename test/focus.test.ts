@@ -91,6 +91,16 @@ describe('focusEntries — maps-only', () => {
     const mapEntries = focusEntries(games).filter((e) => e.dimension === 'map');
     expect(mapEntries).toHaveLength(6);
   });
+
+  it('carries net SR alongside net wins (C2), excluding suppressed placement matches, without changing the ranking', () => {
+    const games = [
+      game({ result: 'Loss', map: 'Ilios', srDelta: -20, matchId: 'm1' }),
+      game({ result: 'Loss', map: 'Ilios', srDelta: -18, matchId: 'm2' }),
+      game({ result: 'Win', map: 'Ilios', srDelta: 999, matchId: 'p1' }), // placement, excluded from srNet
+    ];
+    const [ilios] = focusEntries(games, { suppressed: new Set(['p1']) }).filter((e) => e.dimension === 'map');
+    expect(ilios).toMatchObject({ net: 1, srNet: -38, srLogged: 2 });
+  });
 });
 
 describe('focusTrend', () => {

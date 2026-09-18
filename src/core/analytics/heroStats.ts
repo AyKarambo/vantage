@@ -28,11 +28,13 @@ import { roundCredit } from './grouping';
 export interface HeroStatsOptions {
   /** Map name → mode for the played-time estimate on captures without rounds (defaults to the built-in table). */
   mapModeOf?: MapModeResolver;
+  /** Placement-run match ids to exclude from srNet (C2) — a placement's SR swing isn't comparable to a normal match's. */
+  suppressed?: ReadonlySet<string>;
 }
 
 /** Exact per-hero stats for the local player, aggregated across games. */
 export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): HeroSummary[] {
-  const totals = new Map<string, HeroStat & { games: number; wins: number; losses: number; draws: number; minutes: number }>();
+  const totals = new Map<string, HeroStat & { games: number; wins: number; losses: number; draws: number; minutes: number; srNet: number; srLogged: number }>();
 
   for (const g of games) {
     const played = playedTimeOf(g, opts.mapModeOf);
@@ -43,6 +45,7 @@ export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): Her
       const t = totals.get(hero) ?? {
         hero, role: r.role, eliminations: 0, deaths: 0, assists: 0,
         damage: 0, healing: 0, mitigation: 0, games: 0, wins: 0, losses: 0, draws: 0, minutes: 0,
+        srNet: 0, srLogged: 0,
       };
       t.role = t.role ?? r.role;
       t.eliminations += r.eliminations;
@@ -56,6 +59,12 @@ export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): Her
       else if (g.result === 'Loss') t.losses += share;
       else t.draws += share;
       t.minutes += heroPlayedMinutes(share, played) ?? 0;
+      // Net SR (C2), weighted the same way games/wins already are — a hero
+      // played for a quarter of a +20% match earns a quarter of that swing.
+      if (!opts.suppressed?.has(g.matchId) && g.srDelta != null) {
+        t.srNet += g.srDelta * share;
+        t.srLogged += 1;
+      }
       totals.set(hero, t);
     }
   }
@@ -80,6 +89,7 @@ export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): Her
         per10,
         kda: (t.eliminations + t.assists) / Math.max(t.deaths, 1),
         minutes: t.minutes,
+        ...(t.srLogged > 0 ? { srNet: t.srNet, srLogged: t.srLogged } : {}),
       } as HeroSummary;
     })
     // Most-played first by the unrounded credit, so two heroes that round to

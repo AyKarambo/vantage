@@ -76,18 +76,40 @@ export function roundCredit(c: {
   return { games, wins: out[0], losses: out[1], draws: out[2] };
 }
 
+export interface GroupOpts {
+  /** Placement-run match ids to exclude from the net-SR sum (C2) — the games themselves still count toward win/loss. */
+  suppressed?: ReadonlySet<string>;
+}
+
+/**
+ * Sum of `srDelta` over games that logged one (C2), excluding `suppressed`
+ * (placement-run) games — a placement's SR swing isn't comparable to a normal
+ * match's, the same stance {@link ../session sessionHistory} takes. Undefined
+ * when nothing qualified, so a bucket with no logged deltas reads "—", not 0.
+ * `weight` credits a fractional bucket (a hero's time-share) proportionally,
+ * same as every other weighted field; it is 1 for a whole-game bucket.
+ */
+export function srSum(games: ReadonlyArray<{ game: GameRecord; weight: number }>, suppressed?: ReadonlySet<string>): Pick<Group, 'srNet' | 'srLogged'> {
+  const logged = games.filter(({ game }) => !suppressed?.has(game.matchId) && game.srDelta != null);
+  if (!logged.length) return {};
+  return { srNet: logged.reduce((n, { game, weight }) => n + game.srDelta! * weight, 0), srLogged: logged.length };
+}
+
 /** Group weighted games by a key and compute the weighted win/loss per group, most credit first. */
-export function weightedGroupBy<T extends WeightedGame>(entries: ReadonlyArray<T>, keyOf: (e: T) => string): Group[] {
+export function weightedGroupBy<T extends WeightedGame>(entries: ReadonlyArray<T>, keyOf: (e: T) => string, opts: GroupOpts = {}): Group[] {
   const buckets = new Map<string, T[]>();
   for (const e of entries) {
     const k = keyOf(e) || 'Unknown';
     (buckets.get(k) ?? buckets.set(k, []).get(k)!).push(e);
   }
   return [...buckets.entries()]
-    .map(([key, es]) => ({ key, credit: es.reduce((n, e) => n + e.weight, 0), wl: weightedWinLoss(es) }))
+    .map(([key, es]) => ({
+      key, credit: es.reduce((n, e) => n + e.weight, 0), wl: weightedWinLoss(es),
+      sr: srSum(es, opts.suppressed),
+    }))
     // By unrounded credit, so two keys that round to the same count still order by real share.
     .sort((a, b) => b.credit - a.credit)
-    .map(({ key, wl }) => ({ key, ...wl }));
+    .map(({ key, wl, sr }) => ({ key, ...wl, ...sr }));
 }
 
 /**
@@ -105,21 +127,21 @@ export function heroWeightedGames(games: GameRecord[], hero: string): WeightedGa
 }
 
 /** Group games by a key and compute win/loss per group, sorted by most games. */
-export function groupBy(games: GameRecord[], keyOf: (g: GameRecord) => string): Group[] {
+export function groupBy(games: GameRecord[], keyOf: (g: GameRecord) => string, opts: GroupOpts = {}): Group[] {
   const buckets = new Map<string, GameRecord[]>();
   for (const g of games) {
     const k = keyOf(g) || 'Unknown';
     (buckets.get(k) ?? buckets.set(k, []).get(k)!).push(g);
   }
   return [...buckets.entries()]
-    .map(([key, gs]) => ({ key, ...winLoss(gs) }))
+    .map(([key, gs]) => ({ key, ...winLoss(gs), ...srSum(gs.map((game) => ({ game, weight: 1 })), opts.suppressed) }))
     .sort((a, b) => b.games - a.games);
 }
 
 /** Winrate per map. */
-export const byMap = (g: GameRecord[]) => groupBy(g, (x) => x.map);
+export const byMap = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => x.map, opts);
 /** Winrate per role queue. */
-export const byRole = (g: GameRecord[]) => groupBy(g, (x) => x.role);
+export const byRole = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => x.role, opts);
 /** Winrate per tracked account. */
 export const byAccount = (g: GameRecord[]) => groupBy(g, (x) => x.account);
 
@@ -129,14 +151,14 @@ export const byAccount = (g: GameRecord[]) => groupBy(g, (x) => x.account);
  * split without hero minutes), so a one-minute swap no longer counts as a
  * whole game. A game with no heroes recorded is credited to `Unknown` whole.
  */
-export function byHero(games: GameRecord[]): Group[] {
+export function byHero(games: GameRecord[], opts: GroupOpts = {}): Group[] {
   const entries: Array<WeightedGame & { hero: string }> = [];
   for (const game of games) {
     const shares = heroTimeShares(game);
     if (!shares.size) entries.push({ game, weight: 1, hero: 'Unknown' });
     for (const [hero, weight] of shares) entries.push({ game, weight, hero });
   }
-  return weightedGroupBy(entries, (e) => e.hero);
+  return weightedGroupBy(entries, (e) => e.hero, opts);
 }
 
 /**
@@ -147,8 +169,9 @@ export function focusBy(
   games: GameRecord[],
   keyOf: (g: GameRecord) => string,
   minGames = 3,
+  opts: GroupOpts = {},
 ): FocusItem[] {
-  return groupBy(games, keyOf)
+  return groupBy(games, keyOf, opts)
     .filter((g) => g.games >= minGames)
     .map((g) => ({ ...g, net: g.losses - g.wins }))
     .sort((a, b) => b.net - a.net);

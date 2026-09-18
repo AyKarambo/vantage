@@ -63,6 +63,12 @@ function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement 
       ),
       h('div', { style: { display: 'flex', gap: '12px', alignItems: 'baseline' } },
         h('span', { class: 'is-loss mono', style: { fontSize: '13px' } }, `${signed(-e.net)} net`),
+        // Net SR (C2) beside net wins — display only, the ranking stays raw
+        // net (sample-aware deficit, H1); a 3-loss map at −60% and one at
+        // −45% otherwise look identical on this row.
+        e.srNet !== undefined
+          ? h('span', { class: `mono ${e.srNet >= 0 ? 'is-win' : 'is-loss'}`, style: { fontSize: '11px' } }, `${signed(Math.round(e.srNet))}%`)
+          : null,
         h('span', { class: 'mono', style: { color: wrColor(e.winrate) } }, pct(e.winrate)),
         h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${e.games}g`),
         e.progress || e.inPool === false ? null : targetButton(ctx, e),

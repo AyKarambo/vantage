@@ -178,8 +178,11 @@ export function computeDashboard(
     sessions: sessionHistory(sessionGames, sessionSettings.gapMinutes, suppressed).slice(0, ROW_CAP),
     byRole: byRole(games),
     byAccount: byAccount(games),
-    byMap: byMap(games),
-    byMapType: groupBy(games, (g) => mapModeOf(g.map)),
+    // Net SR (C2) alongside net wins — the games/wins tally is unaffected;
+    // only the SR sum excludes placement-run matches, whose swing isn't
+    // comparable to a normal match's (same stance sessionHistory already takes).
+    byMap: byMap(games, { suppressed }),
+    byMapType: groupBy(games, (g) => mapModeOf(g.map), { suppressed }),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     trend: trend(games, weekly ? 'week' : 'day'),
     timeOfDay: byTimeOfDay(games),
@@ -195,13 +198,13 @@ export function computeDashboard(
     // lifetime, not the current filter). `mode` (H2) is resolved here, not in
     // focusEntries, since it needs the master-data map catalog focus.ts has
     // no business depending on.
-    focusItems: linkFocusTargets(focusEntries(games, { isMapActive }), authoredTargets, all)
+    focusItems: linkFocusTargets(focusEntries(games, { isMapActive, suppressed }), authoredTargets, all)
       .map((e) => (e.dimension === 'map' ? { ...e, mode: mapModeOf(e.key) } : e)),
     // No games/row floor (H5) — the Heroes screen's own min-games chips (default
     // 1+) are the real filter, and its table wrap already scrolls; a hard-coded
     // 2-game floor + 24-row slice here used to quietly drop 1-game heroes from
     // both the table and the palette's Hero entries before the renderer ever saw them.
-    heroStats: heroStats(games, { mapModeOf }).map((r) => {
+    heroStats: heroStats(games, { mapModeOf, suppressed }).map((r) => {
       // Trend/form (H6) reuse Focus's dimension-agnostic reads, joined onto
       // each hero row here rather than inside heroStats() — that stays a pure
       // per-game fold with no notion of "this hero's own games" to re-filter for.

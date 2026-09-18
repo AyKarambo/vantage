@@ -125,22 +125,27 @@ account's per-role lines beneath it.
   difference rather than leaving two numbers to disagree. Local, GEP-only, never
   exported. Players are matched on the name before the `#`, so two BattleTags
   sharing a name fold into one row, flagged with a ⚠.
-- **Maps** — winrate by game mode, then every map ranked best → worst.
+- **Maps** — winrate by game mode, then every map ranked best → worst; a **±SR** column/figure
+  (a mode card's value line, and the ranking table) beside the net wins wherever you've logged
+  one — a 3-loss map that cost −60% is a more urgent fix than one that cost −45%, and the data
+  was already there.
 - **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
   credited to each hero by its share of the match time, the way the in-game career profile
-  does it — see *Played time* below), with a **W-L** column, a played-**Time** column (the real
-  sample-size tell a rounded game count can't carry), a **Trend** column (▴/→/▾ — is this hero
-  getting better or worse lately?), and no hidden games-floor or row cap — the min-games chips
-  are the only filter, so a 1-game hero still shows and is reachable from the command palette.
-  A click-through drill-down drawer adds a role icon and a scope line stating which filters the
-  numbers follow, per-map winrate (each map opening that map's own games on Matches), and recent
-  games that open straight into that match's detail page.
+  does it — see *Played time* below), with a **W-L** column, a **±SR** column (net SR change,
+  weighted by the same time-share credit as the rest of the row), a played-**Time** column (the
+  real sample-size tell a rounded game count can't carry), a **Trend** column (▴/→/▾ — is this
+  hero getting better or worse lately?), and no hidden games-floor or row cap — the min-games
+  chips are the only filter, so a 1-game hero still shows and is reachable from the command
+  palette. A click-through drill-down drawer adds a role icon and a scope line stating which
+  filters the numbers follow, per-map winrate (each map opening that map's own games on
+  Matches), and recent games that open straight into that match's detail page.
 - **Focus** — the "what to work on" hub: your net-losing **roles, heroes and maps**, each in
   its own short section ranked by a sample-aware deficit — so a real, well-evidenced weakness
   outranks a same-sized but noisy small sample. Every row carries a trend readout
-  (improving/declining, with the point delta) and — once you track it as a target — the
-  winrate movement since you flagged it; a map row also shows its top heroes' own W-L and an
-  "Out of pool" tag if it's outside the current competitive rotation. A hero row opens that
+  (improving/declining, with the point delta), the net SR swing beside the net wins when
+  you've logged one, and — once you track it as a target — the winrate movement since you
+  flagged it; a map row also shows its top heroes' own W-L and an "Out of pool" tag if it's
+  outside the current competitive rotation. A hero row opens that
   hero's drawer, a role row opens Trends scoped to it, and **＋ target** pre-fills the builder's
   hero/role scope, not just the name.
 - **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:

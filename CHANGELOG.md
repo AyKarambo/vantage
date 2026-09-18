@@ -382,6 +382,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   "N errors · M warnings this session" instead of nothing — an accent pill once there's an
   error, one click into Logs already filtered to it — and the sidebar's Logs item picks up a
   live dot the moment one is logged (warnings alone stay quiet; they're routine).
+- **Net SR shows up beside net wins.** Maps' mode cards and its "Winrate by map" table, the
+  Heroes table, and Focus rows all gain a **±SR** figure alongside the games/net-wins tally you
+  already had — a 3-loss map that cost −60% is a more urgent fix than one that cost −45%, and
+  the SR data was already being recorded, just never summed anywhere but the rank tile. It's
+  purely informational: rankings and sort orders are unchanged, and it reads "—" rather than a
+  misleading `0` wherever nothing in range logged a change. A placement run's SR swing is
+  excluded from the sum everywhere (its games still count toward everything else) — a
+  placement's SR isn't comparable to a normal match's.
 
 ## 0.34.0 — 31 July 2026
 
