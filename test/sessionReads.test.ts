@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentSession, dayKey, groupByDay, groupBySitting, sessionDebrief, sessionHistory } from '../src/core/analytics';
+import { currentSession, dayKey, groupByDay, groupBySitting, sessionDebrief, sessionHistory, streakStats } from '../src/core/analytics';
 import type { GameRecord, HeroStat } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
@@ -391,5 +391,40 @@ describe('groupBySitting (S4)', () => {
 
   it('returns no groups for no rows', () => {
     expect(groupBySitting([], 180, NOW)).toEqual([]);
+  });
+});
+
+describe('streakStats (C7)', () => {
+  it('returns zeroed streaks and no days for no games', () => {
+    const s = streakStats([]);
+    expect(s).toMatchObject({ longestWin: 0, longestLoss: 0 });
+    expect(s.bestDay).toBeUndefined();
+    expect(s.worstDay).toBeUndefined();
+  });
+
+  it('finds the longest win and loss runs anywhere in range, draws breaking neither', () => {
+    // W W W L L Draw W L L L L — longest win run 3, longest loss run 4 (the draw doesn't reset it)
+    const results: Result[] = ['Win', 'Win', 'Win', 'Loss', 'Loss', 'Draw', 'Win', 'Loss', 'Loss', 'Loss', 'Loss'];
+    const games = results.map((result, i) => game({ timestamp: hoursAgo(20 - i), result }));
+    const s = streakStats(games);
+    expect(s.longestWin).toBe(3);
+    expect(s.longestLoss).toBe(4);
+  });
+
+  it('finds the best and worst single calendar day by net wins − losses', () => {
+    const games = [
+      // "Today" (hoursAgo 1-3): 3W 0L, net +3 — the best day.
+      game({ timestamp: hoursAgo(1), result: 'Win' }),
+      game({ timestamp: hoursAgo(2), result: 'Win' }),
+      game({ timestamp: hoursAgo(3), result: 'Win' }),
+      // A day 26h back: 1W 3L, net −2 — the worst day.
+      game({ timestamp: hoursAgo(26), result: 'Win' }),
+      game({ timestamp: hoursAgo(27), result: 'Loss' }),
+      game({ timestamp: hoursAgo(28), result: 'Loss' }),
+      game({ timestamp: hoursAgo(29), result: 'Loss' }),
+    ];
+    const s = streakStats(games);
+    expect(s.bestDay).toMatchObject({ date: dayKey(hoursAgo(1)), net: 3, wins: 3, losses: 0 });
+    expect(s.worstDay).toMatchObject({ date: dayKey(hoursAgo(26)), net: -2, wins: 1, losses: 3 });
   });
 });

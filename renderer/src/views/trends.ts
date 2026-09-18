@@ -1,18 +1,22 @@
 /** Trends — winrate over time, splits by role/mode/account, and when you play. */
 import { h } from '../dom';
-import type { Group, PerformanceStats, Role, RankSeriesPoint } from '../../../src/shared/contract';
+import type { Group, PerformanceStats, Role, RankSeriesPoint, StreakStats } from '../../../src/shared/contract';
 import { sessionFade } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
 import { horizontalBars, lineChart, ratingChart, rankChart, type WrPoint, type RankSeries } from '../charts/plots';
 import { card, emptyState, statBox } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
+import { clickableRow } from '../components/clickableRow';
 import { pct } from '../format';
 import { viewHead, type ViewContext } from './view';
 
 export function trends(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const byWeek = d.filters.days === 'all' || (typeof d.filters.days === 'number' && d.filters.days > 90);
+  // C7: a day label opens that day's matches — a week label isn't a
+  // Matches-recognized day yet, so the click-through stays daily-mode only.
+  const openDay = byWeek ? undefined : (label: string) => ctx.navigate('matches', { day: label });
   return h('div', { class: 'view' },
     viewHead('Trends', 'Momentum over time and where your winrate concentrates'),
     rankTrendCard(ctx),
@@ -29,7 +33,12 @@ export function trends(ctx: ViewContext): HTMLElement {
       rows: d.trend.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })),
       // Chronological, oldest first — the order the table already opened in.
       initialSort: { key: 'label', dir: 1 },
-    }, lineChart(d.trend.map(toPoint))),
+      ...(openDay ? { onRowClick: (row) => openDay(row.label as string) } : {}),
+    },
+    h('div', null,
+      lineChart(d.trend.map(toPoint), openDay),
+      extremesRow(ctx, d.extremes),
+    )),
     h('div', { class: 'grid-3' },
       card({ title: 'By role' }, breakdown(d.byRole, roleLabel)),
       card({ title: 'By game mode' }, breakdown(d.byMapType)),
@@ -39,7 +48,7 @@ export function trends(ctx: ViewContext): HTMLElement {
       timeOfDayCard(d.timeOfDay),
       sessionPositionCard(d.sessionPosition),
     ),
-    performanceCard(d.performance),
+    performanceCard(ctx, d.performance),
   );
 }
 
@@ -142,15 +151,43 @@ function breakdownOrdered(groups: Group[]): HTMLElement {
 const toPoint = (g: Group): WrPoint => ({ label: g.key, winrate: g.winrate, games: g.games });
 
 /**
+ * "Best / worst day" (C7) — the single calendar day, anywhere in range, with
+ * the highest/lowest net wins − losses. Each box opens that day's matches,
+ * same destination a chart-point click already goes to. Omitted entirely
+ * with no games in range (streakStats returns no days).
+ */
+function extremesRow(ctx: ViewContext, extremes: StreakStats): HTMLElement | null {
+  if (!extremes.bestDay && !extremes.worstDay) return null;
+  const dayBox = (day: StreakStats['bestDay'], label: string): HTMLElement | null => {
+    if (!day) return null;
+    return h('div', {
+      class: 'stat-box', style: { cursor: 'pointer' },
+      title: `Open ${day.date}'s matches`,
+      ...clickableRow(() => ctx.navigate('matches', { day: day.date })),
+    },
+      h('div', { class: 'stat-box-value' }, `${signed(day.net)} (${day.wins}W ${day.losses}L)`),
+      h('div', { class: 'stat-box-label' }, label),
+    );
+  };
+  return h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '10px' } },
+    dayBox(extremes.bestDay, 'best day'),
+    dayBox(extremes.worstDay, 'worst day'),
+  );
+}
+
+/**
  * Self-rated performance over time (issue #44): the rating trend with a rolling
  * average, plus the "does your self-read track results?" win/loss split.
  */
-function performanceCard(p: PerformanceStats): HTMLElement {
+function performanceCard(ctx: ViewContext, p: PerformanceStats): HTMLElement {
   if (p.ratedGames === 0) {
     return card({ title: 'Your self-rating', sub: 'rate matches when logging or reviewing to unlock this' },
       emptyState('No rated games in this range yet — the 0–100 performance slider lives on Log Match and Review.'));
   }
   const gap = p.winAvg !== null && p.lossAvg !== null ? Math.round((p.winAvg - p.lossAvg) * 10) / 10 : null;
+  // C7: always daily today (unlike the winrate chart, this trend has no
+  // weekly-bucket mode yet), so the day click-through is unconditional.
+  const openDay = (label: string): void => ctx.navigate('matches', { day: label });
   return chartCard({
     title: 'Your self-rating',
     sub: `0–100 per match · ${p.ratedGames} rated game${p.ratedGames === 1 ? '' : 's'} · line = 7-day rolling average`,
@@ -163,9 +200,10 @@ function performanceCard(p: PerformanceStats): HTMLElement {
     ],
     rows: p.trend.map((t) => ({ label: t.date, avg: t.avg, games: t.games })),
     initialSort: { key: 'label', dir: 1 },
+    onRowClick: (row) => openDay(row.label as string),
   },
   h('div', null,
-    ratingChart(p.trend.map((t) => ({ label: t.date, rating: t.avg, games: t.games }))),
+    ratingChart(p.trend.map((t) => ({ label: t.date, rating: t.avg, games: t.games })), openDay),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '10px' } },
       statBox(p.winAvg !== null ? String(p.winAvg) : '–', 'avg rating on wins'),
       statBox(p.lossAvg !== null ? String(p.lossAvg) : '–', 'avg rating on losses'),

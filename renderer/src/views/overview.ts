@@ -3,7 +3,7 @@ import { h, render } from '../dom';
 import type { DashboardData, Group, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
 import { dayKey, dayPartAt } from '../../../src/core/analytics';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
-import { dateLong, greeting, int, pct, signed, streakText } from '../format';
+import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
@@ -117,6 +117,31 @@ function recapLine(r: SessionDebrief): string {
   return bits.join(' · ');
 }
 
+/**
+ * The Streak KPI's secondary line (C7). "Reset it" used to fire on ANY loss
+ * streak — even one loss read as an urgent nudge. Now it only fires once the
+ * streak reaches the real break-reminder threshold (or 3, when the reminder
+ * itself is off — still a real "maybe pause" number, just not user-tuned).
+ * Below that, or with no streak at all, the line falls back to something
+ * actually informative: the current sitting's tally, or how long ago the
+ * last game was.
+ */
+function streakDelta(d: DashboardData): { text: string; dir?: 'up' | 'down' } {
+  const s = d.streak;
+  if (s.type === 'W') return { text: 'ride it', dir: 'up' };
+  if (s.type === 'L') {
+    const threshold = d.breakReminder.enabled ? d.breakReminder.afterLosses : 3;
+    if (s.count >= threshold) return { text: 'reset it', dir: 'down' };
+  }
+  // Defensive against an empty-string role (seen from the filter bar in some
+  // states) as well as the normal 'all' — either way, no suffix is the honest
+  // "no role scope" read, not a dangling " · " with nothing after it.
+  const roleSuffix = d.filters.role && d.filters.role !== 'all' ? ` · ${roleLabel(d.filters.role)}` : '';
+  if (d.session) return { text: `${d.session.wins}–${d.session.losses} this session${roleSuffix}` };
+  const last = d.matches[0]?.timestamp;
+  return { text: last ? `last game ${relTime(last)}${roleSuffix}` : '—' };
+}
+
 function kpiRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const trendDelta = wrTrendDelta(d.trend, d.overall.winrate);
@@ -134,7 +159,10 @@ function kpiRow(ctx: ViewContext): HTMLElement {
       label: 'Streak',
       value: streakText(d.streak),
       accent: true,
-      delta: { text: d.streak.type === 'W' ? 'ride it' : d.streak.type === 'L' ? 'reset it' : '—' },
+      delta: streakDelta(d),
+      // C7: the "ride it"/"reset it" cue is the actionable read; best/worst
+      // in range is real context that doesn't need to fight it for space.
+      title: `Best W${d.extremes.longestWin} · worst L${d.extremes.longestLoss} in range`,
     }),
   );
 }

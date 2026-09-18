@@ -159,13 +159,15 @@ account's per-role lines beneath it.
   placement run, a pre-reset match) shows as a real gap rather than a guessed interpolation; a
   hollow point marks a reconstructed (rather than recorded or replayed) rank. Then winrate over
   time (with a rolling average alongside the daily/weekly line so the
-  general direction reads through the noise), splits by role/account, **when you win** (time-of-day
+  general direction reads through the noise — in daily mode, click a point or its table row to
+  open that day's matches, and a **best day / worst day** pair beneath the chart does the same),
+  splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and
   **your self-rating over time** (the 0–100 performance slider with a
   rolling average plus the avg-rating-on-wins vs -losses split — does your self-read track
-  results, or your play?). Per-hero and per-map average self-ratings also appear as **RTG**
-  columns on the Heroes and Maps tables.
+  results, or your play? — also click-through to that day's matches). Per-hero and per-map
+  average self-ratings also appear as **RTG** columns on the Heroes and Maps tables.
 - **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea
   of *supercompensation*, detecting **over- and undertraining**. One **score-first composite**
   (0–100, the band derives from it — score and verdict can't disagree) built from three

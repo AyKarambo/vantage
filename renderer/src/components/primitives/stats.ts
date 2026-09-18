@@ -21,11 +21,13 @@ export interface KpiOpts {
    *  in `components/toast.ts`. Renders below the delta; omitted, the card's
    *  layout is unchanged. */
   action?: { label: string; run: () => void };
+  /** Whole-card hover tooltip — for context that doesn't fit the single delta line (e.g. the Streak KPI's best/worst-day read, C7). */
+  title?: string;
 }
 
 /** Headline metric tile with an optional up/down delta and an optional CTA. */
 export function kpiCard(o: KpiOpts): HTMLElement {
-  return h('div', { class: `kpi${o.accent ? ' kpi--accent' : ''}` },
+  return h('div', { class: `kpi${o.accent ? ' kpi--accent' : ''}`, title: o.title },
     h('div', { class: 'kpi-label' }, o.label),
     // `.kpi-value` is nowrap + ellipsis so one long value can't push its card
     // taller than the other three in the row. A KPI value has no other home for

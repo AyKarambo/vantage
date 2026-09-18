@@ -29,6 +29,8 @@ export function chartCard(
     rows: ChartTableRow[];
     /** Defaults to dataTable's own default (first column, descending) when omitted. */
     initialSort?: { key: string; dir: 1 | -1 };
+    /** Makes the Table view's rows clickable too (C7) — the same destination the chart's own point click opens, so switching Chart/Table never changes what a click does. */
+    onRowClick?: (row: ChartTableRow) => void;
   },
   chart: Node,
 ): HTMLElement {
@@ -45,7 +47,11 @@ export function chartCard(
 
   const paint = (): void => {
     render(body, asTable
-      ? dataTable({ columns, rows: opts.rows, ...(opts.initialSort ? { initialSort: opts.initialSort } : {}) })
+      ? dataTable({
+          columns, rows: opts.rows,
+          ...(opts.initialSort ? { initialSort: opts.initialSort } : {}),
+          ...(opts.onRowClick ? { onRowClick: opts.onRowClick } : {}),
+        })
       : chart);
     render(toggleHost, button(asTable ? 'Chart' : 'Table', {
       variant: 'ghost',
@@ -58,6 +64,6 @@ export function chartCard(
   };
   paint();
 
-  const { columns: _c, rows: _r, initialSort: _s, ...cardOpts } = opts;
+  const { columns: _c, rows: _r, initialSort: _s, onRowClick: _rc, ...cardOpts } = opts;
   return card({ ...cardOpts, actions: toggleHost }, body);
 }

@@ -390,6 +390,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   misleading `0` wherever nothing in range logged a change. A placement run's SR swing is
   excluded from the sum everywhere (its games still count toward everything else) — a
   placement's SR isn't comparable to a normal match's.
+- **Trends' winrate chart is actually clickable, not just cursor-pointer-flavored.** A point (in
+  daily mode) or its Table row now opens that day's games on Matches — the hit target already
+  said "click me" with its cursor, it just never did anything. A new **best day / worst day**
+  pair under the chart surfaces the single calendar day with the highest/lowest net wins −
+  losses anywhere in range, each clickable the same way. The self-rating chart got the same
+  click-through. The Overview **Streak** KPI's second line stopped crying wolf on every single
+  loss — "reset it" now only shows once the streak reaches your actual break-reminder threshold;
+  below that it shows the current sitting's tally or how long ago you last played instead, and
+  a hover on the tile states the range's best/worst streak for context.
 
 ## 0.34.0 — 31 July 2026
 

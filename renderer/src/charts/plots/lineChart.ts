@@ -8,8 +8,12 @@ import { emptyChart, rollingMean, type WrPoint } from './shared';
 
 const ROLLING_WINDOW = 7;
 
-/** Winrate trend over time. Returns an HTML wrapper (SVG + tooltip layer). */
-export function lineChart(points: WrPoint[]): HTMLElement {
+/**
+ * Winrate trend over time. Returns an HTML wrapper (SVG + tooltip layer).
+ * `onSelect` (C7) makes each point open the day/week behind it — pass it only
+ * in daily mode; a weekly bucket's label isn't a Matches-recognized day yet.
+ */
+export function lineChart(points: WrPoint[], onSelect?: (label: string) => void): HTMLElement {
   const wrap = h('div', { class: 'chart-wrap' });
   if (points.length < 2) {
     wrap.append(emptyChart());
@@ -55,7 +59,15 @@ export function lineChart(points: WrPoint[]): HTMLElement {
     // a chart point's value at all.
     const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.winrate), r: 11, fill: 'transparent', tabindex: 0 });
     hit.style.cursor = 'pointer';
-    tips.attach(hit, `${p.label} · ${pct(p.winrate)} · ${p.games}g`);
+    tips.attach(hit, `${p.label} · ${pct(p.winrate)} · ${p.games}g${onSelect ? ' · click to open' : ''}`);
+    if (onSelect) {
+      // The hit circle already had cursor:pointer before there was anything
+      // to click (C7) — this is the click that promise was missing.
+      hit.addEventListener('click', () => onSelect(p.label));
+      hit.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.label); }
+      });
+    }
     s.appendChild(hit);
   });
 

@@ -25,6 +25,43 @@ export function streak(games: GameRecord[]): Streak {
   return { type, count };
 }
 
+/** Longest win/loss runs plus the best/worst single calendar day (net wins − losses) in range (C7). */
+export interface StreakStats {
+  longestWin: number;
+  longestLoss: number;
+  bestDay?: { date: string; net: number; wins: number; losses: number };
+  worstDay?: { date: string; net: number; wins: number; losses: number };
+}
+
+/**
+ * The extremes {@link streak} (current run only) doesn't answer: the longest
+ * win/loss run anywhere in range, and the single best/worst calendar day by
+ * net wins − losses. `bestDay`/`worstDay.date` is a `dayKey`, ready for
+ * Matches' `{ day }` drill-down. Undefined when there are no games at all.
+ */
+export function streakStats(games: GameRecord[]): StreakStats {
+  const decided = [...games].filter((g) => g.result !== 'Draw').sort((a, b) => a.timestamp - b.timestamp);
+  let longestWin = 0;
+  let longestLoss = 0;
+  let curType: 'W' | 'L' | null = null;
+  let curCount = 0;
+  for (const g of decided) {
+    const type = g.result === 'Win' ? 'W' : 'L';
+    curCount = type === curType ? curCount + 1 : 1;
+    curType = type;
+    if (type === 'W') longestWin = Math.max(longestWin, curCount);
+    else longestLoss = Math.max(longestLoss, curCount);
+  }
+
+  const days = groupByDay(games).map((d) => ({ date: d.key, net: d.wins - d.losses, wins: d.wins, losses: d.losses }));
+  // Ties keep whichever was found first — groupByDay is newest-first, so a
+  // tie resolves to the more recent day.
+  const bestDay = days.length ? days.reduce((a, b) => (b.net > a.net ? b : a)) : undefined;
+  const worstDay = days.length ? days.reduce((a, b) => (b.net < a.net ? b : a)) : undefined;
+
+  return { longestWin, longestLoss, bestDay, worstDay };
+}
+
 /**
  * Recap of the current sitting: the trailing run of games with no gap longer
  * than `gapMinutes` between consecutive games, ending at the most recent one.
