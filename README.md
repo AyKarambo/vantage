@@ -80,7 +80,11 @@ account's per-role lines beneath it.
   and a search box matching map, hero or account — with an honest "N of M loaded games match
   your filter" count and a Clear-filter link; it resets when you leave the screen, and "Show
   older games" carries the active filter into its fetch so a search reaches past what's already
-  loaded (M2). Click any row for a full **match detail page**
+  loaded (M2). Day/sitting headers count draws instead of dropping them and show the block's own
+  net SR swing, tinted win/loss, when any row logged one; each row shows a **clock time**
+  instead of a relative age (hover for that); and opening a single day states its own tally
+  ("6 games on Sat, Sep 12 · 4–2") with **‹ ›** buttons to step to the next day that has games
+  (M3). Click any row for a full **match detail page**
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
   support ×2, per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
   wall-clock duration — the fight time those rates divide by, marked *est.* on older captures

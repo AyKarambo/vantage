@@ -113,11 +113,30 @@ export interface DayGroup<T> {
   label: string;
   wins: number;
   losses: number;
+  draws: number;
+  /** Sum of the group's known SR deltas; absent when no row in the group logged one — never a fabricated 0 (M3). */
+  srNet?: number;
+  /** How many of the group's rows contributed to {@link srNet}. */
+  srKnown: number;
   items: T[];
 }
 
+/** The W/L/D + SR tally shared by {@link groupByDay} and {@link groupBySitting}'s groups. */
+function dayTally<T extends { result: string; srDelta?: number }>(
+  items: T[],
+): Pick<DayGroup<T>, 'wins' | 'losses' | 'draws' | 'srNet' | 'srKnown'> {
+  const deltas = items.map((r) => r.srDelta).filter((v): v is number => v != null);
+  return {
+    wins: items.filter((r) => r.result === 'Win').length,
+    losses: items.filter((r) => r.result === 'Loss').length,
+    draws: items.filter((r) => r.result === 'Draw').length,
+    srKnown: deltas.length,
+    ...(deltas.length ? { srNet: deltas.reduce((a, b) => a + b, 0) } : {}),
+  };
+}
+
 /** Group timestamped result rows under day headers (newest day first). */
-export function groupByDay<T extends { timestamp: number; result: string }>(
+export function groupByDay<T extends { timestamp: number; result: string; srDelta?: number }>(
   rows: T[],
   now: number = Date.now(),
 ): Array<DayGroup<T>> {
@@ -131,8 +150,7 @@ export function groupByDay<T extends { timestamp: number; result: string }>(
   return [...groups.entries()].map(([key, items]) => ({
     key,
     label: key === today ? 'Today' : key === yesterday ? 'Yesterday' : key,
-    wins: items.filter((r) => r.result === 'Win').length,
-    losses: items.filter((r) => r.result === 'Loss').length,
+    ...dayTally(items),
     items,
   }));
 }
@@ -349,7 +367,7 @@ export function sessionHistory(
  * {@link groupByDay}: the sitting containing `now` reads "Today's session" (only
  * meaningful if it's still open — callers scope `rows` accordingly), newest first.
  */
-export function groupBySitting<T extends { timestamp: number; result: string }>(
+export function groupBySitting<T extends { timestamp: number; result: string; srDelta?: number }>(
   rows: T[],
   gapMinutes: number,
   now: number = Date.now(),
@@ -372,8 +390,7 @@ export function groupBySitting<T extends { timestamp: number; result: string }>(
     return {
       key: `${start}`,
       label,
-      wins: g.items.filter((r) => r.result === 'Win').length,
-      losses: g.items.filter((r) => r.result === 'Loss').length,
+      ...dayTally(g.items),
       items: g.items,
     };
   });

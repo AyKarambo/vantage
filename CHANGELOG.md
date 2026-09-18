@@ -618,6 +618,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   short. Searching while there's more history to load still reaches it — **"Show older games"**
   carries your filter into the fetch, so paging in older games while searching returns a full page
   of actual matches instead of mostly rows you'd immediately filter back out.
+- **Day headers count draws and show the day's own SR swing; rows show a clock, not a repeated
+  age.** A day with a draw used to lose it from the count — "2–1" for a win, a loss **and** a
+  draw — and never showed its own SR change even though every row carries one; headers now read
+  "2–1–1" when there's a draw, and the day's net SR ("+38%") sits beside the tally, tinted red or
+  green, in place of a flat "−1 net" that just restated the subtraction you could already see. Each
+  row now shows the clock time it happened ("9:34 PM") instead of a relative age that read "1d, 1d,
+  1d" three times in a row under a header already saying Yesterday — hover a row for that age if you
+  still want it. Opening a single day states its own honest count ("6 games on Sat, Sep 12 · 4–2")
+  instead of generic range copy repeating the date you just picked, drops the now-redundant second
+  day header, and the chip gets **‹ ›** buttons to step to the day before or after without a trip
+  back to Overview to re-click the heatmap. A flagged-games drill-down (Tilt, Leaver, etc.) gets the
+  same honest count too — "46 tilt-flagged games in range."
 
 ## 0.34.0 — 31 July 2026
 

@@ -713,7 +713,7 @@
 /* Matches ------------------------------------------------------------------- */
 /*
  * Fixed leading (result badge, main content) and trailing (map-type pill,
- * relative time) tracks. The middle of the template — one `auto` track per
+ * clock time) tracks. The middle of the template — one `auto` track per
  * field currently in 'column' mode (spec F1) — is set per row from JS
  * (`matches.ts` `matchRowGridTemplate`, plain element-style assignment via the
  * h() style option; CSP-safe, no <style> tag). This base rule is only the
@@ -724,7 +724,7 @@
  */
 .match-row {
   display: grid;
-  grid-template-columns: 44px 1fr 84px 46px 24px;
+  grid-template-columns: 44px 1fr 84px 64px 24px;
   align-items: center;
   gap: 14px;
   padding: 10px 12px;
