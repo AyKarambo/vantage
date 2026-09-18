@@ -2,7 +2,7 @@
 import { h, render } from '../dom';
 import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, pct } from '../format';
+import { fmt, pct, roleLabel } from '../format';
 import { wrColor } from '../theme';
 import { prefs } from '../prefs';
 import { store } from '../store';
@@ -111,13 +111,40 @@ export function openHeroDrawer(ctx: ViewContext, hero: string): void {
   });
 }
 
+/** "Damage · last 30 days · all accounts" — Players' scope-text convention
+ *  (H7), so the drawer states plainly that these numbers follow the filter
+ *  bar rather than being a hero's all-time record. */
+function heroDrawerScope(ctx: ViewContext): string {
+  const f = ctx.data.filters;
+  const days = f.days;
+  let season: string;
+  if (typeof days === 'object') {
+    season = ctx.data.options.seasons.find((x) => x.id === days.season)?.label ?? 'one season';
+  } else {
+    season = days === 'all' ? 'all time' : `last ${days} days`;
+  }
+  return [
+    f.role === 'all' ? 'all roles' : roleLabel(f.role),
+    season,
+    f.account === 'all' ? 'all accounts' : f.account,
+  ].join(' · ');
+}
+
 function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLElement {
   const s = d.stats;
   const p = s?.per10;
+  // Games desc (weightedGroupBy's own order) with winrate as a tiebreak — the
+  // common all-1-game case used to read as random, since every map's credit
+  // ties and nothing broke the tie (H7).
+  const byMap = [...d.byMap].sort((a, b) => b.games - a.games || b.winrate - a.winrate);
   return h('div', null,
-    h('h3', { style: { fontSize: '18px' } }, d.hero),
-    h('p', { class: 'u-muted', style: { fontSize: '12px', margin: '2px 0 14px' } },
+    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
+      roleIcon(s?.role),
+      h('h3', { style: { fontSize: '18px' } }, d.hero),
+    ),
+    h('p', { class: 'u-muted', style: { fontSize: '12px', margin: '2px 0 2px' } },
       `${d.overall.games} games · ${pct(d.overall.winrate)} winrate · ${d.overall.wins}W ${d.overall.losses}L`),
+    h('p', { class: 'u-dim', style: { fontSize: '11px', margin: '0 0 14px' } }, heroDrawerScope(ctx)),
     s
       ? h('div', { class: 'stat-grid' },
           statBox(s.kda.toFixed(1), 'KDA'),
@@ -128,20 +155,28 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
           statBox(fmt(p?.mitigation), 'Mit/10'),
         )
       : null,
-    section('By map', d.byMap.length
-      ? d.byMap.map((m) => h('div', { class: 'row', style: { padding: '6px 0' } },
+    section('By map', byMap.length
+      ? byMap.map((m) => h('div', { class: 'row', style: { padding: '6px 0' } },
           inlineLink(m.key, {
             class: 'row-main',
             style: { fontSize: '12.5px', textAlign: 'left' },
-            title: `Find ${m.key} on the Maps screen`,
-            onClick: () => { close(); ctx.navigate('maps', { highlight: m.key }); },
+            title: `Open your ${m.key} matches`,
+            onClick: () => { close(); ctx.navigate('matches', { map: m.key }); },
           }),
           h('span', { style: { color: wrColor(m.winrate) } }, pct(m.winrate)),
-          h('span', { class: 'u-dim', style: { fontSize: '11px', width: '28px', textAlign: 'right' } }, `${m.games}g`),
+          // W-L instead of a bare credited-games count (H7) — the number that
+          // decides whether a map's winrate here is signal, in the same
+          // vocabulary the overall line above already uses.
+          h('span', { class: 'u-dim mono', style: { fontSize: '11px', width: '56px', textAlign: 'right' } }, `${m.wins}W ${m.losses}L`),
         ))
       : [h('div', { class: 'hint' }, '—')]),
     section('Recent', d.recent.length
-      ? d.recent.map((r) => h('div', { class: 'row', style: { padding: '6px 0' } },
+      ? d.recent.map((r) => h('div', {
+          class: 'row is-clickable', style: { padding: '6px 0', cursor: 'pointer' },
+          // Recent rows used to be inert text (H7) — every other match list in
+          // the app opens the detail page on a click; this one just never did.
+          on: { click: () => { close(); ctx.navigate('matchDetail', { matchId: r.matchId }); } },
+        },
           resultPill(r.result),
           h('span', { class: 'row-main', style: { fontSize: '12.5px' } }, r.map),
           h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${r.account} · ${new Date(r.timestamp).toLocaleDateString()}`),

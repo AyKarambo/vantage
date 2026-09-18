@@ -316,6 +316,22 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   directly. The Overview Rank tile now also states how much you've moved since your anchor
   (`▴ +38% since anchor · 16% in division`), not just which direction the arrow points.
 
+### Added
+
+- **Every "open this map" click now takes you to that map's actual games**, not a flash on the
+  Maps ranking table. The Overview scatter and its Top-priority callouts, the Live screen's
+  priority card, a hero drawer's By-map rows, Focus's map rows, and the command palette's Map
+  entries all now open Matches scoped to that one map, with a dismissible `Only <map> ✕` chip
+  above the list — the same drill-down chip Matches already had for a day or a mental flag.
+  Focus keeps a smaller secondary **↗ Maps** link next to its own map rows, since "how does this
+  map look overall" is still a distinct question there.
+- **The hero drawer explains its own numbers.** A role icon sits next to the hero name, and a new
+  line states the filter scope in plain words ("all roles · last 30 days · all accounts") so the
+  stats are never mistaken for the hero's all-time record. **By map** now breaks ties by winrate
+  after games (the common one-game-per-map case used to read as random order) and shows `W`-`L`
+  instead of a bare game count. **Recent** games are clickable straight into that match's detail
+  page instead of being inert text.
+
 ## 0.34.0 — 31 July 2026
 
 ### Added

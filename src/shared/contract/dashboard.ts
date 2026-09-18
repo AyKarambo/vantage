@@ -273,6 +273,6 @@ export interface HeroDetail {
   hero: string;
   overall: WinLoss;
   byMap: Group[];
-  recent: Array<{ map: string; role: Role; result: Result; account: string; timestamp: number }>;
+  recent: Array<{ matchId: string; map: string; role: Role; result: Result; account: string; timestamp: number }>;
   stats: HeroSummary | null;
 }

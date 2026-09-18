@@ -45,6 +45,10 @@ export interface ViewParams {
   day?: string;
   /** Scope Matches to games carrying this mental flag. */
   flag?: MatchFlagKey;
+  /** Scope Matches to one map (H3) — the shared drill-down every "open the
+   *  map" surface (Focus, the Overview scatter, the hero drawer, the palette)
+   *  points at, instead of the old flash-only jump to Maps. */
+  map?: string;
   /** Targets: prefill the builder with this name (self-rated) on open — the
    *  Focus screen's per-map "＋ target" quick-create. */
   prefillName?: string;

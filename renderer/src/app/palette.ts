@@ -118,7 +118,7 @@ function buildItems(ctx: ViewContext, extras: PaletteExtras): PaletteItem[] {
       label: m.key,
       hint: `${m.games} games`,
       group: 'Map',
-      run: () => ctx.navigate('maps', { highlight: m.key }),
+      run: () => ctx.navigate('matches', { map: m.key }),
     });
   }
   for (const hs of d.heroStats) {

@@ -275,7 +275,7 @@ export class App {
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
-  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; prefillName?: string; playerName?: string; targetId?: string; editTargetId?: string; epoch: number } | null = null;
+  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; map?: string; prefillName?: string; playerName?: string; targetId?: string; editTargetId?: string; epoch: number } | null = null;
   /** The snapshot the filter bar was last built for. Background refreshes patch
    *  `refreshing`/`status` without changing `data`, so re-rendering the bar then
    *  would tear down its live controls mid-click and swallow the click — the
@@ -546,6 +546,7 @@ export class App {
       highlight: state.params.highlight,
       day: state.params.day,
       flag: state.params.flag,
+      map: state.params.map,
       prefillName: state.params.prefillName,
       playerName: state.params.playerName,
       targetId: state.params.targetId,
@@ -555,7 +556,8 @@ export class App {
     const last = this.lastRendered;
     if (last && last.data === key.data && last.view === key.view
       && last.matchId === key.matchId && last.highlight === key.highlight
-      && last.day === key.day && last.flag === key.flag && last.prefillName === key.prefillName
+      && last.day === key.day && last.flag === key.flag && last.map === key.map
+      && last.prefillName === key.prefillName
       && last.playerName === key.playerName
       && last.targetId === key.targetId && last.editTargetId === key.editTargetId
       && last.epoch === key.epoch) return;
@@ -567,6 +569,7 @@ export class App {
     // (see bindGlobals). Route/epoch changes fall through and render at once.
     if (this.contentPressed && last && last.view === key.view && last.matchId === key.matchId
       && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
+      && last.map === key.map
       && last.prefillName === key.prefillName && last.playerName === key.playerName
       && last.targetId === key.targetId && last.editTargetId === key.editTargetId && last.epoch === key.epoch) {
       this.pendingContentRender = true;

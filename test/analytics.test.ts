@@ -274,6 +274,14 @@ describe('heroDetail', () => {
     expect(d.stats?.per10?.eliminations).toBe(Math.round(22 * 10 / 14 * 10) / 10); // 22 elims over 6 + 8 played minutes
   });
 
+  it('recent entries carry the source match id, so the drawer can open the real match (H7)', () => {
+    const gs = games();
+    const d = heroDetail(gs, 'Tracer');
+    // Same order asserted above (newest first: timestamps 3, 2) — this pins
+    // each row's matchId to the SAME source game, not just its shape.
+    expect(d.recent.map((r) => r.matchId)).toEqual([gs[0].matchId, gs[1].matchId]);
+  });
+
   it('a short swap earns only its fraction of the game', () => {
     const d = heroDetail(games(), 'Genji');
     expect(d.overall.winrate).toBeCloseTo(0.25 / 1.25, 9); // 0.25 of a win vs a whole loss
