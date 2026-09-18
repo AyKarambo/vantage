@@ -293,6 +293,16 @@ describe('heroDetail', () => {
     expect(d.recent.map((r) => r.matchId)).toEqual([gs[0].matchId, gs[1].matchId]);
   });
 
+  it('attaches trend and form to stats, over the SAME hero-filtered games as overall/byMap (H6)', () => {
+    const losses = [0, 1, 2, 3].map((i) =>
+      game({ result: 'Loss', map: 'Ilios', role: 'damage', heroes: ['Tracer'], timestamp: i }));
+    const wins = [4, 5, 6].map((i) =>
+      game({ result: 'Win', map: 'Ilios', role: 'damage', heroes: ['Tracer'], timestamp: i }));
+    const d = heroDetail([...losses, ...wins], 'Tracer');
+    expect(d.stats?.trend).toBe('improving');
+    expect(d.stats?.form?.results).toEqual(['Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win', 'Win']);
+  });
+
   it('a short swap earns only its fraction of the game', () => {
     const d = heroDetail(games(), 'Genji');
     expect(d.overall.winrate).toBeCloseTo(0.25 / 1.25, 9); // 0.25 of a win vs a whole loss

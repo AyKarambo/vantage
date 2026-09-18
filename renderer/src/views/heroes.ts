@@ -2,7 +2,7 @@
 import { h, render } from '../dom';
 import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { duration, fmt, fmt1, pct, roleLabel } from '../format';
+import { duration, fmt, fmt1, pct, roleLabel, signed } from '../format';
 import { wrColor } from '../theme';
 import { prefs } from '../prefs';
 import { store } from '../store';
@@ -168,6 +168,7 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
     h('p', { class: 'u-muted', style: { fontSize: '12px', margin: '2px 0 2px' } },
       `${d.overall.games} games · ${pct(d.overall.winrate)} winrate · ${d.overall.wins}W ${d.overall.losses}L`),
     h('p', { class: 'u-dim', style: { fontSize: '11px', margin: '0 0 14px' } }, heroDrawerScope(ctx)),
+    formStrip(s),
     s
       ? h('div', { class: 'stat-grid' },
           statBox(s.kda.toFixed(1), 'KDA'),
@@ -205,6 +206,24 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
           h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${r.account} · ${new Date(r.timestamp).toLocaleDateString()}`),
         ))
       : [h('div', { class: 'hint' }, '—')]),
+  );
+}
+
+/**
+ * The last-10-games form strip (H6): a small W/L pill per decided game, the
+ * same trend arrow the table's Trend column shows, and the window's winrate
+ * delta vs the hero's full range — "is this hero getting better lately?"
+ * answered without opening a second drawer.
+ */
+function formStrip(s: HeroSummary | null): HTMLElement | null {
+  if (!s?.form?.results.length) return null;
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', margin: '0 0 14px' } },
+    h('span', { class: 'u-dim', style: { fontSize: '11px', marginRight: '2px' } }, `Last ${s.form.results.length}`),
+    ...s.form.results.map((r) => resultPill(r)),
+    trendArrow(s.trend),
+    s.form.deltaPp !== undefined
+      ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(s.form.deltaPp)}pp vs range`)
+      : null,
   );
 }
 
