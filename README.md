@@ -237,19 +237,26 @@ account's per-role lines beneath it.
 - **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
   how each tracked game felt, and rate your own **performance** on a 0-100 slider; **measured
   (⚡) targets are auto-graded from that match's stats and shown read-only**. An
-  always-visible inbox of ungraded games, independent of the global filters. Each collapsed
-  row carries **inline quick-grade chips** for its self-rated targets plus a Tilt toggle —
-  grade them right there and the game saves and clears itself, no need to open the full card
-  unless you also want SR/performance/comms. **Skip** on an open card collapses it and jumps
-  straight to the next pending game, so a backlog is a straight line instead of scroll-and-hunt;
-  keyboard shortcuts cover the whole loop (`H`/`P`/`M` grade, `S` save, `N` skip, `T`/`X` toggle
-  Tilt/Toxic mates). A game that never should have been tracked can be **deleted** straight
-  from its grading card instead of graded — distinct from the "Not a real match" dismiss above
-  it, which drops a *held* match that never entered history. A deep backlog doesn't have to be
-  graded one card at a time: **Mark older as no-read** bulk-clears everything past an age
-  cutoff (1 day / 7 days / all of it) with a live preview of how many that will affect, and a
-  12-second **Undo**. The sidebar's Review count is scoped to the last 7 days — not the
-  lifetime backlog, which would only ever grow — with the full total in its tooltip.
+  always-visible inbox of ungraded games, independent of the global filters, **grouped by day**
+  ("Yesterday · 2 games · 1-1") — today's games stay open by default, older days collapse to a
+  one-line header you expand when you're ready for them, and each header carries its own
+  **Mark as no-read**. Rows and cards name the **account** the game was played on, and the
+  skill-rating section says which track its ±% moves — useful the moment you're tracking more
+  than one account. The subtitle turns into a live "**7 of 12 graded this session**" counter the
+  moment you start working through a backlog. Each collapsed row carries **inline quick-grade
+  chips** for its self-rated targets plus a Tilt toggle — grade them right there and the game
+  saves and clears itself, no need to open the full card unless you also want SR/performance/
+  comms. **Skip** on an open card collapses it and jumps straight to the next pending game
+  (opening its day if it's still collapsed), so a backlog is a straight line instead of
+  scroll-and-hunt; keyboard shortcuts cover the whole loop (`H`/`P`/`M` grade, `S` save, `N`
+  skip, `T`/`X` toggle Tilt/Toxic mates). A game that never should have been tracked can be
+  **deleted** straight from its grading card instead of graded — distinct from the "Not a real
+  match" dismiss above it, which drops a *held* match that never entered history. A deep
+  backlog doesn't have to be graded one card at a time: **Mark older as no-read** bulk-clears
+  everything past an age cutoff (1 day / 7 days / all of it) with a live preview of how many
+  that will affect, and a 12-second **Undo**. The sidebar's Review count is scoped to the last
+  7 days — not the lifetime backlog, which would only ever grow — with the full total in its
+  tooltip.
 - **Targets** — build a target (self-rated ◎, or measured ⚡ which **auto-grades from your
   stats per 10 minutes played** — no manual read). The **Target library** card offers curated starting
   points grouped by **Mechanics · Macro · Strategy · Training**, each entry showing a one-line

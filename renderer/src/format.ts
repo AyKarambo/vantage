@@ -116,6 +116,15 @@ export function dateLong(ts = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+/** A `groupByDay` key/label ("Today", "Yesterday", or a raw `YYYY-MM-DD`) → a friendly short date. Shared by Matches and Review's day headers. */
+export function prettyDay(label: string): string {
+  if (label === 'Today' || label === 'Yesterday') return label;
+  const d = new Date(`${label}T12:00:00`);
+  return Number.isNaN(d.getTime())
+    ? label
+    : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 /**
  * The "played alongside" vs "played against" relation, spelled one way
  * everywhere (K7): Players called them "With me / Against me", the match

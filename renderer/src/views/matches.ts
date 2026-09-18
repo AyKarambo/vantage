@@ -3,7 +3,7 @@ import { h } from '../dom';
 import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
 import { aggregateGrade, dayKey, groupByDay, groupBySitting } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
-import { rankLabel, relTime, roleLabel, signed } from '../format';
+import { prettyDay, rankLabel, relTime, roleLabel, signed } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
@@ -169,15 +169,6 @@ function dayHeader(label: string, wins: number, losses: number, netSR?: number):
     // never have, since a calendar day isn't the unit an SR run is judged by.
     netSR !== undefined ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(Math.round(netSR))}%`) : null,
   );
-}
-
-/** 'Today'/'Yesterday' pass through; raw day keys render as a friendly date. */
-function prettyDay(label: string): string {
-  if (label === 'Today' || label === 'Yesterday') return label;
-  const d = new Date(`${label}T12:00:00`);
-  return Number.isNaN(d.getTime())
-    ? label
-    : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 /** A field's rendered value for `m`, or `null` when it has nothing to show (spec F3). */

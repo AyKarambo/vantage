@@ -497,6 +497,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   card now opens the next pending game and scrolls to it, instead of just collapsing and leaving
   you to find it yourself, and three new keys cover the rest of the loop: **N** skips, **T**/**X**
   toggle Tilt/Toxic mates.
+- **Review groups your backlog by day.** Rows now sit under day headers — "Yesterday · 2 games
+  · 1-1" — instead of one flat list of 150 identical rows with only a relative time to go on.
+  Today's games stay open; older days start collapsed and each gets its own **Mark as no-read**
+  for clearing just that day. Once you're a few games into a session, the subtitle switches from
+  a plain count to "**7 of 12 graded this session**" — the same backlog, framed as progress.
+  Every row and card now also names the **account** the game was played on, and the
+  skill-rating section says which track its ±% moves — the corner rank chip used to be the only
+  place that told you.
 
 ## 0.34.0 — 31 July 2026
 
