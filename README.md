@@ -39,7 +39,9 @@ scrolls, with the account switcher and session card staying put either side of i
 account switcher lists every account as an aligned row — ✓ · name · rank — with the active
 account's per-role lines beneath it.
 
-- **Overview** — greeting, KPIs (winrate, games, rank, streak — the Rank tile marks a
+- **Overview** — greeting, a computed **coach headline** subtitle (whichever of rank movement,
+  a role deficit, or session fade reads strongest right now, with a **Why →** jump to the
+  screen that explains it), KPIs (winrate, games, rank, streak — the Rank tile marks a
   winrate-derived guess as **"E3 est."** with a **Set rank** action instead of drawing it
   like a measured number, and the Winrate delta states its own window, "▾ 16 pts · last 5
   days"), the flagship

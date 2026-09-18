@@ -176,7 +176,7 @@ export function backControl(): HTMLButtonElement | null {
 }
 
 /** Standard view header: back, title, subtitle, and optional right-aligned actions. */
-export function viewHead(title: string, sub: string, actions?: Node | Node[]): HTMLElement {
+export function viewHead(title: string, sub: string | Node, actions?: Node | Node[]): HTMLElement {
   return h('div', { class: 'view-head' },
     // Back and the titles are ONE flex child: `.view-head` is
     // justify-content:space-between over exactly two children, and a third
