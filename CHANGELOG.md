@@ -505,6 +505,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   Every row and card now also names the **account** the game was played on, and the
   skill-rating section says which track its ±% moves — the corner rank chip used to be the only
   place that told you.
+- **Review and Matches link both ways.** A Review card's head gets an **Open match ›** link
+  straight into that game's full detail page (round score and duration ride along on the meta
+  line when the game reported them); an ungraded row's **⋯ menu** on Matches, and the detail
+  page's own header, both gain a **Grade on Review** action that opens straight to that match's
+  card instead of making you re-find it in the inbox. The row menu also gains **Edit match…**,
+  and the detail page's header gains its own **Delete match**, matching what the row menu
+  already offered. A measured target with nothing to show on a given game now folds into one
+  muted line instead of a dead row per target, and the active-targets strip labels a measured
+  target **auto**, a self-rated one **manual**.
 
 ## 0.34.0 — 31 July 2026
 

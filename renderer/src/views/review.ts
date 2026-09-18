@@ -30,6 +30,7 @@ import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelt
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
 import { openPopover } from '../components/popover';
+import { inlineLink } from '../components/inlineLink';
 import { store } from '../store';
 import { bridge } from '../bridge';
 import { registerShortcut } from '../shortcuts';
@@ -66,6 +67,15 @@ registerShortcut({ combo: 'x', description: 'Toggle Toxic mates on the open game
 
 export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
+  // A deep link (R4) — Matches' "Grade on Review" row action, or the match
+  // detail head's own version — opens straight to that match's card instead
+  // of the newest pending one. Only armed when the param actually CHANGED
+  // since the last render: an internal store.rerender() while already on
+  // this view (grading, skipping) must not keep re-forcing the same match
+  // open every time.
+  if (ctx.params.matchId && ctx.params.matchId !== lastParamMatchId) forceOpenMatchId = ctx.params.matchId;
+  lastParamMatchId = ctx.params.matchId;
+
   const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
   const pending = d.reviewInbox.filter((m) => !gradedThisSession.has(m.matchId));
   // The subtitle states the TRUE, uncapped backlog (R1) — `pending.length` is
@@ -95,24 +105,31 @@ export function review(ctx: ViewContext): HTMLElement {
   // and scrolls to it — plain "collapse and hope the player finds the next
   // row" was the opposite of a triage flow. The chain runs across day
   // boundaries (R3) even though the rows below render grouped by day; a
-  // cross-day Skip sets `forceOpenMatchId` before forcing this render. When
-  // it's set, it's the ONLY card that should start open — falling through to
+  // cross-day Skip (or a deep link's matchId, R4) sets `forceOpenMatchId`
+  // before forcing this render. When it names a match actually in the
+  // inbox, it's the ONLY card that should start open — falling through to
   // "also open pending[0]" would leave two cards open after a Skip that
-  // landed anywhere but the top of the list.
+  // landed anywhere but the top of the list. An invalid/stale id (the match
+  // got graded elsewhere first) falls back to the ordinary default instead
+  // of opening nothing at all.
+  const validForceOpen = forceOpenMatchId != null && pending.some((m) => m.matchId === forceOpenMatchId);
   const items = pending.map((m, i) => {
-    const startOpen = forceOpenMatchId ? m.matchId === forceOpenMatchId : i === 0;
-    return item(m, active, startOpen, d.placements, m.matchId === forceOpenMatchId);
+    const startOpen = validForceOpen ? m.matchId === forceOpenMatchId : i === 0;
+    return item(ctx, m, active, startOpen, d.placements, validForceOpen && m.matchId === forceOpenMatchId);
   });
   for (let i = 0; i < items.length; i++) items[i].next = items[i + 1] ?? null;
-  forceOpenMatchId = null;
   const itemByMatchId = new Map(pending.map((m, i) => [m.matchId, items[i]]));
 
-  // Day groups (R3): the newest day is always expanded (it holds the one
+  // Day groups (R3): the newest day is always expanded (it holds the default
   // pre-opened card); older ones start collapsed so a deep backlog isn't one
   // giant flat scroll, and stay open once the player opens them —
   // `expandedDays` survives a re-render the same way `gradedThisSession` does.
   const dayGroups = groupByDay(pending);
   if (dayGroups[0]) expandedDays.add(dayGroups[0].key);
+  // A forced-open match (skip or deep link) needs its OWN day expanded too —
+  // it's very possibly not the newest one.
+  if (validForceOpen) expandedDays.add(itemByMatchId.get(forceOpenMatchId!)!.dayKey);
+  forceOpenMatchId = null;
 
   return h('div', { class: 'view view--narrow' },
     head,
@@ -332,7 +349,11 @@ function activeStrip(active: TargetSummary[]): HTMLElement {
   return h('div', { class: 'review-active' },
     h('span', { class: 'u-muted', style: { fontSize: '11.5px' } }, 'Active targets'),
     ...(active.length
-      ? active.map((t) => badge(t.name, 'manual'))
+      // Measured (⚡) targets grade themselves from stats — this strip is the
+      // one place a player sees every active target at a glance, so it should
+      // say the same thing the cards below it do (R4): a self-rated target is
+      // something YOU do, a measured one is something the app already knows.
+      ? active.map((t) => badge(t.name, t.mode === 'measured' ? 'auto' : 'manual'))
       : [h('span', { class: 'u-dim', style: { fontSize: '11.5px' } }, 'none yet — add some on the Targets page')]),
   );
 }
@@ -408,12 +429,16 @@ interface ReviewItem {
 }
 
 /**
- * Set by a cross-day Skip (R3) just before it forces a full re-render, so
- * the fresh {@link item} call for that match starts open and scrolls itself
- * into view once mounted — a same-day Skip doesn't need this at all, since
- * its target host is already in the tree and can be flipped open in place.
+ * Set by a cross-day Skip (R3) or a fresh deep-link matchId param (R4) just
+ * before/during a render that should force that one card open, so the fresh
+ * {@link item} call for that match starts open and scrolls itself into view
+ * once mounted — a same-day Skip doesn't need this at all, since its target
+ * host is already in the tree and can be flipped open in place.
  */
 let forceOpenMatchId: string | null = null;
+
+/** The `matchId` param `review()` saw on its last call — lets a deep link (R4) tell a fresh navigation apart from an internal re-render while already on this view. */
+let lastParamMatchId: string | undefined;
 
 /** In-scope, self-rated (hand-graded) targets for a match — measured targets auto-grade and never appear here. Shared by the collapsed quick-grade row and the expanded card so they can't disagree on which targets a game needs. */
 function selfTargetsFor(m: MatchRow, active: TargetSummary[]): TargetSummary[] {
@@ -447,6 +472,7 @@ function quickSave(m: MatchRow, grades: Record<string, TargetGrade>, flags: Matc
 
 /** One inbox entry: a collapsed row (with inline quick-grade) that expands into the full grading card. */
 function item(
+  ctx: ViewContext,
   m: MatchRow,
   active: TargetSummary[],
   startOpen: boolean,
@@ -489,7 +515,7 @@ function item(
   const onSaved = (): void => { store.rerender(); void store.refresh(); };
   const draw = (): void => {
     render(host, open
-      ? expanded(m, active, onSaved, skipToNext, placements)
+      ? expanded(ctx, m, active, onSaved, skipToNext, placements)
       : collapsed(m, active, () => { open = true; draw(); }, onSaved));
   };
   draw();
@@ -546,6 +572,7 @@ function tiltToggle(flags: MatchMental, onToggle: () => void): HTMLElement {
 }
 
 function expanded(
+  ctx: ViewContext,
   m: MatchRow,
   active: TargetSummary[],
   onSaved: () => void,
@@ -596,7 +623,21 @@ function expanded(
   const selfTargets = active.filter((t) => t.mode !== 'measured' && matchInTargetScope(m, t));
   const measuredTargets = active.filter((t) => t.mode === 'measured');
   const rows = selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
-  const targetEls = [...rows.map((r) => r.el), ...measuredTargets.map((t) => measuredResultRow(t, m.measuredGrades?.[t.id]))];
+  // A measured target with nothing to show ("no stat this match") used to get
+  // its own row regardless — on a card with several measured targets, most of
+  // it was repeats of the same dead sentence. Fold them into one muted line
+  // (R4); a target that DID measure something still gets its own row.
+  const measuredHasStat = (t: TargetSummary): boolean => {
+    const res = m.measuredGrades?.[t.id];
+    return res != null && res !== 'no-stat';
+  };
+  const measuredWithStat = measuredTargets.filter(measuredHasStat);
+  const measuredNoStat = measuredTargets.filter((t) => !measuredHasStat(t));
+  const targetEls = [
+    ...rows.map((r) => r.el),
+    ...measuredWithStat.map((t) => measuredResultRow(t, m.measuredGrades?.[t.id])),
+    ...(measuredNoStat.length ? [measuredNoStatHint(measuredNoStat)] : []),
+  ];
   let focusIdx = 0;
   const markFocus = (): void => {
     rows.forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
@@ -741,13 +782,29 @@ function expanded(
 
   const flagsRow = mentalFlagsRow(flags);
 
+  // The score/duration fold-in (R4) rides on the same meta line as the rest
+  // of the auto-facts header — when GEP reported either, it's another free
+  // fact the player would otherwise have to open the match to see.
+  const metaExtra = [
+    m.finalScore ? m.finalScore : null,
+    m.durationMinutes != null ? `${m.durationMinutes} min` : null,
+  ].filter((s): s is string => s != null).join(' · ');
+
   const el = card({ variant: 'raised', class: 'review-card' },
     h('div', { class: 'review-card-head' },
       h('span', { class: 'badge badge--auto' }, '⚡ auto'),
       resultPill(m.result),
       h('span', { style: { fontSize: '13.5px', fontWeight: '600' } }, m.map),
       h('span', { class: 'u-dim', style: { fontSize: '12px' } },
-        `· ${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)} · ${m.account}`),
+        `· ${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)} · ${m.account}${metaExtra ? ` · ${metaExtra}` : ''}`),
+      // Not a navigate-the-whole-row click (unlike a Matches row) — the card
+      // is full of its own controls, so only this explicit link leaves it.
+      inlineLink('Open match ›', {
+        class: 'review-open-match',
+        style: { marginLeft: 'auto', fontSize: '12px' },
+        title: 'Open this match’s full detail page — scoreboard, per-hero stats, player history',
+        onClick: () => ctx.navigate('matchDetail', { matchId: m.matchId }),
+      }),
     ),
     section('Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
       ...(targetEls.length
@@ -827,6 +884,12 @@ function measuredResultRow(
     ),
     h('div', { class: 'u-muted', style: { fontSize: '12px', whiteSpace: 'nowrap' } }, body),
   );
+}
+
+/** The collapsed "no stat this match" line for measured targets that had nothing to grade (R4) — one line instead of one dead row per target. */
+function measuredNoStatHint(targets: TargetSummary[]): HTMLElement {
+  return h('div', { class: 'hint', title: targets.map((t) => t.name).join(', ') },
+    `⚡ ${targets.length} measured target${targets.length === 1 ? '' : 's'} can't be graded here — this match has no stats`);
 }
 
 function gradeLabel(g: TargetGrade): string {

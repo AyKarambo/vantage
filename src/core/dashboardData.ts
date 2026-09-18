@@ -494,6 +494,7 @@ function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: A
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
     ...(targetGrades ? { targetGrades } : {}),
+    reviewed: g.review != null,
   };
 }
 

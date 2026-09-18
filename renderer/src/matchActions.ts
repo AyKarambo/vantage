@@ -30,8 +30,12 @@ export interface DeletableMatch {
  *
  * `reset` re-enables the button when the delete didn't happen, so a failure
  * leaves a live control rather than a dead one.
+ *
+ * Resolves `true` only on an actual delete — a caller that needs to react
+ * specifically to success (the match detail header navigating back, R4)
+ * checks this instead of assuming the promise settling means it worked.
  */
-export async function deleteMatch(m: DeletableMatch, reset: () => void): Promise<void> {
+export async function deleteMatch(m: DeletableMatch, reset: () => void): Promise<boolean> {
   // Sampled BEFORE the delete: the notice below is about the demo dataset
   // *appearing*, so what matters is the flip, not the end state. Someone
   // already browsing demo data hasn't lost anything.
@@ -42,7 +46,7 @@ export async function deleteMatch(m: DeletableMatch, reset: () => void): Promise
   } catch (err) {
     reset();
     toast(`Couldn't delete that match — ${err instanceof Error ? err.message : String(err)}`);
-    return;
+    return false;
   }
   // A no-op means the row was already gone (a stale snapshot, or a delete that
   // raced another surface). Say so instead of claiming a delete that never was.
@@ -50,7 +54,7 @@ export async function deleteMatch(m: DeletableMatch, reset: () => void): Promise
     reset();
     toast('That match was already gone — refreshing.');
     await store.refresh();
-    return;
+    return false;
   }
   // Positive evidence for the back stack: an entry pointing at this match is now
   // a dead end, so Back skips it. The Undo below takes that back.
@@ -73,6 +77,7 @@ export async function deleteMatch(m: DeletableMatch, reset: () => void): Promise
       action: { label: 'Undo', run: () => void undoDelete(m) },
     },
   );
+  return true;
 }
 
 /**

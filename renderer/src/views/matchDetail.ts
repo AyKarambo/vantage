@@ -10,7 +10,7 @@ import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEnc
 import { bridge } from '../bridge';
 import { fmt, fmt1, rankLabel, relTime, roleLabel, signed, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
-import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
+import { button, card, confirmButton, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
@@ -28,6 +28,7 @@ import { inlineLink } from '../components/inlineLink';
 import { scoreboard } from '../components/scoreboard';
 import { store } from '../store';
 import { gradedThisSession } from '../reviews';
+import { deleteMatch } from '../matchActions';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
@@ -141,11 +142,36 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
       h('div', { class: `detail-result is-${state}` }, RESULT_TEXT[d.result] ?? d.result),
       h('h1', { class: 'detail-map' }, d.map),
       meta,
-      h('div', { style: { marginTop: '10px' } },
+      h('div', { style: { marginTop: '10px', display: 'flex', gap: '8px' } },
         button('✎ Edit match', {
           variant: 'soft',
           title: 'Edit this match — result, map, role, heroes, SR %, flags, and target grades',
           onClick: () => openMatchEditor(ctx, d),
+        }),
+        // Only offered while ungraded (R4) — once a review exists, the Grades
+        // card below already shows it; re-opening Review from here would just
+        // land on an "all caught up" inbox that no longer has this match.
+        d.review == null
+          ? button('Grade on Review', {
+              variant: 'ghost',
+              title: 'Grade this match on the Review screen',
+              onClick: () => ctx.navigate('review', { matchId: d.matchId }),
+            })
+          : null,
+        confirmButton({
+          label: 'Delete match',
+          confirmLabel: "Delete permanently — can't be undone",
+          variant: 'ghost',
+          title: 'Remove this match from your history',
+          confirmTitle: `Permanently deletes your ${d.map} ${d.result.toLowerCase()} — this can't be undone`,
+          onConfirm: (reset) => {
+            void deleteMatch(d, reset).then((deleted) => {
+              // Only leave the page on an actual delete — a failed/no-op
+              // attempt (see deleteMatch) already told the player why via
+              // its own toast, and this page is still perfectly valid.
+              if (deleted) store.goBack();
+            });
+          },
         }),
       ),
     ),
@@ -450,6 +476,20 @@ function openMatchEditor(ctx: ViewContext, d: MatchDetail): void {
       throw err;
     },
   );
+}
+
+/**
+ * {@link openMatchEditor} for a caller that only has a `matchId`, not an
+ * already-fetched `MatchDetail` — the Matches row menu's "Edit match…" (R4),
+ * which used to make the player open the row THEN click Edit inside it.
+ * `editorOpening` still guards this path (shared with the detail page's own
+ * button), so a rapid double-click here can't stack two editors either.
+ */
+export function openMatchEditorById(ctx: ViewContext, matchId: string): void {
+  if (editorOpening) return;
+  void bridge.matchDetail(matchId, ctx.data.filters).then((d) => {
+    if (d) openMatchEditor(ctx, d);
+  });
 }
 
 function buildMatchEditor(

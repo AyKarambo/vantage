@@ -98,6 +98,15 @@ export interface MatchRow {
    * this is what the Matches-list "Target grades" field renders.
    */
   targetGrades?: Record<string, TargetGrade>;
+  /**
+   * Whether this match has a saved `MatchReview` record at all — true even
+   * for an empty one ("Mark as no-read" deliberately saves `{ grades: {},
+   * flags: {} }`), since that's still a review the player has dealt with.
+   * `targetGrades`/`flags` being absent doesn't mean the same thing: an
+   * ignored/no-read match has neither, but so does a genuinely never-reviewed
+   * one — this is what tells the two apart (R4).
+   */
+  reviewed: boolean;
 }
 
 /**
