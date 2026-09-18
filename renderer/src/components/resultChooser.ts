@@ -39,6 +39,36 @@ export function bindResultKeys(scope: HTMLElement, row: HTMLElement): void {
   });
 }
 
+export interface SaveKeysOpts {
+  save: () => void;
+  /**
+   * Ctrl/Cmd+Enter — the log card's "Save & log another". Omitted (the match
+   * editor, which has no "next" match to chain into, L5), Ctrl/Cmd+Enter falls
+   * back to plain `save` too, so the shortcut still does SOMETHING there
+   * rather than silently no-opping.
+   */
+  saveAndNext?: () => void;
+}
+
+/**
+ * Enter-to-save, shared by the quick-log card and the match-detail editor
+ * (L5 — the editor used to have no Enter-to-save at all). Enter saves from
+ * anywhere but a focused button (which keeps its native click) — a typeahead
+ * list open elsewhere in the form swallows Enter itself before it gets here,
+ * so this never double-fires against one. `scope` must be focusable so the
+ * keydown actually reaches it.
+ */
+export function bindSaveKeys(scope: HTMLElement, opts: SaveKeysOpts): void {
+  scope.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    // e.repeat: ignore key-repeat from a held Enter — only a fresh keydown saves.
+    if (e.key !== 'Enter' || e.repeat || t instanceof HTMLButtonElement) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) (opts.saveAndNext ?? opts.save)();
+    else opts.save();
+  });
+}
+
 export function resultChooser(opts: ResultChooserOpts): HTMLElement {
   const options: Result[] = ['Win', 'Loss', 'Draw'];
   const row = h('div', { style: { display: 'flex', gap: '8px' } });

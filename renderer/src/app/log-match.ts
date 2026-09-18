@@ -9,13 +9,14 @@
  * targets inline.
  */
 import { h, render } from '../dom';
-import { time, roleLabel, signed } from '../format';
+import { dateLong, isToday, time, roleLabel, signed, toDatetimeLocal } from '../format';
 import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
+import { dialogHeader } from '../components/dialogHeader';
 import { openModal } from '../components/overlay';
 import { mapPicker, resolveMapName, notKnownMapHint } from '../components/mapPicker';
-import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
-import { resultChooser, bindResultKeys } from '../components/resultChooser';
+import { targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
+import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
 import { field, optionalLabel } from '../components/formField';
@@ -41,6 +42,13 @@ const PLAYED_OFFSETS: Array<{ label: string; minutes: number }> = [
   { label: '1h ago', minutes: 60 },
   { label: '2h ago', minutes: 120 },
 ];
+/**
+ * A fifth "Other…" chip (L5) — the four preset offsets alone couldn't honestly
+ * place a session logged the next morning, or a game from 3-4 hours back, even
+ * though `playedAt` is an accepted, clamped-to-the-past absolute instant.
+ * Reveals a `datetime-local` input instead of a relative offset.
+ */
+const PLAYED_OTHER_LABEL = 'Other…';
 
 interface LogState {
   result: Result;
@@ -81,6 +89,15 @@ interface LogState {
 /** Fields carried into the next form by "Save & next" (same sitting, so heroes usually hold). */
 export interface LogCarry {
   heroes?: string[];
+  /**
+   * The just-saved match's own `playedAt` (L5) — backfilling a whole missed
+   * SESSION used to mean re-clicking the same relative-offset chip on every
+   * form, each one measured from an ever-later "now". The next form instead
+   * preselects this exact instant on the "Other…" chip, for the player to nudge
+   * forward by hand. Absent (→ the normal "Just now" default) when the just-
+   * saved match wasn't itself backfilled.
+   */
+  playedAt?: number;
 }
 
 // Cheatsheet entries only — the dialog binds these keys itself (the global
@@ -89,8 +106,11 @@ const never = (): boolean => false;
 registerShortcut({ combo: 'w', description: 'Result: Win (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'l', description: 'Result: Loss (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'd', description: 'Result: Draw (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'enter', description: 'Save the match (in the log dialog)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (in the log dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'enter', description: 'Save the match (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (log dialog) · save (edit dialog)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'h', description: 'Grade a focused target: Hit (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'p', description: 'Grade a focused target: Partial (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'm', description: 'Grade a focused target: Missed (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 
 /**
  * Serialize the chip/switch-driven mental state into the optional per-match
@@ -198,7 +218,7 @@ function buildForm(
     anchorPct: '',
     predTier: initialPrediction.tier,
     predDivision: initialPrediction.division,
-    playedAt: null,
+    playedAt: carry?.playedAt ?? null,
     performance: undefined,
   };
 
@@ -358,7 +378,11 @@ function buildForm(
 
   const timeBadgeHost = h('span');
   const paintTime = (): void => {
-    render(timeBadgeHost, badge(`◎ manual · ${time(state.playedAt ?? Date.now())}`, 'manual'));
+    // A backfill across midnight used to show only hh:mm with no date cue at
+    // all (L5) — the badge now names the day too once the instant isn't today.
+    const ts = state.playedAt ?? Date.now();
+    const when = isToday(ts) ? time(ts) : `${dateLong(ts)} · ${time(ts)}`;
+    render(timeBadgeHost, badge(`◎ manual · ${when}`, 'manual'));
   };
   paintTime();
 
@@ -381,20 +405,14 @@ function buildForm(
   // L2: sticky (top: 0 within the scrolling .modal-card) so it — and the Save
   // row's sticky footer, below — stay visible on a card taller than the
   // window, instead of the whole card scrolling as one block with the header
-  // and the Save/Save & next row both off-screen at once.
-  const header = h('div', {
-    style: {
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px',
-      borderBottom: '1px solid var(--border)', position: 'sticky', top: '0', background: 'var(--card)', zIndex: '1',
-    },
-  },
-    h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, 'Log match'),
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-      accountSelect,
-      timeBadgeHost,
-      h('button', { class: 'overlay-close', on: { click: close } }, '✕'),
-    ),
-  );
+  // and the Save/Save & next row both off-screen at once. Shared with the
+  // match editor's own header (L5, dialogHeader).
+  const header = dialogHeader({
+    title: 'Log match',
+    extra: [accountSelect],
+    badge: timeBadgeHost,
+    onClose: close,
+  });
 
   const resultRow = resultChooser({
     value: state.result,
@@ -439,16 +457,51 @@ function buildForm(
     }),
   );
 
+  // "Other…" (L5): a `datetime-local` input, max=now, for the sessions the four
+  // relative-offset chips can't honestly reach — logged the next morning, or a
+  // game from 3-4 hours back. Hidden until "Other…" is the active chip.
+  const playedOtherInput = h('input', {
+    type: 'datetime-local',
+    class: `vt-input${carry?.playedAt == null ? ' hidden' : ''}`,
+    style: { marginTop: '8px' },
+    max: toDatetimeLocal(Date.now()),
+    value: carry?.playedAt != null ? toDatetimeLocal(carry.playedAt) : '',
+  }) as HTMLInputElement;
+  playedOtherInput.addEventListener('change', () => {
+    if (!playedOtherInput.value) return;
+    const ms = new Date(playedOtherInput.value).getTime();
+    if (Number.isNaN(ms)) return;
+    state.playedAt = Math.min(ms, Date.now());
+    paintTime();
+  });
+  const playedChipsHost = h('div');
+  const paintPlayedChips = (active: string): void => {
+    render(playedChipsHost, choiceSegment(
+      [...PLAYED_OFFSETS.map((o) => o.label), PLAYED_OTHER_LABEL], active, (v) => {
+        if (v === PLAYED_OTHER_LABEL) {
+          // Seed the input from wherever "now" is understood to be right now
+          // (an already-chosen backfill instant, or the live moment) rather
+          // than defaulting it blank.
+          state.playedAt = state.playedAt ?? Date.now();
+          playedOtherInput.value = toDatetimeLocal(state.playedAt);
+          playedOtherInput.classList.remove('hidden');
+          paintTime();
+          return;
+        }
+        playedOtherInput.classList.add('hidden');
+        // Snapshot the absolute timestamp at click time — "Just now" stays null so
+        // both the badge and the eventual save reflect the moment actually chosen,
+        // not a live-recomputed offset that would drift while the form sits open.
+        const minutes = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
+        state.playedAt = minutes > 0 ? Date.now() - minutes * 60_000 : null;
+        paintTime();
+      },
+    ));
+  };
+  paintPlayedChips(carry?.playedAt != null ? PLAYED_OTHER_LABEL : PLAYED_OFFSETS[0].label);
   const playedField = field(
     optionalLabel('Played', '— backfill a game you forgot to log'),
-    choiceSegment(PLAYED_OFFSETS.map((o) => o.label), PLAYED_OFFSETS[0].label, (v) => {
-      // Snapshot the absolute timestamp at click time — "Just now" stays null so
-      // both the badge and the eventual save reflect the moment actually chosen,
-      // not a live-recomputed offset that would drift while the form sits open.
-      const minutes = PLAYED_OFFSETS.find((o) => o.label === v)?.minutes ?? 0;
-      state.playedAt = minutes > 0 ? Date.now() - minutes * 60_000 : null;
-      paintTime();
-    }),
+    h('div', null, playedChipsHost, playedOtherInput),
   );
 
   // Multi-hero picker: a role-filtered chip grid (union with anything already
@@ -566,14 +619,18 @@ function buildForm(
   const commsBlock = field(optionalLabel('Comms', '— how team comms felt'),
     commsToneSwitch(state.mental));
 
-  const targetsBlock = activeTargets.length
-    ? field(
-        optionalLabel('Targets', '— grade now or later on Review'),
-        h('div', { class: 'stack', style: { gap: '10px' } },
-          ...activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }).el),
-        ),
-      )
-    : null;
+  // L5: kept as a stable field (a "No active targets" hint, matching the
+  // editor's own copy) rather than dropped outright when there are none —
+  // the form no longer reflows around whether targets happen to exist.
+  const targetRows = activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
+  const targetsBlock = field(
+    optionalLabel('Targets', '— grade now or later on Review'),
+    h('div', { class: 'stack', style: { gap: '10px' } },
+      ...(targetRows.length
+        ? targetRows.map((r) => r.el)
+        : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+    ),
+  );
 
   const saveAndClose = (): void => {
     void persist().then((ok) => {
@@ -592,8 +649,15 @@ function buildForm(
     void persist().then((ok) => {
       if (!ok) return;
       close();
-      // Same sitting → the heroes usually hold; map/result never do.
-      const openNext = (): void => openLogMatch(ctx, { heroes: [...state.heroes] });
+      // Same sitting → the heroes usually hold; map/result never do. A backfilled
+      // instant carries forward too (L5) — a missed SESSION shouldn't mean
+      // re-clicking the same relative chip, each measured from an ever-later
+      // "now", on every single form; "Just now" (null) carries nothing, since
+      // there's no backfill happening to preselect a starting point for.
+      const openNext = (): void => openLogMatch(ctx, {
+        heroes: [...state.heroes],
+        ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
+      });
       // A completing match gets the reveal-rank confirmation first rather
       // than stacking a second modal under/over it — "next" chains onto its
       // confirm. A Cancel here means "I'll finish this later", so it stays
@@ -661,18 +725,11 @@ function buildForm(
   );
 
   // Keyboard flow: W/L/D pick the result when not typing (shared binding);
-  // Enter saves from anywhere but a button (a focused button keeps its native
-  // click) and the typeahead swallows Enter itself while its list is open.
+  // Enter saves, Ctrl+Enter saves & logs another (shared with the match
+  // editor, L5 — see bindSaveKeys).
   bindResultKeys(form, resultRow);
-  form.addEventListener('keydown', (e) => {
-    const t = e.target as HTMLElement;
-    // e.repeat: ignore key-repeat from a held Enter — only a fresh keydown saves.
-    if (e.key === 'Enter' && !e.repeat && !(t instanceof HTMLButtonElement)) {
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) saveAndNext();
-      else saveAndClose();
-    }
-  });
+  bindSaveKeys(form, { save: saveAndClose, saveAndNext });
+  bindTargetGradeKeys(form, targetRows);
 
   // Nothing moves focus into the dialog by default, which leaves W/L/D dead and
   // (worse) leaves focus on the opener button, so a stray Enter re-clicks it and

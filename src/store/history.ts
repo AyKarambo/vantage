@@ -181,15 +181,17 @@ export class HistoryStore {
 
   /**
    * Patch a stored game's editable fields in place (result/role/map/heroes/
-   * gameType, plus the manual layer mental/srDelta/review/performance). Only the
-   * provided keys change; a `null` value deletes that key (e.g. clearing srDelta);
-   * false if the id is unknown. Game facts are editable on any match now — the
-   * {@link ../main/dataProvider editMatch} layer stamps `factsEditedAt` when it
-   * hand-corrects an auto-tracked (GEP) record; this store just persists the patch.
+   * gameType/timestamp, plus the manual layer mental/srDelta/review/performance).
+   * Only the provided keys change; a `null` value deletes that key (e.g. clearing
+   * srDelta); false if the id is unknown. Game facts are editable on any match now
+   * — the {@link ../main/dataProvider editMatch} layer stamps `factsEditedAt` when
+   * it hand-corrects an auto-tracked (GEP) record; this store just persists the
+   * patch. `timestamp` has no `null` form (L5) — every match keeps SOME instant,
+   * and `editMatch` already gates it to hand-logged matches before it ever reaches here.
    */
   editManual(
     matchId: string,
-    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'mental' | 'review'>> &
+    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'timestamp' | 'mental' | 'review'>> &
       { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null;
         rankAtStart?: GameRecord['rankAtStart'] | null },
   ): boolean {

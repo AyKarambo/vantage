@@ -66,6 +66,13 @@ export interface MatchEditInput {
   /** New performance rating (0-100), or `null` to clear it; `undefined` leaves it unchanged. */
   performance?: number | null;
   grades?: Record<string, TargetGrade>;
+  /**
+   * Correct when this match actually ended (epoch ms) — honoured for a
+   * hand-logged match only; a GEP capture's timestamp is locked like its other
+   * facts stay locked on an auto-tracked match. Clamped to the past by the
+   * receiver. There is no "clear" — every match keeps SOME timestamp.
+   */
+  playedAt?: number;
 }
 
 /** A new improvement target authored in the Targets builder. */

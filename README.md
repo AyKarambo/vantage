@@ -130,6 +130,16 @@ account's per-role lines beneath it.
   progress shows the rank you held **after that specific match**: forward-calculated for
   matches at/after your anchor, and **reconstructed backward** (best-effort) for older
   ones, so a past game no longer just echoes today's rank.
+  The editor no longer trails the log card either (L5): the same sticky header (title, a
+  read-only map · role label, the `⚡ auto`/`◎ manual · <when>` badge plus the **edited**
+  pill, and a real ✕ close), `Enter`/`Ctrl+Enter` to save (no "save & next" here, so
+  `Ctrl+Enter` just saves too rather than doing nothing), and `↑`/`↓` + `H`/`P`/`M` to
+  grade whichever target row is focused — all built from the exact same shared pieces the
+  log card uses, so the two can't drift apart again. A **Played** `datetime-local` field
+  also sits under Role now, for a hand-logged match only (a GEP capture's timestamp is the
+  instant the game itself ended and stays locked): correcting it re-sorts the match
+  everywhere that reads its timestamp — the Matches list's day grouping, the detail page's
+  own day-strip stepper, rank-at-start.
   Each match also stores the **rank you went into it with** — shown on the detail page and
   available as a **Rank at start** field in the Matches list, so a session reads back as the
   climb it was rather than as one number repeated. It is a **snapshot**, written when that
@@ -351,7 +361,9 @@ account's per-role lines beneath it.
   exactly one map keeps what you typed (instead of silently reverting to blank) and says why
   right away. `Enter`
   saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's the same
-  sitting). The header and the Save row **stay on screen** (L2 — sticky top/bottom within the
+  sitting — and, when this game was itself backfilled, its own Played instant too, L5, so a missed
+  SESSION doesn't mean re-clicking the same offset chip, measured from an ever-later "now", on every
+  single form). The header and the Save row **stay on screen** (L2 — sticky top/bottom within the
   card) on a card taller than the window, instead of scrolling the Save button out of view. The
   compact **account** select lives in the header (rarely changed mid-session); pick your **role**
   (Tank / Damage / Support / **Open Queue**); the **hero picker defaults to your most-played
@@ -360,8 +372,10 @@ account's per-role lines beneath it.
   padded out with the rest of the eligible heroes, alphabetically — **search** reaches
   any hero outside the shortlist, and how many heroes it suggests is configurable in **Settings ›
   Quick Log** (default 6). Every logged match is competitive, so there's no mode picker. Forgot to
-  log during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h into the past so
-  session analytics stay honest. The **skill-rating**
+  log during the session? The **Played** chips backfill a game — Just now / 30m / 1h / 2h, or
+  **Other…** for a `datetime-local` picker (max now) that reaches a session logged the next morning
+  or a game from further back than the four presets honestly can (L5) — so session analytics stay
+  honest; the header badge names the date too once the chosen instant isn't today. The **skill-rating**
   field **presets from the result** (+25 on a win, −25 on a loss) and takes a **mouse-wheel nudge**
   (±1, **Shift for ±5**) — or flip it to **"Set current rank"** to enter your rank directly (**prefilled from the rank
   already tracked** for that account+role, if any — also wheel-adjustable) and let Vantage work out
@@ -370,7 +384,9 @@ account's per-role lines beneath it.
   the **comms** tone on a colour switch (**positive / banter / abusive** — the same switch now backs
   Review and the match editor), rate your own **performance** on a 0-100 slider (colored on the same
   red→green scale as winrate elsewhere; also editable later from Review or a match's detail page), and
-  grade active improvement targets inline. Saving shows a toast naming what was actually stored —
+  grade active improvement targets inline — `↑`/`↓` moves the focus outline across them and `H`/`P`/`M`
+  grades whichever one is focused (L5, the same keyboard model Review itself uses, now shared with
+  the match editor too). Saving shows a toast naming what was actually stored —
   "Match logged — Loss · Oasis · Climb Damage · −25%" — with an **Undo** (omitted when the save also
   anchored a first rank or wrote a placement prediction, since undo only unwinds the match record
   itself); no OS notification fires for a hand-logged match, since you're already looking at the toast
