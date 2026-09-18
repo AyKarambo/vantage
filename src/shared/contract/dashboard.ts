@@ -19,6 +19,7 @@ import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
 import type { PlacementRunSummary } from './placements';
+import type { PlayerListRow } from './players';
 
 /** The filters every view is scoped by, chosen in the app shell. */
 export interface DashboardFilters {
@@ -268,6 +269,8 @@ export interface DashboardData {
   matches: MatchRow[];
   /** The true filtered match count, uncapped — `matches` itself caps at 150 rows (M1). */
   matchesTotal: number;
+  /** A small slice (≤30) of players met in the filtered range, games desc → lastSeen desc — the command palette's 'Player' items (M5). The Players screen's own full, searchable list is a separate `playerList` read. */
+  recentPlayers: PlayerListRow[];
   mental: MentalSummary;
   /** "What it costs you" splits (tilt/comms/toxic/leaver/performance) over the FILTERED range. */
   mentalCosts: MentalCosts;

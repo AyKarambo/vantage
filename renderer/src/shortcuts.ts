@@ -28,7 +28,38 @@ export function registerShortcut(s: Shortcut): void {
   registry.push(s);
 }
 
-/** Cheatsheet source: visible shortcuts in registration order, grouped. */
+/**
+ * A group's cheatsheet position — everything else falls in after these, in
+ * whatever order it happened to register in. Without this the cheatsheet led
+ * with 'Log match'/'Review', which only ever register a binding while THEIR
+ * screen is open, ahead of 'Global'/'Navigate' — not because they matter
+ * more, but because their modules happen to import (and so register, at
+ * import time) before the shell's own `bindGlobals()` runs.
+ */
+const GROUP_ORDER = ['Global', 'Navigate', 'Review', 'Log match'];
+
+/** `ctrl+<digit>` → the digit, `0` included; null for anything else (a plain `escape`, `arrowleft`, …). */
+function navigateDigit(combo: string): number | null {
+  const m = /^ctrl\+(\d)$/.exec(combo);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Navigate rows sorted 1..9 then 0 last (a screen's `Ctrl+0` used to land
+ * wherever NAV happened to declare it, e.g. between Ctrl+3 and Ctrl+4) — the
+ * row's OWN digit, not registration order; every non-digit Navigate binding
+ * (Escape, the arrow-key stepper, …) keeps its registered order after them.
+ */
+function byNavigateDigit(a: Shortcut, b: Shortcut): number {
+  const da = navigateDigit(a.combo);
+  const db = navigateDigit(b.combo);
+  if (da == null && db == null) return 0;
+  if (da == null) return 1;
+  if (db == null) return -1;
+  return (da === 0 ? 10 : da) - (db === 0 ? 10 : db);
+}
+
+/** Cheatsheet source: visible shortcuts grouped by {@link GROUP_ORDER} (an unlisted group falls in after, registration order), Navigate additionally sorted by digit. */
 export function shortcutGroups(): Array<{ group: string; items: Shortcut[] }> {
   const groups = new Map<string, Shortcut[]>();
   for (const s of registry) {
@@ -37,7 +68,16 @@ export function shortcutGroups(): Array<{ group: string; items: Shortcut[] }> {
     list.push(s);
     groups.set(s.group, list);
   }
-  return [...groups.entries()].map(([group, items]) => ({ group, items }));
+  const rank = (group: string): number => {
+    const i = GROUP_ORDER.indexOf(group);
+    return i === -1 ? GROUP_ORDER.length : i;
+  };
+  return [...groups.entries()]
+    .sort((a, b) => rank(a[0]) - rank(b[0]))
+    .map(([group, items]) => ({
+      group,
+      items: group === 'Navigate' ? [...items].sort(byNavigateDigit) : items,
+    }));
 }
 
 /** Bind the single dispatcher (idempotent). The shell calls this once. */

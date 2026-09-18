@@ -640,6 +640,19 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   game. The scoreboard gets a **team totals row** (E/A/D/DMG/HEAL/MIT, brighter on the team ahead),
   and the "best in this column" highlight on Deaths now means **fewest**, not most — it used to
   paint whoever died the most in the same green as top damage.
+- **Ctrl+K finds a target, a player, or any match in your history — and can flip a Settings
+  toggle for you.** The palette used to stop at your targets and players entirely, and its Match
+  results at the 30 most recent rows in range — "did I play with Pixel?" meant Ctrl+K → Players →
+  click the search box → type. It now lists every target and a handful of recent players
+  directly, offers a **"Find player on Players"** shortcut for anyone typed in, and — once a
+  query comes up thin — reaches into your **full** history for a map, hero, account, player name
+  or date, under its own "All history" group. A new **Settings** section covers the toggles you
+  actually reach for often — the MCP endpoint, the live kill feed, the break reminder, demo data,
+  log debug detail, and the winrate colour scheme — each showing "currently on/off" and applying
+  instantly, no trip to Settings required. Every screen in the palette now shows its `Ctrl+<digit>`
+  right there, and the **`?`** cheatsheet no longer leads with Log-match/Review shortcuts ahead of
+  the ones that actually matter most of the time — it's ordered Global → Navigate → Review → Log
+  match, with `Ctrl+0` (Players) sorted after `Ctrl+9` instead of wherever it happened to land.
 
 ## 0.34.0 — 31 July 2026
 

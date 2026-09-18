@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { selectMatches, matchesFilter } from '../src/core/dashboardData';
+import { selectMatches, matchesFilter, matchSearchFilter } from '../src/core/dashboardData';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result } from '../src/core/model';
 
@@ -102,6 +102,43 @@ describe('matchesFilter (M2)', () => {
     const games = [game(1000, { result: 'Win' }), game(2000, { result: 'Loss' })];
     const original = [...games];
     matchesFilter(games, mapModeOf, { results: ['Win'] });
+    expect(games).toEqual(original);
+  });
+});
+
+describe('matchSearchFilter (M5)', () => {
+  it('matches map, account, or any hero — case-insensitive substring', () => {
+    const byMap = game(1000, { map: 'Ilios', account: 'Main', heroes: ['Tracer'] });
+    const byAccount = game(2000, { map: 'Dorado', account: 'Smurf99', heroes: ['Genji'] });
+    const byHero = game(3000, { map: 'Dorado', account: 'Main', heroes: ['Kiriko'] });
+    const none = game(4000, { map: 'Dorado', account: 'Main', heroes: ['Genji'] });
+    expect(matchSearchFilter([byMap, byAccount, byHero, none], 'ilios').map((g) => g.matchId)).toEqual([byMap.matchId]);
+    expect(matchSearchFilter([byMap, byAccount, byHero, none], 'SMURF').map((g) => g.matchId)).toEqual([byAccount.matchId]);
+    expect(matchSearchFilter([byMap, byAccount, byHero, none], 'kiri').map((g) => g.matchId)).toEqual([byHero.matchId]);
+  });
+
+  it("matches a roster player's battleTag, not just the tracked account", () => {
+    const withPixel = game(1000, { roster: [{ battleTag: 'Pixel#1234', isLocal: false }] });
+    const withoutPixel = game(2000, { roster: [{ battleTag: 'Someone#5', isLocal: false }] });
+    expect(matchSearchFilter([withPixel, withoutPixel], 'pixel').map((g) => g.matchId)).toEqual([withPixel.matchId]);
+  });
+
+  it('matches the date — an ISO dayKey, or a friendlier month/day pair', () => {
+    const target = game(Date.UTC(2026, 8, 18, 15, 0, 0)); // Sep 18 2026
+    const other = game(Date.UTC(2026, 8, 1));
+    expect(matchSearchFilter([target, other], '2026-09-18').map((g) => g.matchId)).toEqual([target.matchId]);
+    expect(matchSearchFilter([target, other], 'sep 18').map((g) => g.matchId)).toEqual([target.matchId]);
+  });
+
+  it('a blank/whitespace-only query matches nothing, rather than the whole set', () => {
+    const games = [game(1000), game(2000)];
+    expect(matchSearchFilter(games, '   ')).toEqual([]);
+  });
+
+  it('never mutates the input array', () => {
+    const games = [game(1000, { map: 'Ilios' }), game(2000, { map: 'Dorado' })];
+    const original = [...games];
+    matchSearchFilter(games, 'ilios');
     expect(games).toEqual(original);
   });
 });

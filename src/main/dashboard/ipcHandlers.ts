@@ -16,7 +16,7 @@ import type {
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
 import {
-  dashboardRead, heroDetailRead, matchDetailRead, matchesPageRead, playerHistoryRead, playerListRead, playerRecordsRead, filteredCompetitiveGames,
+  dashboardRead, heroDetailRead, matchDetailRead, matchesPageRead, searchMatchesRead, playerHistoryRead, playerListRead, playerRecordsRead, filteredCompetitiveGames,
 } from './reads';
 
 /**
@@ -75,6 +75,9 @@ export function registerDashboardIpc(provider: DataProvider): void {
   );
   handle(ch.matchesPage, (_e, input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter }) =>
     matchesPageRead(provider, input),
+  );
+  handle(ch.searchMatches, (_e, input: { filters?: DashboardFilters; q: string; limit: number }) =>
+    searchMatchesRead(provider, input),
   );
   handle(ch.playerHistory, (_e, name: string) => playerHistoryRead(provider, name));
   handle(ch.playerRecords, (_e, names: string[]) => playerRecordsRead(provider, names));

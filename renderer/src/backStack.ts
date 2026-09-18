@@ -48,6 +48,8 @@ export const PARAM_KINDS: Required<{ [K in keyof ViewParams]: ParamKind }> = {
   // "open the builder in edit mode" — targets/index.ts guards it with a WeakSet
   // keyed on params object identity, which only works while the object is fresh.
   editTargetId: 'effect',
+  // "seed the search box on open" — the command palette's Players fallback (M5).
+  search: 'effect',
 };
 
 /** Every `ViewParams` key. */

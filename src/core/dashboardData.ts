@@ -4,12 +4,13 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
+  byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
+import { playerDirectory } from './playerIndex';
 import { DEFAULT_MASTER_DATA, makeMapActive, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
 import { mentalCosts, tiltBySessionPosition, tiltTrend } from './mentalAnalytics';
@@ -270,6 +271,12 @@ export function computeDashboard(
     // busy range (150+ games) read a header count that flatly disagreed with
     // the status bar right next to it.
     matchesTotal: games.length,
+    // A small, cheap slice for the command palette's 'Player' items (M5) — the
+    // full player list is a filter-scoped IPC round trip (`playerList`); this
+    // reuses the SAME pure aggregation already paid for on the Players screen,
+    // over the same filtered `games`, so Ctrl+K can show a handful of players
+    // synchronously without a second fetch.
+    recentPlayers: playerDirectory(games).players.slice(0, 30),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),
     tiltTrend: tiltTrend(games),
@@ -510,6 +517,33 @@ export function matchesFilter(
     }
   }
   return [...out];
+}
+
+/** UTC month abbreviations, no `Intl`/locale dependency — {@link matchSearchFilter} stays deterministic for tests and CI. */
+const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/** A timestamp's searchable text: the ISO `dayKey` plus a friendlier "sep 18" pair. */
+function dateSearchText(ts: number): string {
+  const d = new Date(ts);
+  return `${dayKey(ts)} ${MONTH_ABBR[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/**
+ * Full-text match search (M5) — map, hero, account, a roster player's
+ * battleTag, or the date, matched as a case-insensitive substring. Backs the
+ * command palette's reach past its own snapshot slice (30 most recent rows):
+ * unlike {@link matchesFilter}, this runs over the FULL scoped history the
+ * caller hands it, not just what's already loaded in the renderer.
+ */
+export function matchSearchFilter(games: readonly GameRecord[], q: string): GameRecord[] {
+  const query = q.trim().toLowerCase();
+  if (!query) return [];
+  return games.filter((g) =>
+    g.map.toLowerCase().includes(query)
+    || g.account.toLowerCase().includes(query)
+    || g.heroes.some((h) => h.toLowerCase().includes(query))
+    || (g.roster ?? []).some((p) => (p.battleTag ?? '').toLowerCase().includes(query))
+    || dateSearchText(g.timestamp).includes(query));
 }
 
 function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow[] {
