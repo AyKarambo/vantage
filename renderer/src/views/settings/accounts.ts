@@ -220,7 +220,8 @@ function labelled(label: string, control: Node): HTMLElement {
  * picker, the reveal-rank confirmation — closes this modal first and reopens
  * it once done, so overlays never stack and the user lands back here.
  */
-function openManageRanks(account: string, onChange: () => void): void {
+/** Exported (C4) so the match-detail Competitive progress card and the Overview Rank KPI's "Set your rank…" action can open the SAME modal a Settings account row does — no separate dialog to keep in sync. */
+export function openManageRanks(account: string, onChange: () => void): void {
   openModal((close) => {
     const host = h('div', { class: 'rank-modal-rows' }, h('div', { class: 'hint' }, 'Loading…'));
     let ranks: RankSummary[] = [];

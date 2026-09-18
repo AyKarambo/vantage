@@ -39,7 +39,10 @@ scrolls, with the account switcher and session card staying put either side of i
 account switcher lists every account as an aligned row — ✓ · name · rank — with the active
 account's per-role lines beneath it.
 
-- **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
+- **Overview** — greeting, KPIs (winrate, games, rank, streak — the Rank tile marks a
+  winrate-derived guess as **"E3 est."** with a **Set rank** action instead of drawing it
+  like a measured number, and the Winrate delta states its own window, "▾ 16 pts · last 5
+  days"), the flagship
   *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
   short-name label beside every priority dot, and numeric axis ticks — with a top-priority
   callout, an activity heatmap (games/day, click a day to open its matches), and a mental

@@ -10,6 +10,7 @@ import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
+import { openManageRanks } from './settings/accounts';
 import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
 
@@ -145,13 +146,18 @@ function streakDelta(d: DashboardData): { text: string; dir?: 'up' | 'down' } {
 function kpiRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const trendDelta = wrTrendDelta(d.trend, d.overall.winrate);
+  // C4: `d.trend`'s own bucketing (matches dashboardData's `weekly` flag) — the
+  // old "recent" label never said whether that meant days or weeks, or how many.
+  const byWeek = d.filters.days === 'all' || (typeof d.filters.days === 'number' && d.filters.days > 90);
+  const bucketWord = byWeek ? 'weeks' : 'days';
   return h('div', { class: 'kpi-row' },
     kpiCard({
       label: 'Winrate',
       value: d.overall.games ? pct(d.overall.winrate) : '–',
       delta: trendDelta != null
-        ? { text: `${trendDelta >= 0 ? '▴' : '▾'} ${Math.abs(trendDelta).toFixed(1)} recent`, dir: trendDelta >= 0 ? 'up' : 'down' }
+        ? { text: `${trendDelta >= 0 ? '▴' : '▾'} ${Math.round(Math.abs(trendDelta))} pts · last 5 ${bucketWord}`, dir: trendDelta >= 0 ? 'up' : 'down' }
         : undefined,
+      title: trendDelta != null ? `Mean winrate of your last 5 ${bucketWord} vs the range average` : undefined,
     }),
     kpiCard({ label: 'Games', value: int(d.overall.games), delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` } }),
     rankKpi(ctx),
@@ -233,13 +239,18 @@ function rankKpi(ctx: ViewContext): HTMLElement {
     tier: d.progression.tier, division: d.progression.division,
     progressPct: d.progression.progressPct, protected: false, short: true,
   });
+  // C4: this used to glue a fake movement arrow (from `progression.delta`,
+  // an unrelated recent-trend read) onto the in-division buffer %, with
+  // nothing marking the whole tile as a winrate guess rather than ground
+  // truth — the movement arrow stays anchored-branch-only now.
+  const targetAccount = d.filters.account !== 'all' ? d.filters.account : d.options.accounts[0];
   return kpiCard({
     label: 'Rank',
-    value: est.rankLabel,
-    delta: {
-      text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
-      dir: d.progression.delta >= 0 ? 'up' : 'down',
-    },
+    value: `${est.rankLabel} est.`,
+    delta: { text: 'from winrate — no rank set' },
+    ...(targetAccount
+      ? { action: { label: 'Set rank', run: () => openManageRanks(targetAccount, () => ctx.refresh()) } }
+      : {}),
   });
 }
 

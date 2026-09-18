@@ -399,6 +399,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   loss — "reset it" now only shows once the streak reaches your actual break-reminder threshold;
   below that it shows the current sitting's tally or how long ago you last played instead, and
   a hover on the tile states the range's best/worst streak for context.
+- **A winrate-derived rank guess no longer looks like a measured one.** With no rank set, the
+  match detail's Competitive progress card used to draw a full division bar and an "over the
+  range" delta (not a number the game ever shows) in the exact same styling as a real
+  calculated rank. It now shows the tier/division in muted text under an honest **"Estimated
+  from winrate"** pill, drops both fabricated numbers, and adds a **"Set your rank…"** button
+  straight into the same Manage-ranks dialog Settings uses. A match from before your last
+  ladder reset — which used to show a raw, untranslated `pre-reset` pill — now reads **"Before
+  reset"**. The Overview Rank tile gets the same honesty pass: an unanchored account shows
+  **"E3 est."** with a plain "from winrate — no rank set" line and its own **Set rank** button,
+  instead of a movement arrow glued to an unrelated number (the arrow stays reserved for a real
+  anchored rank). The Winrate KPI's delta now says which window it means — "▾ 16 pts · last 5
+  days" (or weeks) — instead of a bare "recent".
 
 ## 0.34.0 — 31 July 2026
 
