@@ -757,7 +757,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         'BattleTags, player names, and Windows usernames were removed before export',
         '(best-effort, not a guarantee) — please still review before attaching this to a public report.',
       ].join('\n');
-      const contents = [header, '', ...redacted.map(formatLogLine)].join('\n') + '\n';
+      const contents = [header, '', ...redacted.map((e) => formatLogLine(e))].join('\n') + '\n';
       try {
         const savedPath = await deps.saveTextFile(`vantage-log-${info.version}.txt`, contents);
         return savedPath ? { path: savedPath } : { cancelled: true };

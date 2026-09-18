@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  LOG_RING_CAP, formatLogLine, levelAdmits, pushRing, redactEntry, redactSecrets,
+  LOG_RING_CAP, formatLogLine, levelAdmits, matchesSearch, pushRing, redactEntry, redactSecrets,
   type LogEntry,
 } from '../src/core/logging';
 
@@ -35,6 +35,32 @@ describe('formatLogLine', () => {
     expect(line).not.toContain('\n');
     expect(line).toContain('a\\nb');
     expect(line).toContain('stack=x\\ny');
+  });
+
+  it('stays ISO by default; `localTime` (W5) swaps only the timestamp', () => {
+    const e = entry();
+    expect(formatLogLine(e)).toContain('2026-07-04T18:22:01.123Z');
+    const local = formatLogLine(e, { localTime: true });
+    expect(local).not.toContain('2026-07-04T18:22:01.123Z');
+    expect(local).toContain(new Date(e.ts).toLocaleTimeString());
+    expect(local).toContain('gep attached'); // the rest of the line is unaffected
+  });
+});
+
+describe('matchesSearch (W5)', () => {
+  it('matches case-insensitively over the formatted line, blank query matches everything', () => {
+    const e = entry({ message: 'GEP Attached' });
+    expect(matchesSearch(e, 'attached')).toBe(true);
+    expect(matchesSearch(e, 'ATTACHED')).toBe(true);
+    expect(matchesSearch(e, 'gep')).toBe(true); // scope is part of the line too
+    expect(matchesSearch(e, 'nope')).toBe(false);
+    expect(matchesSearch(e, '')).toBe(true);
+    expect(matchesSearch(e, '   ')).toBe(true);
+  });
+
+  it('matches against field values too, since they ride the same formatted line', () => {
+    const e = entry({ fields: { game: 10844 } });
+    expect(matchesSearch(e, '10844')).toBe(true);
   });
 });
 

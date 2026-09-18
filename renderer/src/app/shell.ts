@@ -45,7 +45,7 @@ import { targets } from '../views/targets';
 import { targetDetail } from '../views/targets/detail';
 import { notion } from '../views/notion';
 import { review } from '../views/review';
-import { logViewer, pauseFollow } from '../views/logViewer';
+import { ensureFeed as ensureLogFeed, logViewer, pauseFollow, subscribeLogStats, type LogStats } from '../views/logViewer';
 import { settings } from '../views/settings';
 import { about } from '../views/about';
 import { faq } from '../views/faq';
@@ -308,6 +308,11 @@ export class App {
     initLiveMatch();
     subscribeLiveMatch(() => this.renderLiveNav());
     this.renderLiveNav();
+    // Start the log feed at shell mount, not on Logs' first render (W5) — the
+    // error/warning counter should reflect the whole session, since a player
+    // usually opens Logs BECAUSE something already went wrong, not before.
+    ensureLogFeed();
+    subscribeLogStats((stats) => this.renderLogsNav(stats));
     initDevModeAuthStatus();
     subscribeDevModeAuthStatus(() => this.renderDevBadge());
     this.renderDevBadge();
@@ -749,6 +754,26 @@ export class App {
     if (isLive && !existing) {
       btn.append(h('span', { class: 'nav-live-dot', title: 'A match is in progress' }));
     } else if (!isLive) {
+      existing?.remove();
+    }
+  }
+
+  /**
+   * A dot on the Logs nav item once an error has been logged this session
+   * (W5) — the same mutate-in-place idiom as {@link renderLiveNav}. Warnings
+   * are routine (e.g. the startup "notion shape validation skipped" warn), so
+   * only errors light it — a warning-only session should stay quiet.
+   */
+  private renderLogsNav(stats: LogStats): void {
+    const btn = this.navButtons.get('logs');
+    if (!btn) return;
+    const existing = btn.querySelector('.nav-live-dot');
+    const title = `${stats.errors} error${stats.errors === 1 ? '' : 's'} logged this session`;
+    if (stats.errors > 0 && existing) {
+      existing.setAttribute('title', title);
+    } else if (stats.errors > 0) {
+      btn.append(h('span', { class: 'nav-live-dot', title }));
+    } else {
       existing?.remove();
     }
   }
