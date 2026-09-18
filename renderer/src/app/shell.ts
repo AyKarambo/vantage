@@ -413,7 +413,14 @@ export class App {
       h('div', { class: 'titlebar-brand' }, h('span', { class: 'brand-mark' }), 'Vantage'),
       h('div', { class: 'titlebar-center' },
         h('button', { class: 'titlebar-search', on: { click: () => this.openPalette() } },
-          h('span', { class: 'kbd' }, 'Ctrl K'), 'Search or log a match'),
+          h('span', { class: 'kbd' }, 'Ctrl K'), 'Search'),
+        // L1: logging a match is the app's primary write, yet the only route
+        // used to be Ctrl+K then typing/picking it, or this pill opening the
+        // palette and still needing Enter — a real button + its own global
+        // key (Ctrl+L, bound in bindGlobals) reaches it in one step from
+        // anywhere.
+        h('button', { class: 'titlebar-search titlebar-log', on: { click: () => openLogMatch(this.context()) } },
+          '+ Log match', h('span', { class: 'kbd' }, 'Ctrl L')),
       ),
       h('div', { class: 'titlebar-controls' },
         control('—', 'win-btn--min', () => bridge.window.minimize()),
@@ -1054,7 +1061,7 @@ export class App {
     openPalette(ctx, {
       nav: NAV.flatMap((g) => g.items.map((i) => ({ id: i.id, label: i.label }))),
       actions: [
-        { label: 'Log match', hint: 'record a game manually', run: () => openLogMatch(ctx) },
+        { label: 'Log match', hint: 'Ctrl L', run: () => openLogMatch(ctx) },
         { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
         { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
         { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
@@ -1112,6 +1119,14 @@ export class App {
     registerShortcut({
       combo: 'ctrl+k', description: 'Command palette — search, actions, log a match', group: 'Global',
       allowInInput: true, run: () => this.openPalette(),
+    });
+    // L1: reachable from anywhere in one step, like Ctrl+K — but unlike
+    // Ctrl+K (which may reasonably reach OVER another overlay to search),
+    // this directly opens a modal, so it stays gated behind !overlayCapturing()
+    // to never stack a second dialog on top of an open one.
+    registerShortcut({
+      combo: 'ctrl+l', description: 'Log a match', group: 'Global',
+      allowInInput: true, when: () => !overlayCapturing(), run: () => openLogMatch(this.context()),
     });
     registerShortcut({ combo: '?', description: 'This cheatsheet', group: 'Global', run: () => this.openCheatsheet() });
     registerShortcut({

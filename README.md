@@ -352,7 +352,9 @@ bar — the account switcher in the top-left already covers "which account", and
 applies. **Role icons appear app-wide** (filter bar, scoreboard, hero picker) so
 tank/damage/support is always visually distinguishable at a glance. Quality-of-life
 throughout: **Ctrl+K command palette** (jump to any screen, run actions, find a
-map/hero/recent match), keyboard shortcuts (`Ctrl+1–9` and `Ctrl+0` screens — each digit is
+map/hero/recent match), **Ctrl+L to log a match from anywhere** in one step (L1 — also a real
+`+ Log match` titlebar button beside the search pill, not just a palette action), keyboard
+shortcuts (`Ctrl+1–9` and `Ctrl+0` screens — each digit is
 pinned to its screen rather than to sidebar position, so adding one never renumbers the rest;
 `Esc`, `Alt+←` or the mouse back button to go **back** to the previous screen
 you were actually on, `?` cheatsheet, `←/→`

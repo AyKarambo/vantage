@@ -39,6 +39,9 @@
   background: var(--grad-accent);
 }
 .titlebar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   -webkit-app-region: no-drag;
 }
 .titlebar-search {

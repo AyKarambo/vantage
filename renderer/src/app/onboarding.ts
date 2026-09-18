@@ -63,7 +63,7 @@ const STEPS: Step[] = [
   {
     title: 'Log a match in seconds',
     lead:
-      'Press Ctrl K anytime to log a match — result, map, role, hero and how it felt. The tilt / ' +
+      'Press Ctrl L anytime to log a match — result, map, role, hero and how it felt (Ctrl K finds it too). The tilt / ' +
       'comms flags you add feed straight into the Mental view.',
   },
   {
