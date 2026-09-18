@@ -630,6 +630,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   day header, and the chip gets **‹ ›** buttons to step to the day before or after without a trip
   back to Overview to re-click the heatmap. A flagged-games drill-down (Tilt, Leaver, etc.) gets the
   same honest count too — "46 tilt-flagged games in range."
+- **A match's own page links out, states when it happened, and steps through your day.** The map
+  name, the account and every hero pill on the detail page now open Maps, filter to that account, or
+  that hero's drill-down — the row already linked all three, so the richest page about a match had
+  fewer exits than its own row. The header states the actual date and time ("Friday, September 18 ·
+  11:38 PM") instead of just a relative age. Between the Older/Newer buttons, a small strip of W/L/D
+  letters now shows where this game sat in its own day — "Game 3 of 7 · Yesterday · 4–3" — each one
+  clickable straight to that match, instead of five blind "Older" clicks to reach yesterday's fifth
+  game. The scoreboard gets a **team totals row** (E/A/D/DMG/HEAL/MIT, brighter on the team ahead),
+  and the "best in this column" highlight on Deaths now means **fewest**, not most — it used to
+  paint whoever died the most in the same green as top damage.
 
 ## 0.34.0 — 31 July 2026
 

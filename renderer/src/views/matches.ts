@@ -214,7 +214,12 @@ export function matches(ctx: ViewContext): HTMLElement {
     const groups = bySitting
       ? groupBySitting(rows, ctx.data.sessionSettings.gapMinutes)
       : groupByDay(rows);
-    const columns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
+    // A flag drill-down shows why each row is actually in the list even when
+    // the player's own column setup hides Flags (M4) — an effective-only
+    // override, never written back to the stored pref, so leaving the
+    // drill-down restores whatever the player actually configured.
+    const storedColumns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
+    const columns = flag ? { ...storedColumns, flags: 'inline' as const } : storedColumns;
 
     // Honesty (M1): `matches` itself silently caps at MATCHES_PAGE_SIZE rows,
     // so the header used to claim a count that could flatly disagree with

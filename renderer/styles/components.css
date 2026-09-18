@@ -1192,6 +1192,30 @@ table.data tbody tr:focus-visible {
   color: var(--win-text);
   font-weight: 700;
 }
+/* Deaths' "best" is fewest — a neutral bold rather than win-green, so the
+   board never reads "green = most deaths" (M4). */
+.sb-cell.is-best-neutral {
+  color: var(--text);
+  font-weight: 700;
+}
+/* Per-team totals row (M4, opt-in via scoreboard({ totals: true })) — the
+   leading team's cells inherit the row's own bold; the trailing team dims,
+   the same "leads full weight, other half opacity" idiom `tallyRow` (Live)
+   uses. */
+.sb-row--total {
+  font-weight: 700;
+  border-top: 1px solid var(--border-2);
+}
+.sb-team-total-label {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sb-cell.is-total-behind {
+  opacity: 0.55;
+  font-weight: 500;
+}
 .sb-vs {
   display: flex;
   align-items: center;
