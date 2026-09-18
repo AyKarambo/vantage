@@ -2,7 +2,7 @@
 import { h, render } from '../dom';
 import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, pct, roleLabel } from '../format';
+import { duration, fmt, fmt1, pct, roleLabel } from '../format';
 import { wrColor } from '../theme';
 import { prefs } from '../prefs';
 import { store } from '../store';
@@ -12,9 +12,13 @@ import { dataTable, type Column } from '../components/table';
 import { infoTip } from '../components/infoTip';
 import { inlineLink } from '../components/inlineLink';
 import { openDrawer } from '../components/overlay';
+import { trendArrow } from '../components/trendArrow';
 import { viewHead, type ViewContext } from './view';
 
 const MIN_GAMES_STEPS = [1, 5, 10] as const;
+
+/** Sort order for the Trend column (H6) — worsening first under a descending arrow, matching the WR/net convention elsewhere. */
+const TREND_ORDER: Record<string, number> = { declining: -1, flat: 0, improving: 1 };
 
 export function heroes(ctx: ViewContext): HTMLElement {
   // Self-rating averages join by hero key (a multi-hero match's single rating
@@ -28,14 +32,25 @@ export function heroes(ctx: ViewContext): HTMLElement {
     // one out among 'Games' / 'Games together' / a bare letter for the same
     // quantity across the app.
     { key: 'games', label: 'Games', get: (r) => r.games },
+    // W-L (H5): the games column alone can't say whether a rounded credit is
+    // signal or a coin-flip sample — Focus and Matches already show W-L.
+    { key: 'wl', label: 'W-L', sortable: false, get: () => null, render: (r) => h('span', { class: 'mono', style: { color: wrColor(r.winrate) } }, `${r.wins}W ${r.losses}L`) },
     { key: 'winrate', label: 'WR', get: (r) => r.winrate, render: (r) => h('span', { style: { color: wrColor(r.winrate) } }, pct(r.winrate)) },
+    // Trend (H6): recent-vs-earlier verdict, reusing Focus's dimension-agnostic
+    // read — 'is my Genji getting better this season?' used to need a drawer
+    // open per hero; this answers it at a glance across the whole table.
+    { key: 'trend', label: 'Trend', get: (r) => (r.trend ? TREND_ORDER[r.trend] : null), render: (r) => trendArrow(r.trend) ?? '–' },
+    // Time (H5): total played minutes on the hero — the sample-size signal a
+    // rounded game count can't carry (a 3-game hero at 9 minutes reads very
+    // differently from one at 40).
+    { key: 'minutes', label: 'Time', get: (r) => r.minutes, render: (r) => duration(r.minutes) },
     { key: 'kda', label: 'KDA', get: (r) => r.kda, render: (r) => r.kda.toFixed(1) },
     // render: dataTable no longer rounds a raw numeric cell for you (K1) — a
-    // per-10 rate genuinely has decimals, so these need the same fmt() call
-    // damage/healing/mitigation already use, or they'd show full float noise.
-    { key: 'elims', label: 'E/10', get: (r) => r.per10?.eliminations ?? null, render: (r) => fmt(r.per10?.eliminations) },
-    { key: 'deaths', label: 'D/10', get: (r) => r.per10?.deaths ?? null, render: (r) => fmt(r.per10?.deaths) },
-    { key: 'assists', label: 'A/10', get: (r) => r.per10?.assists ?? null, render: (r) => fmt(r.per10?.assists) },
+    // per-10 rate genuinely has decimals (fmt1, H5), same convention the
+    // drawer's KDA and the match detail per-hero card already follow.
+    { key: 'elims', label: 'E/10', get: (r) => r.per10?.eliminations ?? null, render: (r) => fmt1(r.per10?.eliminations) },
+    { key: 'deaths', label: 'D/10', get: (r) => r.per10?.deaths ?? null, render: (r) => fmt1(r.per10?.deaths) },
+    { key: 'assists', label: 'A/10', get: (r) => r.per10?.assists ?? null, render: (r) => fmt1(r.per10?.assists) },
     { key: 'damage', label: 'DMG/10', get: (r) => r.per10?.damage ?? null, render: (r) => fmt(r.per10?.damage) },
     { key: 'healing', label: 'HEAL/10', get: (r) => r.per10?.healing ?? null, render: (r) => fmt(r.per10?.healing) },
     { key: 'mitigation', label: 'MIT/10', get: (r) => r.per10?.mitigation ?? null, render: (r) => fmt(r.per10?.mitigation) },
@@ -64,6 +79,14 @@ export function heroes(ctx: ViewContext): HTMLElement {
         prefs.set('minGames', n);
         store.rerender();
       }),
+    ),
+    // H5: the three numbering conventions this table leans on (per-10 minutes
+    // PLAYED, not the wall clock; games/wins credited by hero time-share, not
+    // whole-match counts; Time as the real sample-size signal a rounded game
+    // count can't carry) used to live only in the source doc comment.
+    infoTip(
+      'Rates are per 10 minutes PLAYED (fight time, not the wall clock). Games and wins are credited by your time-share on the hero within each match — a hero played for a quarter of a won game earns 0.25 of a win, so the counts can be fractional-looking. Time is the real minutes behind that credit: a low game count with a lot of minutes is a steadier sample than the same count on quick swaps.',
+      { label: 'How are these numbers computed?' },
     ),
   );
 
@@ -148,8 +171,8 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
     s
       ? h('div', { class: 'stat-grid' },
           statBox(s.kda.toFixed(1), 'KDA'),
-          statBox(fmt(p?.eliminations), 'Elims/10'),
-          statBox(fmt(p?.deaths), 'Deaths/10'),
+          statBox(fmt1(p?.eliminations), 'Elims/10'),
+          statBox(fmt1(p?.deaths), 'Deaths/10'),
           statBox(fmt(p?.damage), 'Dmg/10'),
           statBox(fmt(p?.healing), 'Heal/10'),
           statBox(fmt(p?.mitigation), 'Mit/10'),

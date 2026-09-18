@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { focusEntries, focusTrend, linkFocusTargets, type GameRecord } from '../src/core/analytics';
+import { focusEntries, focusTrend, heroForm, linkFocusTargets, type GameRecord } from '../src/core/analytics';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { Result } from '../src/core/model';
@@ -151,6 +151,39 @@ describe('focusTrend', () => {
     const three = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Numbani' }));
     const noTrend = focusEntries(three).find((e) => e.key === 'Numbani');
     expect(noTrend?.trend).toBeUndefined();
+  });
+});
+
+describe('heroForm (H6)', () => {
+  const at = (i: number, result: Result, p: Partial<GameRecord> = {}): GameRecord =>
+    game({ result, timestamp: T0 + i * HOUR, ...p });
+
+  it('returns undefined with no decided games', () => {
+    expect(heroForm([at(0, 'Draw'), at(1, 'Draw')])).toBeUndefined();
+    expect(heroForm([])).toBeUndefined();
+  });
+
+  it('carries results oldest-to-newest and omits the delta when the window covers the whole range', () => {
+    const games = [at(2, 'Win'), at(0, 'Loss'), at(1, 'Win')]; // out of order on purpose
+    const form = heroForm(games);
+    expect(form?.results).toEqual(['Loss', 'Win', 'Win']);
+    expect(form?.deltaPp).toBeUndefined();
+  });
+
+  it('excludes draws from both the strip and the winrate math', () => {
+    const games = [at(0, 'Win'), at(1, 'Draw'), at(2, 'Loss'), at(3, 'Draw')];
+    expect(heroForm(games)?.results).toEqual(['Win', 'Loss']);
+  });
+
+  it('windows to the last 10 decided games and reports the delta vs the full range', () => {
+    // 5 earlier losses, then 10 recent wins: range winrate 10/15, window (last
+    // 10, all wins) winrate 100% — a real "earlier" portion exists to compare.
+    const earlier = Array.from({ length: 5 }, (_, i) => at(i, 'Loss'));
+    const recent = Array.from({ length: 10 }, (_, i) => at(5 + i, 'Win'));
+    const form = heroForm([...earlier, ...recent]);
+    expect(form?.results).toEqual(Array(10).fill('Win'));
+    // Window (last 10, all wins) 100% vs full-range 10/15 ≈ 66.7% → +33.3pp.
+    expect(form?.deltaPp).toBeCloseTo(33.3, 1);
   });
 });
 
@@ -317,5 +350,14 @@ describe('dashboard focusItems payload', () => {
   it('is empty when nothing is net-losing', () => {
     const d = computeDashboard(run(4, ['Win'], { map: 'Esperanca' }), { days: 'all' }, demo);
     expect(d.focusItems).toEqual([]);
+  });
+
+  it('attaches trend and form to heroStats rows, keyed by the hero\'s own games (H6)', () => {
+    const losses = [0, 1, 2, 3].map((i) => at(i, 'Loss', { heroes: ['Ana'] }));
+    const wins = [4, 5, 6].map((i) => at(i, 'Win', { heroes: ['Ana'] }));
+    const d = computeDashboard([...losses, ...wins], { days: 'all' }, demo);
+    const ana = d.heroStats.find((h) => h.hero === 'Ana');
+    expect(ana?.trend).toBe('improving');
+    expect(ana?.form?.results).toEqual(['Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win', 'Win']);
   });
 });

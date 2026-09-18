@@ -23,6 +23,17 @@ export function fmt(n: number | null | undefined): string {
   return String(Math.round(n));
 }
 
+/**
+ * One decimal, never abbreviated: 5.6 → "5.6" (H5). For small per-10 rates —
+ * eliminations/deaths/assists — where `fmt`'s whole-number rounding hides the
+ * real signal (5.6 and 6.4 deaths/10 both used to print "6"); damage/healing/
+ * mitigation stay on `fmt`'s k-suffix since they're large enough to need it.
+ */
+export function fmt1(n: number | null | undefined): string {
+  if (n == null) return '–';
+  return n.toFixed(1);
+}
+
 /** Thousands-separated integer: 1511 → "1,511". */
 export const int = (n: number): string => Math.round(n).toLocaleString('en-US');
 
@@ -46,6 +57,14 @@ export const games = (n: number): string => `${int(n)} game${n === 1 ? '' : 's'}
 
 /** gamesShort(8) → "8g" — chart labels and tooltips ONLY; prose wants {@link games}. */
 export const gamesShort = (n: number): string => `${int(n)}g`;
+
+/** duration(125) → "2h 5m"; duration(45) → "45m" — minutes to a compact hour+minute label (H5's Heroes Time column). */
+export const duration = (minutes: number): string => {
+  const m = Math.round(minutes);
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return h > 0 ? `${h}h ${rem}m` : `${rem}m`;
+};
 
 /**
  * net(3) → "+3 net"; net(-4) → "−4 net" (wins − losses, signed via {@link signed}).

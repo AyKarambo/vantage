@@ -212,6 +212,21 @@ export interface FocusEntry extends FocusItem {
 }
 
 /**
+ * Recent-form window for one hero (H6): the last {@link FORM_WINDOW} decided
+ * WHOLE games on the hero, oldest → newest, plus how that window's winrate
+ * compares to the hero's full (filtered) range.
+ */
+export interface HeroForm {
+  results: Result[];
+  /**
+   * Window winrate − full-range winrate, in points. Absent when the window
+   * covers every decided game in range (there's no distinct "earlier" to
+   * compare against, so a delta would just be a number against itself).
+   */
+  deltaPp?: number;
+}
+
+/**
  * Per-hero rollup: winrate plus exact stat totals and per-10-minute averages.
  * `games`/`wins`/`losses`/`draws` are the career-profile style TIME-SHARE
  * credit (a hero played for a quarter of a won game earns 0.25 of a win),
@@ -221,6 +236,14 @@ export interface FocusEntry extends FocusItem {
 export interface HeroSummary extends WinLoss {
   hero: string;
   role?: Role;
+  /**
+   * Recent-vs-earlier verdict (H6), computed in `dashboardData` over the
+   * hero's WHOLE games in range via `focusTrend`/`focusGamesFor` — absent
+   * under the same ≥6-game floor `focusTrend` applies to map entries.
+   */
+  trend?: FocusTrend;
+  /** The last-10-games form strip (H6); absent when the hero has no decided games in range. */
+  form?: HeroForm;
   /** Unrounded fractional credit behind `games` (sum of the hero's time shares). */
   creditedGames?: number;
   /** Unrounded fractional credit behind `wins`. */
@@ -231,6 +254,8 @@ export interface HeroSummary extends WinLoss {
   /** Per-10-PLAYED-minute averages (null when no usable time data). */
   per10: Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'> | null;
   kda: number; // (elims + assists) / max(deaths, 1)
+  /** Total played minutes on this hero (H5) — the sample-size signal a rounded game count can't carry: a 3-game hero with 9 minutes reads very differently from one with 40. */
+  minutes: number;
 }
 
 /** Streak of the most recent decided games. */

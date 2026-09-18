@@ -155,6 +155,17 @@ describe('heroStats', () => {
     expect(ana.per10?.healing).toBe(10500); // 21000 × 10 / 20 played minutes
   });
 
+  it('carries total played minutes on the hero (H5) — the sample-size signal a rounded game count can\'t show', () => {
+    const games: GameRecord[] = [
+      game({ result: 'Win', map: 'A', role: 'support', heroes: ['Ana'], durationMinutes: 10, playedMinutes: 10,
+        perHero: [line('Ana', { role: 'support' })] }),
+      game({ result: 'Loss', map: 'B', role: 'support', heroes: ['Ana'], durationMinutes: 8, playedMinutes: 8,
+        perHero: [line('Ana', { role: 'support' })] }),
+    ];
+    const [ana] = heroStats(games);
+    expect(ana.minutes).toBeCloseTo(18, 9);
+  });
+
   it('per-10 divides by the measured PLAYED time, not the wall-clock duration', () => {
     const games: GameRecord[] = [
       game({ result: 'Win', map: 'Ilios', role: 'support', heroes: ['Ana'], durationMinutes: 12, playedMinutes: 10,
