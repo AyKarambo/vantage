@@ -306,6 +306,18 @@
   flex: 1;
   text-align: center;
 }
+/* Collapsed Review rows' inline quick-grade chips (R2) — single-letter H/P/M,
+   sized to sit on a row alongside the map/time text without dominating it. */
+.segmented--tiny {
+  padding: 2px;
+  gap: 1px;
+}
+.segmented--tiny .segmented-opt {
+  padding: 3px 7px;
+  font-size: 11px;
+  min-width: 20px;
+  text-align: center;
+}
 
 /* Comms switch — a colour-coded single-select (positive / banter / abusive).
    Uses `is-on` (not `is-active`) so the accent styling never applies; each

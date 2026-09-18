@@ -693,6 +693,16 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* Collapsed row's inline quick-grade chips (R2) — one small H/P/M per
+   in-scope self-rated target plus a Tilt toggle, so the common case never
+   needs the full card at all. */
+.review-quick-grade {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
 
 /* Matches ------------------------------------------------------------------- */
 /*
