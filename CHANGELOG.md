@@ -481,6 +481,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   which account the dashboard is scoped to, a short "Now showing `<account>`" toast says so — that
   used to happen with zero notice. A hand-logged match no longer also fires a Windows notification
   for something you typed a second ago and are already looking at.
+- **The map field understands a typo, and the hero grid is never empty.** Typing a near-miss map
+  — "kings row", "esperanca" — used to empty the field on blur with no message; matching was
+  prefix-only, so a missing apostrophe or accent found nothing even though the app already had a
+  fuzzy matcher for the command palette. The map field now ranks its search by that same fuzzy
+  matcher (now accent-folding both ways too), auto-resolves a typed value that uniquely matches
+  one map, and — failing that — **keeps what you typed** instead of silently reverting to blank,
+  with the "not a known map" hint shown immediately rather than only after a failed Save. A fresh
+  account, or a role you've never queued, no longer opens the hero picker to an empty grid either
+  — a short "most played" shortlist now pads out with the rest of the eligible heroes.
 
 ## 0.34.0 — 31 July 2026
 

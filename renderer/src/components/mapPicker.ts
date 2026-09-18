@@ -8,6 +8,7 @@
  * {@link resolveMapName} is the save-time guard both surfaces validate with.
  */
 import { typeahead } from './typeahead';
+import { fuzzyRank } from '../fuzzy';
 
 /** The slice of a master-data map entry the picker needs. */
 export interface MapPickerEntry {
@@ -23,6 +24,8 @@ export interface MapPickerOpts {
   /** Map names from match history, newest first (duplicates fine) — ranks browse mode. */
   recentMaps: readonly string[];
   onChange: (value: string) => void;
+  /** Fires on blur (L4) when the typed text isn't a known map and doesn't uniquely fuzzy-resolve to one — lets the caller show its "not a known map" hint immediately. */
+  onInvalid?: (typed: string) => void;
 }
 
 /**
@@ -35,6 +38,12 @@ export function resolveMapName(raw: string, maps: ReadonlyArray<MapPickerEntry>)
   const q = raw.trim().toLowerCase();
   if (!q) return null;
   return maps.map((m) => m.name).find((m) => m.toLowerCase() === q) ?? null;
+}
+
+/** The shared "not a known map" hint (L4) — the log card's `onInvalid` and a failed Save attempt say the same thing, and so does the match editor. */
+export function notKnownMapHint(typed: string): string {
+  const t = typed.trim();
+  return t ? `"${t}" isn't a known map — pick one from the list.` : 'Pick the map — start typing and choose from the list.';
 }
 
 /**
@@ -62,9 +71,13 @@ export function mapPicker(opts: MapPickerOpts): HTMLElement {
     // rotated-out map is still reachable by typing its name.
     searchSuggestions: opts.maps.map((m) => m.name).sort((a, b) => a.localeCompare(b)),
     mutedItems: new Set(opts.maps.filter((m) => !m.isActive).map((m) => m.name)),
+    // L4: fuzzy, not prefix/contains — "kings row" or "esperanca" (missing
+    // the apostrophe/accent) still finds the real map instead of nothing.
+    rank: (q, pool) => fuzzyRank(q, [...pool], (name) => name),
     strict: true,
     showOnFocus: true,
     inputClass: 'vt-input',
     onChange: opts.onChange,
+    onInvalid: opts.onInvalid,
   });
 }
