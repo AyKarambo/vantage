@@ -34,8 +34,10 @@ account switcher lists every account as an aligned row — ✓ · name · rank �
 account's per-role lines beneath it.
 
 - **Overview** — greeting, KPIs (winrate, games, rank, streak), the flagship
-  *winrate × volume* scatter with a top-priority callout, an activity heatmap
-  (games/day, click a day to open its matches), and a mental snapshot.
+  *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
+  short-name label beside every priority dot, and numeric axis ticks — with a top-priority
+  callout, an activity heatmap (games/day, click a day to open its matches), and a mental
+  snapshot.
 - **Live** — the match you're in right now, updated as it plays: the scoreboard the game
   is showing (heroes, K/A/D, damage, healing, mitigation, split into your team and theirs),
   and **players you've met** — everyone on this roster you've shared a game with before,

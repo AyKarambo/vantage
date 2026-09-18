@@ -4,7 +4,7 @@ import type { DashboardData, Group, PlacementRunSummary, SessionRecap } from '..
 import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
-import { PALETTE, wrColor, wrHsl, CATEGORICAL } from '../theme';
+import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
 import { stopRuleLine } from '../components/stopRuleLine';
@@ -257,13 +257,25 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   );
 }
 
-/** Legend of the maps in the scatter — each swatch matches its dot colour; the
- *  full map name is on hover (both here and on the dot). */
+/**
+ * Legend of the game MODES in the scatter (O2), not the maps — dot colour
+ * encodes mode, so a per-map legend entry would repeat the same swatch up to
+ * a dozen times and couldn't identify anything at a full ~30-map pool. At
+ * most 7 modes exist, so this never needs its own scroll/wrap handling the
+ * old 33-item map legend did.
+ */
 function scatterLegend(points: ScatterPoint[]): HTMLElement {
+  const byMode = new Map<string, { color: string; games: number }>();
+  for (const p of points) {
+    const m = byMode.get(p.mode) ?? { color: p.color, games: 0 };
+    m.games += p.volume;
+    byMode.set(p.mode, m);
+  }
+  const modes = [...byMode.entries()].sort((a, b) => b[1].games - a[1].games);
   return h('div', { class: 'chart-legend' },
-    ...points.map((p) =>
-      h('span', { class: 'legend-item', title: p.name },
-        h('span', { class: 'legend-dot', style: { background: p.color } }), p.short),
+    ...modes.map(([mode, m]) =>
+      h('span', { class: 'legend-item', title: `${mode} · ${m.games} games` },
+        h('span', { class: 'legend-dot', style: { background: m.color } }), mode),
     ),
   );
 }
@@ -344,17 +356,21 @@ export function readinessCard(ctx: ViewContext): HTMLElement | null {
 // --- helpers ----------------------------------------------------------------
 
 function toScatter(byMap: Group[], mapModeOf: (name: string) => string): ScatterPoint[] {
-  // Most-played first, so the legend leads with the relevant maps and each map
-  // gets a stable colour shared by its dot and its legend swatch.
+  // Most-played first, so the legend leads with the most-relevant modes.
   return [...byMap]
     .sort((a, b) => b.games - a.games)
-    .map((m, i) => {
+    .map((m) => {
       const net = m.losses - m.wins;
+      const mode = mapModeOf(m.key);
       return {
         name: m.key,
         short: shorten(m.key),
-        mode: mapModeOf(m.key),
-        color: CATEGORICAL[i % CATEGORICAL.length],
+        mode,
+        // O2: dot colour encodes the game MODE (7 stable hues), not a
+        // per-map index — the old CATEGORICAL[i % 11] repeated every 11
+        // maps, so with a full ~30-map pool every colour was shared by
+        // three unrelated maps and the legend couldn't identify a dot.
+        color: modeColor(mode),
         winrate: m.winrate,
         volume: m.games,
         net,

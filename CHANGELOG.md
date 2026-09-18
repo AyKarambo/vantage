@@ -351,6 +351,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   tag now appears on Overview's Top priority callout. A hero row opens that hero's drawer; a role
   row opens Trends scoped to it. **＋ target** now pre-fills the builder's role/hero scope for a
   hero or role entry, not just the name.
+- **The Overview scatter is legible with a full map pool.** Dots are coloured by **game mode**
+  (7 stable hues) instead of a per-map index that repeated every 11 maps — with the demo's ~30
+  maps every colour used to be shared by three unrelated maps, and the legend couldn't identify
+  any of them. The legend now shows one swatch per mode present, not one per map. Every "focus"
+  dot (net ≥ 3 — the ones the card tells you to "fix first") carries an always-visible short-name
+  label, and the X axis gets three numeric ticks with faint gridlines alongside its caption.
 
 ## 0.34.0 — 31 July 2026
 

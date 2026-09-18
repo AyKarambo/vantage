@@ -10,7 +10,7 @@ export interface ScatterPoint {
   name: string;
   short: string;
   mode: string;
-  color: string; // per-map dot colour, matching the legend swatch
+  color: string; // dot colour, encoding the game mode (O2) — matches the legend swatch
   winrate: number;
   volume: number;
   net: number;
@@ -22,10 +22,15 @@ const clampN = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, 
 /**
  * The flagship: every map plotted by winrate (Y) × volume (X). Below the 50%
  * line is the focus band — losing maps you can't avoid. Dot size scales with
- * how often you play the map; dot colour encodes the game mode (see the legend).
- * The winrate axis auto-fits the data so maps below 40% stay separated instead
- * of piling on one line. Hovering a dot reveals the exact map; `onPick` makes
- * dots clickable (the Overview uses it to jump to the map's row on Maps).
+ * how often you play the map; dot colour encodes the game mode (O2, see the
+ * legend) — the one encoding a full ~30-map pool can actually tell apart.
+ * A short name label sits beside every FOCUS dot (net ≥ 3, O2) so the
+ * bottom-right dots the card copy says to "fix first" are identifiable
+ * without a hover. The winrate axis auto-fits the data so maps below 40%
+ * stay separated instead of piling on one line; the X axis gets numeric
+ * ticks (O2) alongside its caption. Hovering a dot reveals the exact map;
+ * `onPick` makes dots clickable (the Overview uses it to jump to the map's
+ * row on Matches).
  *
  * Returns an HTML wrapper (SVG + tooltip layer) rather than a bare SVG.
  */
@@ -36,7 +41,7 @@ export function scatterChart(points: ScatterPoint[], onPick?: (name: string) => 
     return wrap;
   }
 
-  const padL = 40, padR = 16, padT = 16, padB = 32, W = 640, H = 300;
+  const padL = 40, padR = 16, padT = 16, padB = 40, W = 640, H = 300;
   const left = padL, right = W - padR, top = padT, bot = H - padB;
   const plotW = right - left, plotH = bot - top;
 
@@ -64,7 +69,14 @@ export function scatterChart(points: ScatterPoint[], onPick?: (name: string) => 
   for (const wr of [wrHi, 0.5, wrLo]) {
     s.appendChild(svgText(left - 8, yAt(wr) + 3, `${Math.round(wr * 100)}%`, { anchor: 'end', size: 9.5, fill: PALETTE.dim, mono: true }));
   }
-  s.appendChild(svgText(left, bot + 20, '← fewer games · more games →', { anchor: 'start', size: 9.5, fill: PALETTE.dim, mono: true }));
+  // X ticks (O2) — the caption alone ("fewer ↔ more games") never said HOW
+  // many; faint gridlines + the three round numbers give the axis a scale.
+  for (const v of [0, Math.round(vMax / 2), vMax]) {
+    const x = xAt(v);
+    s.appendChild(svgEl('line', { x1: x, y1: top, x2: x, y2: bot, stroke: withAlpha(PALETTE.dim, 0.08) }));
+    s.appendChild(svgText(x, bot + 12, String(v), { anchor: 'middle', size: 9, fill: PALETTE.dim, mono: true }));
+  }
+  s.appendChild(svgText(left, bot + 26, '← fewer games · more games →', { anchor: 'start', size: 9.5, fill: PALETTE.dim, mono: true }));
 
   // Tooltip layer.
   const tip = h('div', { class: 'chart-tooltip' });
@@ -105,6 +117,19 @@ export function scatterChart(points: ScatterPoint[], onPick?: (name: string) => 
       });
     }
     s.appendChild(dot);
+    // Focus dots (net ≥ 3, O2) get an always-visible short name — these are
+    // exactly the "fix the bottom-right first" dots the card copy points at,
+    // which otherwise carried no label until hovered. Anchored away from
+    // whichever edge the dot sits nearest, so the label never clips.
+    if (p.focus) {
+      const nearRight = cx > right - 60;
+      s.appendChild(svgText(
+        nearRight ? cx - r - 5 : cx + r + 5,
+        cy + 3,
+        p.short,
+        { anchor: nearRight ? 'end' : 'start', size: 9.5, fill: PALETTE.text },
+      ));
+    }
   }
 
   wrap.append(s, tip);
