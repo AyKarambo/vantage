@@ -23,6 +23,8 @@ export interface KpiOpts {
   action?: { label: string; run: () => void };
   /** Whole-card hover tooltip — for context that doesn't fit the single delta line (e.g. the Streak KPI's best/worst-day read, C7). */
   title?: string;
+  /** A second, unaccented line below `delta` — e.g. "vs 2026 Season 3: +12 games" (C3), a period-over-period read that doesn't need the smoothed delta's up/down styling. */
+  sub?: string;
 }
 
 /** Headline metric tile with an optional up/down delta and an optional CTA. */
@@ -36,6 +38,7 @@ export function kpiCard(o: KpiOpts): HTMLElement {
     // the 1040px minimum window).
     h('div', { class: 'kpi-value', title: o.value }, o.value),
     o.delta && h('div', { class: `kpi-delta${o.delta.dir ? ' is-' + o.delta.dir : ''}` }, o.delta.text),
+    o.sub && h('div', { class: 'kpi-sub' }, o.sub),
     o.action && button(o.action.label, { variant: 'soft', class: 'kpi-action', onClick: o.action.run }),
   );
 }

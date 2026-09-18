@@ -44,7 +44,9 @@ account's per-role lines beneath it.
   screen that explains it), KPIs (winrate, games, rank, streak — the Rank tile marks a
   winrate-derived guess as **"E3 est."** with a **Set rank** action instead of drawing it
   like a measured number, and the Winrate delta states its own window, "▾ 16 pts · last 5
-  days"), the flagship
+  days"; Winrate and Games each also carry a period-over-period line against the window
+  immediately before this one, "vs 2026 Season 3: +3.2 pts" / "vs the previous 30 days: +12
+  games"), the flagship
   *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
   short-name label beside every priority dot, and numeric axis ticks — with a top-priority
   callout, an activity heatmap (games/day, click a day to open its matches), and a mental
@@ -136,12 +138,17 @@ account's per-role lines beneath it.
   was already there.
 - **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
   credited to each hero by its share of the match time, the way the in-game career profile
-  does it — see *Played time* below), with a **W-L** column, a **±SR** column (net SR change,
-  weighted by the same time-share credit as the rest of the row), a played-**Time** column (the
-  real sample-size tell a rounded game count can't carry), a **Trend** column (▴/→/▾ — is this
+  does it — see *Played time* below), with a **W-L** column, a sortable **Net** column
+  (losses − wins, so sorting by what's actually costing you games is one click), a **±SR**
+  column (net SR change, weighted by the same time-share credit as the rest of the row), a
+  sortable **Δ WR** column against the previous comparison window (period-over-period, greyed
+  under a 5-game sample floor rather than hidden), a played-**Time** column (the real
+  sample-size tell a rounded game count can't carry), a **Trend** column (▴/→/▾ — is this
   hero getting better or worse lately?), and no hidden games-floor or row cap — the min-games
   chips are the only filter, so a 1-game hero still shows and is reachable from the command
-  palette. A click-through drill-down drawer adds a role icon and a scope line stating which
+  palette. A hint line above the table names the hero costing you the most net losses right
+  now alongside its role's overall winrate. A click-through drill-down drawer adds a role
+  icon, a **＋ target** action pre-filled to the hero, and a scope line stating which
   filters the numbers follow, per-map winrate (each map opening that map's own games on
   Matches), and recent games that open straight into that match's detail page.
 - **Focus** — the "what to work on" hub: your net-losing **roles, heroes and maps**, each in

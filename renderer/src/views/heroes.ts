@@ -2,8 +2,8 @@
 import { h, render } from '../dom';
 import type { HeroDetail, HeroSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { duration, fmt, fmt1, pct, roleLabel, signed } from '../format';
-import { wrColor } from '../theme';
+import { duration, fmt, fmt1, int, pct, roleLabel, signed } from '../format';
+import { PALETTE, wrColor } from '../theme';
 import { prefs } from '../prefs';
 import { store } from '../store';
 import { card, chip, emptyState, resultPill, statBox } from '../components/primitives';
@@ -24,6 +24,9 @@ export function heroes(ctx: ViewContext): HTMLElement {
   // Self-rating averages join by hero key (a multi-hero match's single rating
   // counts toward each hero, same convention as the winrate/per-10 columns).
   const ratingByHero = new Map(ctx.data.performance.byHero.map((b) => [b.key, b.avg]));
+  // For the Δ WR column's "greyed under 5 games in either window" gate (C3).
+  const prevHeroGames = new Map((ctx.data.previous?.heroStats ?? []).map((h) => [h.hero, h.games]));
+  const LOW_SAMPLE = 5;
   // Column order is the display order; `get` drives sort, `render` is optional display formatting.
   const columns: Array<Column<HeroSummary>> = [
     { key: 'hero', label: 'Hero', get: (r) => r.hero },
@@ -35,10 +38,29 @@ export function heroes(ctx: ViewContext): HTMLElement {
     // W-L (H5): the games column alone can't say whether a rounded credit is
     // signal or a coin-flip sample — Focus and Matches already show W-L.
     { key: 'wl', label: 'W-L', sortable: false, get: () => null, render: (r) => h('span', { class: 'mono', style: { color: wrColor(r.winrate) } }, `${r.wins}W ${r.losses}L`) },
+    // Net (C3): losses − wins, so "sort by what costs me most" is one click
+    // — same sign convention Focus's own net-loss ranking uses.
+    { key: 'net', label: 'Net', get: (r) => r.losses - r.wins, render: (r) => signed(r.losses - r.wins) },
     { key: 'winrate', label: 'WR', get: (r) => r.winrate, render: (r) => h('span', { style: { color: wrColor(r.winrate) } }, pct(r.winrate)) },
     // ±SR (C2): a rounded credited-games count can't say whether a hero's
     // losses cost 5% or 50% — the data was already on disk, just never shown.
     { key: 'sr', label: '±SR', get: (r) => r.srNet ?? null, render: (r) => (r.srNet === undefined ? '–' : `${signed(Math.round(r.srNet))}%`) },
+    // Δ WR (C3): vs. the same hero's line in the previous comparison window —
+    // only shown when one exists ("All time" has nothing before it). Greyed
+    // (not hidden) below a 5-game floor on either side so a real number never
+    // silently vanishes, it just reads as "don't trust this yet".
+    ...(ctx.data.previous ? [{
+      key: 'deltaWr', label: 'Δ WR',
+      get: (r: HeroSummary) => r.deltaWinrate ?? null,
+      render: (r: HeroSummary) => {
+        if (r.deltaWinrate === undefined) return '–';
+        const lowSample = r.games < LOW_SAMPLE || (prevHeroGames.get(r.hero) ?? 0) < LOW_SAMPLE;
+        const arrow = r.deltaWinrate > 0 ? '▴ ' : r.deltaWinrate < 0 ? '▾ ' : '';
+        // Same ±10-point neutral band the Overview Rank KPI's own movement arrow uses.
+        const deltaColor = r.deltaWinrate >= 10 ? PALETTE.win : r.deltaWinrate <= -10 ? PALETTE.loss : PALETTE.mid;
+        return h('span', lowSample ? { class: 'u-dim' } : { style: { color: deltaColor } }, `${arrow}${signed(r.deltaWinrate)}`);
+      },
+    } as Column<HeroSummary>] : []),
     // Trend (H6): recent-vs-earlier verdict, reusing Focus's dimension-agnostic
     // read — 'is my Genji getting better this season?' used to need a drawer
     // open per hero; this answers it at a glance across the whole table.
@@ -74,6 +96,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
   const minGames = prefs.get('minGames') ?? 1;
   const rows = ctx.data.heroStats.filter((r) => r.games >= minGames);
   const hidden = ctx.data.heroStats.length - rows.length;
+  const hint = worstHeroHint(ctx);
 
   const minGamesChips = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
     h('span', { class: 'u-dim', style: { fontSize: '11px' } }, 'min. games'),
@@ -97,6 +120,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
     viewHead('Heroes',
       `Exact stats, per 10 minutes played · click a hero to drill down${hidden > 0 ? ` · ${hidden} low-sample hidden` : ''}`,
       minGamesChips),
+    hint ? h('div', { class: 'hint', style: { margin: '0 0 8px' } }, hint) : null,
     card({ class: 'card--flush', style: { padding: '4px 10px 10px' } },
       dataTable({
         columns,
@@ -164,9 +188,12 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
   // ties and nothing broke the tie (H7).
   const byMap = [...d.byMap].sort((a, b) => b.games - a.games || b.winrate - a.winrate);
   return h('div', null,
-    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
-      roleIcon(s?.role),
-      h('h3', { style: { fontSize: '18px' } }, d.hero),
+    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', justifyContent: 'space-between' } },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
+        roleIcon(s?.role),
+        h('h3', { style: { fontSize: '18px' } }, d.hero),
+      ),
+      targetButton(ctx, d.hero, close),
     ),
     h('p', { class: 'u-muted', style: { fontSize: '12px', margin: '2px 0 2px' } },
       `${d.overall.games} games · ${pct(d.overall.winrate)} winrate · ${d.overall.wins}W ${d.overall.losses}L`),
@@ -228,6 +255,37 @@ function formStrip(s: HeroSummary | null): HTMLElement | null {
       ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(s.form.deltaPp)}pp vs range`)
       : null,
   );
+}
+
+/**
+ * "Sort by what costs me most" answered before you even touch a column
+ * header (C3): the hero with the most net losses this range, alongside its
+ * own role's overall winrate for context on how much of an outlier it is.
+ * `≥3` games so a single unlucky game can't headline the whole table.
+ */
+function worstHeroHint(ctx: ViewContext): string | undefined {
+  const worst = [...ctx.data.heroStats]
+    .filter((r) => r.games >= 3 && r.losses > r.wins)
+    .sort((a, b) => (b.losses - b.wins) - (a.losses - a.wins))[0];
+  if (!worst) return undefined;
+  const role = worst.role ? ctx.data.byRole.find((g) => g.key === worst.role) : undefined;
+  const roleText = role ? ` · ${roleLabel(role.key)} overall ${pct(role.winrate)} (${int(role.games)}g)` : '';
+  return `Most games lost on ${worst.hero} (${pct(worst.winrate)}, ${int(worst.games)}g)${roleText}`;
+}
+
+/** Quick-create a practice target scoped to this hero (C3) — same pre-fill idiom as Focus's own "＋ target" (H1), reused here so the builder opens already scoped instead of just named. */
+function targetButton(ctx: ViewContext, hero: string, close: () => void): HTMLElement {
+  return h('button', {
+    class: 'btn btn--ghost',
+    style: { padding: '3px 8px', fontSize: '10.5px', flex: '0 0 auto' },
+    title: `Create a practice target for ${hero}`,
+    on: {
+      click: () => {
+        close();
+        ctx.navigate('targets', { prefillName: `Practice ${hero}: warm up unranked + review one replay`, prefillHeroes: [hero] });
+      },
+    },
+  }, '＋ target');
 }
 
 function section(title: string, rows: Node[]): HTMLElement {

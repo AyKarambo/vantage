@@ -125,6 +125,20 @@ export interface PendingMatch {
   reportedResult?: Result;
 }
 
+/**
+ * The comparison window immediately before the active filter's (C3): the
+ * previous season for a season filter, the `[now−2N, now−N)` block for an
+ * N-day filter — same account/role scoping as the active window's `games`.
+ */
+export interface PreviousWindow {
+  /** The prior season's name, or "the previous N days" for a day-count filter. */
+  label: string;
+  overall: WinLoss;
+  byRole: Group[];
+  byMapType: Group[];
+  heroStats: HeroSummary[];
+}
+
 /** Everything the dashboard needs for the current filter set. */
 export interface DashboardData {
   /** Effective demo display: the sample season is shown (demo opted-in AND no real history). */
@@ -210,6 +224,8 @@ export interface DashboardData {
   trend: TrendGroup[];
   /** The winrate-chart momentum strip (C6): trailing window vs. the one before it, over the same filtered games as `trend`. Null below the sample floor. */
   momentum: Momentum | null;
+  /** The comparison window immediately before this one (C3); absent for "All time" or when there's nothing addressable before it. */
+  previous?: PreviousWindow;
   /** Winrate per local day-part (Morning/Afternoon/Evening/Night). */
   timeOfDay: Group[];
   /** Winrate by game number within a session ('1'..'5', '6+'). */

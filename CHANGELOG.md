@@ -425,6 +425,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   column. Trends also states the momentum in numbers now, not just a line to eyeball: a strip
   above the chart reads last-window winrate, the window before it, and the signed point
   change — 7 days normally, 4 weeks once the chart itself switches to weekly buckets.
+- **Compare this range against the one before it.** The Overview Winrate and Games KPIs each
+  gain a second line — "vs 2026 Season 3: +3.2 pts", "vs the previous 30 days: +12 games" —
+  instead of only a smoothed within-range wobble. The Heroes table gains a sortable **Net**
+  column (losses − wins, so "sort by what costs me most" is one click) and a sortable **Δ WR**
+  column against the same previous window, greyed rather than hidden under a 5-game floor on
+  either side, plus a hint line naming the hero costing you the most right now alongside its
+  role's overall winrate for context. A hero's drawer also gets a **＋ target** action that
+  opens the builder already scoped to it. Absent on "All time" — there's nothing before
+  everything — or when the active season has no earlier entry with data.
 
 ## 0.34.0 — 31 July 2026
 
