@@ -17,16 +17,18 @@ export interface AuthoredTarget {
   /** Legacy field kept for old manual.json files; new writes are always 'season'. */
   scope?: 'match' | 'season';
   /**
-   * Role/hero scope, shared by both modes. `measured` targets evaluate the rule
-   * only over the in-scope per-hero stat rows ({@link ./measured matchStatValue});
-   * `self` targets use the coarser per-match check ({@link ./scope
-   * matchInTargetScope}) to decide whether the target applies to a match at all.
-   * `roleScope` restricts to one role (and skips open-queue matches), `heroScope`
-   * restricts to one or more heroes (folded by {@link ../heroes heroMatchKey}).
-   * Both absent = unscoped/global (legacy).
+   * Role/hero/map scope, shared by both modes. `measured` targets evaluate the
+   * rule only over the in-scope per-hero stat rows ({@link ./measured
+   * matchStatValue}); `self` targets use the coarser per-match check
+   * ({@link ./scope matchInTargetScope}) to decide whether the target applies
+   * to a match at all. `roleScope` restricts to one role (and skips open-queue
+   * matches), `heroScope` restricts to one or more heroes (folded by
+   * {@link ../heroes heroMatchKey}), `mapScope` (R9) restricts to one or more
+   * maps. All absent = unscoped/global (legacy).
    */
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
   rule: string;
   createdAt: number;
   /** Active targets are the ones graded on the Review screen. */
@@ -43,9 +45,10 @@ export interface TargetSummary {
   name: string;
   mode: TargetMode;
   rule: string;
-  /** Target scope (D), round-tripped so the builder can pre-fill on edit. */
+  /** Target scope (D, R9), round-tripped so the builder can pre-fill on edit. */
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
   hitRate: number; // 0..1
   hits: number;
   attempts: number;

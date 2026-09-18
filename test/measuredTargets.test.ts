@@ -171,6 +171,19 @@ describe('matchStatValue — role/hero scope (D)', () => {
     const g = game({ durationMinutes: 20, perHero: [hero({ hero: 'Tracer', role: undefined, damage: 12000 })] });
     expect(matchStatValue(g, 'Damage', { roleScope: 'damage' })).toBeNull();
   });
+
+  it('mapScope (R9) skips the whole match when the map is out of scope, before any role/hero filtering', () => {
+    const g = game({ map: 'Numbani', durationMinutes: 20, perHero: [hero({ hero: 'Tracer', role: 'damage', damage: 12000 })] });
+    expect(matchStatValue(g, 'Damage', { mapScope: ['Ilios'] })).toBeNull();
+    // Even an otherwise-fully-satisfied role/hero scope doesn't rescue it.
+    expect(matchStatValue(g, 'Damage', { mapScope: ['Ilios'], roleScope: 'damage', heroScope: ['Tracer'] })).toBeNull();
+  });
+
+  it('mapScope (R9) applies to the whole match, not per-hero rows — an in-scope map still measures normally', () => {
+    const g = multi(); // map defaults to 'Ilios' via the game() fixture
+    expect(matchStatValue(g, 'Damage', { mapScope: ['Ilios'] })).toBe(matchStatValue(g, 'Damage'));
+    expect(matchStatValue(g, 'Damage', { mapScope: ['Ilios', 'Numbani'] })).toBe(matchStatValue(g, 'Damage'));
+  });
 });
 
 describe('evaluateMeasured — Hit / Partial / Missed bands (default m = 20%)', () => {

@@ -8,21 +8,25 @@ import type { GameRecord } from '../analytics';
 import type { Role } from '../model';
 import { heroMatchKey } from '../heroes';
 
-/** Optional role/hero scope for a target. Both absent/empty = unscoped (matches every game). */
+/** Optional role/hero/map scope for a target (R9 adds `mapScope`). All absent/empty = unscoped (matches every game). */
 export interface TargetScope {
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
 }
 
 /**
  * Whether `game` falls inside `scope`. `roleScope` must equal `game.role`
  * exactly (an `openQ` game never equals a specific role, so it's excluded with
  * no separate check). `heroScope` matches if any scoped hero appears anywhere
- * in `game.heroes`, folded via {@link heroMatchKey} on both sides. Both set is
- * an AND. Unscoped (neither set) is always `true`.
+ * in `game.heroes`, folded via {@link heroMatchKey} on both sides. `mapScope`
+ * (R9) matches if `game.map` is exactly one of the scoped maps — maps come
+ * from a fixed picker (`masterData.maps`), not free text, so plain equality
+ * is enough; no folding needed. All set fields are an AND. Unscoped (nothing
+ * set) is always `true`.
  */
-export function matchInTargetScope(game: Pick<GameRecord, 'heroes' | 'role'>, scope: TargetScope): boolean {
-  const { roleScope, heroScope } = scope;
+export function matchInTargetScope(game: Pick<GameRecord, 'heroes' | 'role' | 'map'>, scope: TargetScope): boolean {
+  const { roleScope, heroScope, mapScope } = scope;
 
   if (roleScope != null && game.role !== roleScope) return false;
 
@@ -30,6 +34,8 @@ export function matchInTargetScope(game: Pick<GameRecord, 'heroes' | 'role'>, sc
     const scopedKeys = new Set(heroScope.map(heroMatchKey));
     if (!game.heroes.some((h) => scopedKeys.has(heroMatchKey(h)))) return false;
   }
+
+  if (mapScope != null && mapScope.length > 0 && !mapScope.includes(game.map)) return false;
 
   return true;
 }

@@ -412,6 +412,61 @@ describe('linkFocusTargets', () => {
     expect(neverLinked.dimension).toBe('map');
     expect(neverLinked.progress).toBeUndefined();
   });
+
+  describe('scope-based linking (R9)', () => {
+    it('links a map entry by mapScope even when the name never mentions the map', () => {
+      const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Busan' }));
+      const t = target('My personal warmup routine', { mapScope: ['Busan'] });
+      const [linked] = linkFocusTargets(entriesFor(games), [t], games);
+      expect(linked.progress?.targetId).toBe(t.id);
+    });
+
+    it('links a role entry by roleScope even when the name never mentions the role', () => {
+      const games = run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win', 'Win'], { role: 'tank' });
+      const roleEntries = focusEntries(games).filter((e) => e.dimension === 'role');
+      const t = target('My personal warmup routine', { roleScope: 'tank' });
+      const [linked] = linkFocusTargets(roleEntries, [t], games);
+      expect(linked.progress?.targetId).toBe(t.id);
+    });
+
+    it('links a hero entry by heroScope, folding casing/accents via heroMatchKey', () => {
+      const games = run(8, ['Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win'], { heroes: ['Ana'] });
+      const heroEntries = focusEntries(games).filter((e) => e.dimension === 'hero');
+      const t = target('My personal warmup routine', { heroScope: ['ana'] });
+      const [linked] = linkFocusTargets(heroEntries, [t], games);
+      expect(linked.progress?.targetId).toBe(t.id);
+    });
+
+    it('a scope link wins over a conflicting name-token match', () => {
+      // Named for Oasis (would name-match) but scoped to Busan — scope wins.
+      const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Busan' }));
+      const namedForOasis = target('Practice Oasis', { mapScope: ['Busan'] });
+      const [linked] = linkFocusTargets(entriesFor(games), [namedForOasis], games);
+      expect(linked.progress?.targetId).toBe(namedForOasis.id);
+    });
+
+    it('falls back to the name-token match when no candidate scope-links (legacy targets)', () => {
+      const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Busan' }));
+      const legacy = target('Practice Busan: warm up unranked'); // no mapScope at all
+      const [linked] = linkFocusTargets(entriesFor(games), [legacy], games);
+      expect(linked.progress?.targetId).toBe(legacy.id);
+    });
+
+    it('picks the most recently flagged among several scope-linked candidates', () => {
+      const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Junkertown' }));
+      const older = target('v1', { mapScope: ['Junkertown'], activatedAt: T0 + 1 * HOUR });
+      const newer = target('v2', { mapScope: ['Junkertown'], activatedAt: T0 + 2 * HOUR });
+      const [linked] = linkFocusTargets(entriesFor(games), [older, newer], games);
+      expect(linked.progress?.targetId).toBe(newer.id);
+    });
+
+    it('a target scoped to a DIFFERENT map never links, even if its name would otherwise match', () => {
+      const games = [0, 1, 2].map((i) => at(i, 'Loss', { map: 'Busan' }));
+      const t = target('Practice Busan: warm up', { mapScope: ['Ilios'] });
+      const [linked] = linkFocusTargets(entriesFor(games), [t], games);
+      expect(linked.progress).toBeUndefined();
+    });
+  });
 });
 
 describe('dashboard focusItems payload', () => {

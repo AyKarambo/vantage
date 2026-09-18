@@ -66,4 +66,25 @@ describe('matchInTargetScope', () => {
     expect(matchInTargetScope(g, { roleScope: 'support', heroScope: ['Tracer'] })).toBe(false);
     expect(matchInTargetScope(g, { roleScope: 'damage', heroScope: ['Widowmaker'] })).toBe(false);
   });
+
+  describe('mapScope (R9)', () => {
+    it('matches when game.map is exactly one of the scoped maps', () => {
+      expect(matchInTargetScope(game({ map: 'Ilios' }), { mapScope: ['Ilios'] })).toBe(true);
+      expect(matchInTargetScope(game({ map: 'Ilios' }), { mapScope: ['Numbani', 'Ilios'] })).toBe(true);
+    });
+
+    it('a map not in mapScope is false', () => {
+      expect(matchInTargetScope(game({ map: 'Numbani' }), { mapScope: ['Ilios'] })).toBe(false);
+    });
+
+    it('is an AND with role/hero scope — all set fields must hold', () => {
+      const g = game({ map: 'Ilios', role: 'damage', heroes: ['Tracer'] });
+      expect(matchInTargetScope(g, { mapScope: ['Ilios'], roleScope: 'damage', heroScope: ['Tracer'] })).toBe(true);
+      expect(matchInTargetScope(g, { mapScope: ['Numbani'], roleScope: 'damage', heroScope: ['Tracer'] })).toBe(false);
+    });
+
+    it('an empty mapScope array behaves as unscoped, same as heroScope', () => {
+      expect(matchInTargetScope(game({ map: 'Ilios' }), { mapScope: [] })).toBe(true);
+    });
+  });
 });

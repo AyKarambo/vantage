@@ -162,8 +162,10 @@ account's per-role lines beneath it.
   you've logged one, and — once you track it as a target — the winrate movement since you
   flagged it; a map row also shows its top heroes' own W-L and an "Out of pool" tag if it's
   outside the current competitive rotation. A hero row opens that
-  hero's drawer, a role row opens Trends scoped to it, and **＋ target** pre-fills the builder's
-  hero/role scope, not just the name.
+  hero's drawer, a role row opens Trends scoped to it, and **Track as target** opens a small
+  popover explaining what it creates before pre-filling the builder's hero/role/map scope, not
+  just the name — and links back to a target scoped that way directly, not just by matching
+  its name.
 - **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
   winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
   and the performance drop when tilted — each sample-gated), a **tilt-rate trend** sparkline
@@ -287,14 +289,16 @@ account's per-role lines beneath it.
   the stat or scope. A measured stat within a **configurable partial-credit margin** of its
   threshold (default 20%, in Settings → General → Coaching) scores **Partial** rather than
   Missed. Any target — self-rated or measured — can be
-  **scoped to a role and/or one or more heroes** (collapsed behind a one-line "Applies to: …"
-  summary until you hit **Change**, since the full picker otherwise pushes Save off-screen), so
-  it only applies to games it's actually relevant to: a scoped-out match skips a measured
-  target's auto-grade and hides a self-rated target from Review entirely, for both auto-tracked
-  and hand-logged games alike — a scoped target now carries a compact **scope badge** (role
-  icon + "Tank" / "Zarya, D.Va" / "Support · Ana") on its Targets row, its detail page, and its
-  grade row on Review, and an out-of-scope self target on a Review card leaves behind a muted
-  "1 target skipped — scoped to …" line instead of just silently not showing up. Each target
+  **scoped to a role, one or more heroes, and/or one or more maps** (collapsed behind a
+  one-line "Applies to: …" summary until you hit **Change**, since the full picker otherwise
+  pushes Save off-screen), so it only applies to games it's actually relevant to: a scoped-out
+  match skips a measured target's auto-grade and hides a self-rated target from Review entirely,
+  for both auto-tracked and hand-logged games alike — a map scope gates the WHOLE match, since
+  map isn't a per-hero property the way role/hero can vary within a swap. A scoped target now
+  carries a compact **scope badge** (role icon + "Tank" / "Zarya, D.Va" / "Support · Ana ·
+  Ilios") on its Targets row, its detail page, and its grade row on Review, and an out-of-scope
+  self target on a Review card leaves behind a muted "1 target skipped — scoped to …" line
+  instead of just silently not showing up. Each target
   carries a small **goal-flag** icon for at-a-glance identification. Measured thresholds take
   **scroll-to-adjust** (per-stat steps, hold Shift for bigger jumps). The **Targets list** shows
   each target in plain language — name, grading mode, hit-rate, one status sentence, and a
@@ -314,9 +318,10 @@ account's per-role lines beneath it.
   Rotate your focus with the **Active focus** panel (quick add/remove + an undoable **"start a
   fresh focus"**, toast with **Undo**); active targets that go stale (past a configurable
   days/matches threshold) get a rotate nudge. The **Focus** screen can create a practice target
-  for a losing map, hero or role in one click (**＋ target**) — the builder opens with the
-  matching hero/role scope
-  already selected, not just a prefilled name.
+  for a losing map, hero or role in one click (**Track as target** — a small popover explains
+  what it creates before you confirm) — the builder opens with the matching hero/role/map scope
+  already selected, not just a prefilled name, and Focus links its progress display back to that
+  target by scope, not by guessing from its name.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still

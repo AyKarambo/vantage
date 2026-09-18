@@ -73,9 +73,10 @@ export interface AuthoredTargetInput {
   name: string;
   mode: TargetMode;
   rule: string;
-  /** Role/hero scope, shared by both modes (D): restrict evaluation to a role and/or heroes. */
+  /** Role/hero/map scope, shared by both modes (D, R9): restrict evaluation to a role, hero(es) and/or map(s). */
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
 }
 
 /** A personal-threshold suggestion request for the Measured builder pane (R7). */
@@ -93,9 +94,10 @@ export interface TargetEditInput {
   name: string;
   mode: TargetMode;
   rule: string;
-  /** Role/hero scope, shared by both modes (D); absent clears any previously-saved scope. */
+  /** Role/hero/map scope, shared by both modes (D, R9); absent clears any previously-saved scope. */
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
 }
 
 /** A Review-screen read (target grades + feel flags) for one tracked match. */

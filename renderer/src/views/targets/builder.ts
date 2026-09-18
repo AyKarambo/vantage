@@ -5,7 +5,7 @@
  * (`BuilderHandle.prefill`).
  */
 import { h, render } from '../../dom';
-import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
+import type { HeroEntry, MapEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
 import { stepFor, parseMeasuredRule, roundToStep, MEASURED_STATS, type ThresholdSuggestion } from '../../../../src/core/targets';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
@@ -29,9 +29,10 @@ export interface BuilderState {
   stat: string;
   op: string;
   value: string;
-  /** Role/hero scope (D), shared by both modes. Undefined = "Any" (applies to the whole match). */
+  /** Role/hero/map scope (D, R9), shared by both modes. Undefined = "Any" (applies to the whole match). */
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
 }
 
 export interface BuilderHandle {
@@ -40,9 +41,9 @@ export interface BuilderHandle {
   edit: (t: TargetSummary) => void;
   /** Load a template (or a Focus quick-create) into the builder — always
    *  creates on save, even if the builder was mid-edit (AC 1–2). `roleScope`/
-   *  `heroScope` (H1) seed the scope picker for a hero/role quick-create.
-   *  Opens the card if it was collapsed. */
-  prefill: (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }) => void;
+   *  `heroScope`/`mapScope` (H1, R9) seed the scope picker for a hero/role/map
+   *  quick-create. Opens the card if it was collapsed. */
+  prefill: (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[]; mapScope?: string[] }) => void;
 }
 
 // NOTE: save()'s rule template (`${stat} ${op} ${value}`) and loadRule()'s
@@ -63,6 +64,7 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
     value: '4',
     roleScope: undefined,
     heroScope: undefined,
+    mapScope: undefined,
   };
   // Collapsed by default once the player already has a set (R5) — the builder
   // used to always be the first thing on the screen, pushing "how are my
@@ -74,7 +76,7 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
     const name = state.name.trim() || 'Untitled target';
     const rule = state.mode === 'self' ? 'You grade it' : `${state.stat} ${state.op} ${state.value}`;
     // Scope applies identically to both modes now — always send it.
-    const scope = { roleScope: state.roleScope, heroScope: state.heroScope };
+    const scope = { roleScope: state.roleScope, heroScope: state.heroScope, mapScope: state.mapScope };
     const persist = state.editingId
       ? bridge.updateTarget({ id: state.editingId, name, mode: state.mode, rule, ...scope })
       : bridge.saveTarget({ name, mode: state.mode, rule, ...scope });
@@ -93,8 +95,8 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
 
     const drawGrade = (): void => {
       render(gradeBlock, state.mode === 'self'
-        ? selfBlock(state, ctx.data.masterData.heroes, dirty)
-        : measuredBlock(state, ctx.data.masterData.heroes, dirty, ctx));
+        ? selfBlock(state, ctx.data.masterData.heroes, ctx.data.masterData.maps, dirty)
+        : measuredBlock(state, ctx.data.masterData.heroes, ctx.data.masterData.maps, dirty, ctx));
     };
     const drawFooter = (): void => {
       render(footer,
@@ -141,13 +143,14 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
   // parses the `${stat} ${op} ${value}` string back into the stat/op/value
   // controls via the shared core parser (`parseMeasuredRule`), the inverse of
   // save()'s template — one round-trip, one source of truth.
-  const loadRule = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }): void => {
+  const loadRule = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[]; mapScope?: string[] }): void => {
     state.name = t.name;
     state.mode = t.mode;
     state.saved = false;
     // Round-trip scope on edit regardless of mode; templates carry none, so they clear it.
     state.roleScope = t.roleScope;
     state.heroScope = t.heroScope;
+    state.mapScope = t.mapScope;
     const rule = parseMeasuredRule(t.rule);
     if (t.mode === 'measured' && rule) {
       state.stat = rule.stat;
@@ -173,7 +176,7 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
     reveal();
   };
 
-  const prefill = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] }): void => {
+  const prefill = (t: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[]; mapScope?: string[] }): void => {
     open = true;
     // Always creates on save — abandon any in-progress edit (AC 2).
     state.editingId = null;
@@ -186,12 +189,12 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
   return { el: host, edit, prefill };
 }
 
-export function selfBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
+export function selfBlock(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void): HTMLElement {
   return h('div', { class: 'card', style: { background: 'var(--accent-soft)', borderColor: 'var(--accent-border)' } },
     h('div', { style: { fontSize: '12.5px', color: 'var(--text-2)', marginBottom: '9px' } }, 'You judge it after the game. No stats needed.'),
     h('div', { style: { display: 'flex', gap: '7px' } },
       gradeChip('Hit', PALETTE.winText), gradeChip('Partial', PALETTE.mid), gradeChip('Missed', PALETTE.lossText)),
-    scopeBlock(state, heroes, onChange),
+    scopeBlock(state, heroes, maps, onChange),
   );
 }
 
@@ -226,7 +229,7 @@ export function suggestionAccount(ctx: ViewContext): string | undefined {
   return ctx.data.filters.account !== 'all' ? ctx.data.filters.account : ctx.data.options.accounts[0];
 }
 
-export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void, ctx: ViewContext): HTMLElement {
+export function measuredBlock(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void, ctx: ViewContext): HTMLElement {
   const preview = badge(previewText(state), 'auto');
   const update = (): void => { preview.textContent = previewText(state); onChange(); };
 
@@ -284,7 +287,7 @@ export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange
     suggestionHost,
     // Scope changes also affect the suggestion — it must re-fetch, not just
     // repaint the picker.
-    scopeBlock(state, heroes, () => { onChange(); refreshSuggestion(); }),
+    scopeBlock(state, heroes, maps, () => { onChange(); refreshSuggestion(); }),
   );
 }
 
@@ -317,43 +320,46 @@ function suggestionPanel(stat: string, s: ThresholdSuggestion | null, onUse: (v:
 }
 
 /**
- * Role + hero scope, collapsed by default behind a one-line summary (R5) —
- * with "Any role" selected the full picker paints every hero in the game
- * (`paintHeroChips`'s openQ fallback), which used to be what filled the
- * whole viewport before Save was even visible, for a field most targets
- * never touch. Starts expanded when the loaded target already carries a
- * scope; otherwise a "Change" link reveals the untouched {@link scopePickers}.
+ * Role + hero + map scope (R9), collapsed by default behind a one-line
+ * summary (R5) — with "Any role" selected the full picker paints every hero
+ * in the game (`paintHeroChips`'s openQ fallback), which used to be what
+ * filled the whole viewport before Save was even visible, for a field most
+ * targets never touch. Starts expanded when the loaded target already
+ * carries a scope; otherwise a "Change" link reveals the untouched
+ * {@link scopePickers}.
  */
-function scopeBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
+function scopeBlock(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void): HTMLElement {
   const host = h('div');
-  let expanded = state.roleScope != null || (state.heroScope?.length ?? 0) > 0;
+  let expanded = state.roleScope != null || (state.heroScope?.length ?? 0) > 0 || (state.mapScope?.length ?? 0) > 0;
 
   const summaryRow = (): HTMLElement => {
     const rolePart = state.roleScope ? roleLabel(state.roleScope) : 'any role';
     const heroPart = state.heroScope?.length ? state.heroScope.join(', ') : 'any hero';
+    const mapPart = state.mapScope?.length ? state.mapScope.join(', ') : 'any map';
     return h('div', {
       class: 'hint',
       style: { marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
     },
       state.roleScope ? roleIcon(state.roleScope, { size: 13 }) : null,
-      h('span', null, `Applies to: ${rolePart}, ${heroPart}`),
+      h('span', null, `Applies to: ${rolePart}, ${heroPart}, ${mapPart}`),
       h('span', null, '·'),
       inlineLink('Change', { onClick: () => { expanded = true; draw(); } }),
     );
   };
 
   const draw = (): void => {
-    render(host, expanded ? scopePickers(state, heroes, onChange) : summaryRow());
+    render(host, expanded ? scopePickers(state, heroes, maps, onChange) : summaryRow());
   };
   draw();
   return host;
 }
 
-/** The role/hero picker (D) itself — restricts grading to a role and/or one
- *  or more heroes. Shared by both self-rated and measured targets; the scope
- *  is stored identically regardless of grading mode. Unchanged by the R5
- *  disclosure above it — only when it's shown changed, not what it shows. */
-function scopePickers(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
+/** The role/hero/map picker (D, R9) itself — restricts grading to a role,
+ *  one or more heroes, and/or one or more maps. Shared by both self-rated and
+ *  measured targets; the scope is stored identically regardless of grading
+ *  mode. Unchanged by the R5 disclosure above it — only when it's shown
+ *  changed, not what it shows. */
+function scopePickers(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void): HTMLElement {
   const heroHost = h('div');
   const heroSelected = new Set<string>(state.heroScope ?? []);
   const paintHeroes = (): void => {
@@ -404,12 +410,30 @@ function scopePickers(state: BuilderState, heroes: HeroEntry[], onChange: () => 
   paintRoles();
   paintHeroes();
 
+  const mapHost = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } });
+  const mapSelected = new Set<string>(state.mapScope ?? []);
+  const paintMaps = (): void => {
+    render(mapHost, ...[...maps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => {
+      const el = h('button', { class: `chip${mapSelected.has(m.name) ? ' is-on' : ''}` }, m.name);
+      el.addEventListener('click', () => {
+        mapSelected.has(m.name) ? mapSelected.delete(m.name) : mapSelected.add(m.name);
+        el.classList.toggle('is-on');
+        state.mapScope = mapSelected.size ? [...mapSelected] : undefined;
+        onChange();
+      });
+      return el;
+    }));
+  };
+  paintMaps();
+
   return h('div', null,
     h('div', { class: 'field-label', style: { marginTop: '14px' } }, 'Scope (optional)'),
     h('div', { class: 'hint', style: { marginBottom: '8px' } },
-      'Limit this target to a role and/or one or more heroes — leave as “Any role” with no heroes to apply to the whole match. Out-of-scope matches don’t grade or offer this target.'),
+      'Limit this target to a role, one or more heroes, and/or one or more maps — leave everything as “Any” to apply to the whole match. Out-of-scope matches don’t grade or offer this target.'),
     roleHost,
     h('div', { style: { marginTop: '8px' } }, heroHost),
+    h('div', { class: 'field-label', style: { marginTop: '12px', fontSize: '11.5px' } }, 'Map'),
+    h('div', { style: { marginTop: '6px' } }, mapHost),
   );
 }
 

@@ -56,6 +56,8 @@ export interface ViewParams {
   prefillRole?: Role;
   /** Targets: prefill the builder's hero scope — Focus's per-hero "＋ target" (H1). */
   prefillHeroes?: string[];
+  /** Targets: prefill the builder's map scope — Focus's per-map "＋ target" (R9). */
+  prefillMap?: string[];
   /** playerHistory: the player whose shared-match history to show (a name/battleTag). */
   playerName?: string;
   /** targetDetail: the improvement target to drill into. */
