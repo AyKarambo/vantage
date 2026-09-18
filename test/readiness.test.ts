@@ -576,6 +576,40 @@ describe('composite — habitual high volume stays green', () => {
     expect(r.score!).toBeGreaterThanOrEqual(65);
     expect(r.load.ratio).toBeLessThan(1.3);
   });
+
+  // C8: the same 24-straight-days rhythm used to read the consecutive-days
+  // signal as 'high' purely off `consecutiveDays >= sustainedDays` (24 ≥ 5) —
+  // contradicting the calm, green verdict above, since the score's own
+  // streak penalty is volume-gated and never fired for a flat, on-habit rhythm.
+  it("a long but calm streak reads the consecutive-days signal as 'watch', not 'high'", () => {
+    const r = computeReadiness(statSpan(12, 35, { perDay: 10, result: 'Win', mental: CALM }), ts(35, 20));
+    const streak = r.signals.find((s) => s.key === 'consecutive-days');
+    expect(streak?.severity).toBe('watch');
+    expect(streak?.label).toContain('calm habit');
+  });
+});
+
+describe('composite — consecutive-days severity tracks the score (C8)', () => {
+  it("reads 'high' once a real volume surge accompanies the streak, and the score actually took the hit", () => {
+    const baseline = statSpan(5, 26, { perDay: 5, mental: CALM, result: 'Win' });
+    const surge = statSpan(27, 27, { perDay: 9, mental: CALM, result: 'Win' });
+    const r = computeReadiness([...baseline, ...surge], ts(27, 20));
+    expect(r.load.consecutiveDays).toBeGreaterThanOrEqual(T.sustainedDays);
+    const streak = r.signals.find((s) => s.key === 'consecutive-days');
+    expect(streak?.severity).toBe('high');
+    expect(streak?.label).not.toContain('calm habit');
+  });
+
+  it("a fired streak that still leaves the band green is acknowledged in the headline, not hidden behind 'nothing flagged'", () => {
+    const baseline = statSpan(5, 26, { perDay: 5, mental: CALM, result: 'Win' });
+    const surge = statSpan(27, 27, { perDay: 9, mental: CALM, result: 'Win' });
+    const r = computeReadiness([...baseline, ...surge], ts(27, 20));
+    expect(r.band).toBe('steady');
+    expect(r.signals.find((s) => s.key === 'consecutive-days')?.severity).toBe('high');
+    expect(r.headline).toContain('without a rest day is worth a break');
+    expect(r.recommendation).toBe('ease-up');
+    expect(r.recommendationText).not.toBe('');
+  });
 });
 
 describe('composite — dominant driver', () => {

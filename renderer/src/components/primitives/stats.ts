@@ -71,8 +71,8 @@ export function statBar(o: {
 }
 
 /** Plain value/label stack for a single stat, no chrome. */
-export function statBox(value: Child, label: string): HTMLElement {
-  return h('div', { class: 'stat-box' },
+export function statBox(value: Child, label: string, title?: string): HTMLElement {
+  return h('div', { class: 'stat-box', title },
     h('div', { class: 'stat-box-value' }, value),
     h('div', { class: 'stat-box-label' }, label),
   );

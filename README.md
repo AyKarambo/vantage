@@ -202,8 +202,14 @@ account's per-role lines beneath it.
   (deliberate practice makes you temporarily worse — that's normal) unless your tilt is clearly
   elevated; heroes you're still learning — fewer than 12 games **across all your accounts**,
   since hero experience is yours, not the account's — are exempt entirely. The screen shows the verdict +
-  score, a **"what moves the score"** subscore breakdown, the top reasons, a rest
-  recommendation, and the trend. The verdict is **regime-aware**: a ⚡ stats / ⚡◎ hybrid / ◎
+  score, a **"what moves the score"** subscore breakdown — the live equation ("75 − 4 + 0 − 3 = 68"),
+  diverging bars centred at 0, and each family's real (asymmetric) weight range — the top reasons
+  (a signal's colour reads off the actual verdict, not its severity alone, so a genuinely-fired but
+  score-offset load streak reads amber under a green band, not the same red a real "loaded" verdict
+  gets, and "Steady"/"Fresh" headlines say so explicitly when a load signal still fired), a rest
+  recommendation, and the trend (faint per-day game columns, a hollow dot for a day you didn't play,
+  and dashed lines at the actual fresh/loaded cuts instead of a plain 0/50/100 grid) — every card
+  deep-links its own wiki article via a **"?"**. The verdict is **regime-aware**: a ⚡ stats / ⚡◎ hybrid / ◎
   manual badge shows how much of the read rests on live match stats vs your own logs, blending
   continuously as coverage rises or falls (a patch-day GEP outage eases it toward manual and back —
   missing stats are never counted against you). On manual logs alone (today's norm, pending Overwolf

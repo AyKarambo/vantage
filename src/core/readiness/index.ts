@@ -164,14 +164,25 @@ function adviceFor(band: ReadinessBand, state: StateAt): Advice {
           'Ease back in: an aim warmup and a couple of unranked games before you play ranked. Short, regular sessions rebuild sharpness faster than one big comeback grind.',
         headline: `${state.restDays} days since your last game — expect some rust.`,
       };
-    case 'fresh':
+    case 'fresh': {
+      const base = state.heavy && state.restDays >= T.restFullRecoverDays ? 'Recovered — back to fresh.' : "You're fresh — good to go.";
+      // A genuinely fired load streak (C8) can still coexist with a green
+      // band — the other families offset it. Say so instead of a flat "good
+      // to go" beside a 'high' signal that reads as its opposite.
+      if (!state.streakFired) return { recommendation: 'none', recommendationText: '', headline: base };
       return {
-        recommendation: 'none',
-        recommendationText: '',
-        headline: state.heavy && state.restDays >= T.restFullRecoverDays ? 'Recovered — back to fresh.' : "You're fresh — good to go.",
+        recommendation: 'ease-up',
+        recommendationText: `You're fresh today, but ${state.load.consecutiveDays} days in a row without a rest day recently is worth breaking up before it catches up with you.`,
+        headline: `${base} Still, ${state.load.consecutiveDays} days without a rest day is worth a break.`,
       };
+    }
     case 'steady':
-      return { recommendation: 'none', recommendationText: '', headline: 'Steady — nothing flagged.' };
+      if (!state.streakFired) return { recommendation: 'none', recommendationText: '', headline: 'Steady — nothing flagged.' };
+      return {
+        recommendation: 'ease-up',
+        recommendationText: `Results are holding, but you've played ${state.load.consecutiveDays} days in a row without a rest day — a day off soon keeps it that way.`,
+        headline: `Steady — results are holding, but ${state.load.consecutiveDays} days without a rest day is worth a break.`,
+      };
     default:
       return { recommendation: 'none', recommendationText: '', headline: 'Keep logging to unlock readiness.' };
   }
@@ -206,11 +217,13 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   const loadCurrent = state.restDays < T.rustDays;
 
   if (loadCurrent && load.consecutiveDays >= T.loadedDays) {
-    out.push({
-      key: 'consecutive-days',
-      label: `${load.consecutiveDays} days in a row without a rest day`,
-      severity: load.consecutiveDays >= T.sustainedDays ? 'high' : 'watch',
-    });
+    // 'high' reads off whether the streak actually cost the score anything
+    // (C8) — `load.consecutiveDays >= T.sustainedDays` alone let a long but
+    // CALM streak (no volume/ratio surge, so the score's own streak penalty
+    // never fires) render as a red-severity alarm next to a green verdict.
+    out.push(state.streakFired
+      ? { key: 'consecutive-days', label: `${load.consecutiveDays} days in a row without a rest day`, severity: 'high' }
+      : { key: 'consecutive-days', label: `${load.consecutiveDays} days in a row — a calm habit, but a rest day still helps`, severity: 'watch' });
   }
   if (loadCurrent && load.acutePerDay >= T.absElevatedPerDay) {
     out.push({
