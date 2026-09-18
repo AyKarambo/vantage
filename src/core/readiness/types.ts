@@ -102,6 +102,14 @@ export interface ReadinessSummary {
   /** Which evidence family the verdict rests on (display-only). 'manual' caps confidence at medium. */
   regime: ReadinessRegime;
   trend: ReadinessTrendPoint[];
+  /**
+   * Progress toward the `insufficient-data` gate (F1) — set only on that
+   * band, so the UI can show real unlock progress instead of `load`'s
+   * all-zero placeholder as if it were a measured reading. `games`/`days`
+   * are the player's actual counts; `minGames`/`minSpanDays` mirror
+   * `READINESS_TUNING` (both must be met — an AND, not either alone).
+   */
+  unlock?: { games: number; minGames: number; days: number; minSpanDays: number };
 }
 
 /** Persisted feature settings. */

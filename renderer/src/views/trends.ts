@@ -5,7 +5,7 @@ import { sessionFade, bucketStart } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
 import { horizontalBars, lineChart, ratingChart, rankChart, type WrPoint, type RankSeries } from '../charts/plots';
-import { card, emptyState, statBox } from '../components/primitives';
+import { card, emptyState, statBox, unlockHint } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { clickableRow } from '../components/clickableRow';
 import { PALETTE, wrColor } from '../theme';
@@ -122,30 +122,50 @@ function rankTrendCard(ctx: ViewContext): HTMLElement | null {
  *  AND that best bucket is actually a winning one — a 38% bucket topping the
  *  pack is still a losing window, not one worth queuing ranked into. */
 function timeOfDayCard(groups: Group[]): HTMLElement {
-  const solid = groups.filter((g) => g.wins + g.losses >= 10);
+  const DECIDED_FLOOR = 10;
+  const solid = groups.filter((g) => g.wins + g.losses >= DECIDED_FLOOR);
   const best = solid.length >= 2 ? [...solid].sort((a, b) => b.winrate - a.winrate)[0] : null;
+  // Needs a SECOND day-part to reach the floor too, not just the first — the
+  // 2nd-highest decided count is the honest "how close" answer either way,
+  // whether 0 or 1 day-parts currently qualify (F1).
+  const secondBestDecided = [...groups].map((g) => g.wins + g.losses).sort((a, b) => b - a)[1] ?? 0;
   return card({ title: 'Time of day', sub: 'when you actually win' },
     breakdownOrdered(groups),
-    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+    h('div', { style: { marginTop: '10px' } },
       best
-        ? best.winrate >= 0.5
-          ? h('span', null, 'Your best window is ', h('span', { class: 'is-win' }, best.key.toLowerCase()),
-              ` (${pct(best.winrate)} over ${best.wins + best.losses} decided games). Queue ranked when you're sharp, not just when you're free.`)
-          : 'No winning window in this range yet — every day-part is under 50%.'
-        : 'Log more games to see when you play your best Overwatch.'),
+        ? h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+            best.winrate >= 0.5
+              ? h('span', null, 'Your best window is ', h('span', { class: 'is-win' }, best.key.toLowerCase()),
+                  ` (${pct(best.winrate)} over ${best.wins + best.losses} decided games). Queue ranked when you're sharp, not just when you're free.`)
+              : 'No winning window in this range yet — every day-part is under 50%.')
+        : unlockHint(`Needs 2 day-parts with ${DECIDED_FLOOR}+ decided games to compare`, [
+            { have: secondBestDecided, need: DECIDED_FLOOR, label: 'decided games in your 2nd-best window' },
+          ])),
   );
 }
 
 /** The fatigue curve: winrate by game number within a sitting + the stop-point read. */
 function sessionPositionCard(groups: Group[]): HTMLElement {
+  const FADE_MIN_GAMES = 8;
   const fade = sessionFade(groups);
+  // sessionFade returning null means either "not enough data" OR "genuinely
+  // no fade" — the old copy always blamed sample size, even once there WAS
+  // enough (F1). Games 1-2's own decided count is the actual gate.
+  const earlyDecided = groups
+    .filter((g) => g.key === '1' || g.key === '2')
+    .reduce((n, g) => n + g.wins + g.losses, 0);
   return card({ title: 'Game # in session', sub: 'the fatigue curve — winrate by position in a sitting' },
     breakdownOrdered(groups.map((g) => ({ ...g, key: `Game ${g.key}` }))),
-    h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+    h('div', { style: { marginTop: '10px' } },
       fade
-        ? h('span', null, 'You fade from ', h('span', { class: 'is-loss' }, `game ${fade.position}`),
-            ` on — ${pct(fade.winrate)} vs ${pct(fade.baseline)} in games 1–2. Ending sessions earlier is free rank.`)
-        : 'No late-session fade detected yet — sample sizes are small until you log more games.'),
+        ? h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+            h('span', null, 'You fade from ', h('span', { class: 'is-loss' }, `game ${fade.position}`),
+              ` on — ${pct(fade.winrate)} vs ${pct(fade.baseline)} in games 1–2. Ending sessions earlier is free rank.`))
+        : earlyDecided < FADE_MIN_GAMES
+          ? unlockHint(`Needs ${FADE_MIN_GAMES} decided games in games 1–2 of a sitting to read a fatigue curve`, [
+              { have: earlyDecided, need: FADE_MIN_GAMES, label: 'decided games in games 1–2' },
+            ])
+          : h('div', { class: 'hint', style: { lineHeight: '1.5' } }, 'No late-session fade detected — you hold up across a sitting.')),
   );
 }
 

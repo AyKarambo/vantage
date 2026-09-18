@@ -591,6 +591,19 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   of quietly pointing at one that no longer exists. The status bar stopped saying "demo data" twice —
   once in its own text, once in the sidebar badge — and that badge is a real, clickable button now,
   titled "Sample season — click to turn demo data off" and taking you straight there.
+- **Every "not enough data yet" message now says exactly what's needed.** Readiness used to render its
+  Training load card anyway once your history was too short — "0 games/day · 1.00× vs baseline" —
+  reading as a real measurement instead of the placeholder it was; it's now replaced with an
+  "Unlocking readiness" card showing your actual progress (e.g. "3 of 15 games · 2 of 14 days"), and
+  the trend chart stays hidden until there's enough of a line to draw. Mental's cost breakdown used to
+  print raw counts past their own floor once only one side had cleared it ("12/5 calm"); every row now
+  clamps each side to a check mark the instant it's individually met. Focus and Overview's "Top
+  priority" panel used to celebrate a "clean season" identically whether you were actually doing well
+  or just hadn't logged enough games on any map yet — they now tell those apart. Maps' "3+ games"
+  subtitle used to keep claiming a floor it had silently abandoned once no map reached it; it now says
+  so, with a progress readout for your closest map. Trends' "log more games" lines on Time of day and
+  Game # in session now state the real gate and your progress toward it, and stop blaming sample size
+  once there's actually enough data and the honest answer is just "no pattern found."
 
 ## 0.34.0 — 31 July 2026
 

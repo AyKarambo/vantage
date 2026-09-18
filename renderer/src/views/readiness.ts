@@ -10,7 +10,7 @@ import { h } from '../dom';
 import type { ReadinessBand, ReadinessRegime, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
 import type { WikiArticleId } from '../app/readinessWiki/types';
 import { PALETTE } from '../theme';
-import { badge, button, card, statBox } from '../components/primitives';
+import { badge, button, card, statBox, unlockHint } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
 import { readinessChart } from '../charts/plots';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
@@ -58,13 +58,36 @@ export function readiness(ctx: ViewContext): HTMLElement {
   if (!ctx.data.readinessSettings.enabled) return disabledView(ctx);
 
   const r = ctx.data.readiness;
+  // Fewer than 2 scored trend points make a "trend" line meaningless — hide
+  // the chart rather than draw a flat/single-dot line that implies more
+  // history than actually exists (F1).
+  const scoredPoints = r.trend.filter((p) => p.score !== null).length;
   return h('div', { class: 'view' },
     viewHead('Readiness', 'Training load & recovery — a wellness heuristic, not a diagnosis', globalHelp(ctx)),
     h('div', { class: 'grid-2' }, verdictCard(ctx), whyCard(ctx, r)),
     subscoresCard(ctx),
-    loadCard(ctx),
-    chartCard(ctx),
+    r.unlock ? unlockingCard(ctx, r.unlock) : loadCard(ctx),
+    scoredPoints >= 2 ? chartCard(ctx) : null,
     card({ title: 'Settings' }, readinessSettingsEditor(ctx)),
+  );
+}
+
+/**
+ * Replaces the Training load card while the readiness gate itself hasn't
+ * been met (F1) — the old behavior rendered `loadCard` anyway, with every
+ * number at its zeroed placeholder (`emptyLoad()`), which read as a
+ * measured "0 games/day · 1.00× vs baseline" rather than the true "nothing
+ * computed yet" it actually was. Both dimensions are an AND, not an either:
+ * the gate needs the game count AND the day span together.
+ */
+function unlockingCard(ctx: ViewContext, unlock: NonNullable<ReadinessSummary['unlock']>): HTMLElement {
+  return card({ title: 'Unlocking readiness', sub: 'across all your accounts', actions: wikiButton(ctx, 'training-load') },
+    unlockHint(`Readiness needs ${unlock.minGames} games over ${unlock.minSpanDays} days of history`, [
+      { have: unlock.games, need: unlock.minGames, label: 'games' },
+      { have: unlock.days, need: unlock.minSpanDays, label: 'days' },
+    ]),
+    h('div', { class: 'hint', style: { marginTop: '10px' } },
+      'Logging your mental state (tilt, comms) alongside matches raises confidence in the read once it unlocks.'),
   );
 }
 

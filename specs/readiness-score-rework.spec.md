@@ -54,7 +54,7 @@ The feature remains an **evidence-informed wellness nudge, not a diagnosis** —
   - The dampener never affects the load subscore — grinding is grinding regardless of practice intent.
 
 - **Band derivation.** Bands come from score ranges **plus a direction tag** (dominant driver: overload vs. rust vs. neutral — a 55 from grinding is `loaded`, a 55 from a 10-day layoff is `rusty`) **plus hard gates** that survive from the current model:
-  - `insufficient-data` and the stale gate (≥14 days silent → `rusty`, score withheld) stay upstream, unchanged.
+  - `insufficient-data` and the stale gate (≥14 days silent → `rusty`, score withheld) stay upstream, unchanged. UI-layer only (F1): `ReadinessSummary.unlock` (`{ games, minGames, days, minSpanDays }`) is now set on `insufficient-data` so the Readiness screen can show real progress toward the gate — the Training load card used to render anyway with every field at `emptyLoad()`'s zeroed placeholder ("0 games/day · 1.00× vs baseline"), which read as a measured reading rather than the "nothing computed yet" it actually was. The screen replaces it with an "Unlocking readiness" card (`unlockHint`, two AND'd dimensions — games AND day-span) while the band is `insufficient-data`, and hides the trend chart entirely below 2 scored trend points.
   - **Red (`in-the-hole`) requires load corroboration**: reachable only while actively grinding (played today) with sustained heavy load — a losing streak, stat decline, or subjective signals alone can **never** produce red, whatever the score.
   - `recovering` → `fresh` de-escalation after 1–2 rest days off a heavy state stays.
   - `fresh`/`steady` green split stays cosmetic (label-only; identical recommendation and confidence treatment).

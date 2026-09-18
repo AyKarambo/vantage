@@ -1,6 +1,6 @@
 # Screen spec: Maps (`maps`)
 
-**Source:** `renderer/src/views/maps.ts`, `renderer/src/components/chartCard.ts`, `renderer/src/charts/tooltip.ts`, `src/core/maps.ts`.
+**Source:** `renderer/src/views/maps.ts`, `renderer/src/components/chartCard.ts`, `renderer/src/charts/tooltip.ts`, `src/core/maps.ts`, `src/core/analytics/focus.ts` (`MAP_MIN_GAMES`, shared with Focus's own map floor, F1), `renderer/src/components/primitives/unlock.ts` (`unlockHint`, F1).
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes everything shown. Accepts a `highlight` param (`ViewParams.highlight`) — the entry point for the command palette's Map results and the map cross-links on Matches rows (see `screen-shell.spec.md`, `screen-matches.spec.md`).
 
@@ -23,7 +23,7 @@
 
 ## Constraints & edge cases
 
-- `MIN_MAP_GAMES = 3` — the ranking only includes maps with at least 3 games in range; if **no** map reaches 3, the ranking falls back to showing all maps rather than rendering empty.
+- `MAP_MIN_GAMES = 3` (shared with Focus's own map floor, exported from `src/core/analytics/focus.ts` — F1, no longer a locally duplicated `MIN_MAP_GAMES`) — the ranking only includes maps with at least 3 games in range; if **no** map reaches 3, the ranking falls back to showing all maps rather than rendering empty. When that fallback is active, the "Winrate by map" subtitle says so honestly ("best to worst · every map (none have enough plays yet for a floor)") instead of still claiming "3+ games" while silently showing 1-game maps (F1), and an **`unlockHint`** card below it states the exact progress toward the floor on the player's best-populated map.
 - `TOP_SLICES = 10` — the donut shows at most 10 named slices plus "Other".
 - Charts are dependency-free SVG; the tooltip layer and the table toggle are hand-rolled (guardrail #4).
 - A `highlight` for a map not present in the current range simply doesn't flash anything — no error, no filter change.

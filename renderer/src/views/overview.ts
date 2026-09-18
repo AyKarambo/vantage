@@ -9,7 +9,7 @@ import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } 
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
-import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
+import { button, calendarHeatmap, card, kpiCard, statBar, statBox, unlockHint } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
@@ -349,6 +349,23 @@ function placementKpi(run: PlacementRunSummary, ctx: ViewContext): HTMLElement {
   });
 }
 
+/**
+ * The Top-priority panel's empty state — same distinction Focus's own empty
+ * state makes (F1): a genuinely clean season reads differently from a
+ * first-week player whose maps just haven't reached the floor yet, which
+ * the old "clean season" copy claimed either way.
+ */
+function scatterCalloutsEmpty(d: DashboardData): HTMLElement {
+  const bestMapGames = Math.max(0, ...d.byMap.map((m) => m.games));
+  if (bestMapGames < MAP_MIN_GAMES) {
+    return h('div', { style: { paddingTop: '10px' } },
+      unlockHint(`Unlocks at ${MAP_MIN_GAMES} games on a map`, [
+        { have: bestMapGames, need: MAP_MIN_GAMES, label: 'games on your most-played map' },
+      ]));
+  }
+  return h('div', { class: 'empty empty--good', style: { paddingTop: '10px' } }, 'No net-losing maps — clean season. 🎯');
+}
+
 function scatterCard(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const points = toScatter(d.byMap, makeMapMode(d.masterData.maps));
@@ -376,7 +393,7 @@ function scatterCard(ctx: ViewContext): HTMLElement {
           ),
           h('span', { class: 'mono', style: { fontSize: '14px', color: wrColor(m.winrate) } }, pct(m.winrate)),
         ))
-      : [h('div', { class: 'empty empty--good', style: { paddingTop: '10px' } }, 'No net-losing maps — clean season. 🎯')]),
+      : [scatterCalloutsEmpty(d)]),
     h('div', { style: { marginTop: 'auto', paddingTop: '12px' } },
       h('div', { class: 'hint', style: { lineHeight: '1.55' } }, 'These are dragging your season. Practice them before ranked and review one replay each.'),
       h('div', { style: { marginTop: '10px' } },
