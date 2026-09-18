@@ -1,7 +1,9 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h, render } from '../dom';
 import type { DashboardData, Group, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
-import { dayKey, dayPartAt } from '../../../src/core/analytics';
+import { dayKey, dayPartAt, MAP_MIN_GAMES } from '../../../src/core/analytics';
+import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
+import { READINESS_TUNING } from '../../../src/core/readiness';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
@@ -13,6 +15,7 @@ import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
 import { prefs } from '../prefs';
+import { store } from '../store';
 import { viewHead, shorten, type ViewContext } from './view';
 import { coachHeadline } from '../coachHeadline';
 
@@ -28,6 +31,7 @@ export function overview(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view' },
     head,
     hiddenHistoryBanner(ctx),
+    firstWeekUnlockCard(ctx),
     recapCard(ctx),
     kpiRow(ctx),
     scatterCard(ctx),
@@ -67,6 +71,32 @@ function hiddenHistoryBanner(ctx: ViewContext): HTMLElement | null {
     h('div', { class: 'hint', style: { lineHeight: '1.55', marginBottom: '12px' } },
       `You have ${int(n)} game${n === 1 ? '' : 's'} in your history, but none in the selected range — imported matches often carry older dates. View your full history to see them.`),
     button(`View all time (${int(n)} games)`, { variant: 'primary', onClick: () => ctx.setFilter({ days: 'all' }) }),
+  );
+}
+
+/**
+ * The first-week unlock ladder (F2) — appears once the demo season has
+ * actually retired (shell.ts's `announceDemoRetired` resets the dismissed
+ * pref) so a returning player who used to see 149 demo games, 4 demo
+ * accounts and a handful of sample targets isn't left wondering where it all
+ * went with nothing said about it. States the exact floors that gate Focus,
+ * Mental's cost breakdowns and Readiness — reading the real constants those
+ * screens themselves gate on, so this can never drift out of sync with what
+ * actually unlocks. Auto-hides once the highest floor clears even without an
+ * explicit dismiss — nothing left on the ladder to announce by then.
+ */
+function firstWeekUnlockCard(ctx: ViewContext): HTMLElement | null {
+  const d = ctx.data;
+  if (d.isSample || d.totalGamesAllTime === 0 || d.totalGamesAllTime >= READINESS_TUNING.minGames) return null;
+  if (prefs.get('firstRealGameBannerDismissed') ?? false) return null;
+  const dismiss = (): void => { prefs.set('firstRealGameBannerDismissed', true); store.rerender(); };
+  return card({ variant: 'glow', title: 'A few things unlock as you play' },
+    h('ul', { class: 'hint', style: { lineHeight: '1.7', margin: '0 0 12px', paddingLeft: '18px' } },
+      h('li', null, `${MAP_MIN_GAMES} games on a map — Focus starts ranking it`),
+      h('li', null, `${COST_MIN_SAMPLE} flagged games — Mental shows what tilt and comms actually cost you`),
+      h('li', null, `${READINESS_TUNING.minGames} games over ${READINESS_TUNING.minSpanDays} days — Readiness starts reading your form`),
+    ),
+    button('Got it', { variant: 'ghost', onClick: dismiss }),
   );
 }
 

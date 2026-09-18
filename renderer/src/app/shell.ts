@@ -8,6 +8,7 @@ import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
 import type { DashboardData, GameLoggedPayload, GepStatusPayload, Role } from '../../../src/shared/contract';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
+import { demoTransition } from '../../../src/core/demoPreference';
 import { DETAIL_PARENT, statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
@@ -271,7 +272,14 @@ export class App {
     title: 'The last refresh failed — click to retry',
     on: { click: () => void store.refresh() },
   }, '⚠ stale — retry');
-  private readonly demoBadge = h('span', { class: 'badge badge--demo hidden' }, 'Demo data');
+  // A real button (F2), not a span with a click handler — so it's keyboard-
+  // reachable and its cursor and intent are honest before you even click.
+  private readonly demoBadge = h('button', {
+    class: 'badge badge--demo hidden',
+    style: { border: 'none', cursor: 'pointer', font: 'inherit' },
+    title: 'Sample season — click to turn demo data off',
+    on: { click: () => store.setView('settings', { section: 'appBehavior' }) },
+  }, 'Demo data');
   private readonly devBadge = h('span', { class: 'badge badge--dev hidden' });
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
@@ -450,8 +458,16 @@ export class App {
 
   private migrated = false;
   private firstRunHandled = false;
+  /** The `isSample` this shell last observed — `undefined` until the first snapshot, so that one never itself reads as a transition (F2). */
+  private lastIsSample: boolean | undefined;
 
   private onState(state: AppState): void {
+    // Compare BEFORE overwriting — demoTransition needs the value from the
+    // PREVIOUS call, not this one.
+    const transition = demoTransition(this.lastIsSample, state.data?.isSample ?? false);
+    this.lastIsSample = state.data?.isSample ?? false;
+    if (transition === 'demo-retired') this.announceDemoRetired();
+
     this.renderSidebar(state);
     this.renderFilters(state);
     this.renderContent(state);
@@ -469,6 +485,23 @@ export class App {
         if (imported) void store.refresh();
       });
     }
+  }
+
+  /**
+   * The demo season just retired (F2) — the moment history gains its first
+   * real game, `effectiveDemo` flips every 150 sample games, 4 sample
+   * accounts and however many sample targets over to whatever the player
+   * actually has, with nothing said about it before this. A toast marks the
+   * moment; resetting the dismissed pref re-arms the Overview unlock-ladder
+   * card even if a PRIOR demo-retirement's card was already dismissed (rare,
+   * but deleting your only real game brings demo back, and a later first
+   * real game deserves the same announcement, not permanent silence).
+   */
+  private announceDemoRetired(): void {
+    toast('Your first tracked game is in — the demo season retired. Everything from here is yours.', {
+      action: { label: 'View Overview', run: () => store.setView('overview') },
+    });
+    prefs.set('firstRealGameBannerDismissed', false);
   }
 
   /**

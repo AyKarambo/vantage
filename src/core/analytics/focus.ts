@@ -15,8 +15,8 @@ import type { AuthoredTarget } from '../targets/types';
 // analytics back, and this keeps the module graph cycle-free at runtime.
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 
-/** Minimum sample before a map can be flagged. */
-const MAP_MIN_GAMES = 3;
+/** Minimum sample before a map can be flagged. Exported for the F2 first-week unlock ladder, which states this floor rather than hardcoding a copy of it. */
+export const MAP_MIN_GAMES = 3;
 
 /**
  * Minimum sample before a hero or role can be flagged (H1) — higher than the

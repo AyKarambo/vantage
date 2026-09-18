@@ -84,6 +84,15 @@ interface PrefsShape {
    * window is a reason to keep it collapsed, not a per-session accident.
    */
   sidebarCollapsed: boolean;
+  /**
+   * Dismissed the Overview "first-week unlock ladder" card (F2). Reset to
+   * `false` every time the demo season actually retires (`shell.ts`'s
+   * `demoTransition` check), so it reappears if that genuinely happens again
+   * — deleting your only real game brings the demo season back, and a later
+   * first real game deserves the same announcement, not permanent silence
+   * from one earlier dismissal.
+   */
+  firstRealGameBannerDismissed: boolean;
 }
 
 const PREFIX = 'vantagePref.';

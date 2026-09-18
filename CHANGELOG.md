@@ -581,6 +581,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   checked 3 weeks ago · OverFast API (community mirror of Blizzard data) · nothing about you is
   sent" — naming the source and what leaves your machine, which it never did before — and nudges
   you to check again once that's over 60 days old or has never happened.
+- **Your first tracked game gets announced, not just silently swapped in.** The moment demo data
+  yields to a real one, a toast says so — "Your first tracked game is in — the demo season retired.
+  Everything from here is yours." — instead of 149 sample games, four sample accounts and a handful
+  of sample targets quietly vanishing with nothing said about it. Overview also shows a one-time
+  card naming the sample-size floors coming up (3 games on a map for Focus, 5 flagged games for
+  Mental's cost breakdown, 15 games over 14 days for Readiness) until you dismiss it or clear them.
+  An account filter pinned to a sample-only account resets to "All accounts" automatically instead
+  of quietly pointing at one that no longer exists. The status bar stopped saying "demo data" twice —
+  once in its own text, once in the sidebar badge — and that badge is a real, clickable button now,
+  titled "Sample season — click to turn demo data off" and taking you straight there.
 
 ## 0.34.0 — 31 July 2026
 

@@ -544,7 +544,11 @@ a network port, and Vantage sends nothing outward through it; see
   Targets screen stays honestly empty rather than showing sample targets. Grading, editing or
   deleting a demo game on Review or its match page is a sandbox to try the flow in — nothing is
   actually saved, and every save says so honestly ("Not saved — … is a demo game") instead of
-  claiming success and quietly losing it on restart.
+  claiming success and quietly losing it on restart. The demo season retiring is **announced**,
+  not silent: your first tracked game shows a toast saying so, Overview names the sample-size
+  floors coming up next (3 games on a map for Focus, 5 flagged for Mental, 15 over 14 days for
+  Readiness) until dismissed, and an account filter pinned to a sample-only account resets to
+  "All accounts" automatically instead of quietly scoping to one that no longer exists.
 - Competitive **rank** follows the current Overwatch model: nine tiers Bronze→**Champion**
   (**Emerald** sits between Platinum and Diamond since 2026 Season 4),
   five divisions each (5 = lowest, 1 = highest), with within-division progress shown as a
