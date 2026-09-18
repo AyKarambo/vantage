@@ -91,9 +91,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
 
   // Manual (◎) writes.
   handle(ch.logMatch, (_e, input: ManualMatchInput) => provider.logMatch(input));
-  handle(ch.editMatch, (_e, input: MatchEditInput) => {
-    provider.editMatch(input);
-  });
+  handle(ch.editMatch, (_e, input: MatchEditInput) => provider.editMatch(input));
   handle(ch.deleteMatch, (_e, matchId: string) => provider.deleteMatch(matchId));
   handle(ch.undoDeleteMatch, (_e, matchId: string) => provider.undoDeleteMatch(matchId));
 
@@ -131,9 +129,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
     provider.saveTarget(input);
   });
   handle(ch.suggestThreshold, (_e, input: ThresholdSuggestionInput) => provider.suggestThreshold(input));
-  handle(ch.saveReview, (_e, input: ReviewInput) => {
-    provider.saveReview(input);
-  });
+  handle(ch.saveReview, (_e, input: ReviewInput) => provider.saveReview(input));
   handle(ch.importReviews, (_e, inputs: ReviewInput[]) =>
     provider.importReviews(inputs),
   );

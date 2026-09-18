@@ -69,7 +69,9 @@ export interface OwStatsApi {
   /** Persist a manually-logged match (appended to history). */
   logMatch(input: ManualMatchInput): Promise<{ matchId: string }>;
   /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */
-  editMatch(input: MatchEditInput): Promise<void>;
+  /** `saved: false` when the match id is unknown to real history — a demo game
+   *  (F3), which is never actually persisted. */
+  editMatch(input: MatchEditInput): Promise<{ saved: boolean }>;
   /**
    * IRREVERSIBLY delete one recorded match from history — the user's verdict that
    * a tracked game wasn't real (a phantom GEP match, a misread custom). Hard
@@ -171,8 +173,10 @@ export interface OwStatsApi {
    * that stat).
    */
   suggestThreshold(input: ThresholdSuggestionInput): Promise<ThresholdSuggestion | null>;
-  /** Persist the manual review (grades + flags) onto a tracked match. */
-  saveReview(input: ReviewInput): Promise<void>;
+  /** Persist the manual review (grades + flags) onto a tracked match.
+   *  `saved: false` when the match id is unknown to real history — a demo
+   *  game (F3), which is never actually persisted. */
+  saveReview(input: ReviewInput): Promise<{ saved: boolean }>;
   /** One-time legacy localStorage migration; skips unknown matchIds and existing reviews. */
   importReviews(inputs: ReviewInput[]): Promise<{ imported: number; skipped: number }>;
   /** Edit a target's name/mode/rule; stats keep accruing across edits. */

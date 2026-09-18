@@ -560,6 +560,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   the moment you click. Focus also links a row to its target by that scope directly now, not by
   guessing from the target's name — so renaming a target, or writing one whose name doesn't spell
   out what it's for, no longer breaks the "since you flagged it" progress line.
+- **Demo mode stops accepting writes that silently do nothing.** Grading a demo game on Review,
+  editing one from a match's own page, or deleting one used to look like it worked — a toast said
+  "Review saved" or "Match updated" — but nothing was ever actually stored, and the game was back
+  on restart. Review now leads with a plain notice while demo games are showing ("grading here is
+  practice only"), its subtitle and sidebar count say **demo games** instead of tracked ones with a
+  muted badge instead of the usual accent pill, and every save now says so honestly — "Not saved —
+  "Ilios" is a demo game" — instead of claiming success. Grading and editing demo cards still work
+  as a sandbox to try the flow in; they just never pretend to keep it.
 
 ## 0.34.0 — 31 July 2026
 

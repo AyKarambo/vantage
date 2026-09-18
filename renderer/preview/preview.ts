@@ -633,7 +633,10 @@ const mock: OwStatsApi = {
   },
   editMatch: async (input: MatchEditInput) => {
     const game = dataset().find((g) => g.matchId === input.matchId);
-    if (!game) return;
+    // Mirrors the real dataProvider: only a REAL (logged) match can be edited —
+    // a demo row `dataset()` would still resolve while the season is showing,
+    // but nothing behind it is actually persisted (F3).
+    if (!game || !logged.some((g) => g.matchId === input.matchId)) return { saved: false };
     const patch: Partial<GameRecord> = { ...previewEdits[input.matchId] };
     // Mirrors the real dataProvider: game facts are editable on every match, and
     // a fact change on an auto-tracked (GEP) record stamps `factsEditedAt`.
@@ -670,6 +673,7 @@ const mock: OwStatsApi = {
       previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
       save(REVIEWS_KEY, previewReviews);
     }
+    return { saved: true };
   },
   deleteMatch: async (matchId: string) => {
     if (!dataset().some((g) => g.matchId === matchId)) return { deleted: false };
@@ -966,6 +970,9 @@ const mock: OwStatsApi = {
       roleScope: input.roleScope, heroScope: input.heroScope,
     }),
   saveReview: async (input: ReviewInput) => {
+    // Mirrors the real dataProvider: only a REAL (logged) match can be
+    // reviewed — grading a demo row is practice only and is never persisted (F3).
+    if (!logged.some((g) => g.matchId === input.matchId)) return { saved: false };
     previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.flags };
     save(REVIEWS_KEY, previewReviews);
     if (input.performance !== undefined) {
@@ -993,6 +1000,7 @@ const mock: OwStatsApi = {
       previewEdits[input.matchId] = edit;
       save(EDITS_KEY, previewEdits);
     }
+    return { saved: true };
   },
   importReviews: async (inputs: ReviewInput[]) => {
     const known = new Set(dataset().map((g) => g.matchId));

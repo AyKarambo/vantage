@@ -774,7 +774,7 @@ function buildMatchEditor(
             role: state.role,
             matchId: d.matchId,
             prediction: { tier: predTier, division: predDivision },
-          })])
+          })]).then(([e]) => e)
         : anchoring
           ? Promise.all([edited, bridge.setRankAnchor({
               account: d.account,
@@ -782,12 +782,18 @@ function buildMatchEditor(
               tier: anchorTier,
               division: anchorDivision,
               progressPct: Number(anchorPct) || 0,
-            })])
+            })]).then(([e]) => e)
           : edited;
-      void saved.then(() => {
-        gradedThisSession.add(d.matchId);
+      void saved.then(({ saved }) => {
         close();
         ctx.refresh();
+        // A demo match (F3) is never actually persisted — say so instead of
+        // claiming an update that didn't happen.
+        if (!saved) {
+          toast(`Not saved — "${state.map}" is a demo match. Log or track a real game to edit it for real.`);
+          return;
+        }
+        gradedThisSession.add(d.matchId);
         toast(`Match updated — ${state.map}`);
         // Opened AFTER this modal's own close, never nested inside it. An edit
         // can pull a tenth match onto a track's counted set (e.g. correcting

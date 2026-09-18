@@ -344,6 +344,12 @@
   align-items: center;
   justify-content: center;
 }
+/* Demo mode (F3): the Review count isn't a real backlog — grading it never
+   saves — so it reads as a muted count, not the same urgent accent pill. */
+.nav-badge--muted {
+  background: var(--surface-3);
+  color: var(--text-2);
+}
 /* Live-match indicator on the Live nav item — present only while a match is
    actually in progress, so it never becomes decoration you stop reading. */
 .nav-live-dot {

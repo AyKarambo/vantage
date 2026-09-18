@@ -23,7 +23,7 @@ function makeDeps(announceChange?: () => void): DataProviderDeps {
     history: {
       count: () => games.length,
       all: () => games,
-      setReview: vi.fn(),
+      setReview: vi.fn(() => true),
       setReviews: vi.fn(),
       editManual: vi.fn(),
       clearReview: vi.fn(),
