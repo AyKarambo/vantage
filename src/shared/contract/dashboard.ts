@@ -139,6 +139,20 @@ export interface PreviousWindow {
   heroStats: HeroSummary[];
 }
 
+/** One season's win/loss (C5) — a row of `DashboardData.bySeason`. */
+export interface SeasonBreakdown {
+  /** Addressable season id, e.g. `S:2026-06-16` — pass to `setFilter({ days: { season: id } })`. */
+  id: string;
+  label: string;
+  games: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+  /** Net SR change (C2) summed over the season's games that logged one — same convention as `WinLoss.srNet`. */
+  srNet?: number;
+  srLogged?: number;
+}
+
 /** Everything the dashboard needs for the current filter set. */
 export interface DashboardData {
   /** Effective demo display: the sample season is shown (demo opted-in AND no real history). */
@@ -226,6 +240,8 @@ export interface DashboardData {
   momentum: Momentum | null;
   /** The comparison window immediately before this one (C3); absent for "All time" or when there's nothing addressable before it. */
   previous?: PreviousWindow;
+  /** Win/loss per season (C5), newest first, account/role-scoped but not date-scoped — "how did each season go". */
+  bySeason: SeasonBreakdown[];
   /** Winrate per local day-part (Morning/Afternoon/Evening/Night). */
   timeOfDay: Group[];
   /** Winrate by game number within a session ('1'..'5', '6+'). */

@@ -6,7 +6,7 @@
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
-  trend, rollingWinrate, windowCompare, winLoss, groupBy,
+  trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
@@ -167,6 +167,13 @@ export function computeDashboard(
       };
     })()
     : undefined;
+  // C5: account/role-scoped but NOT date-scoped (see bySeasonOf) — a real
+  // "how did each season go" read, computed once here rather than the
+  // renderer looping setFilter({ days: { season } }) ten times.
+  let accountRoleGames = all;
+  if (filters.account && filters.account !== 'all') accountRoleGames = accountRoleGames.filter((g) => g.account === filters.account);
+  if (filters.role && filters.role !== 'all') accountRoleGames = accountRoleGames.filter((g) => g.role === filters.role);
+  const bySeason = bySeasonOf(accountRoleGames, seasonStartsList, suppressed, Date.now());
   const heroStatsWithForm = heroStats(games, { mapModeOf, suppressed }).map((r) => {
     // Trend/form (H6) reuse Focus's dimension-agnostic reads, joined onto
     // each hero row here rather than inside heroStats() — that stays a pure
@@ -235,6 +242,7 @@ export function computeDashboard(
     // it sits above agree on what "recent" means.
     momentum: windowCompare(games, Date.now(), weekly ? 28 : 7),
     ...(previous ? { previous } : {}),
+    bySeason,
     timeOfDay: byTimeOfDay(games),
     // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.
@@ -364,6 +372,27 @@ export function previousDateRange(
   const n = filters.days;
   const dayMs = 86_400_000;
   return { start: now - 2 * n * dayMs, end: now - n * dayMs, label: `the previous ${n} days` };
+}
+
+/**
+ * Win/loss per season, newest first (C5) — "how did each season go" answered
+ * without turning it into ten filter changes and ten memorised numbers. Scoped
+ * by account/role like every other breakdown but NOT by the date/season filter
+ * itself (a by-season view of one already-picked season is pointless) — same
+ * `{...filters, days: 'all'}` override `pendingReviewMatches` already uses.
+ */
+function bySeasonOf(
+  accountRoleGames: GameRecord[],
+  seasonStartsList: readonly number[] | undefined,
+  suppressed: ReadonlySet<string>,
+  now: number,
+): DashboardData['bySeason'] {
+  return seasonsForData(accountRoleGames.map((g) => g.timestamp), now, seasonStartsList).map((w) => {
+    const seasonGames = accountRoleGames.filter((g) => g.timestamp >= w.start && g.timestamp < w.end);
+    const wl = winLoss(seasonGames);
+    const sr = srSum(seasonGames.map((game) => ({ game, weight: 1 })), suppressed);
+    return { id: w.id, label: w.label, games: wl.games, wins: wl.wins, losses: wl.losses, winrate: wl.winrate, ...sr };
+  });
 }
 
 /**

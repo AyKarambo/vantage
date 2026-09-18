@@ -1,14 +1,14 @@
 /** Trends — winrate over time, splits by role/mode/account, and when you play. */
 import { h } from '../dom';
 import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, StreakStats, TrendGroup } from '../../../src/shared/contract';
-import { sessionFade } from '../../../src/core/analytics';
+import { sessionFade, bucketStart } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
 import { horizontalBars, lineChart, ratingChart, rankChart, type WrPoint, type RankSeries } from '../charts/plots';
 import { card, emptyState, statBox } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { clickableRow } from '../components/clickableRow';
-import { PALETTE } from '../theme';
+import { PALETTE, wrColor } from '../theme';
 import { pct } from '../format';
 import { viewHead, type ViewContext } from './view';
 
@@ -32,14 +32,16 @@ export function trends(ctx: ViewContext): HTMLElement {
       ],
       // Raw winrate (0..1), not a pre-formatted '54%' string (K1) — `render`
       // above formats it, so sorting the WR column compares numbers, not text.
-      rows: d.trend.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games, rolling: g.rolling })),
+      // Week rows show the week's real Monday date (C5), not the raw ISO
+      // week key ("2026-W23") — no year, meaningless out of context.
+      rows: d.trend.map((g) => ({ label: trendBucketLabel(g.key, byWeek), winrate: g.winrate, games: g.games, rolling: g.rolling })),
       // Chronological, oldest first — the order the table already opened in.
       initialSort: { key: 'label', dir: 1 },
       ...(openDay ? { onRowClick: (row) => openDay(row.label as string) } : {}),
     },
     h('div', null,
       momentumStrip(d.momentum, byWeek),
-      lineChart(d.trend.map(toPoint), openDay),
+      lineChart(d.trend.map(toPoint(byWeek)), openDay, d.masterData.seasons),
       extremesRow(ctx, d.extremes),
     )),
     h('div', { class: 'grid-3' },
@@ -47,6 +49,7 @@ export function trends(ctx: ViewContext): HTMLElement {
       card({ title: 'By game mode' }, breakdown(d.byMapType)),
       card({ title: 'By account' }, breakdown(d.byAccount)),
     ),
+    bySeasonCard(ctx),
     h('div', { class: 'grid-2' },
       timeOfDayCard(d.timeOfDay),
       sessionPositionCard(d.sessionPosition),
@@ -151,7 +154,16 @@ function breakdownOrdered(groups: Group[]): HTMLElement {
   return horizontalBars(groups.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })), { compact: true });
 }
 
-const toPoint = (g: TrendGroup): WrPoint => ({ label: g.key, winrate: g.winrate, games: g.games, rolling: g.rolling });
+/**
+ * A `trend` bucket key as a real calendar date (C5) — the bucket's own day,
+ * or a weekly bucket's Monday — instead of the raw ISO week key ("2026-W23")
+ * that carries no year and means nothing without the row it came from.
+ */
+const trendBucketLabel = (key: string, byWeek: boolean): string =>
+  byWeek ? new Date(bucketStart(key, 'week')).toISOString().slice(0, 10) : key;
+
+const toPoint = (byWeek: boolean) => (g: TrendGroup): WrPoint =>
+  ({ label: trendBucketLabel(g.key, byWeek), winrate: g.winrate, games: g.games, rolling: g.rolling });
 
 /**
  * The momentum read (C6): the trailing window vs. the one before it, in
@@ -248,6 +260,33 @@ function performanceCard(ctx: ViewContext, p: PerformanceStats): HTMLElement {
  * breakdowns read cleanly whether there's one row or many (vertical SVG bars
  * ballooned when a card had only a single category).
  */
+/**
+ * "How did each season go" (C5), answered as one card instead of ten filter
+ * changes and ten memorised numbers — `DashboardData.bySeason` already
+ * covers the player's whole account/role-scoped history regardless of the
+ * active date filter, so this can jump straight to any season. Shown once
+ * there's more than one season with games to actually compare.
+ */
+function bySeasonCard(ctx: ViewContext): HTMLElement | null {
+  const seasons = ctx.data.bySeason.filter((s) => s.games > 0);
+  if (seasons.length < 2) return null;
+  return card({ title: 'By season', sub: 'across all your history · click a season to jump to it' },
+    h('div', { class: 'stack', style: { gap: '2px', marginTop: '4px' } },
+      ...seasons.map((s) => h('div', {
+        class: 'row is-clickable', style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' },
+        ...clickableRow(() => ctx.setFilter({ days: { season: s.id } })),
+      },
+        h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, s.label),
+        s.srNet !== undefined
+          ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(Math.round(s.srNet))}%`)
+          : null,
+        h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${s.wins}W ${s.losses}L`),
+        h('span', { class: 'mono', style: { fontSize: '12.5px', color: wrColor(s.winrate), width: '42px', textAlign: 'right' } }, pct(s.winrate)),
+      )),
+    ),
+  );
+}
+
 function breakdown(groups: Group[], label: (key: string) => string = (k) => k): HTMLElement {
   const data = [...groups]
     .sort((a, b) => b.winrate - a.winrate)

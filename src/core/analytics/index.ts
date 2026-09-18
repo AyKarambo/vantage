@@ -10,7 +10,7 @@ export type {
 // Grouping + win/loss aggregation
 export {
   winLoss, groupBy, byMap, byRole, byAccount, byHero, byMode, focusBy, trend, dayKey,
-  weightedWinLoss, weightedGroupBy, heroWeightedGames, rollingWinrate, windowCompare,
+  weightedWinLoss, weightedGroupBy, heroWeightedGames, rollingWinrate, windowCompare, bucketStart, srSum,
 } from './grouping';
 export type { WeightedGame } from './grouping';
 

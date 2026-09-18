@@ -51,10 +51,13 @@ export function ratingChart(points: RatingPoint[], onSelect?: (label: string) =>
   points.forEach((p, i) => (smooth += (i ? 'L' : 'M') + xAt(i) + ' ' + yAt(p.rolling ?? p.rating) + ' '));
   s.appendChild(svgEl('path', { d: smooth, fill: 'none', stroke: PALETTE.accentBright, 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
 
+  // Capped to just under half the point spacing (C5) so a long history's
+  // dense daily points don't overlap each other's hit target.
+  const hitR = Math.max(3, Math.min(11, plotW / (points.length - 1) / 2 - 0.5));
   const tips = tooltipLayer(wrap);
   points.forEach((p, i) => {
     s.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 3, fill: PALETTE.accentBright }));
-    const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 11, fill: 'transparent', tabindex: 0 }); // K8
+    const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: hitR, fill: 'transparent', tabindex: 0 }); // K8
     hit.style.cursor = 'pointer';
     tips.attach(hit, `${p.label} · rated ${Math.round(p.rating)} · ${p.games}g${onSelect ? ' · click to open' : ''}`);
     if (onSelect) {
@@ -66,11 +69,18 @@ export function ratingChart(points: RatingPoint[], onSelect?: (label: string) =>
     s.appendChild(hit);
   });
 
+  // Year once at each boundary among the drawn ticks (C5) — a long history
+  // used to run an endless "MM-DD" strip with no year anywhere.
   const step = Math.ceil(points.length / 8);
   const last = points.length - 1;
+  let lastYear: string | null = null;
   points.forEach((p, i) => {
     const stepped = i % step === 0 && last - i >= step / 2;
-    if (stepped || i === last) s.appendChild(svgText(xAt(i), bot + 16, p.label.slice(5), { size: 9 }));
+    if (!(stepped || i === last)) return;
+    const year = p.label.slice(0, 4);
+    const text = year !== lastYear ? p.label : p.label.slice(5);
+    lastYear = year;
+    s.appendChild(svgText(xAt(i), bot + 16, text, { size: 9 }));
   });
   wrap.append(s, tips.tip);
   return wrap;

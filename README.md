@@ -176,7 +176,11 @@ account's per-role lines beneath it.
   of a few evenings a week no longer stretches "7-day" across two and a half calendar weeks,
   and a 1-game day no longer swings it as much as a 12-game one); in daily mode, click a point
   or its table row to open that day's matches, and a **best day / worst day** pair beneath the
-  chart does the same. Then splits by role/account, **when you win** (time-of-day
+  chart does the same. Ticks and table rows show real calendar dates now, not a bare ISO week
+  key with no year, thin markers label every season (and ladder reset) the chart crosses, and
+  a dense chart's hit targets no longer overlap and steal the hover from the wrong point. A
+  **By season** card answers "how did each season go" in one place — click a season to jump
+  straight to it. Then splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and
   **your self-rating over time** (the 0–100 performance slider with the same real rolling
