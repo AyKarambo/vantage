@@ -15,10 +15,16 @@ import type { MatchMental, TargetGrade, TargetSummary } from '../../../src/share
  * per grade. Shared by the interactive 3-way control below and by read-only
  * grade pills (match-detail Grades card), so graded and displayed colors match.
  */
+// Tokens, not literals (K4): the old bg values didn't even match today's own
+// --win-soft/--loss-soft in the default scheme, and none of the three tracked
+// the colour-blind scheme at all — Missed stayed red-on-orange-loss instead of
+// following --loss to orange. Partial is a grading outcome, not a winrate
+// reading, so it takes the scheme-independent --warn family rather than --mid
+// (which is specifically "winrate near 50%" and changes meaning per scheme).
 export const GRADES: Array<{ v: TargetGrade; label: string; bg: string; fg: string }> = [
-  { v: 'hit', label: 'Hit', bg: 'rgba(87,166,132,0.18)', fg: 'var(--win-text)' },
-  { v: 'partial', label: 'Partial', bg: 'rgba(214,162,79,0.18)', fg: 'var(--mid-text)' },
-  { v: 'missed', label: 'Missed', bg: 'rgba(209,104,95,0.16)', fg: 'var(--loss-text)' },
+  { v: 'hit', label: 'Hit', bg: 'var(--win-soft)', fg: 'var(--win-text)' },
+  { v: 'partial', label: 'Partial', bg: 'var(--warn-soft)', fg: 'var(--warn-text)' },
+  { v: 'missed', label: 'Missed', bg: 'var(--loss-soft)', fg: 'var(--loss-text)' },
 ];
 
 /**

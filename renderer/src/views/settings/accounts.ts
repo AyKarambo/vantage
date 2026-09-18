@@ -167,7 +167,7 @@ export function accountsCard(): HTMLElement {
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
         button('Cancel', { variant: 'ghost', onClick: close }),
         button(`Delete ${a.games} ${noun}`, {
-          class: 'btn--danger',
+          variant: 'danger',
           onClick: () => void bridge.deleteDetectedAccount(a.battleTag).then(() => {
             close();
             reload();

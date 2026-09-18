@@ -32,7 +32,7 @@ export function confirmDelete(t: TargetSummary, ctx: ViewContext, after?: () => 
         'This permanently removes the target from your library and its stats stop counting. Grades already saved on match reviews stay stored but inert. Archive instead if you might want it back.'),
       h('div', { style: { display: 'flex', gap: '10px' } },
         button('Delete permanently', {
-          variant: 'primary',
+          variant: 'danger',
           onClick: () => void bridge.deleteTarget(t.id).then(() => { close(); after?.(); ctx.refresh(); }),
         }),
         button('Keep it', { variant: 'ghost', onClick: close }),

@@ -7,9 +7,15 @@ import { h } from '../../dom';
 
 type Child = Node | string | number | null | undefined | false;
 
-/** Options for {@link button}; `variant` picks the visual weight, `default` is unstyled. */
+/**
+ * Options for {@link button}; `variant` picks the visual weight, `default` is
+ * unstyled. One `primary` per surface (the save/commit action); `danger` for
+ * anything that isn't undoable (permanent delete, remove) — never reach for
+ * `primary` there, it reads exactly like Save; `soft` for a card-level CTA
+ * that isn't the surface's single primary action.
+ */
 export interface BtnOpts {
-  variant?: 'primary' | 'soft' | 'ghost' | 'default';
+  variant?: 'primary' | 'soft' | 'ghost' | 'danger' | 'default';
   onClick?: () => void;
   disabled?: boolean;
   class?: string;

@@ -19,10 +19,14 @@ export function trends(ctx: ViewContext): HTMLElement {
       sub: `${byWeek ? 'by week' : 'by day'} · bold line = 7-${byWeek ? 'week' : 'day'} rolling average`,
       columns: [
         { key: 'label', label: byWeek ? 'Week' : 'Day' },
-        { key: 'winrate', label: 'WR' },
+        { key: 'winrate', label: 'WR', render: (v) => pct(v as number) },
         { key: 'games', label: 'Games' },
       ],
-      rows: d.trend.map((g) => ({ label: g.key, winrate: pct(g.winrate), games: g.games })),
+      // Raw winrate (0..1), not a pre-formatted '54%' string (K1) — `render`
+      // above formats it, so sorting the WR column compares numbers, not text.
+      rows: d.trend.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })),
+      // Chronological, oldest first — the order the table already opened in.
+      initialSort: { key: 'label', dir: 1 },
     }, lineChart(d.trend.map(toPoint))),
     h('div', { class: 'grid-3' },
       card({ title: 'By role' }, breakdown(d.byRole, roleLabel)),
@@ -90,10 +94,13 @@ function performanceCard(p: PerformanceStats): HTMLElement {
     sub: `0–100 per match · ${p.ratedGames} rated game${p.ratedGames === 1 ? '' : 's'} · line = 7-day rolling average`,
     columns: [
       { key: 'label', label: 'Day' },
-      { key: 'avg', label: 'Avg rating' },
+      // Raw average (can carry decimals) — render rounds for display, same as
+      // the table used to do implicitly for every numeric column before K1.
+      { key: 'avg', label: 'Avg rating', render: (v) => (v == null ? '–' : String(Math.round(v as number))) },
       { key: 'games', label: 'Rated' },
     ],
     rows: p.trend.map((t) => ({ label: t.date, avg: t.avg, games: t.games })),
+    initialSort: { key: 'label', dir: 1 },
   },
   h('div', null,
     ratingChart(p.trend.map((t) => ({ label: t.date, rating: t.avg, games: t.games }))),

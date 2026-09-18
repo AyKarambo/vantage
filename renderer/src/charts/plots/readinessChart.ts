@@ -71,7 +71,7 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
     if (p.score === null) return;
     const cx = xAt(i), cy = yAt(p.score);
     s.appendChild(svgEl('circle', { cx, cy, r: 3, fill: PALETTE.accentBright }));
-    const hit = svgEl('circle', { cx, cy, r: 11, fill: 'transparent' });
+    const hit = svgEl('circle', { cx, cy, r: 11, fill: 'transparent', tabindex: 0 }); // K8
     hit.style.cursor = 'pointer';
     tips.attach(hit, `${p.date} · readiness ${p.score} · ${p.games} game${p.games === 1 ? '' : 's'}`);
     s.appendChild(hit);

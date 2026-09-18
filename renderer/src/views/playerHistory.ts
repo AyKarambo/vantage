@@ -14,7 +14,7 @@
 import { h, render } from '../dom';
 import type { PlayerMatchHistory, PlayerSharedMatch, Role, SharedMatchRank } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { rankLabel, relTime } from '../format';
+import { rankLabel, relTime, RELATION_LABEL } from '../format';
 import { card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
 import { roleIcon } from '../components/roleIcon';
 import { backControl, viewHead, type ViewContext } from './view';
@@ -88,8 +88,8 @@ function teamSplit(d: PlayerMatchHistory): HTMLElement | null {
   const against = d.enemyTeam.wins + d.enemyTeam.losses;
   if (!withYou && !against) return null;
   const parts: string[] = [];
-  if (withYou) parts.push(`As teammates: ${d.sameTeam.wins}W ${d.sameTeam.losses}L`);
-  if (against) parts.push(`As opponents: ${d.enemyTeam.wins}W ${d.enemyTeam.losses}L`);
+  if (withYou) parts.push(`${RELATION_LABEL.with.long}: ${d.sameTeam.wins}W ${d.sameTeam.losses}L`);
+  if (against) parts.push(`${RELATION_LABEL.against.long}: ${d.enemyTeam.wins}W ${d.enemyTeam.losses}L`);
   return h('div', { class: 'hint', style: { margin: '0 0 12px' } }, parts.join('   ·   '));
 }
 
@@ -152,7 +152,7 @@ function playedCell(heroes: string[], role: Role | undefined, title?: string): H
 /** One shared match, click-through to its detail. */
 function matchRow(m: PlayerSharedMatch, ctx: ViewContext): HTMLElement {
   const state = RESULT_STATE[m.result];
-  const relation = m.sameTeam === true ? 'with you' : m.sameTeam === false ? 'vs you' : null;
+  const relation = m.sameTeam === true ? RELATION_LABEL.with.short : m.sameTeam === false ? RELATION_LABEL.against.short : null;
   const row = h('tr', { class: 'is-clickable' },
     h('td', null,
       h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },

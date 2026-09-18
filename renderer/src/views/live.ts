@@ -20,7 +20,7 @@ import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { scoreboard } from '../components/scoreboard';
 import { card, emptyState, pill } from '../components/primitives';
-import { fmt, relTime } from '../format';
+import { fmt, relTime, RELATION_LABEL } from '../format';
 import { viewHead, type ViewContext } from './view';
 
 export function live(ctx: ViewContext): HTMLElement {
@@ -254,7 +254,7 @@ function playerRow(r: PlayerRecord, withYou: boolean | undefined, ctx: ViewConte
       class: 'pill',
       title: withYou === undefined ? 'Team not reported this match' : withYou ? 'On your team now' : 'On the enemy team now',
       style: { minWidth: '38px', textAlign: 'center' },
-    }, withYou === undefined ? '—' : withYou ? 'with' : 'vs'),
+    }, withYou === undefined ? '—' : withYou ? RELATION_LABEL.with.short : RELATION_LABEL.against.short),
     h('div', { class: 'row-main', style: { minWidth: '0' } },
       h('button', {
         class: 'inline-link',

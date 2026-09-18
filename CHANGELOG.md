@@ -195,6 +195,31 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   Training** — a decision-timing split — each with a visible coaching blurb and role tag. Pick
   one to prefill the builder.
 
+### Added
+
+- **A ⓘ next to a column header or label explains what it means**, e.g. Heroes' **RTG** column.
+  Hover, focus with the keyboard, or tap it — it stays open until you click away or press Esc, so
+  it works without a mouse and won't get clipped scrolling off the window's edge the way a native
+  tooltip could.
+
+### Fixed
+
+- **The colour-blind and teal & coral palettes didn't reach the whole app.** Overview's map
+  scatter chart still drew its "below 50%" focus band and dots in the default red/purple no
+  matter which palette Settings → Appearance had picked, and a chart point's tooltip needed a
+  mouse — it's now reachable by keyboard too.
+- **A stale-data link, hybrid/dev badges, banter-tone comms and a log warning now share one
+  consistent amber**, instead of five slightly different ambers that happened to be picked
+  separately — and it stays that amber regardless of which winrate palette you're on, since none
+  of those are a win/loss signal.
+- **A table's sort arrow could point the wrong way.** Clicking a numeric column header sometimes
+  ordered rows opposite what the ↓/↑ next to it showed.
+- **Heroes with nothing to show now says why.** Choosing a higher **min. games** filter than any
+  hero clears, or a date range with no games at all, used to leave just the header over an empty
+  table. It now explains which one happened and offers a way back — **Show 1+**, or **Show all
+  time** when you've got history outside the current range — matching how Overview, Matches and
+  Players already handle it.
+
 ## 0.34.0 — 31 July 2026
 
 ### Added

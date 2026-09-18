@@ -50,7 +50,10 @@ export function lineChart(points: WrPoint[]): HTMLElement {
   points.forEach((p, i) => {
     s.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(p.winrate), r: 3, fill: PALETTE.accentBright }));
     // Generous invisible hit area so hovering the thin line is easy.
-    const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.winrate), r: 11, fill: 'transparent' });
+    // tabindex so Tab reaches every point (K8) — the styled tooltip now shows
+    // on keyboard focus too, where before a keyboard user had no way to read
+    // a chart point's value at all.
+    const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.winrate), r: 11, fill: 'transparent', tabindex: 0 });
     hit.style.cursor = 'pointer';
     tips.attach(hit, `${p.label} · ${pct(p.winrate)} · ${p.games}g`);
     s.appendChild(hit);

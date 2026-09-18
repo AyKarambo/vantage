@@ -26,8 +26,39 @@ export function fmt(n: number | null | undefined): string {
 /** Thousands-separated integer: 1511 → "1,511". */
 export const int = (n: number): string => Math.round(n).toLocaleString('en-US');
 
-/** signed(3) → "+3"; signed(-3) → "-3" (positive values get an explicit plus, negatives keep JS's native hyphen-minus). */
-export const signed = (n: number): string => (n > 0 ? `+${n}` : String(n));
+/**
+ * signed(3) → "+3"; signed(-3) → "−3" (U+2212 MINUS SIGN, not the ASCII
+ * hyphen-minus a bare template string gives you) — Mental and the readiness
+ * wiki hand-wrote U+2212 already; this is the one place every other signed
+ * number in the app should come from, so a column never mixes both glyphs at
+ * two widths in the mono font (K7).
+ */
+export const signed = (n: number): string => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : '0');
+
+/**
+ * games(8) → "8 games"; games(1) → "1 game". The long form, for prose and
+ * column headers — see {@link gamesShort} for the compact chart-label form.
+ * K7: this quantity used to be spelled five different ways across the app
+ * ('8g', '8 games', a bare 'G' header, 'Games together', 'Games' vs 'Rtg'
+ * casing) — reach for one of these two instead of a template string.
+ */
+export const games = (n: number): string => `${int(n)} game${n === 1 ? '' : 's'}`;
+
+/** gamesShort(8) → "8g" — chart labels and tooltips ONLY; prose wants {@link games}. */
+export const gamesShort = (n: number): string => `${int(n)}g`;
+
+/**
+ * net(3) → "+3 net"; net(-4) → "−4 net" (wins − losses, signed via {@link signed}).
+ * K7: this read as '-4 net' on Focus/Matches but 'net -4' on Overview and a
+ * bare signed number on the Maps mode cards — one wording, one glyph.
+ */
+export const net = (n: number): string => `${signed(n)} net`;
+
+/** pts(18) → "+18 pts"; pts(-24) → "−24 pts" — a winrate-point delta (Mental's cost cards, target lift). */
+export const pts = (n: number): string => `${signed(n)} pts`;
+
+/** ratio(0.76) → "0.76×" — always one decimal, the multiplier form used for load-vs-baseline reads. */
+export const ratio = (n: number): string => `${n.toFixed(1)}×`;
 
 /** Winrate → semantic state class used across components. */
 export function wrState(winrate: number): 'win' | 'loss' | 'mid' {
@@ -65,6 +96,20 @@ export function time(ts: number): string {
 export function dateLong(ts = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
+
+/**
+ * The "played alongside" vs "played against" relation, spelled one way
+ * everywhere (K7): Players called them "With me / Against me", the match
+ * card called them "Together / As opponents", the player page mixed "As
+ * teammates / As opponents" with "with you / vs you", and Live used a bare
+ * "with / vs" — different enough that the CHANGELOG once had to explain that
+ * "together" didn't mean your record together. `long` is for column headers
+ * and split-out lines; `short` is for pills and a compact Side column.
+ */
+export const RELATION_LABEL = {
+  with: { long: 'With you', short: 'with' },
+  against: { long: 'Against you', short: 'vs' },
+} as const;
 
 /** Greeting appropriate to the local hour. */
 export function greeting(now = new Date()): string {

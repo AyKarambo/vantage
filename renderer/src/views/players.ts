@@ -15,7 +15,7 @@
 import { h, must, render } from '../dom';
 import type { PlayerList, PlayerListRow, PlayerSortKey } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { relTime, roleLabel } from '../format';
+import { relTime, roleLabel, RELATION_LABEL } from '../format';
 import { button, card, chip, emptyState } from '../components/primitives';
 import { dataTable, type Column } from '../components/table';
 import { prefs } from '../prefs';
@@ -103,8 +103,8 @@ function columns(): Array<Column<PlayerListRow>> {
       ),
     },
     { key: 'games', label: 'Games together', get: (r) => r.games },
-    { key: 'with', label: 'With me', get: (r) => rate(r.sameTeam), render: (r) => wl(r.sameTeam) },
-    { key: 'vs', label: 'Against me', get: (r) => rate(r.enemyTeam), render: (r) => wl(r.enemyTeam) },
+    { key: 'with', label: RELATION_LABEL.with.long, get: (r) => rate(r.sameTeam), render: (r) => wl(r.sameTeam) },
+    { key: 'vs', label: RELATION_LABEL.against.long, get: (r) => rate(r.enemyTeam), render: (r) => wl(r.enemyTeam) },
     { key: 'lastSeen', label: 'Last seen', get: (r) => r.lastSeen, render: (r) => relTime(r.lastSeen) },
   ];
 }
@@ -205,9 +205,11 @@ export function players(ctx: ViewContext): HTMLElement {
     const scope = scopeLabel(p, ctx);
     must('.view-sub', head).textContent =
       `${p.totalInScope.toLocaleString()} ${p.totalInScope === 1 ? 'player' : 'players'} met in this filter scope · ${scope}`;
-    scopeNote.textContent =
-      `Counts on this screen are scoped to the filter bar: ${scope}. Opening a player shows their `
-      + 'complete all-time record, which the filters never touch.';
+    // The scope (role/season/account) is already stated once in the subtitle
+    // above ('N players met in this filter scope · {scope}') — restating it
+    // here too was the exact repetition K7 flagged; this note now says only
+    // the one thing the subtitle doesn't.
+    scopeNote.textContent = 'Opening a player shows their complete all-time record, which the filters never touch.';
 
     const empty = emptyBranch(p);
     if (empty) {

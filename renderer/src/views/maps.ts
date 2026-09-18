@@ -1,7 +1,7 @@
 /** Maps — by game mode, games-played share, and every map ranked best → worst. */
 import { h } from '../dom';
 import type { DashboardData, Group } from '../../../src/shared/contract';
-import { pct, signed } from '../format';
+import { fmt, pct, signed } from '../format';
 import { wrColor, CATEGORICAL, OTHER_COLOR } from '../theme';
 import { donutChart, horizontalBars, type DonutSlice } from '../charts/plots';
 import { card, statBar } from '../components/primitives';
@@ -24,20 +24,24 @@ export function maps(ctx: ViewContext): HTMLElement {
       sub: 'best to worst · 3+ games',
       columns: [
         { key: 'map', label: 'Map' },
-        { key: 'winrate', label: 'WR' },
-        { key: 'net', label: 'Net' },
+        { key: 'winrate', label: 'WR', render: (v) => pct(v as number) },
+        { key: 'net', label: 'Net', render: (v) => signed(v as number) },
         { key: 'games', label: 'Games' },
-        { key: 'rating', label: 'Rtg' },
+        { key: 'rating', label: 'RTG', render: (v) => fmt(v as number | null) }, // matches Heroes' casing (K7)
       ],
-      // Self-rating joins by map key; empty cells stay '–', never 0 (this table
-      // path has no per-column render, so formatting lives in the row-mapper).
-      rows: rankedMaps(d).map((m) => {
-        const rating = d.performance.byMap.find((b) => b.key === m.key)?.avg;
-        return {
-          map: m.key, winrate: pct(m.winrate), net: signed(m.wins - m.losses), games: m.games,
-          rating: rating !== undefined ? String(rating) : '–',
-        };
-      }),
+      // Raw values, not pre-formatted strings (K1) — `render` above formats
+      // them; `get` (chartCard.ts) sorts the same raw number, so WR/Net/Rtg
+      // order correctly instead of comparing '100%' < '25%' as strings.
+      rows: rankedMaps(d).map((m) => ({
+        map: m.key,
+        winrate: m.winrate,
+        net: m.wins - m.losses,
+        games: m.games,
+        rating: d.performance.byMap.find((b) => b.key === m.key)?.avg ?? null,
+      })),
+      // Opens in the same best-to-worst order as the chart beside it, rather
+      // than chartCard's generic "first column, descending" default.
+      initialSort: { key: 'winrate', dir: -1 },
     }, horizontalBars(rankedMaps(d).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })))),
   );
   // Palette / cross-link entry: scroll to and flash the requested map's bar.

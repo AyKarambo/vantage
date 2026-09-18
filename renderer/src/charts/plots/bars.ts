@@ -14,7 +14,7 @@ export function horizontalBars(data: WrPoint[], opts: { compact?: boolean } = {}
   wrap.append(
     ...data.map((d) => {
       const fill = h('div', { class: 'hbar-fill', style: { width: `${Math.max(3, Math.round(d.winrate * 100))}%`, background: wrColor(d.winrate) } });
-      const row = h('div', { class: 'hbar-row' },
+      const row = h('div', { class: 'hbar-row', tabindex: '0' }, // K8: Tab-reachable, shows the tooltip on focus
         h('div', { class: 'hbar-label', title: d.label }, d.label),
         h('div', { class: 'hbar-track' }, fill),
         h('div', { class: 'hbar-value' }, `${pct(d.winrate)}  ${d.games}g`),

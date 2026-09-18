@@ -210,7 +210,7 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   const focus = d.focusMaps.filter((f) => f.net > 0).slice(0, 3);
 
   const callouts = h('div', { class: 'scatter-callouts' },
-    h('div', { style: { fontSize: '12px', fontWeight: '600', color: '#c98079', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' } }, 'Top priority'),
+    h('div', { style: { fontSize: '12px', fontWeight: '600', color: 'var(--loss-text)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' } }, 'Top priority'),
     ...(focus.length
       ? focus.map((m) => h('div', { class: 'row' },
           h('span', { class: 'dot', style: { background: wrHsl(m.winrate) } }),

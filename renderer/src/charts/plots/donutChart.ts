@@ -39,20 +39,29 @@ export function donutChart(slices: DonutSlice[], opts: { size?: number; thicknes
   let offset = 0;
   for (const s of slices) {
     const len = (s.value / total) * C;
+    // tabindex + focusin/focusout so every slice is Tab-reachable with the
+    // same styled tip a mouse hover gets (K8) — no second native <title>
+    // fallback either, which used to pop its own OS tooltip alongside it.
     const seg = svgEl('circle', {
       cx, cy, r, fill: 'none', stroke: s.color, 'stroke-width': thickness,
       'stroke-dasharray': `${len.toFixed(2)} ${(C - len).toFixed(2)}`,
       'stroke-dashoffset': `${(-offset).toFixed(2)}`,
       'pointer-events': 'stroke',
+      tabindex: 0,
     });
     seg.style.cursor = 'pointer';
     const label = `${s.label} · ${s.value}g · ${Math.round((s.value / total) * 100)}%`;
     seg.addEventListener('mouseenter', (e) => { tip.textContent = label; tip.classList.add('is-visible'); moveTip(e); });
     seg.addEventListener('mousemove', moveTip);
     seg.addEventListener('mouseleave', () => tip.classList.remove('is-visible'));
-    const title = svgEl('title');
-    title.textContent = label;
-    seg.appendChild(title);
+    seg.addEventListener('focusin', () => {
+      tip.textContent = label;
+      tip.classList.add('is-visible');
+      const r2 = seg.getBoundingClientRect(), wrapR = wrap.getBoundingClientRect();
+      tip.style.left = `${r2.left + r2.width / 2 - wrapR.left}px`;
+      tip.style.top = `${r2.top + r2.height / 2 - wrapR.top}px`;
+    });
+    seg.addEventListener('focusout', () => tip.classList.remove('is-visible'));
     ring.appendChild(seg);
     offset += len;
   }

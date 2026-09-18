@@ -86,6 +86,17 @@ interface PrefsShape {
 
 const PREFIX = 'vantagePref.';
 
+/**
+ * One-time-migration marker for the `heroSort` direction-inversion fix (K1):
+ * `dataTable`'s comparator used to sort `dir: -1` ASCENDING although the
+ * header drew a descending arrow for it, so a value persisted before the fix
+ * means the opposite of what `dir` says today. A dedicated flag, checked
+ * before the "was a value stored" branch, so a brand-new user who sets
+ * `heroSort` for the first time AFTER the fix is never later flipped by a
+ * read that mistakes "no flag yet" for "needs migrating".
+ */
+const HERO_SORT_MIGRATED_KEY = PREFIX + 'heroSortMigratedV2';
+
 /** Default suggested-hero-count when the user hasn't set one. */
 export const DEFAULT_SUGGESTED_HEROES = 6;
 const SUGGESTED_HEROES_MIN = 3;
@@ -113,6 +124,19 @@ export const prefs = {
   get<K extends keyof PrefsShape>(key: K): PrefsShape[K] | undefined {
     try {
       const raw = localStorage.getItem(PREFIX + key);
+      if (key === 'heroSort' && localStorage.getItem(HERO_SORT_MIGRATED_KEY) !== '1') {
+        try { localStorage.setItem(HERO_SORT_MIGRATED_KEY, '1'); } catch { /* ignore — retried next read */ }
+        if (raw != null) {
+          try {
+            const old = JSON.parse(raw) as HeroSortPref;
+            const migrated: HeroSortPref = { key: old.key, dir: old.dir === 1 ? -1 : 1 };
+            localStorage.setItem(PREFIX + key, JSON.stringify(migrated));
+            return migrated as PrefsShape[K];
+          } catch {
+            /* unparseable — fall through to the normal parse below, which will also fail safely */
+          }
+        }
+      }
       if (raw == null) return undefined;
       const value = JSON.parse(raw) as PrefsShape[K];
       if (key === 'filterPresets') {
