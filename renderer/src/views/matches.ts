@@ -1,6 +1,6 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
-import { h } from '../dom';
-import type { DashboardFilters, MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
+import { h, render } from '../dom';
+import type { DashboardFilters, MatchFlagKey, MatchRow, Result, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { aggregateGrade, dayKey, groupByDay, groupBySitting } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
@@ -18,7 +18,7 @@ import { prefs, MATCH_COLUMNS_DEFAULT, type MatchColumnKey, type MatchColumnsPre
 import { store } from '../store';
 import { deleteMatch } from '../matchActions';
 import { openMatchEditorById } from './matchDetail';
-import { MATCHES_PAGE_SIZE } from '../../../src/core/dashboardData';
+import { MATCHES_PAGE_SIZE, matchesFilter, type MatchesTextFilter } from '../../../src/core/dashboardData';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
 const FLAG_LABELS: Record<MatchFlagKey, string> = {
@@ -60,8 +60,52 @@ let extraOlderMatches: MatchRow[] = [];
 let extraOlderFiltersKey: string | null = null;
 let loadingOlder = false;
 
+/**
+ * The in-list filter row (M2) — result, map type, and a map/hero/account
+ * search, all client-side and reset on navigating away from Matches (never
+ * persisted — Reset up top already covers the "real" range/role/account
+ * filters). `store.subscribe` below is the same "leaving the view" idiom
+ * `views/settings/index.ts` uses for its own reset-on-navigate state.
+ */
+let matchResultFilter = new Set<Result>();
+let matchTypeFilter = new Set<string>();
+let matchSearch = '';
+let onMatches = false;
+store.subscribe((state) => {
+  if (state.view !== 'matches' && onMatches) {
+    onMatches = false;
+    matchResultFilter = new Set();
+    matchTypeFilter = new Set();
+    matchSearch = '';
+  } else if (state.view === 'matches') {
+    onMatches = true;
+  }
+});
+
 function filtersKey(f: DashboardFilters): string {
   return JSON.stringify(f);
+}
+
+/**
+ * The client-side half of the in-list filter (M2) — deliberately a separate,
+ * small function rather than reusing core's `matchesFilter`: `MatchRow`
+ * already carries a resolved `mapType`, so there is no `mapModeOf` to thread
+ * through, and `MatchRow` isn't structurally a `GameRecord`. Mirrors
+ * `matchesFilter`'s exact semantics (multi-select OR within a dimension, AND
+ * across dimensions) so the two never visibly disagree.
+ */
+function textFilterRows(rows: MatchRow[], f: { results: Set<Result>; mapTypes: Set<string>; search: string }): MatchRow[] {
+  let out = rows;
+  if (f.results.size) out = out.filter((m) => f.results.has(m.result));
+  if (f.mapTypes.size) out = out.filter((m) => f.mapTypes.has(m.mapType));
+  const q = f.search.trim().toLowerCase();
+  if (q) {
+    out = out.filter((m) =>
+      m.map.toLowerCase().includes(q)
+      || m.account.toLowerCase().includes(q)
+      || m.heroes.some((h) => h.toLowerCase().includes(q)));
+  }
+  return out;
 }
 
 export function matches(ctx: ViewContext): HTMLElement {
@@ -72,77 +116,195 @@ export function matches(ctx: ViewContext): HTMLElement {
     extraOlderFiltersKey = key;
     loadingOlder = false;
   }
-  // Drill-downs (day/flag/map) scope to what's ALREADY loaded — "show older"
-  // only makes sense on the unscoped list, since a drill-down's own count is
-  // usually tiny and its filtering can't be expressed in the paging IPC call.
-  const allMatches = day || flag || map ? ctx.data.matches : [...ctx.data.matches, ...extraOlderMatches];
-  const rows = day
-    ? allMatches.filter((m) => dayKey(m.timestamp) === day)
-    : flag
-      ? allMatches.filter((m) => m.flags?.[flag])
-      : map
-        ? allMatches.filter((m) => m.map === map)
-        : allMatches;
-  // By day / by sitting (S4) — a single-day drill-down (from the heatmap)
-  // keeps calendar grouping; grouping any further by sitting inside one
-  // already-picked day would be a distinction with no real difference.
-  const grouping = day ? 'day' : (prefs.get('matchGrouping') ?? 'day');
-  const bySitting = grouping === 'sitting';
-  const groups = bySitting
-    ? groupBySitting(rows, ctx.data.sessionSettings.gapMinutes)
-    : groupByDay(rows);
-  const scopeChip = day || flag || map ? drillDownChip(ctx, day, flag, map) : null;
-  const columns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
 
-  const headActions: Node[] = [];
-  if (!day) headActions.push(groupingToggle(grouping));
-  headActions.push(customizeViewButton());
+  // The shell rebuilds the whole view on every new snapshot — a background
+  // refresh, a tracked match, the window-focus refetch — which would replace
+  // the search input and drop the caret mid-typing (same concern players.ts
+  // already works around). The factory runs BEFORE `replaceChildren`, so the
+  // outgoing input is still the active element here.
+  const outgoing = document.activeElement;
+  const hadFocus = outgoing instanceof HTMLInputElement && outgoing.classList.contains('matches-search-input');
+  const caret = hadFocus ? outgoing.selectionStart : null;
 
-  // Honesty (M1): `matches` itself silently caps at MATCHES_PAGE_SIZE rows,
-  // so the header used to claim a count that could flatly disagree with the
-  // status bar's own (uncapped) one on any range past 150 games.
-  const loadedTotal = allMatches.length;
-  const capped = !day && !flag && !map && ctx.data.matchesTotal > loadedTotal;
-  const headline = capped
-    ? `Showing the ${loadedTotal} most recent of ${ctx.data.matchesTotal} games in range · newest first · click a match for details`
-    : `${rows.length} games in range · newest first · click a match for details`;
+  const host = h('div', { class: 'view view--wide' });
+  const headHost = h('div');
+  const scopeHost = h('div');
+  const listHost = h('div');
+  const clearHost = h('span');
 
-  return h('div', { class: 'view view--wide' },
-    viewHead('Matches', headline, headActions),
-    scopeChip,
-    card({ class: 'card--flush', style: { padding: '8px' } },
+  // In-list filter row (M2): result + map-type chips and a search box, all
+  // client-side over what's already loaded and reset the moment you leave
+  // this screen (the `store.subscribe` near the module state above).
+  const searchInput = h('input', {
+    class: 'search-input matches-search-input',
+    type: 'search',
+    placeholder: 'Search map, hero or account…',
+    value: matchSearch,
+    'aria-label': 'Search matches by map, hero, or account',
+  }) as HTMLInputElement;
+  searchInput.addEventListener('input', () => {
+    matchSearch = searchInput.value;
+    render(clearHost, clearLink());
+    repaint();
+  });
+
+  const resultChipsHost = h('div', { style: { display: 'flex', gap: '6px' } });
+  const typeChipsHost = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } });
+  const paintResultChips = (): void => {
+    render(resultChipsHost, ...(['Win', 'Loss', 'Draw'] as Result[]).map((r) =>
+      chip(RESULT_LETTER[r], matchResultFilter.has(r), () => {
+        if (matchResultFilter.has(r)) matchResultFilter.delete(r); else matchResultFilter.add(r);
+        paintResultChips();
+        render(clearHost, clearLink());
+        repaint();
+      })));
+  };
+  const paintTypeChips = (): void => {
+    render(typeChipsHost, ...ctx.data.byMapType.map((g) =>
+      chip(g.key, matchTypeFilter.has(g.key), () => {
+        if (matchTypeFilter.has(g.key)) matchTypeFilter.delete(g.key); else matchTypeFilter.add(g.key);
+        paintTypeChips();
+        render(clearHost, clearLink());
+        repaint();
+      })));
+  };
+  const hasTextFilter = (): boolean =>
+    matchResultFilter.size > 0 || matchTypeFilter.size > 0 || matchSearch.trim() !== '';
+  const clearLink = (): HTMLElement | null =>
+    hasTextFilter()
+      ? inlineLink('Clear filter', {
+          onClick: () => {
+            matchResultFilter = new Set();
+            matchTypeFilter = new Set();
+            matchSearch = '';
+            searchInput.value = '';
+            paintResultChips();
+            paintTypeChips();
+            render(clearHost, clearLink());
+            repaint();
+          },
+        })
+      : null;
+  paintResultChips();
+  paintTypeChips();
+  render(clearHost, clearLink());
+
+  const repaint = (): void => {
+    // Drill-downs (day/flag/map) scope to what's ALREADY loaded — "show
+    // older" only makes sense on the unscoped list, since a drill-down's own
+    // scope can't be expressed in the paging IPC call.
+    const allMatches = day || flag || map ? ctx.data.matches : [...ctx.data.matches, ...extraOlderMatches];
+    const scoped = day
+      ? allMatches.filter((m) => dayKey(m.timestamp) === day)
+      : flag
+        ? allMatches.filter((m) => m.flags?.[flag])
+        : map
+          ? allMatches.filter((m) => m.map === map)
+          : allMatches;
+    const textActive = hasTextFilter();
+    const rows = textActive
+      ? textFilterRows(scoped, { results: matchResultFilter, mapTypes: matchTypeFilter, search: matchSearch })
+      : scoped;
+
+    // By day / by sitting (S4) — a single-day drill-down (from the heatmap)
+    // keeps calendar grouping; grouping any further by sitting inside one
+    // already-picked day would be a distinction with no real difference.
+    const grouping = day ? 'day' : (prefs.get('matchGrouping') ?? 'day');
+    const bySitting = grouping === 'sitting';
+    const groups = bySitting
+      ? groupBySitting(rows, ctx.data.sessionSettings.gapMinutes)
+      : groupByDay(rows);
+    const columns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
+
+    // Honesty (M1): `matches` itself silently caps at MATCHES_PAGE_SIZE rows,
+    // so the header used to claim a count that could flatly disagree with
+    // the status bar's own (uncapped) one on any range past 150 games.
+    const loadedTotal = allMatches.length;
+    const moreToLoad = !day && !flag && !map && loadedTotal < ctx.data.matchesTotal;
+    const headline = textActive
+      ? `${rows.length} of ${allMatches.length} loaded games match your filter${moreToLoad ? ` (${ctx.data.matchesTotal} total in range)` : ''} · click a match for details`
+      : moreToLoad
+        ? `Showing the ${loadedTotal} most recent of ${ctx.data.matchesTotal} games in range · newest first · click a match for details`
+        : `${rows.length} games in range · newest first · click a match for details`;
+
+    const headActions: Node[] = [];
+    if (!day) headActions.push(groupingToggle(grouping));
+    headActions.push(customizeViewButton());
+    render(headHost, viewHead('Matches', headline, headActions));
+
+    render(scopeHost, day || flag || map ? drillDownChip(ctx, day, flag, map) : null);
+
+    render(listHost,
       rows.length
         ? h('div', null,
             ...groups.flatMap((g) => [
               dayHeader(g.label, g.wins, g.losses, bySitting ? netSR(g.items) : undefined),
               ...g.items.map((m) => matchRow(m, ctx, columns)),
             ]),
-            capped ? showOlderRow(ctx) : null,
+            moreToLoad ? showOlderRow(ctx, repaint) : null,
           )
-        : (day || flag || map) ? emptyState('No games match this drill-down — clear the scope above to see everything.') : emptyActions(ctx),
+        : (day || flag || map)
+          ? emptyState('No games match this drill-down — clear the scope above to see everything.')
+          : textActive
+            ? emptyState('No loaded games match this filter — try Show older games, or clear the filter.')
+            : emptyActions(ctx),
+    );
+  };
+  repaint();
+
+  render(host,
+    headHost,
+    h('div', { class: 'matches-filter-row' },
+      resultChipsHost, typeChipsHost, searchInput, clearHost,
     ),
+    scopeHost,
+    card({ class: 'card--flush', style: { padding: '8px' } }, listHost),
   );
+
+  // After the shell mounts this tree (the factory returns first, `render`
+  // replaces the children right after), put the caret back where it was.
+  if (hadFocus) {
+    setTimeout(() => {
+      if (!host.isConnected) return;
+      searchInput.focus();
+      const at = caret ?? searchInput.value.length;
+      searchInput.setSelectionRange(at, at);
+    }, 0);
+  }
+
+  return host;
 }
 
-/** "Show older games" (M1) — fetches the next page via `bridge.matchesPage` and appends it client-side; no data refetch, so the rest of the dashboard (KPIs, Focus, etc.) stays exactly as it was. */
-function showOlderRow(ctx: ViewContext): HTMLElement {
-  const oldest = ctx.data.matches[ctx.data.matches.length - 1]?.timestamp;
+/**
+ * "Show older games" (M1) — fetches the next page via `bridge.matchesPage`
+ * and appends it client-side; no data refetch, so the rest of the dashboard
+ * (KPIs, Focus, etc.) stays exactly as it was. Carries the active in-list
+ * filter (M2), when one is set, so a search reaches past what's currently
+ * loaded instead of only ever searching the first capped page — the server
+ * applies the SAME filter before capping the page, so "Show older games"
+ * under a search returns up to a full page of actual matches, not mostly
+ * rows the client would immediately filter back out.
+ */
+function showOlderRow(ctx: ViewContext, repaint: () => void): HTMLElement {
+  const oldest = [...ctx.data.matches, ...extraOlderMatches]
+    .reduce((min, m) => Math.min(min, m.timestamp), Infinity);
   const btn = button(loadingOlder ? 'Loading…' : 'Show older games', {
     variant: 'ghost', class: 'btn--block',
-    disabled: loadingOlder || oldest == null,
+    disabled: loadingOlder || !Number.isFinite(oldest),
     onClick: () => {
-      if (loadingOlder || oldest == null) return;
+      if (loadingOlder || !Number.isFinite(oldest)) return;
       loadingOlder = true;
-      store.rerender();
-      const oldestLoaded = [...ctx.data.matches, ...extraOlderMatches]
-        .reduce((min, m) => Math.min(min, m.timestamp), oldest);
-      void bridge.matchesPage({ filters: ctx.data.filters, before: oldestLoaded, limit: MATCHES_PAGE_SIZE })
+      repaint();
+      const text = (matchResultFilter.size || matchTypeFilter.size || matchSearch.trim())
+        ? { results: [...matchResultFilter], mapTypes: [...matchTypeFilter], search: matchSearch }
+        : undefined;
+      void bridge.matchesPage({ filters: ctx.data.filters, before: oldest, limit: MATCHES_PAGE_SIZE, text })
         .then((page) => {
           extraOlderMatches = [...extraOlderMatches, ...page];
           loadingOlder = false;
-          store.rerender();
+          repaint();
         })
-        .catch(() => { loadingOlder = false; store.rerender(); });
+        .catch(() => { loadingOlder = false; repaint(); });
     },
   });
   return h('div', { style: { padding: '10px' } }, btn);

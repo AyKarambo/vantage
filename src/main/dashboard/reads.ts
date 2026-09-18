@@ -5,7 +5,7 @@ import {
   PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerMatchHistory, playerRecords,
   selectPlayers, type PlayerDirectory,
 } from '../../core/playerIndex';
-import { computeDashboard, applyFilters, selectMatches, toMatchRow } from '../../core/dashboardData';
+import { computeDashboard, applyFilters, selectMatches, toMatchRow, matchesFilter, type MatchesTextFilter } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
@@ -142,14 +142,21 @@ export function matchDetailRead(
  */
 export function matchesPageRead(
   provider: DataProvider,
-  input: { filters?: DashboardFilters; before: number; limit: number },
+  input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter },
 ): MatchRow[] {
   const masterData = provider.effectiveMasterData();
   const mapModeOf = makeMapMode(masterData.maps);
   const activeMeasured = activeMeasuredTargets(provider.manualTargets());
   const margin = provider.getGrading().partialMargin;
   const suppressed = suppressedMatchIds(competitiveOnly(provider.games()), provider.placementRuns());
-  const games = filteredCompetitiveGames(provider, input.filters);
+  // The in-list filter row (M2, `input.text`) narrows WHICH games are
+  // eligible for the page before `selectMatches` picks which slice of them
+  // — so "Show older games" under an active result/map-type/search filter
+  // fetches a page that's already relevant, instead of 150 unfiltered rows
+  // the caller would mostly throw away client-side.
+  const games = input.text
+    ? matchesFilter(filteredCompetitiveGames(provider, input.filters), mapModeOf, input.text)
+    : filteredCompetitiveGames(provider, input.filters);
   const { rows } = selectMatches(games, { before: input.before, limit: input.limit });
   return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }

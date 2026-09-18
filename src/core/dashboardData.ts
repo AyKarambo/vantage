@@ -23,7 +23,7 @@ import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSetting
 import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
-import type { Role } from './model';
+import type { Role, Result } from './model';
 import type { DemoContext } from './demoPreference';
 import type { DashboardData, DashboardFilters, MatchRow, MasterData, PendingMatch } from '../shared/contract';
 
@@ -476,6 +476,40 @@ export function selectMatches(
   const eligible = before != null ? games.filter((g) => g.timestamp < before) : [...games];
   eligible.sort((a, b) => b.timestamp - a.timestamp);
   return { rows: eligible.slice(0, sel.limit), matched: eligible.length };
+}
+
+/** Matches' in-list filter row (M2) — result and map-type are multi-select (empty = no restriction), `search` matches map, hero or account (case-insensitive substring, mirrors `selectPlayers`'). */
+export interface MatchesTextFilter {
+  results?: readonly Result[];
+  mapTypes?: readonly string[];
+  search?: string;
+}
+
+/**
+ * Applied BEFORE `selectMatches`' before/sort/cap — result/map-type/search
+ * narrow WHICH games are eligible for a page, `selectMatches` then picks
+ * which slice of them. Needs `mapModeOf` because map type isn't a stored
+ * `GameRecord` field, only ever resolved on read (same resolver every other
+ * map-type read in this module already uses).
+ */
+export function matchesFilter(
+  games: readonly GameRecord[],
+  mapModeOf: MapModeResolver,
+  f: MatchesTextFilter,
+): GameRecord[] {
+  let out: readonly GameRecord[] = games;
+  if (f.results?.length) out = out.filter((g) => f.results!.includes(g.result));
+  if (f.mapTypes?.length) out = out.filter((g) => f.mapTypes!.includes(mapModeOf(g.map)));
+  if (f.search) {
+    const q = f.search.trim().toLowerCase();
+    if (q) {
+      out = out.filter((g) =>
+        g.map.toLowerCase().includes(q)
+        || g.account.toLowerCase().includes(q)
+        || g.heroes.some((h) => h.toLowerCase().includes(q)));
+    }
+  }
+  return [...out];
 }
 
 function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow[] {
