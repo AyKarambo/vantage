@@ -6,7 +6,7 @@ import {
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, RosterPlayer } from '../src/core/model';
 import type { EnteringRank } from '../src/core/rank';
-import type { PlayerListQuery, PlayerListRow, PlayerSortKey } from '../src/shared/contract';
+import type { PlayerListQuery, PlayerListRow, PlayerRelation, PlayerSortKey } from '../src/shared/contract';
 
 let seq = 0;
 function game(p: Partial<GameRecord> & { result: Result }): GameRecord {
@@ -516,6 +516,27 @@ describe('playerDirectory', () => {
     expect(playerDirectory(all).players).toEqual(playerDirectory(all).players);
   });
 
+  it('lastSameTeam (M6) reflects the newest game with a known team relation, not just the newest game', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 1000, roster: [meT(0), them('Nova#1', 0)] }), // teammate
+      game({ result: 'Loss', timestamp: 2000, roster: [meT(0), them('Nova#1', 1)] }), // enemy — newer
+    ];
+    expect(playerDirectory(all).players[0].lastSameTeam).toBe(false);
+  });
+
+  it('lastSameTeam skips a NEWER game whose feed left the relation unreported, keeping the last known one', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 1000, roster: [meT(0), them('Nova#1', 0)] }), // teammate, relation known
+      game({ result: 'Loss', timestamp: 2000, roster: [meT(0), { battleTag: 'Nova#1', heroName: 'Ana' }] }), // newer, no team reported
+    ];
+    expect(playerDirectory(all).players[0].lastSameTeam).toBe(true);
+  });
+
+  it('lastSameTeam is absent when no shared game ever reported a team for both rows', () => {
+    const all = [game({ result: 'Win', timestamp: 1000, roster: [{ battleTag: 'Karambo#21234', heroName: 'Tracer', isLocal: true }, { battleTag: 'Nova#1', heroName: 'Ana' }] })];
+    expect(playerDirectory(all).players[0].lastSameTeam).toBeUndefined();
+  });
+
   it('walks the history exactly once', () => {
     let reads = 0;
     const games: GameRecord[] = [];
@@ -624,7 +645,7 @@ describe('selectPlayers / normalizePlayerSelection', () => {
 
   it('normalizes hostile input rather than trusting the wire', () => {
     expect(normalizePlayerSelection(undefined)).toEqual({
-      search: '', minGames: 1, sort: 'games', dir: -1, limit: PLAYER_ROW_CAP,
+      search: '', minGames: 1, relation: 'any', sort: 'games', dir: -1, limit: PLAYER_ROW_CAP,
     });
     expect(sel({ sort: 'nonsense' as PlayerSortKey }).sort).toBe('games');
     expect(sel({ dir: 3 as 1 }).dir).toBe(-1);
@@ -633,6 +654,40 @@ describe('selectPlayers / normalizePlayerSelection', () => {
     expect(sel({ minGames: 2.7 }).minGames).toBe(2);
     expect(sel({ search: 'x'.repeat(10_000) }).search).toHaveLength(64);
     expect(sel({ search: 42 as unknown as string }).search).toBe('');
+    expect(sel({ relation: 'nonsense' as PlayerRelation }).relation).toBe('any');
+    expect(sel({ relation: 'with' }).relation).toBe('with');
+  });
+
+  it('relation "with" keeps only players with a decided same-team game (M6)', () => {
+    const players = [
+      row({ key: 'teammate', name: 'Teammate#1', sameTeam: { wins: 2, losses: 0 } }),
+      row({ key: 'opponent', name: 'Opponent#1', enemyTeam: { wins: 1, losses: 1 } }),
+      row({ key: 'unknown', name: 'Unknown#1' }),
+    ];
+    expect(selectPlayers(players, sel({ relation: 'with' })).rows.map((p) => p.name)).toEqual(['Teammate#1']);
+  });
+
+  it('relation "vs" keeps only players with a decided enemy-team game (M6)', () => {
+    const players = [
+      row({ key: 'teammate', name: 'Teammate#1', sameTeam: { wins: 2, losses: 0 } }),
+      row({ key: 'opponent', name: 'Opponent#1', enemyTeam: { wins: 1, losses: 1 } }),
+      row({ key: 'unknown', name: 'Unknown#1' }),
+    ];
+    expect(selectPlayers(players, sel({ relation: 'vs' })).rows.map((p) => p.name)).toEqual(['Opponent#1']);
+  });
+
+  it('relation "any" (default) applies no filter', () => {
+    const players = [
+      row({ key: 'teammate', name: 'Teammate#1', sameTeam: { wins: 2, losses: 0 } }),
+      row({ key: 'unknown', name: 'Unknown#1' }),
+    ];
+    expect(selectPlayers(players, sel()).rows).toHaveLength(2);
+  });
+
+  it('relation excludes a player whose only games on that side were draws (no decided games)', () => {
+    // A relation known but all-draw side has nothing to show, same as "unknown".
+    const players = [row({ key: 'drawn', name: 'Drawn#1', sameTeam: { wins: 0, losses: 0 } })];
+    expect(selectPlayers(players, sel({ relation: 'with' })).rows).toHaveLength(0);
   });
 
   it('does not mutate the directory it selects from', () => {

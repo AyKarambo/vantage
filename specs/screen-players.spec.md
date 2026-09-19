@@ -27,8 +27,16 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
 - **Sortable table:** Player, Games together, With you, Against you, Last seen (the with/against
   wording is shared across Players, the match detail's player-history card, a player's own page
   and Live via `RELATION_LABEL` in `renderer/src/format.ts` — K7). Default sort is
-  shared games descending. Search and a **min. games** chip row (`1+ / 2+ / 5+ / 10+`, its own
-  `minPlayerGames` pref) narrow the list; the sort choice persists as `playerSort`.
+  shared games descending. Search, a **relation** chip row (M6: `Any / Played with / Played
+  against`, its own `playerRelation` pref) and a **min. games** chip row (`1+ / 2+ / 5+ / 10+`,
+  its own `minPlayerGames` pref) narrow the list; the sort choice persists as `playerSort`.
+  Relation filters SERVER-side (`selectPlayers`, over the whole matched set before the cap, same
+  as the floor) — `with`/`vs` keep only rows with at least one DECIDED game on that side (a
+  relation known but all-draw side has nothing to show, same treatment as no relation data at
+  all). The **Last seen** cell carries a dim `with`/`vs` suffix (M6, `PlayerListRow.lastSameTeam`)
+  — the team relation of that player's most recent shared game whose feed reported a team for
+  BOTH rows, which is not necessarily the same game `lastSeen` itself is from if a later game's
+  teams went unreported; absent (no suffix) when no shared game ever reported one.
 - **Sorting, searching and capping happen on MAIN**, over the whole matched set, before the
   page is cut (`selectPlayers`). The renderer supplies `dataTable`'s `onSort` and never sorts
   locally: re-ordering a capped page would answer "the most recent among your 200
@@ -55,7 +63,10 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
 - **Six empty states**, distinct because they have different causes and different fixes:
   nothing tracked at all · no games in scope · games but no rosters · rosters but no names ·
   the floor hid everyone · search found nothing. None may read as "you have met nobody", and
-  the search miss offers **Search all time** rather than implying they don't exist.
+  the search miss offers **Search all time** rather than implying they don't exist. The floor-hid
+  and search-miss states name the relation filter too when one is applied (M6, `p.appliedRelation`
+  — the payload's own echo, same discipline as `appliedMinGames`) and offer **Show any relation**
+  alongside **Show 1+**/**Clear search**.
 - **Identity merging is surfaced, not hidden.** Players are keyed on the lowercased name before
   `#`, so `Nova#1111` and `Nova#2222` fold into one row; such a row carries a `⚠` marker.
 

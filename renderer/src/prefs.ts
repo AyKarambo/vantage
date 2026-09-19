@@ -3,7 +3,7 @@
  * and shapes never scatter across modules. Same hardening as the filter
  * persistence: storage failures degrade to defaults, never throw.
  */
-import type { DashboardFilters } from '../../src/shared/contract';
+import type { DashboardFilters, PlayerRelation } from '../../src/shared/contract';
 import { migrateLegacySeasonDays } from '../../src/core/season';
 import type { WinrateScheme } from './winrateScheme';
 
@@ -58,6 +58,8 @@ interface PrefsShape {
   playerSort: HeroSortPref;
   /** Players table minimum-shared-games filter. */
   minPlayerGames: number;
+  /** Players table team-relation filter (M6). */
+  playerRelation: PlayerRelation;
   /** Maps ranking minimum-games filter (H4). */
   minMapGames: number;
   /** Maps ranking mode filter (H4) — a `byMapType` key, or absent for "All". */

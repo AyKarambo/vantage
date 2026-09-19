@@ -387,6 +387,7 @@ export function playerListRead(provider: DataProvider, query: PlayerListQuery | 
     dir: sel.dir,
     appliedSearch: sel.search,
     appliedMinGames: sel.minGames,
+    appliedRelation: sel.relation,
     scope,
   };
 }

@@ -13,7 +13,7 @@
  * with no visible tell that the row you wanted was cut before the sort ran.
  */
 import { h, must, render } from '../dom';
-import type { PlayerList, PlayerListRow, PlayerSortKey } from '../../../src/shared/contract';
+import type { PlayerList, PlayerListRow, PlayerRelation, PlayerSortKey } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { relTime, roleLabel, RELATION_LABEL } from '../format';
 import { button, card, chip, emptyState } from '../components/primitives';
@@ -24,6 +24,12 @@ import { viewHead, type ViewContext } from './view';
 
 /** The minimum-games chip steps, mirroring the Heroes screen's idiom. */
 const MIN_GAMES_STEPS = [1, 2, 5, 10] as const;
+/** Relation chip steps (M6) — "who have I only ever faced" / "who was on my team". */
+const RELATION_STEPS: ReadonlyArray<{ value: PlayerRelation; label: string }> = [
+  { value: 'any', label: 'Any' },
+  { value: 'with', label: 'Played with' },
+  { value: 'vs', label: 'Played against' },
+];
 const SORT_KEYS: readonly PlayerSortKey[] = ['name', 'games', 'with', 'vs', 'lastSeen'];
 /** How long typing must pause before a keystroke costs a round trip. */
 const SEARCH_DEBOUNCE_MS = 200;
@@ -60,6 +66,11 @@ function restoreSort(): { key: PlayerSortKey; dir: 1 | -1 } {
 function minGamesPref(): number {
   const n = prefs.get('minPlayerGames');
   return MIN_GAMES_STEPS.find((s) => s === n) ?? 1;
+}
+
+function relationPref(): PlayerRelation {
+  const r = prefs.get('playerRelation');
+  return RELATION_STEPS.some((s) => s.value === r) ? r! : 'any';
 }
 
 /** "Damage · Season 15 · Karambo" — always names the filters, even at defaults,
@@ -110,7 +121,20 @@ function columns(): Array<Column<PlayerListRow>> {
     { key: 'games', label: 'Games together', get: (r) => r.games },
     { key: 'with', label: RELATION_LABEL.with.long, get: (r) => rate(r.sameTeam), render: (r) => wl(r.sameTeam) },
     { key: 'vs', label: RELATION_LABEL.against.long, get: (r) => rate(r.enemyTeam), render: (r) => wl(r.enemyTeam) },
-    { key: 'lastSeen', label: 'Last seen', get: (r) => r.lastSeen, render: (r) => relTime(r.lastSeen) },
+    {
+      key: 'lastSeen', label: 'Last seen', get: (r) => r.lastSeen,
+      render: (r) => h('span', null,
+        relTime(r.lastSeen),
+        // M6: the relation of the newest game with a known team — absent when
+        // no shared game ever reported one, never a guess.
+        r.lastSameTeam != null
+          ? h('span', {
+              class: 'u-dim', style: { marginLeft: '5px' },
+              title: r.lastSameTeam ? 'On your team last time' : 'Against you last time',
+            }, r.lastSameTeam ? RELATION_LABEL.with.short : RELATION_LABEL.against.short)
+          : null,
+      ),
+    },
   ];
 }
 
@@ -140,6 +164,7 @@ export function players(ctx: ViewContext): HTMLElement {
   const footNote = h('div', { class: 'hint', style: { marginTop: '8px' } });
   let sort = restoreSort();
   let minGames = minGamesPref();
+  let relation = relationPref();
 
   const searchInput = h('input', {
     class: 'search-input',
@@ -173,7 +198,23 @@ export function players(ctx: ViewContext): HTMLElement {
   }
   paintChips();
 
-  const head = viewHead('Players', 'Loading…', h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } }, chipRow, searchInput));
+  // M6: "who have I only ever faced" / "who was on my team" — filters d.matches
+  // server-side (selectPlayers), same round-trip as min. games, not a client
+  // narrowing of the already-capped page.
+  const relationChipRow = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } });
+  function paintRelationChips(): void {
+    render(relationChipRow,
+      ...RELATION_STEPS.map((s) => chip(s.label, relation === s.value, () => {
+        relation = s.value;
+        prefs.set('playerRelation', s.value);
+        paintRelationChips();
+        void load();
+      })),
+    );
+  }
+  paintRelationChips();
+
+  const head = viewHead('Players', 'Loading…', h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' } }, relationChipRow, chipRow, searchInput));
   const scopeNote = h('div', { class: 'hint', style: { margin: '0 0 12px' } });
 
   render(host, head, scopeNote, card({ class: 'card--flush', style: { padding: '4px 10px 10px' } }, tableHost, footNote));
@@ -184,7 +225,7 @@ export function players(ctx: ViewContext): HTMLElement {
    * back on the same snapshot costs nothing.
    */
   const requestKey = (): string =>
-    JSON.stringify([ctx.data.generatedAt, ctx.data.filters, search, minGames, sort.key, sort.dir]);
+    JSON.stringify([ctx.data.generatedAt, ctx.data.filters, search, minGames, relation, sort.key, sort.dir]);
 
   async function load(): Promise<void> {
     const key = requestKey();
@@ -194,7 +235,7 @@ export function players(ctx: ViewContext): HTMLElement {
     tableHost.style.opacity = payload ? '0.55' : '1';
     try {
       const p = await bridge.playerList({
-        filters: ctx.data.filters, search, minGames, sort: sort.key, dir: sort.dir,
+        filters: ctx.data.filters, search, minGames, relation, sort: sort.key, dir: sort.dir,
       });
       if (mine !== seq || !host.isConnected) return;
       payload = p;
@@ -292,17 +333,23 @@ export function players(ctx: ViewContext): HTMLElement {
     if (!p.appliedSearch) {
       return wrap(
         emptyState(`No player has ${p.appliedMinGames}+ games with you in this scope — `
-          + `${p.totalInScope.toLocaleString()} met in total.`),
-        h('div', { style: { marginTop: '10px' } },
+          + `${p.totalInScope.toLocaleString()} met in total.`
+          + (p.appliedRelation !== 'any' ? ` The "${RELATION_STEPS.find((s) => s.value === p.appliedRelation)!.label}" filter is also applied.` : '')),
+        h('div', { style: { marginTop: '10px', display: 'flex', gap: '8px' } },
           button('Show 1+', {
             variant: 'soft',
             onClick: () => { minGames = 1; prefs.set('minPlayerGames', 1); paintChips(); void load(); },
-          })),
+          }),
+          p.appliedRelation !== 'any'
+            ? button('Show any relation', { variant: 'ghost', onClick: () => { relation = 'any'; prefs.set('playerRelation', 'any'); paintRelationChips(); void load(); } })
+            : null,
+        ),
       );
     }
     return wrap(
       emptyState(`No player matching “${p.appliedSearch}” in this scope.`
-        + (p.appliedMinGames > 1 ? ` The ${p.appliedMinGames}+ minimum is also applied.` : '')),
+        + (p.appliedMinGames > 1 ? ` The ${p.appliedMinGames}+ minimum is also applied.` : '')
+        + (p.appliedRelation !== 'any' ? ` The "${RELATION_STEPS.find((s) => s.value === p.appliedRelation)!.label}" filter is also applied.` : '')),
       h('div', { class: 'hint', style: { margin: '8px 0' } },
         'Search matches the name before the # — Nova#1111 and Nova#2222 are the same player here.'),
       h('div', { style: { display: 'flex', gap: '8px' } },
@@ -314,6 +361,12 @@ export function players(ctx: ViewContext): HTMLElement {
           ? button('Show 1+', {
               variant: 'ghost',
               onClick: () => { minGames = 1; prefs.set('minPlayerGames', 1); paintChips(); void load(); },
+            })
+          : null,
+        p.appliedRelation !== 'any'
+          ? button('Show any relation', {
+              variant: 'ghost',
+              onClick: () => { relation = 'any'; prefs.set('playerRelation', 'any'); paintRelationChips(); void load(); },
             })
           : null,
         // Never say "you've never met them" — they may well be outside the scope.

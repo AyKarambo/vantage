@@ -836,6 +836,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   per-position bars dim under 5 games instead of drawing a full-strength red bar off one game
   (F6).
 
+### Added
+
+- **A relation filter on Players.** Narrow the list to just the people you've actually played
+  **with** or **against** — "who have I only ever faced?" used to mean scanning every row's With
+  you/Against you columns by eye. The **Last seen** column now also carries a dim "with"/"vs"
+  note for whether that person was on your team the last time you played together (M6).
+
 ## 0.34.0 — 31 July 2026
 
 ### Added

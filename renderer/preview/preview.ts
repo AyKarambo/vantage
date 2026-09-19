@@ -516,7 +516,7 @@ const mock: OwStatsApi = {
       scannedGames: dir.scannedGames,
       gamesWithRoster: dir.gamesWithRoster,
       sort: sel.sort, dir: sel.dir,
-      appliedSearch: sel.search, appliedMinGames: sel.minGames,
+      appliedSearch: sel.search, appliedMinGames: sel.minGames, appliedRelation: sel.relation,
       scope,
     };
   },
