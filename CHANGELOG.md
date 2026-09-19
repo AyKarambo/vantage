@@ -774,8 +774,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   sync also lists exactly which matches didn't go through and why, with a **Retry failed** button
   that re-syncs just those — instead of a blind re-run of everything. The connected-database card
   also gains an **Open in Notion ↗** link, previously buried in the tray menu (W6).
-- **A "Show in Explorer" button on Data storage.** The folder path was text you had to copy and
-  paste into a file manager yourself — one click now opens it directly (W3).
+- **A "Show in Explorer" button on Data storage**, and a real backup export. The folder path used
+  to be text you had to copy and paste into a file manager yourself — one click now opens it
+  directly. Data import is now **Backup & import**: **Export backup…** writes your whole local
+  history to a JSON file (every game with its review/mental notes, every account, every rank
+  anchor, every target) for moving to another machine, and a persistent "Last import" line replaces
+  the one-time toast as the only record that an import happened (W3).
 
 ## 0.34.0 — 31 July 2026
 

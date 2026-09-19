@@ -140,6 +140,8 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.importFromFile, () => provider.importFromFile());
   handle(ch.deleteFileImports, () => provider.deleteFileImports());
   handle(ch.fileImportedCount, () => provider.fileImportedCount());
+  handle(ch.lastFileImportAt, () => provider.lastFileImportAt());
+  handle(ch.exportBackup, () => provider.exportBackup());
   handle(ch.saveTarget, (_e, input: AuthoredTargetInput) => {
     provider.saveTarget(input);
   });

@@ -401,6 +401,8 @@ const gameLoggedListeners = new Set<(p: GameLoggedPayload) => void>();
 let previewImportedMatches = 0;
 // Canned count of file-imported matches (Settings → Data), cleared independently of Notion imports.
 let previewFileImports = 0;
+// When the last simulated file import "landed" (W3's persistent Last import line).
+let previewLastFileImportAt: number | undefined;
 
 // In-memory data-folder mock (Area C): the browser preview has no real
 // filesystem to migrate, so "choosing a folder" just relabels the mock
@@ -994,14 +996,22 @@ const mock: OwStatsApi = {
   importFromFile: async () => {
     // No real filesystem in the harness — simulate importing a small file.
     previewFileImports += 5;
+    previewLastFileImportAt = Date.now();
     return { imported: 5, skipped: 0, invalid: 0, accountsAdded: 1, anchorSet: true };
   },
   deleteFileImports: async () => {
     const deleted = previewFileImports;
     previewFileImports = 0;
+    previewLastFileImportAt = undefined;
     return { deleted };
   },
   fileImportedCount: async () => previewFileImports,
+  lastFileImportAt: async () => previewLastFileImportAt,
+  // No real filesystem/save-dialog in the harness — log the intent, same as openExternal.
+  exportBackup: async () => {
+    console.info('[preview] exportBackup', { games: dataset().length, targets: targets.length });
+    return { path: 'C:\\Users\\preview\\Documents\\vantage-backup-preview.json' };
+  },
   cleanupNotionDuplicates: async () => {
     if (!selectedNotionDatabaseId) return { archived: 0, kept: 0, failed: 0, unavailable: true };
     // No real Notion rows in the harness — return a canned result so the UI is testable.

@@ -20,3 +20,6 @@ export interface ImportFileResult {
   /** Set when the file could not be used at all (unreadable / not a valid envelope) — nothing was written. */
   error?: string;
 }
+
+/** Outcome of "Export backup…" (W3 phase 2) — the full local-data backup, not just games. */
+export type ExportBackupResult = { path: string } | { cancelled: true } | { error: string };

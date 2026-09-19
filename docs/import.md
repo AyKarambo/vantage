@@ -9,7 +9,9 @@ There are two pieces:
 
 1. **`scripts/import-obsidian.ps1`** — converts an [Obsidian](https://obsidian.md) match vault into a
    Vantage import file.
-2. **Settings → Data import** — the in-app action that reads a Vantage import file into history.
+2. **Settings → Backup & import** — the in-app action that reads a Vantage import file into history,
+   and **Export backup…** — a full local backup written in the same format (games, accounts, rank
+   anchors, targets), for restoring your own history on another machine.
 
 If your data lives somewhere other than Obsidian, you can produce the same JSON with any tool — the
 [format](#the-vantage-import-file-format) is documented below and mirrored in the in-app help panel.
@@ -66,14 +68,25 @@ powershell -ExecutionPolicy Bypass -File import-obsidian.ps1 -VaultPath "C:\path
 
 ## Importing in the app
 
-1. Open **Settings → Data import**.
+1. Open **Settings → Backup & import**.
 2. Click **Import from file…** and choose your `vantage-import.json`.
 3. The result line reports how many matches were imported, skipped (already present), or invalid, and
-   whether a rank anchor was set.
+   whether a rank anchor was set. A persistent "Last import" line under the buttons keeps saying how
+   many matches are currently imported and when, so you don't have to re-run an import to check.
 
 To re-sync after editing matches in your other tool, use **Remove imported matches** and import the
 freshly-generated file again. Only file-imports are removed — live, hand-logged, and Notion-imported
 matches are left intact.
+
+## Backing up your own history
+
+**Export backup…** on the same card writes a **v2** Vantage import file — a superset of the format
+below that also carries every game's review/mental self-report, every configured account, every
+(account, role) rank anchor (not just one), and every authored target. It's meant for moving your
+*own* history to a new machine, not for a companion tool to hand-write — use **Import from file…**
+with the resulting file the same way as any other import file. Re-importing a v2 backup currently
+restores its games (with review/mental) and its single legacy `anchor`, same as a v1 file; full
+restoration of the `accounts`/`rankAnchors`/`targets` sections on import is not yet wired up.
 
 ## Ranks (SR)
 
@@ -130,3 +143,30 @@ highest band of a tier, `5` the lowest. `progressPct` is `0–100` within the di
   match in your source tool won't update the already-imported copy — use **Remove imported matches**
   and re-import for a clean re-sync.
 - A malformed file (not a valid envelope) is rejected with a message and nothing is written.
+
+## The v2 (full backup) format
+
+`vantageImport: 2` is a superset written only by **Export backup…** — a v1 file never has these
+extra sections, and a v2 file's `games` entries can carry `mental`/`review` blocks (the same shapes
+the app itself uses) that a v1 file never did.
+
+```jsonc
+{
+  "vantageImport": 2,
+  "exportedAt": 1751733720000,
+  "accounts": [
+    { "battleTag": "You#1234", "label": "Main" }
+  ],
+  "rankAnchors": [
+    { "account": "Main", "role": "damage", "tier": "Gold", "division": 3, "progressPct": 40, "setAt": 1751000000000 }
+  ],
+  "targets": [ /* AuthoredTarget objects, as stored */ ],
+  "games": [
+    {
+      "matchId": "…", "timestamp": 1751733720000, "map": "Busan", "result": "Loss", "heroes": ["Winston"],
+      "mental": { "tilt": true, "comms": "positive" },
+      "review": { "at": 1751733999000, "grades": { "targetId": "hit" }, "flags": { "toxicMates": true } }
+    }
+  ]
+}
+```

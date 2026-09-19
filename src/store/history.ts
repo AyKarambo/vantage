@@ -133,6 +133,7 @@ export class HistoryStore {
   private changesStmt!: StatementSync;
   private openId = 0;
   private importedCountStmt!: StatementSync;
+  private lastImportedAtStmt!: StatementSync;
   private selectImportedStmt!: StatementSync;
   private deleteImportedStmt!: StatementSync;
   private deleteByAccountStmt!: StatementSync;
@@ -366,6 +367,17 @@ export class HistoryStore {
   }
 
   /**
+   * When the most recent import from the given channel landed (epoch ms) —
+   * the persistent "Last import: N matches on <date>" line (W3), which
+   * survives a repaint or restart unlike a one-time toast. Undefined when
+   * nothing from that channel is currently stored.
+   */
+  lastImportedAt(source: 'notion' | 'file'): number | undefined {
+    const m = this.lastImportedAtStmt.get(source)?.m;
+    return typeof m === 'number' ? m : undefined;
+  }
+
+  /**
    * Drop every game that came from the given import channel (carries `importedAt`
    * with that provenance), leaving live-tracked, hand-logged, and other-channel
    * imports untouched — so one import can be wiped and re-run cleanly without
@@ -570,6 +582,9 @@ export class HistoryStore {
     // maps legacy Notion imports (written before the column existed) to 'notion'.
     this.importedCountStmt = this.db.prepare(
       `SELECT COUNT(*) AS c FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
+    );
+    this.lastImportedAtStmt = this.db.prepare(
+      `SELECT MAX(importedAt) AS m FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ?`,
     );
     this.selectImportedStmt = this.db.prepare(
       `SELECT data FROM games WHERE importedAt IS NOT NULL AND COALESCE(importSource, 'notion') = ? ORDER BY rowid`,

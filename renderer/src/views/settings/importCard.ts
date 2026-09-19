@@ -4,43 +4,77 @@ import { bridge } from '../../bridge';
 import { button, card } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
 import { toast } from '../../components/toast';
+import { relTime } from '../../format';
 import { store } from '../../store';
 
 /**
- * Data import — bring match history in from a Vantage import file (JSON), e.g.
- * the one the Obsidian→Vantage script (`scripts/import-obsidian.ps1`) writes.
- * Imported matches are marked so "Remove imported matches" clears exactly this
- * set, leaving live-tracked, hand-logged, and Notion-imported games untouched —
- * so a friend can keep tracking elsewhere and re-import cleanly. A collapsible
- * help panel documents the file format for adapting other sources.
+ * Backup & import — bring match history in from a Vantage import file (JSON),
+ * e.g. the one the Obsidian→Vantage script (`scripts/import-obsidian.ps1`)
+ * writes, and export a full local backup (W3 phase 2) — every game (with its
+ * review/mental self-report), every configured account, every rank anchor,
+ * and every authored target, in the same v2 envelope format import reads.
+ * Imported matches are marked so "Remove imported matches" clears exactly
+ * this set, leaving live-tracked, hand-logged, and Notion-imported games
+ * untouched — so a friend can keep tracking elsewhere and re-import cleanly.
+ * A collapsible help panel documents the file format for adapting other
+ * sources.
  */
 export function importCard(): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '10px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
   let helpOpen = false;
   let count = 0;
+  let lastImportedAt: number | undefined;
+  let exporting = false;
 
-  void bridge.fileImportedCount().then((c) => { count = c; paint(); });
+  void Promise.all([bridge.fileImportedCount(), bridge.lastFileImportAt()]).then(([c, at]) => {
+    count = c;
+    lastImportedAt = at;
+    paint();
+  });
 
   function paint(message?: string): void {
     render(body,
       h('div', { class: 'hint' },
-        'Import matches from a Vantage import file (JSON). Imported matches are tagged so you can clear and ' +
-        're-import them cleanly, without touching live-tracked, hand-logged, or Notion-imported games.'),
+        'Export a full local backup, or import matches from a Vantage import file (JSON). Imported matches are ' +
+        'tagged so you can clear and re-import them cleanly, without touching live-tracked, hand-logged, or ' +
+        'Notion-imported games.'),
       h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' } },
+        button(exporting ? 'Exporting…' : 'Export backup…', { variant: 'soft', disabled: exporting, onClick: runExport }),
         button('Import from file…', { variant: 'primary', onClick: runImport }),
         count > 0 ? button('Remove imported matches', { variant: 'soft', onClick: confirmRemove }) : null,
       ),
+      // Persistent (W3) — survives leaving and returning to this screen, unlike
+      // the one-time import toast that used to be the only confirmation.
       count > 0
-        ? h('div', { class: 'hint' }, `${count} match${count === 1 ? '' : 'es'} currently imported from a file.`)
+        ? h('div', { class: 'hint' },
+            lastImportedAt
+              ? `Last import: ${count} match${count === 1 ? '' : 'es'} currently stored, ${relTime(lastImportedAt)}.`
+              : `${count} match${count === 1 ? '' : 'es'} currently imported from a file.`)
         : null,
       message ? h('div', { class: 'hint' }, message) : null,
       formatHelp(),
     );
   }
 
-  /** Re-read the live count (after import/remove) and repaint, optionally with a status line. */
+  /** Re-read the live count + last-import time (after import/remove) and repaint, optionally with a status line. */
   function refreshCount(message?: string): void {
-    void bridge.fileImportedCount().then((c) => { count = c; paint(message); });
+    void Promise.all([bridge.fileImportedCount(), bridge.lastFileImportAt()]).then(([c, at]) => {
+      count = c;
+      lastImportedAt = at;
+      paint(message);
+    });
+  }
+
+  function runExport(): void {
+    exporting = true;
+    paint();
+    void bridge.exportBackup().then((res) => {
+      exporting = false;
+      if ('cancelled' in res) { paint(); return; } // user dismissed the save dialog — nothing to report
+      if ('error' in res) { toast(`Backup failed: ${res.error}`); paint(`⚠ ${res.error}`); return; }
+      toast(`Backup saved to ${res.path}`);
+      paint();
+    });
   }
 
   function runImport(): void {
@@ -96,11 +130,13 @@ export function importCard(): HTMLElement {
         'srDelta and performance (0–100) are optional; a stable matchId per source match makes re-imports skip duplicates. ' +
         'The optional anchor sets your current rank (tier one of Bronze…Champion, division 1 = highest … 5 = lowest, ' +
         'progressPct 0–100); it is applied at your most recent imported match, and earlier ranks are reconstructed ' +
-        'backward from it, so rank-protection detail on older matches is approximate.'),
+        'backward from it, so rank-protection detail on older matches is approximate. "Export backup…" above writes ' +
+        'a fuller version of this same format — every game with its review/mental self-report, every account, every ' +
+        'rank anchor, and every authored target — for restoring on another machine, and reads back in here too.'),
     );
   }
 
-  return card({ title: 'Data import', sub: 'bring match history in from a file (Obsidian, another tracker, …)' }, body);
+  return card({ title: 'Backup & import', sub: 'export a full local backup, or bring match history in from a file' }, body);
 }
 
 /** A one-line summary of an import result for the toast + status line. */
