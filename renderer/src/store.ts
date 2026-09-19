@@ -275,6 +275,19 @@ class Store {
           if (mine !== this.fetchSeq) return;
         }
       }
+      // Every fetch, not just cold (F2) — unlike a season id, the account list
+      // can change mid-session: the demo season's accounts vanish the instant
+      // a real GEP match retires it, so a filter pinned to one of them (e.g.
+      // 'Climb') would otherwise keep scoping to an account that no longer
+      // exists, which also makes the hidden-history banner blame the date
+      // range for what is actually a stale account filter.
+      const accountReconciled = reconcileAccountFilter(this.state.filters, data);
+      if (accountReconciled !== this.state.filters) {
+        this.state.filters = accountReconciled;
+        persistFilters(accountReconciled);
+        data = await bridge.getDashboard(this.state.filters);
+        if (mine !== this.fetchSeq) return;
+      }
       this.patch({ data, loading: false, refreshing: false, stale: false, error: null, status: statusText(data) });
     } catch (err) {
       // A superseded fetch's failure is not this snapshot's problem — the newer
@@ -294,10 +307,14 @@ class Store {
   }
 }
 
-/** The status-bar line — exported so the shell can re-derive it as time passes. */
+/**
+ * The status-bar line — exported so the shell can re-derive it as time
+ * passes. Says nothing about demo data (F2) — the sidebar's own "Demo data"
+ * badge already says that, and saying it twice was the actual complaint;
+ * that badge is a real button now, so it also does something on click.
+ */
 export function statusText(d: DashboardData): string {
-  const demo = d.isSample ? ' · demo data (play games to populate)' : '';
-  return `${d.overall.games} games${demo} · updated ${relTime(d.generatedAt)}`;
+  return `${d.overall.games} games · updated ${relTime(d.generatedAt)}`;
 }
 
 /**
@@ -332,6 +349,12 @@ function reconcileSeasonFilter(filters: Required<DashboardFilters>, data: Dashbo
   if (typeof days !== 'object') return filters;
   const known = data.options.seasons.some((s) => s.id === days.season);
   return known ? filters : { ...filters, days: FILTER_DEFAULTS.days };
+}
+
+/** The persisted account filter falls back to 'all' the moment it names an account `data.options.accounts` no longer offers (F2) — see the call site above for why. */
+function reconcileAccountFilter(filters: Required<DashboardFilters>, data: DashboardData): Required<DashboardFilters> {
+  if (filters.account === 'all') return filters;
+  return data.options.accounts.includes(filters.account) ? filters : { ...filters, account: 'all' };
 }
 
 function persistFilters(filters: DashboardFilters): void {

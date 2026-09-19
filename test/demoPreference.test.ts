@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveDemo, type DemoPreference } from '../src/core/demoPreference';
+import { effectiveDemo, demoTransition, type DemoPreference } from '../src/core/demoPreference';
 
 describe('effectiveDemo', () => {
   it('shows the demo season only when opted in AND there is no real history (A6)', () => {
@@ -18,5 +18,25 @@ describe('effectiveDemo', () => {
   it('covers every preference value exhaustively for an empty history', () => {
     const cases: Array<[DemoPreference, boolean]> = [['unset', false], ['on', true], ['off', false]];
     for (const [pref, expected] of cases) expect(effectiveDemo(pref, 0)).toBe(expected);
+  });
+});
+
+describe('demoTransition (F2)', () => {
+  it('reports demo-retired when isSample flips true → false', () => {
+    expect(demoTransition(true, false)).toBe('demo-retired');
+  });
+
+  it('reports demo-restored when isSample flips false → true', () => {
+    expect(demoTransition(false, true)).toBe('demo-restored');
+  });
+
+  it('reports no transition when isSample stays the same', () => {
+    expect(demoTransition(true, true)).toBeNull();
+    expect(demoTransition(false, false)).toBeNull();
+  });
+
+  it('never reports a transition on the very first observation (nothing to compare against)', () => {
+    expect(demoTransition(undefined, true)).toBeNull();
+    expect(demoTransition(undefined, false)).toBeNull();
   });
 });

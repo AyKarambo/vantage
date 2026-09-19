@@ -27,3 +27,19 @@ export interface DemoContext {
 export function effectiveDemo(pref: DemoPreference, historyCount: number): boolean {
   return pref === 'on' && historyCount === 0;
 }
+
+/**
+ * Whether `isSample` just flipped between two consecutive reads (F2) — drives
+ * the one-time "your first tracked game is in" announcement (`'demo-retired'`)
+ * and its silent-by-design reverse (`'demo-restored'`, already handled by
+ * `matchActions.ts`'s delete-toast). `prev` is `undefined` for the very first
+ * observation (nothing to compare against yet), which never counts as either.
+ */
+export type DemoTransition = 'demo-retired' | 'demo-restored' | null;
+
+export function demoTransition(prevIsSample: boolean | undefined, nextIsSample: boolean): DemoTransition {
+  if (prevIsSample === undefined) return null;
+  if (prevIsSample && !nextIsSample) return 'demo-retired';
+  if (!prevIsSample && nextIsSample) return 'demo-restored';
+  return null;
+}

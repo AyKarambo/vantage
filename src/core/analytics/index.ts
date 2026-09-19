@@ -15,7 +15,7 @@ export {
 export type { WeightedGame } from './grouping';
 
 // Cross-dimension focus ranking (the Focus screen's "work on these" hub)
-export { focusEntries, focusTrend, focusGamesFor, heroForm, linkFocusTargets } from './focus';
+export { focusEntries, focusTrend, focusGamesFor, heroForm, linkFocusTargets, MAP_MIN_GAMES } from './focus';
 export type { FocusEntriesOptions } from './focus';
 
 // Per-hero stat rollups (per-10 over played time, time-share game credit)
