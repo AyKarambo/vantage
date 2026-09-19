@@ -769,9 +769,14 @@ Every build — including releases — writes a structured log to `%APPDATA%/Van
 (`vantage.log`, rotating at 2 MB × 5 files): app lifecycle, GEP attach/detach, match-pipeline
 milestones, Notion sync results, and uncaught errors from both processes. Notion tokens are
 redacted before anything is written. The **Logs** screen (sidebar → App) live-tails the last
-1000 entries with level filtering, and its **Debug detail** toggle raises verbosity to the full
-GEP event stream for the current session (resets to `info` on restart). Logs never leave the
-device.
+1000 entries with level filtering, a **scope filter** (gep/main/notion/pipeline/renderer), a
+**text search** across the full formatted line (including `key=value` fields), a UTC/local-time
+timestamp toggle, and **Copy visible** / **Save debug log…** for whatever's currently filtered.
+Its **Debug detail** toggle raises verbosity to the full GEP event stream for the current session
+(resets to `info` on restart). The feed starts tracking at launch, not just when you first open
+Logs, so Settings → Diagnostics can show an honest "N errors · M warnings this session" — an
+accent pill once there's an error, one click into Logs already filtered to it — and the sidebar's
+Logs item gets a live dot the moment one is logged. Logs never leave the device.
 
 ## Testing the live pipeline
 

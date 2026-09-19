@@ -374,6 +374,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   one block instead of splitting under two day headers, each with its own W-L tally; a sitting
   header also states its net SR swing when the sitting logged one. The current-session gap
   setting (Settings → Coaching) now spells out which surfaces it governs.
+- **The Logs screen can actually help you find something.** A scope filter (gep/main/notion/
+  pipeline/renderer), a text search across the full formatted line — including `key=value`
+  fields, not just the message — a UTC/local-time toggle, and **Copy visible** / **Save debug
+  log…** for whatever's currently filtered. The feed now starts tracking the moment the app
+  launches, not just once you first open Logs, so Settings → Diagnostics can show an honest
+  "N errors · M warnings this session" instead of nothing — an accent pill once there's an
+  error, one click into Logs already filtered to it — and the sidebar's Logs item picks up a
+  live dot the moment one is logged (warnings alone stay quiet; they're routine).
 
 ## 0.34.0 — 31 July 2026
 

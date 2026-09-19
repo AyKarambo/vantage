@@ -39,14 +39,22 @@ export function pushRing<T>(ring: T[], item: T, cap: number = LOG_RING_CAP): voi
  * `2026-07-04T18:22:01.123Z info  gep attached game=10844`
  * (ISO timestamp, level padded to 5, scope, message, `key=value` fields).
  * Newlines never survive into the file — multi-line values are escaped.
+ * `localTime` (W5, Logs-viewer-only — the file log and every other caller
+ * stay ISO by leaving it unset) swaps the timestamp for `toLocaleTimeString()`.
  */
-export function formatLogLine(e: LogEntry): string {
-  const ts = new Date(e.ts).toISOString();
+export function formatLogLine(e: LogEntry, opts: { localTime?: boolean } = {}): string {
+  const ts = opts.localTime ? new Date(e.ts).toLocaleTimeString() : new Date(e.ts).toISOString();
   const level = e.level.padEnd(5);
   const fields = e.fields
     ? ' ' + Object.entries(e.fields).map(([k, v]) => `${k}=${escapeNewlines(String(v))}`).join(' ')
     : '';
   return `${ts} ${level} ${e.scope} ${escapeNewlines(e.message)}${fields}`;
+}
+
+/** Case-insensitive substring match over an entry's formatted line (W5's Logs search). Blank query matches everything. */
+export function matchesSearch(e: LogEntry, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  return !q || formatLogLine(e).toLowerCase().includes(q);
 }
 
 function escapeNewlines(s: string): string {
