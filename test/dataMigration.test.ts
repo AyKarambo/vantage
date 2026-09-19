@@ -10,6 +10,7 @@ import {
   OUTBOX_FILE,
   RANK_ANCHORS_FILE,
   PLACEMENTS_FILE,
+  CHECK_INS_FILE,
   LEGACY_HISTORY_JSON_FILE,
   type DataArtifactPresence,
 } from '../src/core/dataMigration';
@@ -29,6 +30,8 @@ function presence(overrides: Partial<DataArtifactPresence> = {}): DataArtifactPr
     outbox: false,
     rankAnchors: false,
     placements: false,
+    checkIns: false,
+    masterData: false,
     legacyHistoryJson: false,
     ...overrides,
   };
@@ -128,6 +131,14 @@ describe('planDataMigration', () => {
     expect(planWithPlacements.ops.map((op) => op.name)).toContain(PLACEMENTS_FILE);
     const planWithoutPlacements = planDataMigration(presence({ historyDb: true }), fromDir, toDir);
     expect(planWithoutPlacements.ops.map((op) => op.name)).not.toContain(PLACEMENTS_FILE);
+  });
+
+  it('includes checkIns.json when present, omits when absent (S10 phase 2)', () => {
+    const planWithCheckIns = planDataMigration(presence({ historyDb: true, checkIns: true }), fromDir, toDir);
+    expect(planWithCheckIns.ops.map((op) => op.name)).toContain(CHECK_INS_FILE);
+    expect(planWithCheckIns.ops.find((op) => op.name === CHECK_INS_FILE)).toMatchObject({ kind: 'file', optional: true });
+    const planWithoutCheckIns = planDataMigration(presence({ historyDb: true }), fromDir, toDir);
+    expect(planWithoutCheckIns.ops.map((op) => op.name)).not.toContain(CHECK_INS_FILE);
   });
 });
 

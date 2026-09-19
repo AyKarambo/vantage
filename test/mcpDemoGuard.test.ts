@@ -38,6 +38,7 @@ function provider(demo: boolean): { p: DataProvider; mutations: string[] } {
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
     placementRuns: () => [],
+    getCheckIns: () => [],
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }) as never,
     logMatch: forbid('logMatch') as never,

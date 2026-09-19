@@ -18,7 +18,7 @@ import { prefs, MATCH_COLUMNS_DEFAULT, type MatchColumnKey, type MatchColumnsPre
 import { store } from '../store';
 import { deleteMatch } from '../matchActions';
 import { openMatchEditorById } from './matchDetail';
-import { MATCHES_PAGE_SIZE, matchesFilter, type MatchesTextFilter } from '../../../src/core/dashboardData';
+import { MATCHES_PAGE_SIZE } from '../../../src/core/dashboardData';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
 const FLAG_LABELS: Record<MatchFlagKey, string> = {
@@ -273,7 +273,16 @@ export function matches(ctx: ViewContext): HTMLElement {
         : (day || flag || map)
           ? emptyState('No games match this drill-down — clear the scope above to see everything.')
           : textActive
-            ? emptyState('No loaded games match this filter — try Show older games, or clear the filter.')
+            ? h('div', null,
+                emptyState(moreToLoad
+                  ? 'No loaded games match this filter — try Show older games, or clear the filter.'
+                  : 'No games match this filter — clear the filter to see everything.'),
+                // The empty branch never rendered this before, so the "try Show
+                // older games" advice above pointed at a control that wasn't
+                // actually on screen — moreToLoad is exactly the condition that
+                // makes the advice actionable.
+                moreToLoad ? showOlderRow(ctx, repaint) : null,
+              )
             : emptyActions(ctx),
     );
   };

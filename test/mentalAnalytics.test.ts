@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  mentalCosts, tiltAfterResult, tiltByMap, tiltBySessionPosition, tiltByTimeOfDay, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE,
+  mentalCosts, tiltAfterResult, tiltByCheckIn, tiltByMap, tiltBySessionPosition, tiltByTimeOfDay, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE,
 } from '../src/core/mentalAnalytics';
 import { isTilted } from '../src/core/mental';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
+import type { SessionCheckIn } from '../src/core/checkIn';
 import type { Result, Role } from '../src/core/model';
 
 // ---- fixtures ---------------------------------------------------------------
@@ -336,6 +337,71 @@ describe('tiltBySessionPosition', () => {
 
   it('is empty for no games', () => {
     expect(tiltBySessionPosition([])).toEqual([]);
+  });
+});
+
+// ---- tiltByCheckIn (S10 phase 2) ------------------------------------------------
+
+const checkIn = (at: number, mood: SessionCheckIn['mood']): SessionCheckIn => ({ at, mood });
+
+describe('tiltByCheckIn', () => {
+  it('buckets each sitting\'s first game by the check-in that immediately preceded it', () => {
+    const games = [
+      ...sitting(T0, 2, [1], 'a'), // opens tilted, checked in tilted
+      ...sitting(T0 + 24 * 60 * MIN, 2, [], 'b'), // opens clean, checked in calm
+    ];
+    const checkIns = [
+      checkIn(T0 - 10 * MIN, 'tilted'),
+      checkIn(T0 + 24 * 60 * MIN - 5 * MIN, 'calm'),
+    ];
+    const t = tiltByCheckIn(games, checkIns);
+    expect(t).toEqual([
+      { key: 'calm', games: 1, tilted: 0, rate: 0 },
+      { key: 'tilted', games: 1, tilted: 1, rate: 1 },
+    ]);
+  });
+
+  it('buckets a sitting with no preceding check-in under "none"', () => {
+    const games = sitting(T0, 1, [1]);
+    const t = tiltByCheckIn(games, []);
+    expect(t).toEqual([{ key: 'none', games: 1, tilted: 1, rate: 1 }]);
+  });
+
+  it('ignores a check-in outside the gap window (default 90 minutes)', () => {
+    const games = sitting(T0, 1);
+    const t = tiltByCheckIn(games, [checkIn(T0 - 91 * MIN, 'edgy')]);
+    expect(t).toEqual([{ key: 'none', games: 1, tilted: 0, rate: 0 }]);
+  });
+
+  it('ignores a check-in logged AFTER the game it would otherwise match', () => {
+    const games = sitting(T0, 1);
+    const t = tiltByCheckIn(games, [checkIn(T0 + MIN, 'tilted')]);
+    expect(t).toEqual([{ key: 'none', games: 1, tilted: 0, rate: 0 }]);
+  });
+
+  it('picks the LATEST qualifying check-in when several precede the same game', () => {
+    const games = sitting(T0, 1);
+    const t = tiltByCheckIn(games, [checkIn(T0 - 80 * MIN, 'tilted'), checkIn(T0 - 10 * MIN, 'calm')]);
+    expect(t).toEqual([{ key: 'calm', games: 1, tilted: 0, rate: 0 }]);
+  });
+
+  it('only ever looks at position-1 games — a check-in never attaches to game 2+', () => {
+    // A check-in that lands right before game 2 of a sitting (not game 1) must
+    // never pull that sitting's continuation games into a mood bucket.
+    const games = sitting(T0, 2);
+    const t = tiltByCheckIn(games, [checkIn(T0 + 25 * MIN, 'edgy')]);
+    expect(t).toEqual([{ key: 'none', games: 1, tilted: 0, rate: 0 }]);
+  });
+
+  it('numbers over ALL games while include scopes which position-1 games aggregate', () => {
+    const a = sitting(T0, 1, [1], 'a');
+    const b = sitting(T0 + 24 * 60 * MIN, 1, [], 'b');
+    const t = tiltByCheckIn([...a, ...b], [checkIn(T0 - MIN, 'tilted')], { include: new Set([a[0].matchId]) });
+    expect(t).toEqual([{ key: 'tilted', games: 1, tilted: 1, rate: 1 }]);
+  });
+
+  it('is empty for no games and for no position-1 games at all', () => {
+    expect(tiltByCheckIn([], [])).toEqual([]);
   });
 });
 

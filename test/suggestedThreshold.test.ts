@@ -53,6 +53,14 @@ describe('suggestMeasuredThreshold', () => {
     expect(s!.median).toBe(9000);
   });
 
+  it('honors map scope (R9) — the same TargetScope a map-scoped target grades with', () => {
+    const ilios = game({ map: 'Ilios', durationMinutes: 10, perHero: [hero({ damage: 4000 })] });
+    const kingsRow = game({ map: "King's Row", durationMinutes: 10, perHero: [hero({ damage: 9000 })] });
+    const s = suggestMeasuredThreshold([ilios, kingsRow], 'Damage', 'Main', { mapScope: ['Ilios'] });
+    expect(s!.n).toBe(1);
+    expect(s!.median).toBe(4000);
+  });
+
   it('skips games that can\'t measure the stat — no duration, no perHero — rather than treating them as zero', () => {
     const measurable = game({ durationMinutes: 10, perHero: [hero({ damage: 10000 })] });
     const noDuration = game({ perHero: [hero({ damage: 5000 })] }); // no durationMinutes → unmeasurable

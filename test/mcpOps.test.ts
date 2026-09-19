@@ -68,6 +68,7 @@ function setup(over: {
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
     placementRuns: () => [],
+    getCheckIns: () => [],
     getRanks: () => { note('getRanks'); return []; },
     getGepStatus: () => { note('getGepStatus'); return { state: 'idle' } as never; },
     logMatch: (input) => { note(`logMatch:${input.result}:${input.role}:${input.map}`); return { matchId: 'new-1' }; },

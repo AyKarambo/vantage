@@ -56,6 +56,7 @@ function fakeProvider(
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
     placementRuns: () => [],
+    getCheckIns: () => [],
     effectiveMasterData: () => master,
     pendingMatches: () => [],
     // playerListRead consults both: the memo must not serve a page from before a

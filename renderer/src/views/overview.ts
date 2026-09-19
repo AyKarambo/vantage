@@ -15,6 +15,7 @@ import { clickableRow } from '../components/clickableRow';
 import { inlineLink } from '../components/inlineLink';
 import { practiceTargetButton } from '../components/practiceTargetButton';
 import { stopRuleLine } from '../components/stopRuleLine';
+import { checkInPrompt } from '../components/checkInPrompt';
 import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
@@ -47,6 +48,7 @@ export function overview(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view' },
     head,
+    checkInStrip(ctx),
     nextUpStrip(ctx),
     hiddenHistoryBanner(ctx),
     firstWeekUnlockCard(ctx),
@@ -139,6 +141,18 @@ function nextUpStrip(ctx: ViewContext): HTMLElement | null {
 
 function nextUpItem(label: string, onClick: () => void): HTMLElement {
   return h('button', { class: 'next-up-item', on: { click: onClick } }, label, h('span', { class: 'next-up-arrow' }, '→'));
+}
+
+/**
+ * The pre-session check-in (S10 phase 2), also offered on the idle Live
+ * screen — Overview is the OTHER place a player looks right before queuing.
+ * Hidden mid-match (nothing to check in for) and once demo data is in play
+ * (a mood log about sample games would just be noise).
+ */
+function checkInStrip(ctx: ViewContext): HTMLElement | null {
+  if (getLiveMatch()?.live) return null;
+  const prompt = checkInPrompt(ctx);
+  return prompt ? card({ style: { marginBottom: '14px' } }, prompt) : null;
 }
 
 /** Renders (or clears) the header's live-match pill in place — see the live subscription in {@link overview}. */

@@ -107,6 +107,7 @@ function auditProvider(): DataProvider {
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
     placementRuns: () => [],
+    getCheckIns: () => [],
     isSample: () => false,
     historyRevision: () => 'rev-1',
     getRanks: () => [],

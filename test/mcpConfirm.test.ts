@@ -56,6 +56,7 @@ function setup() {
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
     placementRuns: () => [],
+    getCheckIns: () => [],
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }) as never,
     logMatch: (() => { mutations.push('logMatch'); return { matchId: 'x' }; }) as never,

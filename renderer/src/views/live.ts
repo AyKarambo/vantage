@@ -27,6 +27,7 @@ import { fmt, games, matchClock, net, pct, relTime, roleLabel, RELATION_LABEL } 
 import { wrColor } from '../theme';
 import { readinessCard } from './overview';
 import { stopRuleLine } from '../components/stopRuleLine';
+import { checkInPrompt } from '../components/checkInPrompt';
 import { viewHead, type ViewContext } from './view';
 
 export function live(ctx: ViewContext): HTMLElement {
@@ -370,6 +371,7 @@ function beforeYouQueueCard(d: DashboardData, ctx: ViewContext): HTMLElement {
       window && window.wins + window.losses >= 5
         ? `It’s ${dayPart.toLowerCase()} — you’re ${pct(window.winrate)} over ${window.wins + window.losses} decided ${dayPart.toLowerCase()} games.`
         : `It’s ${dayPart.toLowerCase()} — not enough ${dayPart.toLowerCase()} games yet to say how you do then.`),
+    h('div', { style: { marginTop: '10px' } }, checkInPrompt(ctx)),
     stopRuleLine(ctx),
     active.length
       ? h('div', { class: 'stack', style: { gap: '6px', marginTop: '10px' } },

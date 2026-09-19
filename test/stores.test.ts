@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { HistoryStore } from '../src/store/history';
 import { RankAnchorStore } from '../src/store/rankAnchors';
+import { CheckInStore } from '../src/store/checkIns';
 import type { GameRecord } from '../src/core/analytics';
 
 let dir: string;
@@ -196,6 +197,56 @@ describe('RankAnchorStore', () => {
       // relocate itself doesn't touch the old dir's file (copy/delete is the
       // migration executor's job).
       expect(new RankAnchorStore(dir).get('Alt', 'damage')).toBeUndefined();
+    } finally {
+      fs.rmSync(newDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('CheckInStore (S10 phase 2)', () => {
+  it('appends and reads back in oldest-first order, persisted across a reopen', () => {
+    const s = new CheckInStore(dir);
+    s.add({ at: 200, mood: 'edgy' });
+    s.add({ at: 100, mood: 'calm' }); // added second but earlier — must still sort oldest-first
+    expect(s.all()).toEqual([{ at: 100, mood: 'calm' }, { at: 200, mood: 'edgy' }]);
+    expect(new CheckInStore(dir).all()).toEqual([{ at: 100, mood: 'calm' }, { at: 200, mood: 'edgy' }]);
+  });
+
+  it('add returns the stored entry', () => {
+    const s = new CheckInStore(dir);
+    expect(s.add({ at: 1, mood: 'tilted' })).toEqual({ at: 1, mood: 'tilted' });
+  });
+
+  it('starts empty for a fresh directory', () => {
+    expect(new CheckInStore(dir).all()).toEqual([]);
+  });
+
+  it('trims the oldest entries once past the retention cap', () => {
+    const s = new CheckInStore(dir);
+    for (let i = 0; i < 500; i++) s.add({ at: i, mood: 'calm' });
+    expect(s.all()).toHaveLength(500);
+    s.add({ at: 500, mood: 'tilted' });
+    const all = s.all();
+    expect(all).toHaveLength(500); // still capped
+    expect(all[0].at).toBe(1); // the oldest (at: 0) fell off
+    expect(all[all.length - 1]).toEqual({ at: 500, mood: 'tilted' });
+  });
+
+  it('relocate re-points and reloads from the new dir, leaving the old dir untouched', () => {
+    const s = new CheckInStore(dir);
+    s.add({ at: 1, mood: 'calm' });
+
+    const newDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-store-checkins-new-'));
+    try {
+      fs.copyFileSync(path.join(dir, 'checkIns.json'), path.join(newDir, 'checkIns.json'));
+      s.relocate(newDir);
+
+      expect(s.all()).toEqual([{ at: 1, mood: 'calm' }]);
+      s.add({ at: 2, mood: 'tilted' });
+      expect(new CheckInStore(newDir).all()).toEqual([{ at: 1, mood: 'calm' }, { at: 2, mood: 'tilted' }]);
+      // relocate itself doesn't touch the old dir's file (copy/delete is the
+      // migration executor's job).
+      expect(new CheckInStore(dir).all()).toEqual([{ at: 1, mood: 'calm' }]);
     } finally {
       fs.rmSync(newDir, { recursive: true, force: true });
     }

@@ -15,6 +15,7 @@ import { migrateDataFolder, type DataMigrationStores } from '../store/dataMigrat
 import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
 import { PlacementStore } from '../store/placements';
+import { CheckInStore } from '../store/checkIns';
 import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
@@ -187,6 +188,7 @@ function main(): void {
   manual.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
   const rankAnchors = new RankAnchorStore(dataDir);
   const placements = new PlacementStore(dataDir);
+  const checkIns = new CheckInStore(dataDir);
   const masterDataStore = new MasterDataStore(dataDir);
   // Effective (defaults ⊕ overrides) map views for the Notion Maps seed (all maps)
   // and the sample generator's competitive pool (active only).
@@ -210,6 +212,7 @@ function main(): void {
     outbox,
     rankAnchors,
     placements,
+    checkIns,
     masterData: masterDataStore,
   });
 
@@ -411,6 +414,7 @@ function main(): void {
     manual,
     rankAnchors,
     placements,
+    checkIns,
     masterDataStore,
     fetchMasterDataUpdate: () => fetchOverfast(config.masterData.overfastBaseUrl),
     notion,
