@@ -12,7 +12,13 @@ import { shouldEnableDevTools } from '../../core/devMode';
  * against its DataProvider. Main-process Electron edge — no domain logic here.
  */
 
-const WINDOW = { width: 1300, height: 840, minWidth: 1040, minHeight: 640 };
+// minWidth 960 (W7): exactly half a 1920px display, so Win+Left/Right
+// snapping beside a windowed Overwatch or Discord can produce a fitting
+// window on a 1080p monitor — the previous 1040 was wider than that half.
+// The sidebar's own auto-collapse (SIDEBAR_NARROW_QUERY, shell.ts) triggers
+// at 1180px, well above this floor, so the nav never becomes a keyhole
+// between the two thresholds.
+const WINDOW = { width: 1300, height: 840, minWidth: 960, minHeight: 640 };
 
 /** Window-behavior hooks supplied by the composition root. */
 export interface WindowUiDeps {

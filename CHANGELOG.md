@@ -786,6 +786,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **A text-size zoom control.** `Ctrl+=`/`Ctrl+-` step the whole app's size up or down, `Ctrl+Shift+0`
   resets to 100% — all three now on the `?` cheatsheet — and Settings → App behavior gets a matching
   90/100/110/125% select. Persists and reapplies on every launch before the first paint (W7).
+- **The window can fit half a 1080p screen.** The minimum window width drops from 1040px to
+  960px — exactly half of 1920px — so Win+Left/Right snapping it beside a windowed Overwatch or
+  Discord actually works. The sidebar now auto-collapses to an icon rail once the window gets
+  narrower than ~1180px, and expands again above it, so a snapped window's nav never turns into a
+  keyhole; pin it open or closed any time with the collapse toggle or `Ctrl+B` (W7).
 
 ## 0.34.0 — 31 July 2026
 

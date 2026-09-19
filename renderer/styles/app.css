@@ -628,6 +628,21 @@
   }
 }
 
+/* W7 — a narrower window (half a 1080p display, ≥960px minWidth) gets tighter
+   content padding and a slimmer scatter-callouts column, so the Overview
+   scatter chart itself keeps more of the width instead of losing it all to
+   chrome. The sidebar auto-collapses on its own trigger (1180px, shell.ts)
+   rather than this one — narrower still by the time this applies. */
+@media (max-width: 1100px) {
+  .content {
+    padding: 16px 18px;
+  }
+  .scatter-callouts {
+    width: 200px;
+    flex: 0 0 200px;
+  }
+}
+
 /* "What do I do next?" alert strip (O3) — hidden entirely with nothing
    pending, so it never competes for space with the greeting header below it. */
 .next-up {
