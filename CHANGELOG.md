@@ -458,6 +458,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   instead of overlapping them. A new **By season** card answers "how did each season go" in one
   place — click a season to jump straight to it — instead of ten filter changes and ten
   memorised numbers.
+- **Log a match from anywhere with Ctrl+L.** Logging is the app's primary write, but the only
+  routes were the Overview greeting button, two empty states, or the palette (Ctrl+K, then
+  typing or picking "Log match", then Enter). The titlebar's search pill now splits into
+  `Ctrl K · Search` and a real `+ Log match · Ctrl L` button beside it, and Ctrl+L opens the
+  log dialog directly from any screen — the intro tour and the palette's own hint now say so.
 
 ## 0.34.0 — 31 July 2026
 
