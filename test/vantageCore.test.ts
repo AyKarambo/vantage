@@ -599,6 +599,29 @@ describe('computeDashboard', () => {
     expect(d.matches.find((m) => m.matchId === ungraded.matchId)).not.toHaveProperty('targetGrades');
   });
 
+  it('reviewed is true for any saved review, even an empty "mark as no-read" one (R4)', () => {
+    const now = Date.now();
+    const graded = game({
+      result: 'Win', map: 'Ilios', role: 'damage', timestamp: now,
+      review: { at: now, grades: { t1: 'hit' }, flags: {} },
+    });
+    // "Mark as no-read" (R1/R3) saves an empty review — no grades, no flags —
+    // specifically so it leaves the inbox without being counted as graded.
+    // `reviewed` still has to say true here: it's not the same state as a
+    // match nobody has dealt with at all.
+    const noRead = game({
+      result: 'Loss', map: 'Ilios', role: 'damage', timestamp: now - 1000,
+      review: { at: now, grades: {}, flags: {} },
+    });
+    const untouched = game({ result: 'Win', map: 'Numbani', role: 'damage', timestamp: now - 2000 });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+
+    const d = computeDashboard([graded, noRead, untouched], { days: 'all' }, demo);
+    expect(d.matches.find((m) => m.matchId === graded.matchId)!.reviewed).toBe(true);
+    expect(d.matches.find((m) => m.matchId === noRead.matchId)!.reviewed).toBe(true);
+    expect(d.matches.find((m) => m.matchId === untouched.matchId)!.reviewed).toBe(false);
+  });
+
   it('carries performance onto ungraded review-inbox rows so the Review card can seed its slider', () => {
     // An imported / pre-rated game has a performance but no review — it belongs in
     // the inbox, and its rating must ride along so the card shows it (not "Not rated").

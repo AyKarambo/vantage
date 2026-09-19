@@ -92,12 +92,16 @@ account's per-role lines beneath it.
   match is **editable** from here — both hand-logged and auto-tracked matches, down to
   their game facts (result, map, role, heroes) and their manual layer (mental flags,
   leaver-team, SR %, target grades). Correcting a game fact the feed got wrong on an
-  auto-tracked match keeps its ⚡ auto provenance and tags it **edited**. When the feed
-  invents a game outright — a phantom match, a custom misread as tracked play — the row's
-  **⋯ menu** deletes it: a two-click confirm that names the match, then it's gone from
-  history and every stat recomputes without it. The confirmation offers **Undo**, which
-  restores the real record (same id, same ⚡ provenance, same grades) rather than re-logging
-  a copy; that window closes when the message does, and doesn't survive a restart.
+  auto-tracked match keeps its ⚡ auto provenance and tags it **edited**. The row's
+  **⋯ menu** carries the same actions without opening the row first: **Open match**, an
+  ungraded game's own **Grade on Review** straight into its Review card, **Edit match…**,
+  and Delete — a two-click confirm that names the match. When the feed invents a game
+  outright — a phantom match, a custom misread as tracked play — that's what clears it:
+  it's gone from history and every stat recomputes without it. The confirmation offers
+  **Undo**, which restores the real record (same id, same ⚡ provenance, same grades)
+  rather than re-logging a copy; that window closes when the message does, and doesn't
+  survive a restart. The detail page's own head carries **Edit match**, **Grade on
+  Review** (while ungraded) and **Delete match** the same way.
   The editor mirrors the Log match card — the same shared controls, wording and field
   order: colour-coded **W/L/D** (the `W`/`L`/`D` keys work here too), the **locked map
   combobox** (type to search, recent maps first), the **most-played hero shortlist**
@@ -256,7 +260,14 @@ account's per-role lines beneath it.
   everything past an age cutoff (1 day / 7 days / all of it) with a live preview of how many
   that will affect, and a 12-second **Undo**. The sidebar's Review count is scoped to the last
   7 days — not the lifetime backlog, which would only ever grow — with the full total in its
-  tooltip.
+  tooltip. An expanded card's own **Open match ›** link goes straight to that game's full
+  detail page (round score and duration ride along on the meta line when GEP recorded them),
+  and Matches/the detail page both link back — an ungraded row's **⋯ menu**, or the detail
+  head itself, offers **Grade on Review**, so grading a game you happened to open first
+  doesn't mean re-finding it in the inbox. A measured target with nothing to show on a
+  given match folds into one muted line instead of a dead row each, and the active-targets
+  strip badges a measured target **auto**, a self-rated one **manual**, matching how the
+  cards below already read.
 - **Targets** — build a target (self-rated ◎, or measured ⚡ which **auto-grades from your
   stats per 10 minutes played** — no manual read). The **Target library** card offers curated starting
   points grouped by **Mechanics · Macro · Strategy · Training**, each entry showing a one-line

@@ -16,6 +16,7 @@ import { viewHead, type ViewContext } from './view';
 import { prefs, MATCH_COLUMNS_DEFAULT, type MatchColumnKey, type MatchColumnsPref, type MatchFieldMode } from '../prefs';
 import { store } from '../store';
 import { deleteMatch } from '../matchActions';
+import { openMatchEditorById } from './matchDetail';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
 const FLAG_LABELS: Record<MatchFlagKey, string> = {
@@ -389,6 +390,22 @@ function openRowMenu(anchor: HTMLElement, m: MatchRow, ctx: ViewContext): void {
         variant: 'ghost',
         class: 'btn--block',
         onClick: () => { close(); ctx.navigate('matchDetail', { matchId: m.matchId }); },
+      }),
+      // Only offered while ungraded (R4) — the same "point straight at the
+      // job" shortcut the match detail header now offers too, so a game
+      // doesn't need to be opened, read, then re-found in the Review inbox
+      // just to grade it.
+      !m.reviewed
+        ? button('Grade on Review', {
+            variant: 'ghost',
+            class: 'btn--block',
+            onClick: () => { close(); ctx.navigate('review', { matchId: m.matchId }); },
+          })
+        : null,
+      button('Edit match…', {
+        variant: 'ghost',
+        class: 'btn--block',
+        onClick: () => { close(); openMatchEditorById(ctx, m.matchId); },
       }),
       confirmButton({
         label: 'Delete match',
