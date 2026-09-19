@@ -6,7 +6,7 @@
 import { h } from '../dom';
 import type { ReadinessSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { chip } from './primitives';
+import { toggleRow } from './primitives';
 import type { ViewContext } from '../views/view';
 
 export function readinessSettingsEditor(ctx: ViewContext): HTMLElement {
@@ -19,12 +19,17 @@ export function readinessSettingsEditor(ctx: ViewContext): HTMLElement {
   };
 
   return h('div', { class: 'stack', style: { gap: '10px', marginTop: '12px' } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
-      chip(r.enabled ? 'Readiness coach: on' : 'Readiness coach: off', r.enabled, () => set({ enabled: !r.enabled })),
-      r.enabled
-        ? chip(r.launchToast ? 'Launch reminder: on' : 'Launch reminder: off', r.launchToast, () => set({ launchToast: !r.launchToast }))
-        : null,
-    ),
+    toggleRow({ label: 'Readiness coach', on: r.enabled, onChange: () => set({ enabled: !r.enabled }) }),
+    // K3: disabled rather than removed when readiness itself is off — a
+    // row that vanishes and reappears changes the card's shape under you
+    // every time you flip the parent toggle, for no reason a disabled
+    // (still-visible) control doesn't already communicate.
+    toggleRow({
+      label: 'Launch reminder',
+      on: r.launchToast,
+      disabled: !r.enabled,
+      onChange: () => set({ launchToast: !r.launchToast }),
+    }),
     h('div', { class: 'hint' },
       r.enabled
         ? 'Optional launch reminder: a one-time tray nudge at startup when you’re grinding into the hole (off by default).'

@@ -34,6 +34,73 @@ export function button(label: Child, o: BtnOpts = {}): HTMLButtonElement {
 }
 
 /**
+ * Options for {@link toggleRow} — a fixed-label boolean setting. Several
+ * on/off settings used to be a `chip()` (`../labels`) whose only state cue
+ * was a tint, with the actual on/off carried entirely in the label text
+ * itself ("Demo data: on" vs "Demo data: off", or worse, asymmetric wording
+ * like "✕ keeps Vantage in the tray" vs "✕ quits Vantage") — no shared
+ * vocabulary a screen reader's `role=switch`/`aria-checked` could hook onto
+ * (K3).
+ */
+export interface ToggleRowOpts {
+  /** Never changes with the state — the switch track alone shows on/off. */
+  label: string;
+  on: boolean;
+  /** Explanatory line under the row, same placement every caller already used with `chip`. */
+  hint?: string | Node;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}
+
+/** Options for the bare {@link toggleSwitch} — no label/hint layout, just the control itself. */
+export interface ToggleSwitchOpts {
+  on: boolean;
+  disabled?: boolean;
+  /** Read by assistive tech when the switch has no adjacent visible label (K3) — e.g. a header-level toggle like Logs' "Debug detail". */
+  ariaLabel?: string;
+  onChange: (next: boolean) => void;
+}
+
+/**
+ * The bare switch control: a real `role="switch"` track (native Space/Enter
+ * via the underlying `<button>`, `aria-checked`, a visible focus ring), with
+ * no label or hint layout around it — for a compact, inline spot ({@link
+ * toggleRow} wraps this for the common full-row case).
+ */
+export function toggleSwitch(o: ToggleSwitchOpts): HTMLButtonElement {
+  const track = h('span', { class: `toggle-switch${o.on ? ' is-on' : ''}` },
+    h('span', { class: 'toggle-thumb' }));
+  return h('button', {
+    class: 'toggle-track',
+    role: 'switch',
+    'aria-checked': o.on ? 'true' : 'false',
+    'aria-label': o.ariaLabel,
+    disabled: o.disabled,
+    on: o.disabled ? undefined : { click: () => o.onChange(!o.on) },
+  }, track);
+}
+
+/**
+ * A labelled boolean setting: {@link toggleSwitch} beside a label that never
+ * rewrites itself, plus an optional hint line underneath (K3). Reserve
+ * {@link chip} for filter-style multi-choice or momentary controls; this is
+ * for a genuine on/off app setting.
+ */
+export function toggleRow(o: ToggleRowOpts): HTMLElement {
+  return h('div', { class: 'toggle-row' },
+    h('div', { class: 'toggle-row-main' },
+      h('span', { class: 'toggle-row-label' }, o.label),
+      // The label is a sibling, not inside the switch <button> itself, so the
+      // button has no text content of its own to derive an accessible name
+      // from — pass the same label through explicitly rather than leaving a
+      // screen reader with a bare "switch, off/on".
+      toggleSwitch({ on: o.on, disabled: o.disabled, ariaLabel: o.label, onChange: o.onChange }),
+    ),
+    o.hint ? h('div', { class: 'hint', style: { marginTop: '6px' } }, o.hint) : null,
+  );
+}
+
+/**
  * How long the armed state must have been held before a click can commit it.
  * Without this a double-click lands both the arm AND the commit, so a
  * "two-click confirm" confirms nothing — the single most common mouse gesture

@@ -858,6 +858,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   inline-SVG icons: a crosshair for Focus, a battery for Readiness, a map pin for Maps, and so
   on. Every nav button's tooltip also names its `Ctrl+<digit>` shortcut, and the command
   palette's Screen rows show the same icon, so a screen reads at a glance there too (K6).
+- **Every on/off setting is a real switch now.** Close-to-tray, Run at login, Demo data, GEP
+  alerts, Live kill feed, the MCP endpoint, Dev Mode, Break reminder, Readiness coach, Launch
+  reminder and the Debug detail toggle all render as a proper switch with a fixed label — no
+  more guessing the state from a tint or from asymmetric label text. **Launch reminder** now
+  stays visible (dimmed, not disabled-and-hidden) when Readiness coach is off, instead of
+  disappearing outright (K3).
 
 ### Fixed
 
@@ -865,6 +871,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   number, then alt-tabbing away to paste it, used to lose the selection the moment you came
   back — the window-focus refetch replaced the whole screen underneath it. The refresh now
   waits until the selection itself is cleared before it applies (K2).
+- **Tab could escape an open popover into the dimmed screen behind it** (the account switcher,
+  the connection-status details, …) — it's now trapped the same way a centered dialog already
+  was (K3). The command palette's search box is also now properly announced as a combobox to
+  screen readers, with the highlighted result read out as you arrow through it (K3).
 
 ## 0.34.0 — 31 July 2026
 

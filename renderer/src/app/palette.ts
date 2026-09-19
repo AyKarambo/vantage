@@ -61,8 +61,12 @@ export function openPalette(ctx: ViewContext, extras: PaletteExtras): void {
       type: 'text',
       placeholder: 'Jump to a screen, run an action, find a map / hero / target / player / match…',
       'aria-label': 'Command palette',
+      role: 'combobox',
+      'aria-expanded': 'true',
+      'aria-controls': 'palette-listbox',
+      'aria-autocomplete': 'list',
     }) as HTMLInputElement;
-    const list = h('div', { class: 'palette-list' });
+    const list = h('div', { class: 'palette-list', role: 'listbox', id: 'palette-listbox' });
 
     let ranked: PaletteItem[] = [];
     let selected = 0;
@@ -118,6 +122,9 @@ export function openPalette(ctx: ViewContext, extras: PaletteExtras): void {
           ? ranked.map((item, i) =>
               h('div', {
                 class: `palette-item${i === selected ? ' is-selected' : ''}`,
+                role: 'option',
+                id: `palette-option-${i}`,
+                'aria-selected': i === selected ? 'true' : 'false',
                 on: {
                   click: () => {
                     close();
@@ -141,6 +148,15 @@ export function openPalette(ctx: ViewContext, extras: PaletteExtras): void {
             )
           : [h('div', { class: 'empty', style: { padding: '14px' } }, 'No matches.')],
       );
+      // Keyboard focus stays on the input throughout (the palette input
+      // owns typing); aria-activedescendant is how a screen reader learns
+      // which option that virtual selection currently points at (K3).
+      if (ranked.length) {
+        input.setAttribute('aria-activedescendant', `palette-option-${selected}`);
+        list.querySelector(`#palette-option-${selected}`)?.scrollIntoView({ block: 'nearest' });
+      } else {
+        input.removeAttribute('aria-activedescendant');
+      }
 
       // A snapshot answer under 12 hits (this screen's own reach, past the
       // "Find player" fallback and any earlier history group) is worth
