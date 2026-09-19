@@ -968,6 +968,13 @@
   font-size: 10.5px;
   margin-top: 2px;
 }
+/* The per-hero card's "vs your usual" delta line (H8) — a third, smaller line
+   under the label; colour comes from the shared .is-win/.is-loss/.u-dim
+   utilities so it always matches the winrate colour language elsewhere. */
+.stat-box-delta {
+  font-size: 9.5px;
+  margin-top: 3px;
+}
 /* A clickable stat box (Mental's non-zero flag boxes) — distinguished from a
    plain read-only one by an accent border, a lift on hover, and a trailing
    arrow, instead of looking identical to the hero drawer's inert stat grid.

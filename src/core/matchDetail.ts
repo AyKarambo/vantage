@@ -1,6 +1,6 @@
 import type { GameRecord } from './analytics';
 import type { RosterPlayer, Role } from './model';
-import type { MatchDetail, ScoreboardEntry } from '../shared/contract';
+import type { MatchDetail, MatchDetailHeroStat, ScoreboardEntry, UsualPer10 } from '../shared/contract';
 import { DEFAULT_MASTER_DATA, makeMapMode, type MapModeResolver } from './masterData';
 import { progression } from './progression';
 import { classifyGameType } from './matchFilter';
@@ -11,7 +11,39 @@ import { roleOfHero } from './heroes';
 import { playerHistory } from './playerIndex';
 import { mergeHeroStats } from './perHero';
 import { heroCredits, heroPlayedMinutes, playedTimeOf } from './playedTime';
+import { heroStats } from './analytics';
 import { measuredGradesForMatch, type AuthoredTarget } from './targets';
+
+/**
+ * "Usual" baseline window (H8) — the trailing games on a hero (same account)
+ * the match-detail per-hero card compares this match against. Capped so a
+ * long-tenured main doesn't drag in years-old play; floored so a fresh or
+ * rarely-played hero never gets a fabricated comparison.
+ */
+const USUAL_WINDOW_GAMES = 30;
+const USUAL_MIN_GAMES = 5;
+
+/**
+ * The player's own per-10 usual on `hero`: the trailing {@link USUAL_WINDOW_GAMES}
+ * games on it (same account), STRICTLY BEFORE `beforeTs` so a match never
+ * leaks into its own comparison — `null` under {@link USUAL_MIN_GAMES}.
+ * Reuses `heroStats`' own per-10/played-time machinery over that windowed set,
+ * the same numbers the Heroes table and readiness's baselines are built from.
+ */
+function usualForHero(
+  all: GameRecord[],
+  account: string,
+  hero: string,
+  beforeTs: number,
+  mapModeOf: MapModeResolver,
+): UsualPer10 | null {
+  const priorOnHero = all
+    .filter((g) => g.account === account && g.timestamp < beforeTs && g.heroes.includes(hero))
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, USUAL_WINDOW_GAMES);
+  if (priorOnHero.length < USUAL_MIN_GAMES) return null;
+  return heroStats(priorOnHero, { mapModeOf }).find((s) => s.hero === hero)?.per10 ?? null;
+}
 
 /**
  * Full drill-down payload for one match. Pure and I/O-free, mirroring the
@@ -51,10 +83,11 @@ export function matchDetail(
   // records, a rescale of wall-clock swap minutes on older ones — so the
   // renderer only divides and formats.
   const played = playedTimeOf(game, mapModeOf);
-  const perHero = heroCredits(game).map(({ stats, share }) => {
-    if (stats.minutes == null) return stats; // no timed swaps → the panel equal-splits the played time
+  const perHero: MatchDetailHeroStat[] = heroCredits(game).map(({ stats, share }) => {
+    const usual = usualForHero(all, game.account, stats.hero, game.timestamp, mapModeOf);
+    if (stats.minutes == null) return { ...stats, usual }; // no timed swaps → the panel equal-splits the played time
     const minutes = heroPlayedMinutes(share, played);
-    return minutes != null && minutes > 0 ? { ...stats, minutes } : stats;
+    return { ...stats, ...(minutes != null && minutes > 0 ? { minutes } : {}), usual };
   });
 
   return {

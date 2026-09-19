@@ -677,6 +677,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   you jump to from anywhere else in the app — the Overview scatter, a Focus row, a hero's By-map
   list, the command palette — always lands now, even if it's below whatever floor or mode filter
   you last left this screen on.
+- **A match's per-hero card now says whether that was a good game for you, on that hero.** Each
+  stat box (eliminations, assists, deaths, damage, healing, mitigation) gets a small **vs usual**
+  line comparing it to your own trailing 30 games on that hero, colour-coded win or loss (fewer
+  deaths counts as the win, same as everywhere else). A one-line summary under the card calls out
+  the two biggest swings in plain language — "vs your usual on Genji: more eliminations (18.0 vs
+  10.0), fewer deaths (1.0 vs 4.0)" — picked by how large the change is relative to your usual,
+  so a big swing in eliminations isn't drowned out by an unremarkable few hundred extra damage.
+  Needs 5 prior games on that hero before it'll compare anything; below that, the card shows your
+  numbers with no baseline rather than guess from too little history.
 
 ## 0.34.0 — 31 July 2026
 

@@ -4,6 +4,20 @@
  * and the renderer bundle can all share it.
  */
 import type { Role, Result, HeroStat } from '../../core/model';
+
+/** The player's own per-10 averages on a hero — the "usual" comparison baseline for the match-detail per-hero card (H8). */
+export type UsualPer10 = Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'>;
+
+/**
+ * One per-hero row on the match-detail page, with the player's own baseline
+ * attached (H8) — `usual` is the trailing-games average on this hero (same
+ * account) before this match, or `null` under the qualifying-games floor
+ * (see `core/matchDetail`'s `USUAL_MIN_GAMES`), so a fresh or rarely-played
+ * hero never gets a fabricated comparison.
+ */
+export interface MatchDetailHeroStat extends HeroStat {
+  usual: UsualPer10 | null;
+}
 import type { RankPosition } from '../../core/rank/types';
 import type { MatchMental, MatchReview, TargetGrade } from '../../core/analytics';
 
@@ -226,7 +240,7 @@ export interface MatchDetail {
    * per-hero data. `minutes`, when present, are already on the played-time
    * basis of `playedMinutes` (rescaled for older wall-clock captures).
    */
-  perHero: HeroStat[];
+  perHero: MatchDetailHeroStat[];
   mental?: MatchMental;
   /**
    * The saved Review-screen data (target grades + mental flags) for this match,
