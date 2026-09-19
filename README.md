@@ -543,6 +543,9 @@ Matches), remembered role + account in the
 quick-log, hover tooltips + a "view as table" toggle on charts, a last-session debrief once your sitting closes (S3), a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange), a
 **Comfortable/Compact density** toggle that tightens card, table-row and KPI padding app-wide (W7),
+a **window that fits half a 1080p display** — `minWidth: 960` plus a sidebar that auto-collapses
+to an icon rail below ~1180px (pin it open/closed with the toggle or `Ctrl+B` to opt out) so
+Win+Left/Right snapping beside a windowed Overwatch or Discord never leaves the nav a keyhole (W7),
 window-position memory, and a **Settings** screen with a **section rail** (jump links to
 Accounts, Quick Log, Coaching, App behavior, Appearance, Diagnostics, Data storage and Import —
 click one and it scrolls to and flashes that card, and About/FAQ's own links land pre-scrolled

@@ -83,11 +83,16 @@ interface PrefsShape {
   /** How many "most played" heroes the Log Match hero picker shortlists (default 6, clamped 3-15). */
   suggestedHeroCount: number;
   /**
-   * Sidebar collapsed to an icon-only rail. Persisted because it is a lasting
-   * preference about how much chrome you want — a small screen or a short
-   * window is a reason to keep it collapsed, not a per-session accident.
+   * Sidebar collapse state (W7): `'auto'` (default, fresh install) follows
+   * the window width — collapsed to an icon-only rail below ~1180px, expanded
+   * above it; `'open'`/`'collapsed'` is an explicit pin the user set via the
+   * toggle or `Ctrl+B`, which opts out of the width-driven behavior entirely
+   * (today's toggle already sticks until clicked again — this only adds the
+   * width-responsive default for someone who has never touched it). A legacy
+   * boolean value is migrated once: `true` → `'collapsed'`, `false` → `'auto'`
+   * (see `prefs.get`'s migration branch).
    */
-  sidebarCollapsed: boolean;
+  sidebarCollapsed: 'auto' | 'open' | 'collapsed';
   /**
    * Dismissed the Overview "first-week unlock ladder" card (F2). Reset to
    * `false` every time the demo season actually retires (`shell.ts`'s
@@ -176,6 +181,15 @@ export const prefs = {
       }
       if (key === 'matchColumns') {
         return { ...MATCH_COLUMNS_DEFAULT, ...(value as MatchColumnsPref) } as PrefsShape[K];
+      }
+      // A legacy boolean sticks around until this read rewrites it (W7):
+      // `true` (collapsed) migrates to the explicit pin `'collapsed'`,
+      // `false` to `'auto'` — the new width-responsive default, since a plain
+      // "not collapsed" carried no opinion about staying that way at any width.
+      if (key === 'sidebarCollapsed' && typeof value === 'boolean') {
+        const migrated = value ? 'collapsed' : 'auto';
+        try { localStorage.setItem(PREFIX + key, JSON.stringify(migrated)); } catch { /* migration just won't stick this run */ }
+        return migrated as PrefsShape[K];
       }
       return value;
     } catch {

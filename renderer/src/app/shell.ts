@@ -115,6 +115,15 @@ interface NavItem {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
+ * Below this width the sidebar auto-collapses to an icon rail when the user
+ * hasn't pinned an explicit state (W7) — matches the width `minWidth: 960`
+ * (dashboardWindow.ts) is chosen against, so Win+Left/Right snapping to half
+ * a 1080p display lands inside the "auto-collapsed" range rather than
+ * leaving the nav a keyhole at the window's actual minimum size.
+ */
+const SIDEBAR_NARROW_QUERY = window.matchMedia('(max-width: 1180px)');
+
+/**
  * The Targets nav glyph: a pennant flying from a pole (a goal flag), drawn inline
  * in `currentColor` so it tracks the nav item's colour and active state — the same
  * technique as {@link ../components/roleIcon}. Deliberately distinct from Review's
@@ -309,6 +318,10 @@ export class App {
   constructor(mount: HTMLElement) {
     render(mount, this.build());
     store.subscribe((state) => this.onState(state));
+    // Only matters while the pref is 'auto' (applyCollapsed resolves that
+    // against the query's live match state either way) — registered once,
+    // for the window's lifetime.
+    SIDEBAR_NARROW_QUERY.addEventListener('change', () => this.applyCollapsed());
     this.bindGlobals();
     mountToastHost();
     initGepStatus();
@@ -774,14 +787,28 @@ export class App {
    * of the sidebar, so this is not a second fix for that — it is for the case
    * scrolling handles correctly but unpleasantly: a short window where the nav
    * is technically fine and practically a keyhole. Collapsed, all of it fits.
+   *
+   * `sidebarCollapsed` is tri-state (W7): `'auto'` (fresh-install default)
+   * follows {@link SIDEBAR_NARROW_QUERY} — collapsed below it, expanded above
+   * — so the window can Win+Left/Right snap to half a 1080p display without
+   * the nav becoming a keyhole; the toggle here and `Ctrl+B` always PIN an
+   * explicit `'open'`/`'collapsed'`, opting out of the width-driven behavior
+   * from then on (today's sticky-boolean toggle, unchanged in spirit).
    */
   private toggleCollapsed(): void {
-    prefs.set('sidebarCollapsed', !(prefs.get('sidebarCollapsed') ?? false));
+    const next: 'open' | 'collapsed' = this.effectiveCollapsed() ? 'open' : 'collapsed';
+    prefs.set('sidebarCollapsed', next);
     this.applyCollapsed();
   }
 
+  /** The actual collapsed/expanded state right now — resolves `'auto'` against the live media-query match. */
+  private effectiveCollapsed(): boolean {
+    const pref = prefs.get('sidebarCollapsed') ?? 'auto';
+    return pref === 'auto' ? SIDEBAR_NARROW_QUERY.matches : pref === 'collapsed';
+  }
+
   private applyCollapsed(): void {
-    const collapsed = prefs.get('sidebarCollapsed') ?? false;
+    const collapsed = this.effectiveCollapsed();
     this.sidebarHost.classList.toggle('is-collapsed', collapsed);
     this.collapseIcon.textContent = collapsed ? '»' : '«';
     this.collapseLabel.textContent = collapsed ? 'Expand' : 'Collapse';
