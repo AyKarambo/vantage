@@ -96,6 +96,9 @@
   "dependencies": {
     "@notionhq/client": "^5.22.0"
   },
+  "overrides": {
+    "builder-util-runtime": "^9.7.0"
+  },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@overwolf/ow-electron": "42.7.1",
