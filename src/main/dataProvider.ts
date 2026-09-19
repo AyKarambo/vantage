@@ -34,6 +34,7 @@ import {
 } from '../core/masterData';
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
+import type { CheckInStore } from '../store/checkIns';
 import {
   PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, trackMatches, hasDrifted, isAwaitingRank,
   runProgress, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, resetBoundaries,
@@ -80,6 +81,8 @@ export interface DataProviderDeps {
     PlacementStore,
     'allRuns' | 'getRun' | 'setRun' | 'removeRun' | 'declinedFor' | 'addDeclined' | 'relabel' | 'removeAccount'
   >;
+  /** Pre-session mood check-ins (S10 phase 2). */
+  checkIns: Pick<CheckInStore, 'all' | 'add'>;
   /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
   masterDataStore: Pick<MasterDataStore, 'all' | 'replace'>;
   /** The online-catalog fetch edge (main-process `net.fetch` of OverFast); injected so this stays Electron-free. */
@@ -755,6 +758,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       deps.persistBreakReminder(config.breakReminder);
       return config.breakReminder;
     },
+    getCheckIns: () => deps.checkIns.all(),
+    recordCheckIn: (mood) => deps.checkIns.add({ at: Date.now(), mood }),
     getReadiness: () => deps.getConfig().readiness,
     setReadiness: (input) => {
       const config = deps.getConfig();

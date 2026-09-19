@@ -14,7 +14,8 @@ import { heroCredits } from './playedTime';
 import { playerDirectory } from './playerIndex';
 import { DEFAULT_MASTER_DATA, makeMapActive, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
-import { mentalCosts, tiltAfterResult, tiltByMap, tiltBySessionPosition, tiltByTimeOfDay, tiltTrend } from './mentalAnalytics';
+import { mentalCosts, tiltAfterResult, tiltByCheckIn, tiltByMap, tiltBySessionPosition, tiltByTimeOfDay, tiltTrend } from './mentalAnalytics';
+import type { SessionCheckIn } from './checkIn';
 import { progression } from './progression';
 import { buildTargets, activeMeasuredTargets, measuredGradesForMatch, type AuthoredTarget, type TargetSummary } from './targets';
 import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from './gradingSettings';
@@ -62,6 +63,8 @@ export interface ManualData {
    * keep working unchanged.
    */
   readinessSummary?: ReadinessSummary;
+  /** Pre-session mood check-ins (S10 phase 2); empty when none have been logged. */
+  checkIns?: SessionCheckIn[];
 }
 
 export function computeDashboard(
@@ -311,6 +314,8 @@ export function computeDashboard(
     tiltByTimeOfDay: tiltByTimeOfDay(games),
     tiltAfterResult: tiltAfterResult(all, { include: new Set(games.map((g) => g.matchId)) }),
     tiltByMap: tiltByMap(games),
+    tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: new Set(games.map((g) => g.matchId)) }),
+    checkIns: manual?.checkIns ?? [],
     performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all),
     reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)),

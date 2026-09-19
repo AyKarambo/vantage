@@ -8,7 +8,7 @@
  * real app persists them to disk.
  */
 import type {
-  AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings,
+  AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings, CheckInMood, SessionCheckIn,
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
@@ -67,6 +67,7 @@ const MASTER_DATA_KEY = 'vantagePreviewMasterData';
 const MASTER_DATA_CHECK_KEY = 'vantagePreviewMasterDataCheck';
 const PLACEMENTS_KEY = 'vantagePreviewPlacements';
 const DECLINED_KEY = 'vantagePreviewPlacementsDeclined';
+const CHECK_INS_KEY = 'vantagePreviewCheckIns';
 
 /** Preview-side master-data overrides, persisted to localStorage like other writes. */
 function loadOverrides(): MasterDataOverrides {
@@ -112,6 +113,7 @@ const logged: GameRecord[] = load<GameRecord>(LOGGED_KEY);
 const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
   .map((t) => ({ ...t, isActive: t.isActive ?? true, activatedAt: t.activatedAt ?? t.createdAt }));
 const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
+const previewCheckIns: SessionCheckIn[] = load<SessionCheckIn>(CHECK_INS_KEY);
 // Manual-layer edits from the Matches drill-down, overlaid onto any match.
 const previewEdits: Record<string, Partial<GameRecord>> = loadMap<Partial<GameRecord>>(EDITS_KEY);
 // Hard-deleted matches. The app drops the row from SQLite outright; the preview
@@ -446,7 +448,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()] }, effectiveMasterData()),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()], checkIns: previewCheckIns }, effectiveMasterData()),
   heroDetail: async (hero: string, f: DashboardFilters) =>
     heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
@@ -1116,6 +1118,12 @@ const mock: OwStatsApi = {
     breakReminder = normalizeBreakReminder(input);
     save(BREAK_REMINDER_KEY, breakReminder);
     return breakReminder;
+  },
+  recordCheckIn: async (mood: CheckInMood) => {
+    const entry: SessionCheckIn = { at: Date.now(), mood };
+    previewCheckIns.push(entry);
+    save(CHECK_INS_KEY, previewCheckIns);
+    return entry;
   },
   getStaleness: async () => staleness,
   setStaleness: async (input: StalenessSettings) => {

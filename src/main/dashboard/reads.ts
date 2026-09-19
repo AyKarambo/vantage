@@ -147,6 +147,7 @@ export function dashboardRead(
       grading: provider.getGrading(),
       rankAnchors: provider.rankAnchorMap(),
       placementRuns: provider.placementRuns(),
+      checkIns: provider.getCheckIns(),
     },
     provider.effectiveMasterData(),
     // Held "needs result" matches ride on the same payload the Review screen

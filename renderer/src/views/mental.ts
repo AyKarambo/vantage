@@ -1,6 +1,7 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
-import type { MatchFlagKey, RatedSide, TiltBucket, WinrateSide } from '../../../src/shared/contract';
+import type { CheckInMood, MatchFlagKey, RatedSide, TiltBucket, WinrateSide } from '../../../src/shared/contract';
+import { CHECK_IN_LABELS } from '../../../src/shared/contract';
 import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '../../../src/core/mentalAnalytics';
 import { confidenceTier } from '../../../src/core/confidence';
 import { pct } from '../format';
@@ -315,6 +316,32 @@ function byMapTrigger(buckets: TiltBucket[]): HTMLElement | null {
 }
 
 /**
+ * "Pre-session check-in" trigger block (S10 phase 2) — does queuing up
+ * already tilted actually predict a tilted game 1, or is the check-in just
+ * a feeling that doesn't pan out? `'none'` (no qualifying check-in) renders
+ * as a plain baseline row alongside the three moods.
+ */
+function checkInTrigger(buckets: TiltBucket[]): HTMLElement | null {
+  if (!buckets.length) return null;
+  const rowLabel = (key: string): string => key === 'none' ? 'No check-in' : CHECK_IN_LABELS[key as CheckInMood];
+  const calm = buckets.find((b) => b.key === 'calm');
+  const tilted = buckets.find((b) => b.key === 'tilted');
+  const sampled = calm && tilted && calm.games >= COST_MIN_SAMPLE && tilted.games >= COST_MIN_SAMPLE;
+  const coach = !sampled
+    ? h('span', { class: 'u-dim' }, `Needs ${COST_MIN_SAMPLE} calm and tilted check-ins each to compare.`)
+    : tilted!.rate <= calm!.rate
+      ? 'Checking in tilted hasn’t actually predicted a tilted game 1 yet.'
+      : calm!.rate === 0
+        ? 'You’ve tilted game 1 after checking in tilted, but never after checking in calm.'
+        : `Checking in tilted before queuing tilts game 1 ${Math.round((tilted!.rate / calm!.rate) * 10) / 10}× as often as checking in calm.`;
+  return h('div', null,
+    h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, 'Pre-session check-in'),
+    h('div', { class: 'stack', style: { gap: '5px' } }, ...buckets.map((b) => tiltRow(rowLabel(b.key), b))),
+    h('div', { class: 'hint', style: { marginTop: '6px', lineHeight: '1.5' } }, coach),
+  );
+}
+
+/**
  * Tilt rate by game # within a sitting — the "stop after game N" read (issue
  * #70 C) — plus the "when do I tilt" triggers (S9): time of day, right after
  * a loss, and by map. `byTimeOfDay`/`bySessionPosition`/`byMap` all already
@@ -327,6 +354,7 @@ function sessionCard(ctx: ViewContext): HTMLElement {
     timeOfDayTrigger(d.tiltByTimeOfDay),
     afterResultTrigger(d.tiltAfterResult),
     byMapTrigger(d.tiltByMap),
+    checkInTrigger(d.tiltByCheckIn),
   ].filter((n): n is HTMLElement => n != null);
   if (!buckets.length) {
     return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting, time of day, after a loss, and by map' },

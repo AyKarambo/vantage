@@ -5,6 +5,7 @@
  * share it.
  */
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { CheckInMood, SessionCheckIn } from '../../core/checkIn';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
@@ -220,6 +221,8 @@ export interface OwStatsApi {
   getBreakReminder(): Promise<BreakReminderSettings>;
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */
   setBreakReminder(input: BreakReminderSettings): Promise<BreakReminderSettings>;
+  /** Record a pre-session mood check-in (S10 phase 2) at the current instant. */
+  recordCheckIn(mood: CheckInMood): Promise<SessionCheckIn>;
   /** The currently persisted readiness feature settings. */
   getReadiness(): Promise<ReadinessSettings>;
   /** Persist new readiness feature settings; returns the persisted value. */
@@ -440,6 +443,7 @@ export const IPC_CHANNELS = {
   setStaleness: 'settings:set-staleness',
   getBreakReminder: 'settings:get-break-reminder',
   setBreakReminder: 'settings:set-break-reminder',
+  recordCheckIn: 'settings:record-check-in',
   getReadiness: 'settings:get-readiness',
   setReadiness: 'settings:set-readiness',
   getSessionSettings: 'settings:get-session',

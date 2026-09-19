@@ -864,6 +864,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   more guessing the state from a tint or from asymmetric label text. **Launch reminder** now
   stays visible (dimmed, not disabled-and-hidden) when Readiness coach is off, instead of
   disappearing outright (K3).
+- **A one-click check-in before you queue: Calm, Edgy, or Tilted.** It shows up on the idle
+  Live screen and right under your name on Overview — log it and Mental starts tracking
+  whether queuing up already tilted actually costs you a worse first game, instead of just
+  guessing (S10).
 
 ### Fixed
 

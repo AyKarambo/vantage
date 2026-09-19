@@ -2,6 +2,7 @@ import type { GameRecord } from '../../core/analytics';
 import type { Role } from '../../core/model';
 import type { AuthoredTarget, ThresholdSuggestion } from '../../core/targets';
 import type { BreakReminderSettings } from '../../core/breakReminder';
+import type { CheckInMood, SessionCheckIn } from '../../core/checkIn';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
@@ -139,6 +140,12 @@ export interface DataProvider {
   getBreakReminder(): BreakReminderSettings;
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */
   setBreakReminder(input: BreakReminderSettings): BreakReminderSettings;
+  /** Every stored pre-session check-in (S10 phase 2) — the dashboard payload
+   *  reads this to split game-1 tilt by mood and to know whether a fresh
+   *  prompt is due. */
+  getCheckIns(): SessionCheckIn[];
+  /** Record a pre-session check-in at the current instant; returns the stored entry. */
+  recordCheckIn(mood: CheckInMood): SessionCheckIn;
   /** Current readiness feature settings. */
   getReadiness(): ReadinessSettings;
   /** Persist new readiness feature settings; returns the persisted value. */

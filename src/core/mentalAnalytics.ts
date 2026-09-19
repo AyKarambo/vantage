@@ -1,4 +1,5 @@
 import { dayKey, dayPartAt, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts } from './analytics';
+import type { SessionCheckIn } from './checkIn';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isTilted } from './mental';
@@ -224,6 +225,44 @@ const toBucket = (key: string, gs: GameRecord[]): TiltBucket => {
   const tilted = gs.reduce((n, g) => n + (isTilted(g) ? 1 : 0), 0);
   return { key, games: gs.length, tilted, rate: gs.length ? tilted / gs.length : 0 };
 };
+
+/**
+ * Tilt rate on a sitting's FIRST game, split by whichever pre-session
+ * check-in (S10 phase 2) immediately preceded it — "does queuing tilted
+ * actually cost you?" A check-in "belongs" to a sitting when it's the most
+ * recent one at or before that sitting's first game, within `opts.gapMinutes`
+ * (same 90-minute default and convention as {@link tiltBySessionPosition}) —
+ * a check-in older than that gap is treated as having never been acted on,
+ * same as any check-in through the current data model applies to at most the
+ * ONE sitting it precedes. Sittings with no qualifying check-in bucket under
+ * `'none'`, giving the mood buckets a real baseline to compare against.
+ * Numbered over the UNFILTERED history like every sibling here; `opts.include`
+ * scopes which of those first games aggregate without renumbering sittings.
+ */
+export function tiltByCheckIn(
+  games: GameRecord[],
+  checkIns: readonly SessionCheckIn[],
+  opts: SessionPositionOpts = {},
+): TiltBucket[] {
+  const gapMs = (opts.gapMinutes ?? 90) * 60_000;
+  const firstGames = sessionPositionGroups(games, opts).find((b) => b.key === '1')?.games ?? [];
+  const sorted = [...checkIns].sort((a, b) => a.at - b.at);
+  const buckets = new Map<string, GameRecord[]>();
+  for (const g of firstGames) {
+    // The LATEST check-in at or before this game, still within the gap window
+    // — a walk rather than a single lookup, since an older, still-qualifying
+    // check-in must not win over a fresher one closer to kickoff.
+    let mood: string | null = null;
+    for (const c of sorted) {
+      if (c.at > g.timestamp) break;
+      if (g.timestamp - c.at <= gapMs) mood = c.mood;
+    }
+    const key = mood ?? 'none';
+    (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(g);
+  }
+  const order = ['calm', 'edgy', 'tilted', 'none'];
+  return order.filter((k) => buckets.has(k)).map((k) => toBucket(k, buckets.get(k)!));
+}
 
 /** Same local day-part boundaries {@link ../analytics byTimeOfDay} uses, so "it's evening" never means a different window here. */
 const DAY_PART_ORDER = ['Morning', 'Afternoon', 'Evening', 'Night'];

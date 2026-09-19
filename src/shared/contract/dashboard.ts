@@ -9,6 +9,7 @@ import type { RankSeriesPoint } from '../../core/rank/series';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit, WeekdayDayPartCell } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
+import type { SessionCheckIn } from '../../core/checkIn';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
 import type { StalenessSettings } from '../../core/staleness';
@@ -315,6 +316,20 @@ export interface DashboardData {
   tiltAfterResult: { afterWin: TiltBucket; afterLoss: TiltBucket };
   /** Tilt rate by map, top 3 by rate, 3+ games — "which maps tilt me?" (S9). */
   tiltByMap: TiltBucket[];
+  /**
+   * Tilt rate on a sitting's first game, split by whichever pre-session
+   * check-in preceded it (S10 phase 2) — "does queuing tilted actually cost
+   * me?" Bucket key is a {@link CheckInMood} or `'none'`. Numbered over the
+   * UNFILTERED history, aggregating only filtered sittings (same convention
+   * as {@link tiltBySession}).
+   */
+  tiltByCheckIn: TiltBucket[];
+  /**
+   * Every stored pre-session check-in, oldest first — ALWAYS unfiltered (a
+   * mood log, not Overwatch data). The idle Live screen and Overview head
+   * read the most recent one to decide whether a fresh prompt is due.
+   */
+  checkIns: SessionCheckIn[];
   /** Self-rated performance rollups over the FILTERED range (issue #44 analytics). */
   performance: PerformanceStats;
   targets: TargetSummary[];
