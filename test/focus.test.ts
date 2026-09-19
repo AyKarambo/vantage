@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { focusEntries, focusTrend, heroForm, linkFocusTargets, type GameRecord } from '../src/core/analytics';
+import { focusEntries, focusTrend, heroForm, linkFocusTargets, qualifiedMapCount, type GameRecord } from '../src/core/analytics';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { Result } from '../src/core/model';
@@ -100,6 +100,40 @@ describe('focusEntries — maps-only', () => {
     ];
     const [ilios] = focusEntries(games, { suppressed: new Set(['p1']) }).filter((e) => e.dimension === 'map');
     expect(ilios).toMatchObject({ net: 1, srNet: -38, srLogged: 2 });
+  });
+});
+
+describe('qualifiedMapCount', () => {
+  it('is 0 with no games at all', () => {
+    expect(qualifiedMapCount([])).toBe(0);
+  });
+
+  it('is 0 when every map is below the floor — a win-heavy map included, not just losing ones', () => {
+    const games = [
+      ...run(2, ['Loss'], { map: 'Ilios' }),
+      ...run(2, ['Win'], { map: 'Oasis' }),
+    ];
+    expect(qualifiedMapCount(games)).toBe(0);
+  });
+
+  it('counts a map the moment it reaches MAP_MIN_GAMES (3)', () => {
+    const games = run(3, ['Win'], { map: 'Ilios' });
+    expect(qualifiedMapCount(games)).toBe(1);
+  });
+
+  it('counts every map that individually clears the floor, ignoring ones that do not', () => {
+    const games = [
+      ...run(3, ['Win'], { map: 'Ilios' }),
+      ...run(4, ['Loss'], { map: 'Oasis' }),
+      ...run(5, ['Win', 'Loss'], { map: 'Busan' }),
+      ...run(2, ['Win'], { map: 'Lijiang' }), // below the floor
+    ];
+    expect(qualifiedMapCount(games)).toBe(3);
+  });
+
+  it('excludes the Unknown bucket — a missing map id never counts toward qualification', () => {
+    const games = run(5, ['Loss'], { map: '' });
+    expect(qualifiedMapCount(games)).toBe(0);
   });
 });
 

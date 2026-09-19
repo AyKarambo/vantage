@@ -44,9 +44,15 @@ export function maps(ctx: ViewContext): HTMLElement {
   // once nothing meets it, so the subtitle would otherwise keep claiming a
   // floor that isn't actually being applied (F1).
   const meetingFloor = modeScoped.filter((m) => m.games >= effectiveMinGames);
+  const belowFloor = modeScoped.filter((m) => m.games < effectiveMinGames);
   const floorActive = meetingFloor.length > 0;
-  const ranked = (floorActive ? meetingFloor : [...modeScoped]).sort((a, b) => b.winrate - a.winrate);
-  const hiddenCount = floorActive ? modeScoped.length - meetingFloor.length : 0;
+  // F4: below-floor maps used to vanish outright the moment ANY map cleared
+  // the floor — "my maps disappeared" the instant a first map hit 3 games.
+  // They now coexist, sorted after the qualified ones and rendered dimmed
+  // (below), so nothing about the ranking is a cliff at the threshold.
+  const ranked = floorActive
+    ? [...sortByWinrate(meetingFloor), ...sortByWinrate(belowFloor)]
+    : sortByWinrate(modeScoped);
 
   const modeChips = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
     chip('All', !modeFilter, () => { prefs.remove('mapModeFilter'); store.rerender(); }),
@@ -66,9 +72,12 @@ export function maps(ctx: ViewContext): HTMLElement {
     modeChips, minGamesChips,
   );
 
+  // F4: an honest subtitle either way — which floor is actually being
+  // applied (and how many maps sit below it, dimmed rather than hidden), or
+  // the plain fact that no map has reached it yet.
   const sub = floorActive
-    ? `best to worst · ${effectiveMinGames}+ games${hiddenCount > 0 ? ` · ${hiddenCount} low-sample hidden` : ''}`
-    : 'best to worst · every map (none have enough plays yet for a floor)';
+    ? `best to worst · ${effectiveMinGames}+ games${belowFloor.length > 0 ? ` · ${belowFloor.length} below the floor` : ''}`
+    : `no map has ${effectiveMinGames} game${effectiveMinGames === 1 ? '' : 's'} yet — showing all ${modeScoped.length} · low sample`;
 
   const view = h('div', { class: 'view' },
     viewHead('Maps', 'Where the games actually go — by mode, then map by map'),
@@ -115,6 +124,7 @@ export function maps(ctx: ViewContext): HTMLElement {
     }, horizontalBars(ranked.map((m) => ({
       label: m.key, winrate: m.winrate, games: m.games,
       meta: mapMeta(m, d, mapModeOf, isMapActive),
+      dimmed: floorActive && m.games < effectiveMinGames,
     })))),
   );
   // Palette / cross-link entry: scroll to and flash the requested map's bar
@@ -142,6 +152,8 @@ export function maps(ctx: ViewContext): HTMLElement {
   }
   return view;
 }
+
+const sortByWinrate = (gs: readonly Group[]): Group[] => [...gs].sort((a, b) => b.winrate - a.winrate);
 
 /** The mode's own best/worst map by winrate, over the same floor the main ranking applies (falling back to every map in the mode when none meets it). Absent when the mode has no map data at all. */
 function modeBestWorst(

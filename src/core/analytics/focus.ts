@@ -155,6 +155,17 @@ export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
 }
 
 /**
+ * How many distinct maps have reached {@link MAP_MIN_GAMES} (F4) — the honest
+ * gate behind Focus's and Overview's empty states, so "no net-losing maps"
+ * only ever means what it says rather than also standing in for "no map has
+ * enough games to judge yet". Same 'Unknown'-excluding, floor-filtered
+ * definition of a qualified map the Focus ranking itself uses.
+ */
+export function qualifiedMapCount(games: GameRecord[]): number {
+  return focusByMap(games).length;
+}
+
+/**
  * Recent-form window for one dimension entry's games (H6): the last
  * {@link FORM_WINDOW} DECIDED whole games, oldest → newest, plus how that
  * window's winrate compares to the full (filtered) range behind it. Draws are

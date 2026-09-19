@@ -283,6 +283,14 @@ export interface DashboardData {
   /** Map-only ranking that annotates the Overview scatter ("Top priority" callout). */
   focusMaps: FocusItem[];
   /**
+   * How many distinct maps have reached `MAP_MIN_GAMES` in the filtered range
+   * (F4) — the honest gate behind Focus's and Overview's empty states, so
+   * "no net-losing maps" (a real, worth-celebrating result) is never
+   * conflated with "no map has enough games to judge yet" (nothing to
+   * celebrate, just too early to tell).
+   */
+  qualifiedMaps: number;
+  /**
    * The Focus screen's cross-dimension "work on these" list: net-losing maps,
    * heroes and roles merged, ranked and capped, with trend + linked-target
    * progress attached. Already net>0-filtered.

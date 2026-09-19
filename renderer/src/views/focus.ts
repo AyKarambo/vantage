@@ -7,11 +7,11 @@
  * Maps/Trends stay the raw reference tables → Targets is the commitment.
  */
 import { h, applyStyle } from '../dom';
-import type { FocusEntry, FocusProgress } from '../../../src/shared/contract';
+import type { DashboardData, FocusEntry, FocusProgress } from '../../../src/shared/contract';
 import { MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { pct, roleLabel, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
-import { button, card, pill, unlockHint } from '../components/primitives';
+import { button, card, emptyState, pill, unlockHint } from '../components/primitives';
 import { TREND_META } from '../components/trendArrow';
 import { inlineLink } from '../components/inlineLink';
 import { practiceTargetButton } from '../components/practiceTargetButton';
@@ -24,32 +24,53 @@ export function focus(ctx: ViewContext): HTMLElement {
   const roles = items.filter((e) => e.dimension === 'role');
   const heroes = items.filter((e) => e.dimension === 'hero');
   const maps = items.filter((e) => e.dimension === 'map');
-  // Distinguishes a genuinely clean season from a first-week player who just
-  // hasn't reached the map floor yet (F1) — the old empty state read the
-  // same "nice, clean season!" either way, which was actively misleading for
-  // the second case. `byMap` carries every map with at least one game (no
-  // floor of its own), so its best count is the honest "how close" answer.
-  const bestMapGames = Math.max(0, ...d.byMap.map((m) => m.games));
 
   return h('div', { class: 'view' },
     viewHead('Focus', 'The roles, heroes and maps that cost you the most points — work on these'),
     focusSection(ctx, 'Roles', 'net = losses − wins · across your roles', roles),
     focusSection(ctx, 'Heroes', 'net = losses − wins · across your heroes', heroes),
     focusSection(ctx, 'Maps', 'net = losses − wins · across your maps', maps),
-    items.length
-      ? null
-      : bestMapGames < MAP_MIN_GAMES
-        ? card({ title: 'Work on these' },
-            unlockHint(`Unlocks at ${MAP_MIN_GAMES} games on a map`, [
-              { have: bestMapGames, need: MAP_MIN_GAMES, label: 'games on your most-played map' },
-            ]))
-        : card({ title: 'Work on these' }, h('div', { class: 'empty empty--good' }, 'Nothing is net-losing right now — nice. 🎯')),
+    items.length ? null : focusEmptyCard(ctx, d),
     card({ variant: 'glow', title: 'Build a focus routine' },
       h('p', { class: 'hint', style: { lineHeight: '1.6', margin: '0 0 12px' } },
         'Practice your bottom three before ranked and review one replay each. Small, repeatable — that is how the deficit closes.'),
       button('Start a routine →', { variant: 'primary', onClick: () => ctx.navigate('targets') }),
     ),
   );
+}
+
+/**
+ * Focus's empty state (F1, F4) — three genuinely different situations that
+ * used to collapse into two: no games in range at all (a filter problem, not
+ * a coaching verdict), games in range but no map has reached the floor yet
+ * (too early to tell, distinct from Overview's `qualifiedMaps` gate below),
+ * and a real, well-evidenced clean season. `d.byMap` carries every map with
+ * at least one game (no floor of its own, unlike `qualifiedMaps`), so its
+ * best non-'Unknown' count is the honest "how close" progress read.
+ */
+function focusEmptyCard(ctx: ViewContext, d: DashboardData): HTMLElement {
+  if (d.overall.games === 0) {
+    const hasOlderGames = d.totalGamesAllTime > 0 && d.filters.days !== 'all';
+    return card({ title: 'Work on these' },
+      emptyState({
+        body: 'No games in this range yet.',
+        ...(hasOlderGames
+          ? { action: { label: `Show all time (${d.totalGamesAllTime} games)`, run: () => ctx.setFilter({ days: 'all' }) } }
+          : {}),
+        secondaryAction: { label: 'Log a match', run: () => ctx.openLogMatch() },
+      }));
+  }
+  if (d.qualifiedMaps === 0) {
+    const bestMapGames = Math.max(0, ...d.byMap.filter((m) => m.key !== 'Unknown').map((m) => m.games));
+    return card({ title: 'Work on these' },
+      unlockHint(`Unlocks at ${MAP_MIN_GAMES} games on a map`, [
+        { have: bestMapGames, need: MAP_MIN_GAMES, label: 'games on your most-played map' },
+      ]),
+      h('div', { class: 'hint', style: { marginTop: '10px' } },
+        'See how close every map is on ', inlineLink('Maps', { onClick: () => ctx.navigate('maps') }), '.'),
+    );
+  }
+  return card({ title: 'Work on these' }, h('div', { class: 'empty empty--good' }, 'Nothing is net-losing right now — nice. 🎯'));
 }
 
 /** One dimension's card — omitted entirely when it has no net-losing entries, so an empty dimension doesn't waste a section on nothing. */

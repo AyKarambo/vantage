@@ -19,6 +19,13 @@ export interface WrPoint {
    * agnostic about what they mean.
    */
   meta?: Node[];
+  /**
+   * Renders this row muted, with its bar in a neutral colour instead of the
+   * winrate tint (F4) — below whatever sample floor the caller is applying,
+   * so it stays visible (no cliff at the threshold the moment a sibling row
+   * qualifies) without reading as equally trustworthy as a qualified one.
+   */
+  dimmed?: boolean;
 }
 
 /** Small "not enough data" placeholder chart shown in place of an empty series. */
