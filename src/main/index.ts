@@ -289,11 +289,15 @@ function main(): void {
    * `undefined` and writes nothing — there is no automatic upload path
    * (guardrail 5, local-first).
    */
-  async function saveTextFile(defaultName: string, contents: string): Promise<string | undefined> {
+  async function saveTextFile(
+    defaultName: string,
+    contents: string,
+    opts: { title?: string; filterName?: string; extensions?: string[] } = {},
+  ): Promise<string | undefined> {
     const res = await dialog.showSaveDialog({
-      title: 'Save debug log',
+      title: opts.title ?? 'Save debug log',
       defaultPath: path.join(app.getPath('documents'), defaultName),
-      filters: [{ name: 'Text log', extensions: ['txt'] }],
+      filters: [{ name: opts.filterName ?? 'Text log', extensions: opts.extensions ?? ['txt'] }],
     });
     if (res.canceled || !res.filePath) return undefined;
     await fs.promises.writeFile(res.filePath, contents, 'utf8');

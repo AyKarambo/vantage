@@ -17,7 +17,7 @@ import { formatDiagnostics } from '../core/about';
 import { currentRank, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
-import { parseVantageImport } from '../core/importEnvelope';
+import { parseVantageImport, buildImportEnvelope, type ImportAccount } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
 import { suggestMeasuredThreshold } from '../core/targets';
 import { pendingReviewMatches, eligibleForNoRead } from '../core/dashboardData';
@@ -42,7 +42,7 @@ import {
 import type { MasterDataStore } from '../store/masterData';
 import type {
   AccountSummary, AppInfo, AppUiSettings, DataLocation, DataLocationResult,
-  DevModeAuthStatusPayload, GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
+  DevModeAuthStatusPayload, ExportBackupResult, GepStatusPayload, ImportFileResult, LogExportResult, MatchEditInput, PendingMatch, RankSummary,
   PlacementRunSummary, PlacementOffer, PlacementTrackInput,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
@@ -70,7 +70,7 @@ function sameHeroes(a: string[], b: string[]): boolean {
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes, account
    *  management (relabel/delete), per-match delete, and the pending-store read. */
-  history: Pick<HistoryStore, 'count' | 'revision' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'clearReviews' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
+  history: Pick<HistoryStore, 'count' | 'revision' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'clearReviews' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'lastImportedAt' | 'allPending'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -157,9 +157,12 @@ export interface DataProviderDeps {
    * Show a native save dialog defaulting to `defaultName` and write `contents`
    * to wherever the user picks; resolves `undefined` when they cancel (nothing
    * is written). Injected so this stays Electron/fs-free, and so it never
-   * writes anywhere but the user's own chosen path (guardrail 5).
+   * writes anywhere but the user's own chosen path (guardrail 5). `opts`
+   * overrides the dialog title/file-type filter for a non-log caller (W3's
+   * backup export); omitted, both default to the original "Save debug log" /
+   * `.txt` behavior so `exportLogBundle` is unaffected.
    */
-  saveTextFile(defaultName: string, contents: string): Promise<string | undefined>;
+  saveTextFile(defaultName: string, contents: string, opts?: { title?: string; filterName?: string; extensions?: string[] }): Promise<string | undefined>;
   /** Restart the app to apply a staged GEP package fix (`app.relaunch()` + exit). */
   applyGepUpdate(): void;
   /** Data-folder location: current value, Settings folder-picker/migrate, and the
@@ -721,6 +724,29 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return { deleted: removed.length };
     },
     fileImportedCount: () => deps.history.importedCount('file'),
+    lastFileImportAt: () => deps.history.lastImportedAt('file'),
+    exportBackup: async (): Promise<ExportBackupResult> => {
+      const accounts: ImportAccount[] = Object.entries(deps.getConfig().accounts)
+        .map(([battleTag, label]) => ({ battleTag, label }));
+      const envelope = buildImportEnvelope({
+        games: deps.history.all(),
+        accounts,
+        rankAnchors: deps.rankAnchors.map(),
+        targets: deps.manual.targets(),
+      });
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      try {
+        const savedPath = await deps.saveTextFile(
+          `vantage-backup-${dateStamp}.json`,
+          JSON.stringify(envelope, null, 2),
+          { title: 'Export backup', filterName: 'Vantage backup', extensions: ['json'] },
+        );
+        return savedPath ? { path: savedPath } : { cancelled: true };
+      } catch (err) {
+        const detail = (err as { message?: string })?.message;
+        return { error: detail ? `Couldn't save the backup — ${detail}` : "Couldn't save the backup." };
+      }
+    },
     cleanupNotionDuplicates: () => deps.notion.cleanupDuplicates(),
     getBreakReminder: () => deps.getConfig().breakReminder,
     setBreakReminder: (input) => {

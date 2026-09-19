@@ -31,7 +31,7 @@ import type {
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput,
   PlacementTrackInput, PlacementOffer, PlacementDeclineInput,
 } from './placements';
-import type { ImportFileResult } from './importFile';
+import type { ExportBackupResult, ImportFileResult } from './importFile';
 import type { Role, Result } from '../../core/model';
 import type { LogEntry, LogLevel, LogExportResult, RendererErrorInput } from './logging';
 import type { GepStatusPayload } from './gepStatus';
@@ -176,6 +176,10 @@ export interface OwStatsApi {
   deleteFileImports(): Promise<{ deleted: number }>;
   /** How many file-imported matches are currently stored (for the Settings → Data status line). */
   fileImportedCount(): Promise<number>;
+  /** When the most recent file import landed (epoch ms), for the persistent "Last import" line (W3). Undefined if none. */
+  lastFileImportAt(): Promise<number | undefined>;
+  /** Write a full local backup (games incl. review/mental, accounts, every rank anchor, targets) to a user-chosen file (W3 phase 2). */
+  exportBackup(): Promise<ExportBackupResult>;
   /**
    * Explicit action: archives redundant duplicate rows (Notion trash,
    * restorable) in the configured Gametracker database, keeping one canonical
@@ -421,6 +425,8 @@ export const IPC_CHANNELS = {
   importFromFile: 'import:from-file',
   deleteFileImports: 'import:delete-file',
   fileImportedCount: 'import:file-count',
+  lastFileImportAt: 'import:last-file-import-at',
+  exportBackup: 'import:export-backup',
   saveTarget: 'manual:save-target',
   suggestThreshold: 'manual:suggest-threshold',
   saveReview: 'manual:save-review',

@@ -919,8 +919,11 @@ sensor.
 
 Bring an existing tracker's matches into Vantage without giving up your own tool. A companion
 PowerShell script converts an Obsidian match vault into a **Vantage import file** (JSON), and
-Settings → **Data import** ingests it — imported matches are tagged so they can be cleared and
-re-imported cleanly. See **[docs/import.md](docs/import.md)** for the workflow and the file format.
+Settings → **Backup & import** ingests it — imported matches are tagged so they can be cleared and
+re-imported cleanly. The same card's **Export backup…** writes a fuller version of that same format
+(every game with its review/mental layer, every account, every rank anchor, every target) for
+moving your own history to another machine. See **[docs/import.md](docs/import.md)** for the
+workflow and both file formats.
 
 ```powershell
 npm run import:obsidian -- -VaultPath "C:\path\to\vault" -OutFile "vantage-import.json" -CurrentRank "Diamond 3"

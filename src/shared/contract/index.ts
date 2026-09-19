@@ -77,7 +77,7 @@ export type {
 } from './placements';
 
 // Local file import (Settings → Data)
-export type { ImportFileResult } from './importFile';
+export type { ImportFileResult, ExportBackupResult } from './importFile';
 
 // Logging payloads (release debug log + in-app viewer)
 export type { LogEntry, LogLevel, RendererErrorInput, LogExportResult } from './logging';

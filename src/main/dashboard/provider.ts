@@ -12,7 +12,7 @@ import type { PlacementRun } from '../../core/placements';
 import type { MasterDataConfig } from '../config';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
-  DataLocation, DataLocationResult, DevModeAuthStatusPayload, ExportResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
+  DataLocation, DataLocationResult, DevModeAuthStatusPayload, ExportBackupResult, ExportResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
   IgnorePendingReviewsInput, ThresholdSuggestionInput,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
@@ -110,6 +110,10 @@ export interface DataProvider {
   deleteFileImports(): { deleted: number };
   /** How many file-imported matches are stored (Settings → Data status line). */
   fileImportedCount(): number;
+  /** When the most recent file import landed (epoch ms), for the persistent "Last import" line (W3). Undefined if none. */
+  lastFileImportAt(): number | undefined;
+  /** Write a full local backup (games incl. review/mental, accounts, every rank anchor, targets) to a user-chosen file (W3 phase 2). */
+  exportBackup(): Promise<ExportBackupResult>;
   /** Explicit action: archive redundant duplicate rows (Notion trash) in the configured Gametracker database. */
   cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
   /** Attach a Review-screen read (grades + flags) to a tracked match.
