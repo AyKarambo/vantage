@@ -19,6 +19,7 @@ import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
+import { pendingReviewMatches, eligibleForNoRead } from '../core/dashboardData';
 import { mergeAccountList, UNKNOWN_ACCOUNT } from '../core/accountsManage';
 import { resolveRole } from '../core/resolvers/role';
 import { resolveAccount } from '../core/resolvers/account';
@@ -68,7 +69,7 @@ function sameHeroes(a: string[], b: string[]): boolean {
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes, account
    *  management (relabel/delete), per-match delete, and the pending-store read. */
-  history: Pick<HistoryStore, 'count' | 'revision' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
+  history: Pick<HistoryStore, 'count' | 'revision' | 'all' | 'setReview' | 'setReviews' | 'clearReview' | 'clearReviews' | 'editManual' | 'add' | 'addMany' | 'mergeImported' | 'relabelAccount' | 'deleteByAccount' | 'deleteMatch' | 'removeImported' | 'importedCount' | 'allPending'>;
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
@@ -172,6 +173,12 @@ export interface DataProviderDeps {
 /** Assemble the dashboard's DataProvider over the injected deps. */
 export function createDataProvider(deps: DataProviderDeps): DataProvider {
   const demoPref = () => deps.getConfig().ui.demoPreference;
+  // Sample games fill an empty history ONLY when the user opted into demo mode;
+  // a fresh-start user sees nothing until they track real matches. Shared by
+  // `games` and the pending-review bulk-ignore reads (R1) so they can never
+  // walk a different history than the dashboard itself does.
+  const allGames = (): GameRecord[] =>
+    deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : [];
   const effectiveMasterData = (): MasterData => mergeMasterData(DEFAULT_MASTER_DATA, deps.masterDataStore.all());
   // The manageable account list: configured accounts unioned with the accounts
   // only detected in history (Unknown bucket + unlabelled raw BattleTags),
@@ -186,9 +193,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
   const deletedUndo = new Map<string, GameRecord>();
   const UNDO_BUFFER = 20;
   const provider: DataProvider = {
-    // Sample games fill an empty history ONLY when the user opted into demo mode;
-    // a fresh-start user sees nothing until they track real matches.
-    games: () => (deps.history.count() ? deps.history.all() : demoPref() === 'on' ? deps.sampleGames() : []),
+    games: allGames,
     historyRevision: () => deps.history.revision(),
     isSample: () => effectiveDemo(demoPref(), deps.history.count()),
     demoContext: () => ({
@@ -780,6 +785,25 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     clearReview: (matchId) => {
       deps.history.clearReview(matchId);
     },
+    // Both read the SAME eligible set (pendingReviewMatches, already role/
+    // account-scoped, minus eligibleForNoRead's age cutoff) so the live preview
+    // count and the actual write can never disagree (R1).
+    previewPendingReviewIgnore: (input) => {
+      const pending = pendingReviewMatches(allGames(), input.filters, effectiveMasterData().seasons.map((s) => s.start));
+      return { count: eligibleForNoRead(pending, input.minAgeDays).length };
+    },
+    ignorePendingReviews: (input) => {
+      const pending = pendingReviewMatches(allGames(), input.filters, effectiveMasterData().seasons.map((s) => s.start));
+      const matchIds = eligibleForNoRead(pending, input.minAgeDays).map((g) => g.matchId);
+      // An empty review — not a real grade — so a cleared game leaves the
+      // inbox/badge but never claims Hit/Partial/Missed on anything.
+      const at = Date.now();
+      deps.history.setReviews(matchIds.map((matchId) => ({ matchId, review: { at, grades: {}, flags: {} } })));
+      return { matchIds };
+    },
+    clearReviews: (matchIds) => {
+      deps.history.clearReviews(matchIds);
+    },
     pendingMatches: () => {
       const accounts = deps.getConfig().accounts;
       return deps.history.allPending().map((rec) => toPendingMatch(rec, accounts));
@@ -846,7 +870,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
  * against the real provider so a renamed method can't silently fall out of it.
  */
 export const DASHBOARD_WRITES = [
-  'saveReview', 'clearReview', 'importReviews',
+  'saveReview', 'clearReview', 'importReviews', 'ignorePendingReviews', 'clearReviews',
   'editMatch', 'deleteMatch', 'undoDeleteMatch',
   'setRankAnchor',
   'startPlacementRun', 'setPlacementPrediction', 'completePlacementRun',

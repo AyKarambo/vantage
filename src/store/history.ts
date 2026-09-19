@@ -394,6 +394,20 @@ export class HistoryStore {
     return true;
   }
 
+  /** Bulk {@link clearReview} (one transaction) — the undo of {@link setReviews}
+   *  for `ignorePendingReviews`' "Mark older games as no-read" (R1). Unknown or
+   *  already-review-less ids are silently skipped, same as the single form. */
+  clearReviews(matchIds: readonly string[]): void {
+    this.tx(() => {
+      for (const matchId of matchIds) {
+        const game = this.getOne(matchId);
+        if (!game?.review) continue;
+        delete game.review;
+        this.updateStmt.run(...updateValues(game));
+      }
+    });
+  }
+
   /**
    * Bulk review import (one transaction) for the legacy-localStorage migration.
    * Never overwrites an existing review; unknown match ids are skipped.

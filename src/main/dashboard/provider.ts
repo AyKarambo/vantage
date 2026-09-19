@@ -12,6 +12,7 @@ import type { PlacementRun } from '../../core/placements';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
+  IgnorePendingReviewsInput,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
@@ -191,6 +192,12 @@ export interface DataProvider {
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
+  /** Read-only: how many pending-review rows "Mark older games as no-read" would affect right now (R1). */
+  previewPendingReviewIgnore(input: IgnorePendingReviewsInput): { count: number };
+  /** Bulk-saves an empty review on every matching pending row; returns their ids for Undo. */
+  ignorePendingReviews(input: IgnorePendingReviewsInput): { matchIds: string[] };
+  /** Undo of {@link ignorePendingReviews}: clears reviews on exactly these matchIds. */
+  clearReviews(matchIds: string[]): void;
   /** Played competitive matches held without a GEP outcome, awaiting a manual result (the "Needs result" section). */
   pendingMatches(): PendingMatch[];
   /** Complete a held pending match with a win/loss/draw — moves it into history via the normal pipeline. */

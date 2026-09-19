@@ -24,6 +24,7 @@ import { button } from '../components/primitives';
 import { pct, relTime, roleLabel, signed } from '../format';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
+import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
 import { maybeOfferPlacements } from './placementOffer';
 import { roleStatus } from '../roleStatus';
 import { sidebarChip } from '../sidebarChip';
@@ -630,15 +631,21 @@ export class App {
     this.accountChip.title = `${chip.name} · ${chip.subFull} — click to switch account`;
 
     // Saving a review doesn't refetch, so subtract the games graded since the
-    // last snapshot (only those the snapshot still counts as pending).
-    const gradedOverlap = d ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId)).length : 0;
-    const pendingReviews = d ? Math.max(0, d.pendingReviews - gradedOverlap) : 0;
+    // last snapshot (only those the snapshot still counts as pending) — scoped
+    // to the same recency window pendingReviewsRecent itself counts over (R1),
+    // so a session spent grading week-old games can't under-subtract a badge
+    // that was never counting them in the first place.
+    const now = Date.now();
+    const gradedOverlapRecent = d
+      ? d.reviewInbox.filter((m) => gradedThisSession.has(m.matchId) && now - m.timestamp < RECENT_REVIEW_WINDOW_MS).length
+      : 0;
+    const pendingReviews = d ? Math.max(0, d.pendingReviewsRecent - gradedOverlapRecent) : 0;
     // Parameterized views highlight their parent list in the sidebar. Read from
     // DETAIL_PARENT rather than a second hand-written branch chain, so the
     // parenting is expressed exactly once (it also drives relaunch restore).
     const activeNav: ViewId = DETAIL_PARENT[state.view as keyof typeof DETAIL_PARENT] ?? state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
-    this.updateReviewBadge(pendingReviews);
+    this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0);
 
     render(this.sessionBody, this.sessionSummary(state));
   }
@@ -737,7 +744,10 @@ export class App {
     }
   }
 
-  private updateReviewBadge(pending: number): void {
+  /** `pending` is the recency-scoped count the badge shows (R1); `total` is the
+   *  full lifetime backlog, named only in the title — the badge itself only
+   *  ever shows "this week", never a number that only ever grows. */
+  private updateReviewBadge(pending: number, total: number): void {
     const btn = this.navButtons.get('review');
     if (!btn) return;
     const existing = btn.querySelector<HTMLElement>('.nav-badge');
@@ -745,10 +755,11 @@ export class App {
     // this to a bare dot with no visible number — the title is the only place
     // "how many" survives there, so it's set even though the expanded rail's
     // own visible digits make it redundant there.
-    const title = `${pending} game${pending === 1 ? '' : 's'} to review`;
+    const title = `${pending} from this week · ${total} in total`;
+    const shown = pending > 99 ? '99+' : String(pending);
     if (pending > 0) {
-      if (existing) { existing.textContent = String(pending); existing.title = title; }
-      else btn.append(h('span', { class: 'nav-badge', title }, String(pending)));
+      if (existing) { existing.textContent = shown; existing.title = title; }
+      else btn.append(h('span', { class: 'nav-badge', title }, shown));
     } else {
       existing?.remove();
     }

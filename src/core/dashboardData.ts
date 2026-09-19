@@ -194,6 +194,7 @@ export function computeDashboard(
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all),
     reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)),
     pendingReviews: pending.length,
+    pendingReviewsRecent: pendingReviewsRecent(pending),
     pendingMatches,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
     staleness: manual?.staleness ?? DEFAULT_STALENESS,
@@ -274,6 +275,39 @@ export function pendingReviewMatches(
   return applyFilters(competitive, { ...filters, days: 'all' }, seasonStartsList)
     .filter((g) => !g.review)
     .sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/** How far back {@link pendingReviewsRecent} counts (R1) — matches the badge's
+ *  "things to do this week" framing, not the app's session-gap convention:
+ *  a queue someone hasn't opened in days is exactly what the badge exists to
+ *  surface, so it can't be scoped to "the current sitting". */
+export const RECENT_REVIEW_WINDOW_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * Of `pendingReviewMatches`' result, how many landed in the last 7 days — the
+ * sidebar badge's count (R1). The uncapped lifetime total only ever grows for
+ * an active player, which stops meaning "things to do tonight" and trains
+ * people to ignore it; this is the number that still does.
+ */
+export function pendingReviewsRecent(pending: readonly GameRecord[], now = Date.now()): number {
+  const cutoff = now - RECENT_REVIEW_WINDOW_MS;
+  return pending.filter((g) => g.timestamp >= cutoff).length;
+}
+
+/**
+ * Of `pendingReviewMatches`' already role/account-scoped rows, the ones a bulk
+ * "Mark older games as no-read" at this age cutoff would affect (R1) — the
+ * SAME function backs the live preview count and the actual write, so they
+ * can never disagree. `minAgeDays <= 0` means no cutoff: every pending row.
+ */
+export function eligibleForNoRead(
+  pending: readonly GameRecord[],
+  minAgeDays: number,
+  now = Date.now(),
+): GameRecord[] {
+  if (minAgeDays <= 0) return [...pending];
+  const cutoff = now - minAgeDays * 24 * 60 * 60_000;
+  return pending.filter((g) => g.timestamp <= cutoff);
 }
 
 /** Row cap keeps list payloads bounded; counts (e.g. pendingReviews) never are. */

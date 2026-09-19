@@ -100,6 +100,20 @@ describe('HistoryStore (SQLite) — core interface', () => {
     expect(h.clearReview('a')).toBe(false);
   });
 
+  it('clearReviews (bulk) clears exactly the given ids, silently skipping unknown/already-clear ones', () => {
+    const h = open(tmp());
+    h.addMany([
+      g({ matchId: 'a', review: { at: 1, grades: {}, flags: {} } }),
+      g({ matchId: 'b', review: { at: 1, grades: {}, flags: {} } }),
+      g({ matchId: 'c', review: { at: 1, grades: {}, flags: {} } }),
+    ]);
+    h.clearReviews(['a', 'b', 'nope']); // 'nope' unknown, 'c' untouched
+    const byId = new Map(h.all().map((x) => [x.matchId, x]));
+    expect(byId.get('a')?.review).toBeUndefined();
+    expect(byId.get('b')?.review).toBeUndefined();
+    expect(byId.get('c')?.review).toBeDefined();
+  });
+
   it('losslessly round-trips a fully-populated record through the JSON blob', () => {
     const rich: GameRecord = {
       matchId: 'rich', timestamp: 1_700_000_000_000, account: 'Main', role: 'support',
