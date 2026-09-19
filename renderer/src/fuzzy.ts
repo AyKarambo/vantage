@@ -5,13 +5,25 @@
  */
 
 /**
+ * Strip combining diacritical marks (é → e, ç → c, ñ → n, …) so an
+ * accent-free query still matches an accented name (L4 — "esperanca" for
+ * "Esperança"). Subsequence matching below already tolerates a SKIPPED
+ * character (an apostrophe the query never has to type), but not a
+ * DIFFERENT one at the same position, which is what an accent is without
+ * this fold.
+ */
+function foldDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
  * Score `query` against `text`. Higher is better; null = no match.
  * Every query char must appear in order; contiguous runs, word starts and a
  * text-prefix match score higher, longer texts score slightly lower.
  */
 export function fuzzyScore(query: string, text: string): number | null {
-  const q = query.toLowerCase().trim();
-  const t = text.toLowerCase();
+  const q = foldDiacritics(query.toLowerCase().trim());
+  const t = foldDiacritics(text.toLowerCase());
   if (!q) return 0;
 
   let score = 0;

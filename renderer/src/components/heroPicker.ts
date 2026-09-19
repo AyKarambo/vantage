@@ -19,12 +19,31 @@ export function heroesForRole(role: Role, heroes: HeroEntry[]): string[] {
 /** Options that switch {@link paintHeroChips} from the full grid to a shortlist + search. */
 export interface HeroPickerOpts {
   /**
-   * A pre-ranked, pre-sized pool (e.g. "most played") to show instead of every
-   * role-eligible hero. Omit to keep today's full-grid behavior.
+   * A pre-ranked pool (e.g. "most played"), NOT pre-sliced by the caller — to
+   * show instead of every role-eligible hero. Omit to keep today's full-grid
+   * behavior.
    */
   shortlist?: readonly string[];
+  /**
+   * How many chips the shortlist should show. Required alongside `shortlist`.
+   * L4: a `shortlist` shorter than this (a fresh account, or a role never
+   * queued on this account, has no "most played" history at all) is padded
+   * out with the rest of the role-eligible pool, alphabetically, so a new
+   * track still opens to a usable grid instead of an empty one that forces
+   * typing every hero into search.
+   */
+  shortlistLimit?: number;
   /** Show a text filter above the grid that searches the full role-eligible pool. */
   search?: boolean;
+}
+
+/** `ranked` sliced to `limit`, padded with the rest of `eligible` (alphabetically) when it falls short — see {@link HeroPickerOpts.shortlistLimit}. */
+export function padShortlist(ranked: readonly string[], limit: number, eligible: readonly string[]): string[] {
+  const sliced = ranked.slice(0, limit);
+  if (sliced.length >= limit) return sliced;
+  const have = new Set(sliced);
+  const fill = eligible.filter((h) => !have.has(h)).sort((a, b) => a.localeCompare(b));
+  return [...sliced, ...fill].slice(0, limit);
 }
 
 function heroChip(hero: string, selected: Set<string>): HTMLElement {
@@ -52,7 +71,9 @@ export function paintHeroChips(
   host: HTMLElement, selected: Set<string>, role: Role, heroes: HeroEntry[], opts?: HeroPickerOpts,
 ): void {
   const eligible = heroesForRole(role, heroes);
-  const basePool = opts?.shortlist ?? eligible;
+  const basePool = opts?.shortlist
+    ? padShortlist(opts.shortlist, opts.shortlistLimit ?? opts.shortlist.length, eligible)
+    : eligible;
   // Recomputed on every paint (not captured once) so a hero picked via search
   // still shows up once the search box is cleared back to the base view.
   const currentBaseView = (): string[] =>

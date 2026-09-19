@@ -269,13 +269,19 @@ account's per-role lines beneath it.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still
-  reachable by typing its name (shown muted, deprioritized), just not offered by default. `Enter`
+  reachable by typing its name (shown muted, deprioritized), just not offered by default. The
+  search is **fuzzy, not prefix-only** (L4) — a typo, a missing apostrophe or a missing accent
+  ("kings row", "esperanca") still finds the real map; a typed value that can't resolve to
+  exactly one map keeps what you typed (instead of silently reverting to blank) and says why
+  right away. `Enter`
   saves, and `Ctrl+Enter` is **Save & log another** (which carries your heroes over — it's the same
   sitting). The header and the Save row **stay on screen** (L2 — sticky top/bottom within the
   card) on a card taller than the window, instead of scrolling the Save button out of view. The
   compact **account** select lives in the header (rarely changed mid-session); pick your **role**
   (Tank / Damage / Support / **Open Queue**); the **hero picker defaults to your most-played
-  heroes** for that role and account (chip grid, same tap-to-toggle as before) — **search** reaches
+  heroes** for that role and account (chip grid, same tap-to-toggle as before) — a fresh account,
+  or a role you've never queued, no longer opens to an empty grid (L4): a shortlist too short gets
+  padded out with the rest of the eligible heroes, alphabetically — **search** reaches
   any hero outside the shortlist, and how many heroes it suggests is configurable in **Settings ›
   Quick Log** (default 6). Every logged match is competitive, so there's no mode picker. Forgot to
   log during the session? The **Played** chips backfill a game 30 min / 1 h / 2 h into the past so

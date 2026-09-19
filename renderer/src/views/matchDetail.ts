@@ -19,7 +19,7 @@ import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../com
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
-import { mapPicker, resolveMapName, type MapPickerEntry } from '../components/mapPicker';
+import { mapPicker, resolveMapName, notKnownMapHint, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
@@ -553,8 +553,8 @@ function buildMatchEditor(
     const heroEditHost = h('div');
     const paintEditorHeroes = (): void => {
       const limit = prefs.get('suggestedHeroCount') ?? DEFAULT_SUGGESTED_HEROES;
-      const shortlist = (mostPlayed[d.account]?.[state.role] ?? []).slice(0, limit);
-      paintHeroChips(heroEditHost, heroes, state.role, ctx.data.masterData.heroes, { shortlist, search: true });
+      const shortlist = mostPlayed[d.account]?.[state.role] ?? [];
+      paintHeroChips(heroEditHost, heroes, state.role, ctx.data.masterData.heroes, { shortlist, shortlistLimit: limit, search: true });
     };
     paintEditorHeroes();
 
@@ -582,6 +582,12 @@ function buildMatchEditor(
         maps,
         recentMaps: ctx.data.matches.map((m) => m.map),
         onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
+        // L4: same hint as the log card, shown the moment the field can't
+        // resolve rather than only after a failed Save.
+        onInvalid: (typed) => {
+          mapError.textContent = notKnownMapHint(typed);
+          mapError.classList.remove('hidden');
+        },
       }),
     );
     mapField.append(mapError);
@@ -689,9 +695,7 @@ function buildMatchEditor(
       // Same guard as the log card: only a resolved, known map may save.
       const resolved = resolveMap();
       if (!resolved) {
-        mapError.textContent = state.map.trim()
-          ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
-          : 'Pick the map — start typing and choose from the list.';
+        mapError.textContent = notKnownMapHint(state.map);
         mapError.classList.remove('hidden');
         return;
       }

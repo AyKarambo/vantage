@@ -25,6 +25,22 @@ export interface TypeaheadOpts {
   strict?: boolean;
   /** Items in this set render visually muted/deprioritized in the list. */
   mutedItems?: ReadonlySet<string>;
+  /**
+   * Custom ranking for the typed-query pool (L4) — overrides the default
+   * startsWith/contains filter, e.g. `fuzzyRank` so a typo, a missing
+   * apostrophe or a missing accent ("kings row", "esperanca") still finds
+   * the real entry instead of coming up empty. Also backs `strict` mode's
+   * near-miss resolution on blur, below.
+   */
+  rank?: (query: string, pool: readonly string[]) => string[];
+  /**
+   * `strict` only (L4): fires on blur when the typed text resolves to
+   * neither an exact match nor a single unambiguous `rank` candidate — the
+   * field keeps what was typed (no more silently reverting to blank with no
+   * explanation) and gets an `is-invalid` class; the caller surfaces its own
+   * "not a known X" hint immediately instead of waiting for a save attempt.
+   */
+  onInvalid?: (typed: string) => void;
 }
 
 export function typeahead(opts: TypeaheadOpts): HTMLElement {
@@ -80,11 +96,11 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
       browsing = true;
     } else {
       const pool = opts.searchSuggestions ?? opts.suggestions;
-      const starts = pool.filter((s) => s.toLowerCase().startsWith(q));
-      const contains = pool.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
-      const combined = [...starts, ...contains];
-      // Stable sort: muted entries sink to the end, preserving starts-before-
-      // contains ordering within each bucket.
+      const combined = opts.rank
+        ? opts.rank(q, pool)
+        : [...pool.filter((s) => s.toLowerCase().startsWith(q)), ...pool.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q))];
+      // Stable sort: muted entries sink to the end, preserving the ranking's
+      // own ordering within each bucket.
       const ranked = opts.mutedItems
         ? [...combined.filter((s) => !opts.mutedItems!.has(s)), ...combined.filter((s) => opts.mutedItems!.has(s))]
         : combined;
@@ -97,6 +113,7 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
   };
 
   input.addEventListener('input', () => {
+    input.classList.remove('is-invalid'); // typing again is the start of a fix
     opts.onChange(input.value);
     refilter();
   });
@@ -122,16 +139,44 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
       closeList();
       if (!opts.strict) return;
       const pool = opts.searchSuggestions ?? opts.suggestions;
-      const q = input.value.trim().toLowerCase();
+      const typed = input.value.trim();
+      const q = typed.toLowerCase();
       const exact = pool.find((s) => s.toLowerCase() === q);
       if (exact) {
         committed = exact;
         input.value = exact;
+        input.classList.remove('is-invalid');
         opts.onChange(exact);
-      } else if (input.value !== committed) {
-        input.value = committed;
-        opts.onChange(committed);
+        return;
       }
+      // Near-miss resolution (L4): a typo, a missing apostrophe or accent
+      // ("kings row", "esperanca") that `rank` still resolves to exactly ONE
+      // candidate commits to it — uniqueness is the safety net, not the
+      // score alone, so genuinely ambiguous text still falls through below.
+      if (opts.rank && q) {
+        const candidates = opts.rank(q, pool);
+        if (candidates.length === 1) {
+          const [only] = candidates;
+          committed = only;
+          input.value = only;
+          input.classList.remove('is-invalid');
+          opts.onChange(only);
+          return;
+        }
+      }
+      if (!typed) {
+        // Nothing typed — quietly revert to the last committed value, same
+        // as before; there is nothing to flag as invalid about a blank field.
+        input.value = committed;
+        input.classList.remove('is-invalid');
+        opts.onChange(committed);
+        return;
+      }
+      // No exact or unique-fuzzy match: KEEP what was typed — silently
+      // wiping it to blank was the whole bug — flag it, and say why right
+      // away instead of only after a save attempt.
+      input.classList.add('is-invalid');
+      opts.onInvalid?.(input.value);
     }, 100);
   });
 

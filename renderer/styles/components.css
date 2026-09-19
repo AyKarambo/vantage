@@ -1030,6 +1030,13 @@ table.data tbody tr:focus-visible {
   width: 100%;
   box-sizing: border-box;
 }
+/* A strict typeahead's typed text that resolved to neither an exact nor a
+   unique near-miss match (L4) — the field keeps the text instead of
+   reverting to blank, and this marks it as not yet a real value. */
+.vt-input.is-invalid,
+.target-name-input.is-invalid {
+  border-color: var(--loss-border);
+}
 .vt-num {
   /* Wide enough to show a 5-digit per-10-minute threshold (e.g. damage 12500)
      plus the number stepper without clipping or inner scroll. */

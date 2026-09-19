@@ -13,7 +13,7 @@ import { time, roleLabel, signed } from '../format';
 import { registerShortcut } from '../shortcuts';
 import { badge, button, select } from '../components/primitives';
 import { openModal } from '../components/overlay';
-import { mapPicker, resolveMapName } from '../components/mapPicker';
+import { mapPicker, resolveMapName, notKnownMapHint } from '../components/mapPicker';
 import { targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
@@ -247,9 +247,7 @@ function buildForm(
     placementOfferFor = undefined;
     const map = resolveMap();
     if (!map) {
-      mapError.textContent = state.map.trim()
-        ? `"${state.map.trim()}" isn't a known map — pick one from the list.`
-        : 'Pick the map — start typing and choose from the list.';
+      mapError.textContent = notKnownMapHint(state.map);
       mapError.classList.remove('hidden');
       return false;
     }
@@ -417,6 +415,13 @@ function buildForm(
       maps: ctx.data.masterData.maps,
       recentMaps: ctx.data.matches.map((m) => m.map),
       onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
+      // L4: the same hint a failed Save attempt already showed, but the
+      // moment the field can't resolve — not silently blanked with Save
+      // just disabled and no explanation.
+      onInvalid: (typed) => {
+        mapError.textContent = notKnownMapHint(typed);
+        mapError.classList.remove('hidden');
+      },
     }),
   );
   mapField.append(mapError);
@@ -452,8 +457,8 @@ function buildForm(
   const heroHost = h('div');
   const paintHeroes = (): void => {
     const limit = prefs.get('suggestedHeroCount') ?? DEFAULT_SUGGESTED_HEROES;
-    const shortlist = (mostPlayed[state.account]?.[state.role] ?? []).slice(0, limit);
-    paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes, { shortlist, search: true });
+    const shortlist = mostPlayed[state.account]?.[state.role] ?? [];
+    paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes, { shortlist, shortlistLimit: limit, search: true });
   };
   paintHeroes();
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
