@@ -434,6 +434,21 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   role's overall winrate for context. A hero's drawer also gets a **＋ target** action that
   opens the builder already scoped to it. Absent on "All time" — there's nothing before
   everything — or when the active season has no earlier entry with data.
+- **Readiness stopped contradicting itself.** A calm, on-habit streak — "31 days in a row" with
+  no real volume spike — used to render as a red-severity signal next to a green "Steady"
+  verdict, because the signal read straight off the day count while the score's own streak
+  penalty is volume-gated and never actually charged for it. The signal now reads 'high' only
+  when the streak genuinely cost the score something (otherwise: "a calm habit, but a rest day
+  still helps"), a signal's colour is a function of the actual verdict too (a fired-but-offset
+  load streak reads amber under a green band, not the same red a real "loaded" verdict gets),
+  and a "Steady"/"Fresh" headline now says so explicitly when a load signal still fired — "Steady
+  — results are holding, but 23 days without a rest day is worth a break" — instead of a flat
+  "nothing flagged" beside a signal that read as its opposite. The **"What moves the score"**
+  card now shows the live arithmetic ("75 − 4 + 0 − 3 = 68") with diverging bars centred at 0
+  and each family's real (asymmetric) weight range, the trend chart draws faint per-day game
+  columns and a hollow dot for a day you didn't play, its reference lines sit at the actual
+  fresh/loaded cuts instead of a plain 0/50/100 grid, and every card now deep-links its own wiki
+  article via a **"?"** (previously only Verdict did).
 
 ## 0.34.0 — 31 July 2026
 

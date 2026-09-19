@@ -21,11 +21,12 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
     return wrap;
   }
 
-  const padL = 30, padR = 14, padT = 12, padB = 24, W = 720, H = 190;
+  const padL = 30, padR = 30, padT = 12, padB = 24, W = 720, H = 190;
   const n = points.length;
   const s = svgRoot(W, H);
   const xAt = (i: number): number => padL + (n === 1 ? 0 : (i / (n - 1)) * (W - padL - padR));
   const yAt = (v: number): number => padT + (1 - v / 100) * (H - padT - padB);
+  const plotBottom = H - padB;
 
   // Faint band zones — a quiet fresh→in-the-hole reference behind the line, not a
   // dominant backdrop: red (0–40), amber (40–70), green (70–100).
@@ -41,9 +42,34 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
     }));
   }
 
-  for (const v of [0, 50, 100]) {
-    s.appendChild(svgEl('line', { x1: padL, y1: yAt(v), x2: W - padR, y2: yAt(v), stroke: PALETTE.grid }));
-    s.appendChild(svgText(padL - 6, yAt(v) + 3, String(v), { anchor: 'end', size: 9, fill: PALETTE.dim }));
+  // Faint per-day game columns (C8) behind the line, on a small right-hand
+  // "games" axis of their own — the wiki said "greyed columns are days you
+  // didn't play" while the chart drew none; a day's actual volume is exactly
+  // the load context the score's own load family reads.
+  const maxGames = Math.max(1, ...points.map((p) => p.games));
+  const barW = Math.max(2, (W - padL - padR) / n - 2);
+  const barMaxH = (plotBottom - padT) * 0.3; // a quiet backdrop, not competing with the line
+  points.forEach((p, i) => {
+    if (p.games <= 0) return;
+    const bh = (p.games / maxGames) * barMaxH;
+    s.appendChild(svgEl('rect', {
+      x: xAt(i) - barW / 2, y: plotBottom - bh, width: barW, height: bh,
+      fill: PALETTE.dim, 'fill-opacity': 0.25,
+    }));
+  });
+  s.appendChild(svgText(W - padR + 6, plotBottom - barMaxH + 3, String(maxGames), { anchor: 'start', size: 8, fill: PALETTE.dim }));
+  s.appendChild(svgText(W - padR + 6, plotBottom + 3, 'games', { anchor: 'start', size: 8, fill: PALETTE.dim }));
+
+  // Dashed reference lines at the chart's own band cuts (40/70) — matching
+  // the zone tints above — instead of a plain 0/50/100 grid that had nothing
+  // to do with what the colour bands actually mean.
+  for (const [v, label] of [[70, 'fresh'], [40, 'loaded']] as const) {
+    s.appendChild(svgEl('line', {
+      x1: padL, y1: yAt(v), x2: W - padR, y2: yAt(v),
+      stroke: PALETTE.grid, 'stroke-dasharray': '4 4',
+    }));
+    s.appendChild(svgText(padL - 6, yAt(v) + 3, `${v}`, { anchor: 'end', size: 9, fill: PALETTE.dim }));
+    s.appendChild(svgText(padL + 4, yAt(v) - 3, label, { anchor: 'start', size: 8, fill: PALETTE.dim }));
   }
 
   // Coordinates of the scored points (skipping no-history days), shared by the
@@ -66,11 +92,18 @@ export function readinessChart(points: ReadinessTrendPoint[]): HTMLElement {
   }));
 
   // Dots + generous invisible hit targets wired to the shared app tooltip.
+  // A zero-game day (C8) draws hollow — a computed rest-day reading, not one
+  // you actually played, same distinction the game columns above make.
   const tips = tooltipLayer(wrap);
   points.forEach((p, i) => {
     if (p.score === null) return;
     const cx = xAt(i), cy = yAt(p.score);
-    s.appendChild(svgEl('circle', { cx, cy, r: 3, fill: PALETTE.accentBright }));
+    const played = p.games > 0;
+    s.appendChild(svgEl('circle', {
+      cx, cy, r: 3,
+      fill: played ? PALETTE.accentBright : 'none',
+      ...(played ? {} : { stroke: PALETTE.accentBright, 'stroke-width': 1.5 }),
+    }));
     const hit = svgEl('circle', { cx, cy, r: 11, fill: 'transparent', tabindex: 0 }); // K8
     hit.style.cursor = 'pointer';
     tips.attach(hit, `${p.date} · readiness ${p.score} · ${p.games} game${p.games === 1 ? '' : 's'}`);

@@ -44,6 +44,8 @@ export interface StateAt {
   deltas: { load: number; perf: number; subj: number };
   /** Fade-adjusted overload penalty (drives the `overload` driver tag). */
   overloadPen: number;
+  /** Did the day-streak penalty (own-norm surge, sustained) actually contribute to `deltas.load` (C8)? Drives the consecutive-days signal's severity — see `loadParts`. */
+  streakFired: boolean;
   driver: ReadinessDriver;
   /** Regime blend b ∈ [0,1] (from perf.blend) — how much of the acute window has comparable per-10 coverage. */
   blend: number;
@@ -70,6 +72,7 @@ const EMPTY_STATE: StateAt = {
   marathonSession: false,
   deltas: { load: 0, perf: 0, subj: 0 },
   overloadPen: 0,
+  streakFired: false,
   driver: 'neutral',
   blend: 0,
   regime: 'manual',
@@ -112,7 +115,7 @@ export function loadParts(
   restDays: number,
   blend: number,
   rankTrend: RankTrend = 'unknown',
-): { delta: number; overloadPen: number } {
+): { delta: number; overloadPen: number; streakFired: boolean } {
   const trust = Math.min(1, load.chronicActiveDays / T.minChronicActiveDays);
   const ratioPen = load.ratio > T.ratioElevated ? Math.min((load.ratio - T.ratioElevated) * 30, T.ratioPenCap) : 0;
   const habitBar = Math.max(T.absElevatedPerDay, T.habitFactor * load.chronicPerDay);
@@ -157,6 +160,11 @@ export function loadParts(
   return {
     delta: clamp(restEffectFor(restDays) - overloadPen - freqPen, T.loadDeltaMin, T.loadDeltaMax),
     overloadPen,
+    // Did the day-streak penalty itself actually contribute (C8), not just
+    // "is the streak long" — the consecutive-days signal's severity reads
+    // off this, not `load.consecutiveDays >= sustainedDays` alone, so it
+    // can no longer read 'high' while the score never charged for it.
+    streakFired: streakPen > 0,
   };
 }
 
@@ -205,6 +213,7 @@ export function computeStateAt(
     marathonSession,
     deltas: { load: lp.delta, perf: perf.delta * fade, subj: subj.delta * fade },
     overloadPen: lp.overloadPen,
+    streakFired: lp.streakFired,
     driver,
     blend: perf.blend,
     regime: regimeFor(perf.blend),
