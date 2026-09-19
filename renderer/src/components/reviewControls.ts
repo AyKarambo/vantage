@@ -51,6 +51,27 @@ export function targetGradeRow(
   return { el, set: control.set };
 }
 
+/**
+ * A compact H/P/M control for a target, sized for a collapsed Review row
+ * (R2) — single-letter labels (there's no room for the target's name on the
+ * row itself, so it lives in the group's `title` instead). `stopPropagation`
+ * keeps a click from also triggering the row's own click-to-expand.
+ */
+export function quickGradeChip(t: TargetSummary, onSet: (g: TargetGrade) => void): HTMLElement {
+  const btns = GRADES.map((o) => h('button', { class: 'segmented-opt', title: `${t.name} — ${o.label}` }, o.label[0]));
+  GRADES.forEach((o, i) => btns[i].addEventListener('click', (e) => {
+    e.stopPropagation();
+    btns.forEach((b, j) => {
+      const on = i === j;
+      b.classList.toggle('is-active', on);
+      b.style.background = on ? GRADES[j].bg : '';
+      b.style.color = on ? GRADES[j].fg : '';
+    });
+    onSet(o.v);
+  }));
+  return h('div', { class: 'segmented segmented--tiny', title: t.name }, ...btns);
+}
+
 /** A 3-way grade control that starts unselected, tinting the chosen grade. */
 function gradeControl(onChange: (g: TargetGrade) => void): { el: HTMLElement; set: (g: TargetGrade) => void } {
   const btns = GRADES.map((o) => h('button', { class: 'segmented-opt' }, o.label));
@@ -71,7 +92,7 @@ function gradeControl(onChange: (g: TargetGrade) => void): { el: HTMLElement; se
 }
 
 /** The boolean-valued mental flags the binary chips toggle (comms is separate — see below). */
-type BoolFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'leaverMyTeam' | 'leaverEnemyTeam';
+export type BoolFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'leaverMyTeam' | 'leaverEnemyTeam';
 
 const FLAGS: Array<{ label: string; key: BoolFlagKey }> = [
   { label: 'Tilt', key: 'tilt' },
@@ -86,7 +107,22 @@ const FLAGS: Array<{ label: string; key: BoolFlagKey }> = [
  * match-detail editor, and Review all render these exact chips.
  */
 export function mentalFlagChips(flags: MatchMental): HTMLElement {
-  return h('div', { class: 'review-flags' }, ...FLAGS.map((f) => flagChip(f.label, flags, f.key)));
+  return buildFlagChips(flags).el;
+}
+
+/** {@link mentalFlagChips}, but also handing back a `toggle` so a caller (Review's T/X keyboard shortcuts, R2) can flip a flag from outside a click and keep the chip's own visual state in sync. */
+function buildFlagChips(flags: MatchMental): { el: HTMLElement; toggle: (key: BoolFlagKey) => void } {
+  const chips = new Map<BoolFlagKey, HTMLElement>();
+  const el = h('div', { class: 'review-flags' }, ...FLAGS.map((f) => {
+    const btn = flagChip(f.label, flags, f.key);
+    chips.set(f.key, btn);
+    return btn;
+  }));
+  const toggle = (key: BoolFlagKey): void => {
+    flags[key] = !flags[key];
+    chips.get(key)?.classList.toggle('is-on', Boolean(flags[key]));
+  };
+  return { el, toggle };
 }
 
 /**
@@ -110,15 +146,19 @@ export function commsToneSwitch(flags: MatchMental): HTMLElement {
 /**
  * Review's bundled "how it felt" block: the flag chips over the labelled comms
  * switch — a composition of {@link mentalFlagChips} and {@link commsToneSwitch}.
+ * Also hands back `toggleFlag` so Review's T/X keyboard shortcuts (R2) can
+ * flip Tilt/Toxic mates without a click.
  */
-export function mentalFlagsRow(flags: MatchMental): HTMLElement {
-  return h('div', { class: 'stack', style: { gap: '10px' } },
-    mentalFlagChips(flags),
+export function mentalFlagsRow(flags: MatchMental): { el: HTMLElement; toggleFlag: (key: BoolFlagKey) => void } {
+  const flagChips = buildFlagChips(flags);
+  const el = h('div', { class: 'stack', style: { gap: '10px' } },
+    flagChips.el,
     h('div', null,
       h('div', { class: 'field-label', style: { marginBottom: '6px' } }, 'Comms'),
       commsToneSwitch(flags),
     ),
   );
+  return { el, toggleFlag: flagChips.toggle };
 }
 
 function flagChip(label: string, flags: MatchMental, key: BoolFlagKey): HTMLElement {

@@ -24,7 +24,7 @@ import { matchInTargetScope, parseMeasuredRule } from '../../../src/core/targets
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { relTime, roleLabel } from '../format';
 import { badge, button, card, chip, confirmButton, emptyState, resultPill } from '../components/primitives';
-import { targetGradeRow, mentalFlagsRow } from '../components/reviewControls';
+import { targetGradeRow, mentalFlagsRow, quickGradeChip, type BoolFlagKey } from '../components/reviewControls';
 import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
 import { toast } from '../components/toast';
@@ -41,10 +41,17 @@ import { viewHead, type ViewContext } from './view';
 
 /**
  * Keyboard grading: while a grading card is open on the Review screen, H/P/M
- * grade the focused target (advancing to the next), S saves. The hook is set
- * by the mounted card; the `when` gates keep stale hooks inert.
+ * grade the focused target (advancing to the next), S saves, N skips to the
+ * next pending game (R2), T/X toggle the Tilt / Toxic mates flags. The hook
+ * is set by the mounted card; the `when` gates keep stale hooks inert.
  */
-let kbHook: { el: HTMLElement; grade: (g: TargetGrade) => void; save: () => void } | null = null;
+let kbHook: {
+  el: HTMLElement;
+  grade: (g: TargetGrade) => void;
+  save: () => void;
+  skip: () => void;
+  toggleFlag: (key: BoolFlagKey) => void;
+} | null = null;
 const kbActive = (): boolean =>
   store.get().view === 'review' && kbHook !== null && kbHook.el.isConnected;
 
@@ -52,6 +59,9 @@ registerShortcut({ combo: 'h', description: 'Grade focused target: Hit', group: 
 registerShortcut({ combo: 'p', description: 'Grade focused target: Partial', group: 'Review', when: kbActive, run: () => kbHook?.grade('partial') });
 registerShortcut({ combo: 'm', description: 'Grade focused target: Missed', group: 'Review', when: kbActive, run: () => kbHook?.grade('missed') });
 registerShortcut({ combo: 's', description: 'Save the open review & advance', group: 'Review', when: kbActive, run: () => kbHook?.save() });
+registerShortcut({ combo: 'n', description: 'Skip — leave for later, open the next game', group: 'Review', when: kbActive, run: () => kbHook?.skip() });
+registerShortcut({ combo: 't', description: 'Toggle Tilt on the open game', group: 'Review', when: kbActive, run: () => kbHook?.toggleFlag('tilt') });
+registerShortcut({ combo: 'x', description: 'Toggle Toxic mates on the open game', group: 'Review', when: kbActive, run: () => kbHook?.toggleFlag('toxicMates') });
 
 export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
@@ -80,12 +90,17 @@ export function review(ctx: ViewContext): HTMLElement {
     );
   }
 
+  // A sibling-aware chain (R2): each item's Skip opens the next pending one
+  // and scrolls to it — plain "collapse and hope the player finds the next
+  // row" was the opposite of a triage flow.
+  const items = pending.map((m, i) => item(m, active, i === 0, d.placements));
+  for (let i = 0; i < items.length; i++) items[i].next = items[i + 1] ?? null;
+
   return h('div', { class: 'view view--narrow' },
     head,
     activeStrip(active),
     needsResultSection,
-    h('div', { class: 'stack', style: { gap: '10px' } },
-      ...pending.map((m, i) => item(m, active, i === 0, d.placements))),
+    h('div', { class: 'stack', style: { gap: '10px' } }, ...items.map((it) => it.host)),
   );
 }
 
@@ -285,25 +300,98 @@ function activeStrip(active: TargetSummary[]): HTMLElement {
   );
 }
 
-/** One inbox entry: a collapsed row that expands into the grading card. */
+/** An inbox entry's controller — its host node plus the sibling {@link item} Skip opens next (R2). */
+interface ReviewItem {
+  host: HTMLElement;
+  next: ReviewItem | null;
+  open: () => void;
+}
+
+/** In-scope, self-rated (hand-graded) targets for a match — measured targets auto-grade and never appear here. Shared by the collapsed quick-grade row and the expanded card so they can't disagree on which targets a game needs. */
+function selfTargetsFor(m: MatchRow, active: TargetSummary[]): TargetSummary[] {
+  return active.filter((t) => t.mode !== 'measured' && matchInTargetScope(m, t));
+}
+
+/**
+ * The minimal save behind a collapsed row's quick-grade chips (R2): just the
+ * self-rated grades and whatever flags were toggled — SR, performance and
+ * placement/rank handling stay behind the full card ("Grade"), which is
+ * where a player who needs them already goes. Same toast+Undo as the full
+ * save, but no placement-confirm/offer follow-up: quick-grade never touches
+ * rank data, so there is nothing new for either of those to react to.
+ */
+function quickSave(m: MatchRow, grades: Record<string, TargetGrade>, flags: MatchMental, onDone: () => void): void {
+  void bridge.saveReview({ matchId: m.matchId, grades, flags }).then(() => {
+    gradedThisSession.add(m.matchId);
+    onDone();
+    toast(`Review saved — ${m.map}`, {
+      action: {
+        label: 'Undo',
+        run: () => void bridge.clearReview(m.matchId).then(() => {
+          gradedThisSession.delete(m.matchId);
+          store.rerender();
+          void store.refresh();
+        }),
+      },
+    });
+  });
+}
+
+/** One inbox entry: a collapsed row (with inline quick-grade) that expands into the full grading card. */
 function item(
   m: MatchRow,
   active: TargetSummary[],
   startOpen: boolean,
   placements: PlacementRunSummary[],
-): HTMLElement {
+): ReviewItem {
   const host = h('div');
   let open = startOpen;
+  const controller: ReviewItem = { host, next: null, open: () => { open = true; draw(); } };
+  const skipToNext = (): void => {
+    open = false;
+    draw();
+    // Open the next pending sibling and bring it into view — Skip used to
+    // only collapse the current card, leaving the player to scroll down and
+    // click "Grade" themselves; "Skip" still means "later", not "graded"
+    // (the game stays in the inbox either way).
+    if (controller.next) {
+      controller.next.open();
+      controller.next.host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+  // The full card's own "saved" refresh — reused by the collapsed row's
+  // quick-grade path too, since a quick-graded game must leave the inbox the
+  // same way a fully-graded one does, not just sit there re-collapsed.
+  const onSaved = (): void => { store.rerender(); void store.refresh(); };
   const draw = (): void => {
     render(host, open
-      ? expanded(m, active, () => { store.rerender(); void store.refresh(); }, () => { open = false; draw(); }, placements)
-      : collapsed(m, () => { open = true; draw(); }));
+      ? expanded(m, active, onSaved, skipToNext, placements)
+      : collapsed(m, active, () => { open = true; draw(); }, onSaved));
   };
   draw();
-  return host;
+  return controller;
 }
 
-function collapsed(m: MatchRow, onGrade: () => void): HTMLElement {
+function collapsed(m: MatchRow, active: TargetSummary[], onOpen: () => void, onGraded: () => void): HTMLElement {
+  const selfTargets = selfTargetsFor(m, active);
+  const grades: Record<string, TargetGrade> = {};
+  const flags: MatchMental = {};
+  let saved = false;
+  // Fires once every in-scope self-rated target has a grade (R2) — with zero
+  // active self-rated targets, toggling Tilt alone is the only interaction
+  // there is, so that becomes the trigger instead.
+  const maybeSave = (): void => {
+    if (saved) return;
+    if (selfTargets.length ? Object.keys(grades).length < selfTargets.length : !flags.tilt) return;
+    saved = true;
+    quickSave(m, grades, flags, onGraded);
+  };
+  const grid = selfTargets.length
+    ? h('div', { class: 'review-quick-grade' },
+        ...selfTargets.map((t) => quickGradeChip(t, (g) => { grades[t.id] = g; maybeSave(); })),
+        tiltToggle(flags, maybeSave),
+      )
+    : h('div', { class: 'review-quick-grade' }, tiltToggle(flags, maybeSave));
   return h('div', { class: 'review-row' },
     h('span', { class: 'review-auto', title: 'auto-detected' }, '⚡'),
     resultPill(m.result),
@@ -312,8 +400,21 @@ function collapsed(m: MatchRow, onGrade: () => void): HTMLElement {
       h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
         `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
     ),
-    button('Grade', { onClick: onGrade }),
+    grid,
+    button('Grade', { onClick: onOpen }),
   );
+}
+
+/** The collapsed row's Tilt toggle (R2) — a plain chip, same visual language as {@link import('../components/reviewControls').mentalFlagChips}'s. */
+function tiltToggle(flags: MatchMental, onToggle: () => void): HTMLElement {
+  const btn = h('button', { class: 'chip', title: 'Flag this game as tilted' }, 'Tilt');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    flags.tilt = !flags.tilt;
+    btn.classList.toggle('is-on', Boolean(flags.tilt));
+    onToggle();
+  });
+  return btn;
 }
 
 function expanded(
@@ -510,6 +611,8 @@ function expanded(
     });
   };
 
+  const flagsRow = mentalFlagsRow(flags);
+
   const el = card({ variant: 'raised', class: 'review-card' },
     h('div', { class: 'review-card-head' },
       h('span', { class: 'badge badge--auto' }, '⚡ auto'),
@@ -523,7 +626,7 @@ function expanded(
         ? targetEls
         : [h('div', { class: 'hint' }, 'No active targets yet — add some on the Targets page to grade them here.')]),
     )),
-    section('◎ How it felt', mentalFlagsRow(flags)),
+    section('◎ How it felt', flagsRow.el),
     section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
     // Competitive only — GEP can't report SR, so the player enters what the game
     // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
@@ -531,7 +634,8 @@ function expanded(
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),
-      h('span', { class: 'u-dim', style: { fontSize: '10.5px', marginLeft: 'auto' } }, 'keys: H / P / M grade · S saves'),
+      h('span', { class: 'u-dim', style: { fontSize: '10.5px', marginLeft: 'auto' } },
+        'keys: H P M grade · S save · N skip · T tilt · X toxic'),
       // Deliberately NOT labelled "Not a real match" — the pending rows above
       // carry that label for a match that never entered history, and this one
       // destroys a recorded game. Same words on one screen for two very
@@ -563,6 +667,8 @@ function expanded(
       markFocus();
     },
     save: doSave,
+    skip: onSkip,
+    toggleFlag: flagsRow.toggleFlag,
   };
   return el;
 }

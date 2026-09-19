@@ -490,6 +490,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   with the "not a known map" hint shown immediately rather than only after a failed Save. A fresh
   account, or a role you've never queued, no longer opens the hero picker to an empty grid either
   — a short "most played" shortlist now pads out with the rest of the eligible heroes.
+- **Grading a game you already know the read on is a couple of clicks, not a full card.**
+  Review's collapsed rows now carry inline **H/P/M** chips for their self-rated targets plus a
+  **Tilt** toggle — grade them right there and the game saves and clears itself; SR, performance
+  and comms still live behind the full **Grade** card for when you want them. **Skip** on an open
+  card now opens the next pending game and scrolls to it, instead of just collapsing and leaving
+  you to find it yourself, and three new keys cover the rest of the loop: **N** skips, **T**/**X**
+  toggle Tilt/Toxic mates.
 
 ## 0.34.0 — 31 July 2026
 
