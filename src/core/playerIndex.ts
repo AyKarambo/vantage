@@ -120,6 +120,8 @@ export function playerMatchHistory(
   const sameTeam = { wins: 0, losses: 0 };
   const enemyTeam = { wins: 0, losses: 0 };
   const matches: PlayerSharedMatch[] = [];
+  /** Games per hero + the most recent one seen, for `theirHeroes`' top-3-by-count-then-recency (M6). */
+  const heroCounts = new Map<string, { games: number; lastSeen: number }>();
 
   for (const game of all) {
     if (!game.roster?.length) continue;
@@ -152,6 +154,12 @@ export function playerMatchHistory(
     lastSeen = Math.max(lastSeen, game.timestamp);
     // Prefer a full battleTag over a bare name, wherever one shows up.
     if (them.battleTag?.includes('#') && !display.includes('#')) display = them.battleTag.trim();
+    if (them.heroName) {
+      const h = heroCounts.get(them.heroName) ?? { games: 0, lastSeen: 0 };
+      h.games += 1;
+      h.lastSeen = Math.max(h.lastSeen, game.timestamp);
+      heroCounts.set(them.heroName, h);
+    }
     if (game.result === 'Win') {
       results.wins += 1;
       if (relation === true) sameTeam.wins += 1;
@@ -165,7 +173,12 @@ export function playerMatchHistory(
 
   if (!matches.length) return null;
   matches.sort((a, b) => b.timestamp - a.timestamp);
-  return { name: display || 'Unknown', encounters: matches.length, lastSeen, results, sameTeam, enemyTeam, matches };
+  const theirHeroes = [...heroCounts.entries()]
+    .sort((a, b) => b[1].games - a[1].games || b[1].lastSeen - a[1].lastSeen)
+    .slice(0, 3)
+    .map(([hero, c]) => ({ hero, games: c.games }));
+  const form = matches.slice(0, 10).map((m) => m.result);
+  return { name: display || 'Unknown', encounters: matches.length, lastSeen, results, sameTeam, enemyTeam, theirHeroes, form, matches };
 }
 
 /**

@@ -842,6 +842,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   **with** or **against** — "who have I only ever faced?" used to mean scanning every row's With
   you/Against you columns by eye. The **Last seen** column now also carries a dim "with"/"vs"
   note for whether that person was on your team the last time you played together (M6).
+- **A player's page now says who they are at a glance.** Their top 3 heroes and a last-10 W/L
+  strip sit right under the name — no more scanning the whole match table to answer "who do they
+  play?" or "how are they running lately?". Filter chips (All / With you / Against you / Side
+  unknown) narrow the record itself, updating the W/L line to match; the shared-match table is
+  now sortable on Map, Mode, Side, Account and When (M6).
 
 ## 0.34.0 — 31 July 2026
 

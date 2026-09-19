@@ -240,6 +240,39 @@ describe('playerMatchHistory', () => {
     expect(h.enemyTeam).toEqual({ wins: 0, losses: 1 });
   });
 
+  it('theirHeroes (M6) ranks by game count, ties broken by recency, capped at 3', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 1000, roster: [meT(0), them('Nova#1', 0, 'Ana')] }),
+      game({ result: 'Win', timestamp: 2000, roster: [meT(0), them('Nova#1', 0, 'Ana')] }), // Ana: 2 games, last at 2000
+      game({ result: 'Win', timestamp: 3000, roster: [meT(0), them('Nova#1', 0, 'Kiriko')] }),
+      game({ result: 'Win', timestamp: 4000, roster: [meT(0), them('Nova#1', 0, 'Kiriko')] }), // Kiriko: 2 games, last at 4000 — ties Ana on count, wins on recency
+      game({ result: 'Win', timestamp: 5000, roster: [meT(0), them('Nova#1', 0, 'Moira')] }), // Moira: 1 game
+      game({ result: 'Win', timestamp: 6000, roster: [meT(0), them('Nova#1', 0, 'Zenyatta')] }), // Zenyatta: 1 game, more recent than Moira — Moira falls off the top-3
+    ];
+    const h = playerMatchHistory(all, 'Nova#1')!;
+    expect(h.theirHeroes).toEqual([
+      { hero: 'Kiriko', games: 2 },
+      { hero: 'Ana', games: 2 },
+      { hero: 'Zenyatta', games: 1 },
+    ]);
+  });
+
+  it('theirHeroes is empty when the feed never reported their hero', () => {
+    const themNoHero: RosterPlayer = { battleTag: 'Nova#1', team: 0 };
+    const h = playerMatchHistory([game({ result: 'Win', roster: [meT(0), themNoHero] })], 'Nova#1')!;
+    expect(h.theirHeroes).toEqual([]);
+  });
+
+  it('form (M6) carries the last 10 results newest-first, including draws and undecided-side games', () => {
+    const all = Array.from({ length: 12 }, (_, i) =>
+      game({ result: i % 3 === 0 ? 'Draw' : i % 2 === 0 ? 'Win' : 'Loss', timestamp: 1000 + i * 1000, roster: [meT(0), them('Nova#1', 0)] }));
+    const h = playerMatchHistory(all, 'Nova#1')!;
+    expect(h.form).toHaveLength(10);
+    // Newest first: the last-created game (i=11, odd → Loss) leads.
+    expect(h.form[0]).toBe('Loss');
+    expect(h.form).toEqual(h.matches.slice(0, 10).map((m) => m.result));
+  });
+
   it('returns a single match when met once', () => {
     const h = playerMatchHistory([game({ result: 'Win', roster: [meT(0), them('Solo#1', 0)] })], 'Solo#1')!;
     expect(h.encounters).toBe(1);

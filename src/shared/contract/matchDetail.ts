@@ -179,6 +179,14 @@ export interface PlayerMatchHistory {
   sameTeam: { wins: number; losses: number };
   /** W/L split for matches where they were on the enemy team (team relation known). */
   enemyTeam: { wins: number; losses: number };
+  /**
+   * Their top 3 heroes by game count (M6), ties broken by recency — "who they
+   * are" at a glance, without scanning the whole match table. Empty when no
+   * shared match ever reported their hero.
+   */
+  theirHeroes: Array<{ hero: string; games: number }>;
+  /** Their last 10 shared-match results (decided or not), newest first (M6). */
+  form: Result[];
   /** The shared matches, newest first. */
   matches: PlayerSharedMatch[];
 }

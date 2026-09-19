@@ -15,9 +15,10 @@ import { h, render } from '../dom';
 import type { PlayerMatchHistory, PlayerSharedMatch, Role, SharedMatchRank } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { rankLabel, relTime, RELATION_LABEL } from '../format';
-import { card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
+import { card, chip, emptyState, pill, resultPill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
 import { roleIcon } from '../components/roleIcon';
-import { clickableRow } from '../components/clickableRow';
+import { dataTable, type Column } from '../components/table';
+import { roleOfHero } from '../../../src/core/heroes';
 import { backControl, viewHead, type ViewContext } from './view';
 
 export function playerHistory(ctx: ViewContext): HTMLElement {
@@ -33,7 +34,7 @@ export function playerHistory(ctx: ViewContext): HTMLElement {
       render(host, backRow(), card({}, emptyState(`No tracked matches with ${name} yet.`)));
       return;
     }
-    render(host, ...sections(data, ctx));
+    render(host, sections(data, ctx));
   });
   return host;
 }
@@ -47,40 +48,97 @@ function backRow(): HTMLElement {
   return h('div', { style: { marginBottom: '4px' } }, backControl());
 }
 
-function sections(d: PlayerMatchHistory, ctx: ViewContext): Node[] {
-  const decided = d.results.wins + d.results.losses;
-  const wr = decided ? Math.round((d.results.wins / decided) * 100) : null;
-  const sub = [
-    // "all time" is load-bearing: the Players list counts under the filter bar,
-    // so the two numbers legitimately differ and each says which it shows.
-    `${d.encounters} shared ${d.encounters === 1 ? 'game' : 'games'}, all time`,
-    `last ${relTime(d.lastSeen)}`,
-    `${d.results.wins}W ${d.results.losses}L${wr != null ? ` · ${wr}% WR` : ''}`,
-  ].join(' · ');
-  return [
+/** Which shared matches the filter chip row narrows the table (and head W/L line) to (M6). */
+type MatchFilter = 'all' | 'with' | 'vs' | 'unknown';
+const FILTER_STEPS: ReadonlyArray<{ value: MatchFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'with', label: RELATION_LABEL.with.long },
+  { value: 'vs', label: RELATION_LABEL.against.long },
+  { value: 'unknown', label: 'Side unknown' },
+];
+
+function applyFilter(matches: readonly PlayerSharedMatch[], f: MatchFilter): PlayerSharedMatch[] {
+  if (f === 'with') return matches.filter((m) => m.sameTeam === true);
+  if (f === 'vs') return matches.filter((m) => m.sameTeam === false);
+  if (f === 'unknown') return matches.filter((m) => m.sameTeam === undefined);
+  return [...matches];
+}
+
+/** `sections` owns view-local filter state (M6) — one render per player, chips repaint the head W/L line + table in place without a re-fetch. */
+function sections(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement {
+  let filter: MatchFilter = 'all';
+  const wlHost = h('span');
+  const chipRow = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', margin: '0 0 12px' } });
+  const tableHost = h('div');
+
+  const paintChips = (): void => {
+    render(chipRow, ...FILTER_STEPS.map((s) => chip(s.label, filter === s.value, () => {
+      filter = s.value;
+      paintChips();
+      paintTable();
+    })));
+  };
+
+  const paintTable = (): void => {
+    const matches = applyFilter(d.matches, filter);
+    const decided = matches.reduce((n, m) => n + (m.result !== 'Draw' ? 1 : 0), 0);
+    const wins = matches.filter((m) => m.result === 'Win').length;
+    const wr = decided ? Math.round((wins / decided) * 100) : null;
+    // M6: the head's W/L line reflects the ACTIVE filter's subset — "N shared
+    // games, all time" above it stays the lifetime fact (this screen is
+    // deliberately unscoped), but the record itself is what the chip row
+    // claims to be narrowing.
+    render(wlHost, `${wins}W ${matches.filter((m) => m.result === 'Loss').length}L${wr != null ? ` · ${wr}% WR` : ''}`);
+    render(tableHost, matches.length
+      ? dataTable({
+          columns: matchColumns(),
+          rows: matches,
+          initialSort: { key: 'when', dir: -1 },
+          onRowClick: (m) => ctx.navigate('matchDetail', { matchId: m.matchId }),
+        })
+      : emptyState('No games match this filter.'));
+  };
+
+  paintChips();
+  paintTable();
+
+  const sub = h('span', null,
+    `${d.encounters} shared ${d.encounters === 1 ? 'game' : 'games'}, all time · last ${relTime(d.lastSeen)} · `,
+    wlHost,
+  );
+
+  return h('div', null,
     viewHead(d.name, sub),
+    whoTheyAreBand(d),
     teamSplit(d),
-    card({ class: 'card--flush', style: { padding: '4px 10px 10px' } },
-      h('div', { class: 'table-wrap' },
-        h('table', { class: 'data' },
-          h('thead', null,
-            h('tr', null,
-              h('th', null, 'Map'),
-              h('th', null, 'Mode'),
-              h('th', null, 'Side'),
-              h('th', null, 'They played'),
-              h('th', null, 'You played'),
-              h('th', null, 'Account'),
-              h('th', null, 'Your rank'),
-              h('th', null, 'When'),
-            ),
-          ),
-          h('tbody', null, ...d.matches.map((m) => matchRow(m, ctx))),
-        ),
-      ),
-    ),
+    chipRow,
+    card({ class: 'card--flush', style: { padding: '4px 10px 10px' } }, tableHost),
     rankFootnote(d),
-  ].filter((n): n is HTMLElement => n != null);
+  );
+}
+
+/**
+ * "Who they are" at a glance (M6) — their top 3 heroes by game count and a
+ * last-10 W/L dot strip, so answering doesn't require scanning the whole
+ * shared-match table. Omitted when the feed never reported a hero for them
+ * (heroes) or there are no shared matches at all (form — never actually
+ * reached, `sections` only runs with `matches.length > 0`, kept for safety).
+ */
+function whoTheyAreBand(d: PlayerMatchHistory): HTMLElement | null {
+  if (!d.theirHeroes.length && !d.form.length) return null;
+  return h('div', { class: 'stack', style: { gap: '6px', margin: '0 0 12px' } },
+    d.theirHeroes.length
+      ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+          ...d.theirHeroes.map((hs) => h('span', {
+            class: 'tag', style: { display: 'inline-flex', alignItems: 'center', gap: '5px' },
+          }, roleIcon(roleOfHero(hs.hero), { size: 12 }), `${hs.hero} ×${hs.games}`)))
+      : null,
+    d.form.length
+      ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' } },
+          h('span', { class: 'u-dim', style: { fontSize: '11px', marginRight: '2px' } }, `Last ${d.form.length}`),
+          ...d.form.map((r) => resultPill(r)))
+      : null,
+  );
 }
 
 /** Your record split by whether they were on your team — omitted when unknown. */
@@ -109,19 +167,19 @@ const RANK_DERIVED_TITLE =
   + 'and setting a new rank rewrites it.';
 
 /**
- * One rank cell. Never a shield and never a movement arrow: `SharedMatchRank`
- * carries no protection flag precisely so this cell cannot assert one, and a
- * derivative across two derived cells could invent a division change that never
- * happened.
+ * One rank cell's content. Never a shield and never a movement arrow:
+ * `SharedMatchRank` carries no protection flag precisely so this cell cannot
+ * assert one, and a derivative across two derived cells could invent a
+ * division change that never happened.
  */
-function rankCell(r: PlayerSharedMatch['rank']): HTMLElement {
-  if (!r) return h('td', { class: 'mono u-muted', title: 'Not a competitive match.' }, '—');
+function rankCell(r: PlayerSharedMatch['rank']): Node {
+  if (!r) return h('span', { class: 'mono u-muted', title: 'Not a competitive match.' }, '—');
   if (r.tier == null || r.division == null) {
-    return h('td', { class: 'mono u-muted', title: RANK_BLANK_REASON[r.note] }, '—');
+    return h('span', { class: 'mono u-muted', title: RANK_BLANK_REASON[r.note] }, '—');
   }
   const label = `${rankLabel(r.tier, r.division)} · ${Math.round(r.progressPct ?? 0)}%`;
-  if (r.note === 'stored') return h('td', { class: 'mono', title: RANK_STORED_TITLE }, label);
-  return h('td', { class: 'mono u-muted', title: RANK_DERIVED_TITLE },
+  if (r.note === 'stored') return h('span', { class: 'mono', title: RANK_STORED_TITLE }, label);
+  return h('span', { class: 'mono u-muted', title: RANK_DERIVED_TITLE },
     label, h('span', { class: 'u-dim' }, ' est.'));
 }
 
@@ -135,48 +193,55 @@ function rankFootnote(d: PlayerMatchHistory): HTMLElement | null {
 }
 
 /** A role badge plus hero name(s), or a blank when the feed reported neither. */
-function playedCell(heroes: string[], role: Role | undefined, title?: string): HTMLElement {
+function playedCell(heroes: string[], role: Role | undefined, title?: string): Node {
   if (!heroes.length && !role) {
     // A masked roster slot legitimately has no hero — blank, never "Unknown".
-    return h('td', { class: 'u-muted', title: 'The game feed did not report this.' }, '—');
+    return h('span', { class: 'u-muted', title: 'The game feed did not report this.' }, '—');
   }
-  const cell = h('td', null,
-    h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' } },
-      role ? h('span', { class: 'tag tag--role' }, roleIcon(role)) : null,
-      heroes.length ? h('span', null, heroes.join(', ')) : null,
-    ),
+  const cell = h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' } },
+    role ? h('span', { class: 'tag tag--role' }, roleIcon(role)) : null,
+    heroes.length ? h('span', null, heroes.join(', ')) : null,
   );
   if (title) cell.title = title;
   return cell;
 }
 
-/** One shared match, click-through to its detail. */
-function matchRow(m: PlayerSharedMatch, ctx: ViewContext): HTMLElement {
-  const state = RESULT_STATE[m.result];
+/** Side cell content, or a blank when the feed didn't report both teams. */
+function sideCell(m: PlayerSharedMatch): Node {
   const relation = m.sameTeam === true ? RELATION_LABEL.with.short : m.sameTeam === false ? RELATION_LABEL.against.short : null;
-  const open = (): void => ctx.navigate('matchDetail', { matchId: m.matchId });
-  const row = h('tr', { class: 'is-clickable', title: `Open your ${m.map} match`, ...clickableRow(open) },
-    h('td', null,
-      h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
-        h('span', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
+  return relation
+    ? h('span', null, relation)
+    : h('span', { class: 'u-muted', title: 'The game feed did not report both teams.' }, '—');
+}
+
+/**
+ * Table columns (M6) — Map, Mode, Side, Account and When are locally sortable
+ * (`dataTable`, no `onSort`: the whole uncapped list is already in the
+ * renderer, unlike Players' capped page); They played / You played / Your
+ * rank stay `sortable: false` — compound, rendered cells with no single
+ * scalar a header click could honestly order by.
+ */
+function matchColumns(): Array<Column<PlayerSharedMatch>> {
+  return [
+    {
+      key: 'map', label: 'Map', get: (m) => m.map,
+      render: (m) => h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
+        h('span', { class: `match-result is-${RESULT_STATE[m.result]}` }, RESULT_LETTER[m.result]),
         h('span', null, m.map),
       ),
-    ),
-    h('td', null, pill(m.mapType, 'accent')),
-    relation
-      ? h('td', null, relation)
-      // Withheld unless the feed reported a team for BOTH rows — a guess here
-      // would defeat the point of the column.
-      : h('td', { class: 'u-muted', title: 'The game feed did not report both teams.' }, '—'),
-    // Singular by necessity: the feed only ever gave us their LAST hero.
-    playedCell(m.hero ? [m.hero] : [], m.theirRole,
-      m.hero ? 'The last hero the game feed reported for them.' : undefined),
-    // Your own swaps ARE known, so this can be a list. The role is what the rank
-    // column is keyed by — rank is tracked per account x role.
-    playedCell(m.heroes, m.role),
-    h('td', { class: 'u-muted' }, m.account),
-    rankCell(m.rank),
-    h('td', { class: 'u-dim mono' }, relTime(m.timestamp)),
-  );
-  return row;
+    },
+    { key: 'mode', label: 'Mode', get: (m) => m.mapType, render: (m) => pill(m.mapType, 'accent') },
+    { key: 'side', label: 'Side', get: (m) => (m.sameTeam === true ? 'with' : m.sameTeam === false ? 'vs' : ''), render: (m) => sideCell(m) },
+    {
+      key: 'theirs', label: 'They played', get: () => null, sortable: false,
+      render: (m) => playedCell(m.hero ? [m.hero] : [], m.theirRole, m.hero ? 'The last hero the game feed reported for them.' : undefined),
+    },
+    {
+      key: 'yours', label: 'You played', get: () => null, sortable: false,
+      render: (m) => playedCell(m.heroes, m.role),
+    },
+    { key: 'account', label: 'Account', get: (m) => m.account, render: (m) => h('span', { class: 'u-muted' }, m.account) },
+    { key: 'rank', label: 'Your rank', get: () => null, sortable: false, render: (m) => rankCell(m.rank) },
+    { key: 'when', label: 'When', get: (m) => m.timestamp, render: (m) => h('span', { class: 'u-dim mono' }, relTime(m.timestamp)) },
+  ];
 }
