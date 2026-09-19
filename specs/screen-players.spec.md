@@ -1,10 +1,12 @@
 # Screen spec: Players (`players`) and the player drill-down (`playerHistory`)
 
 **Source:** `renderer/src/views/players.ts`, `renderer/src/views/playerHistory.ts`,
-`src/core/playerIndex.ts` (`playerDirectory`, also behind `DashboardData.recentPlayers` —
-the command palette's small Player-item slice, M5, see `screen-shell.spec.md`),
-`src/core/rank/entering.ts`, `src/main/dashboard/reads.ts`
-(`playerListRead`, `playerHistoryRead`), `src/shared/contract/players.ts`.
+`src/core/playerIndex.ts` (`playerDirectory`, `playerMatchHistory`'s `theirHeroes`/`form`, M6;
+also behind `DashboardData.recentPlayers` — the command palette's small Player-item slice, M5,
+see `screen-shell.spec.md`), `src/core/heroes.ts` (`roleOfHero`, M6), `src/core/rank/entering.ts`,
+`renderer/src/components/table.ts` (`dataTable`, M6), `renderer/src/components/roleIcon.ts`,
+`src/main/dashboard/reads.ts` (`playerListRead`, `playerHistoryRead`),
+`src/shared/contract/players.ts`, `src/shared/contract/matchDetail.ts`.
 
 **Shared context:** Players is a normal top-level screen scoped by the global filter bar;
 `playerHistory` is a parameterized drill-down (`playerName`) registered in `VIEWS` but not
@@ -73,9 +75,27 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
 ## The player drill-down — layout & behaviour
 
 - **Head:** the player's name, then `N shared games, all time · last seen · W/L · WR`, with the
-  teammate/opponent split beneath. "All time" is load-bearing wording.
-- **Shared-match table:** Map · Mode · Side · They played · You played · Account · Your rank ·
-  When. Every row opens that match.
+  teammate/opponent split beneath. "All time" is load-bearing wording — the games-count clause
+  stays the lifetime total even while the W/L/WR clause reflects the active filter chip below
+  (M6): the two can legitimately disagree (e.g. "51 shared games, all time · 6W 6L · 50% WR"
+  once narrowed to "With you") — the record is what the chip claims to be narrowing, the count
+  above it is not.
+- **"Who they are" band** (M6, `whoTheyAreBand`): their top 3 heroes by game count (ties broken
+  by recency), each a chip with a role icon — "Tracer ×7 · Juno ×4 · Zenyatta ×3" — then a
+  last-10 shared-result dot strip (`resultPill`, the same W/L/D colouring every other result pill
+  in the app uses). Either half is omitted when its source data is empty; the whole band is
+  omitted only when both are.
+- **Filter chips** (M6): All · With you · Against you · Side unknown, filtering `d.matches`
+  purely client-side (the whole all-time list already rode the payload) and repainting the head's
+  W/L line and the table together. Nothing persists — the chips reset to "All" on every fresh
+  visit to a player's page.
+- **Shared-match table** (M6, `dataTable`, no `onSort` — the list is uncapped and already fully
+  in the renderer, unlike Players' own capped page): Map · Mode · Side · They played · You played
+  · Account · Your rank · When. Map/Mode/Side/Account/When sort locally on click (Side sorts on
+  its own "with"/"vs"/"" categorical value); They played/You played/Your rank stay
+  `sortable: false` — compound, rendered cells with no single scalar a header click could
+  honestly order by. The sort is view-local and unpersisted, same as the filter chips above.
+  Every row opens that match.
 - **Their hero is singular; yours is a list.** The aggregator banks per-hero segments only for
   the tracked player and overwrites the roster slot for everyone else on each tick, so their
   swaps were never captured and cannot be backfilled.

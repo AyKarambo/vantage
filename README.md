@@ -204,7 +204,11 @@ account's per-role lines beneath it.
   **min. games** chip row hides the one-offs. The counts here follow the filter bar
   (role · season · account) and say so; opening a player shows their **complete
   all-time** record, which the filters never touch — the screen explains the
-  difference rather than leaving two numbers to disagree. Local, GEP-only, never
+  difference rather than leaving two numbers to disagree. Their page leads with
+  **who they are** (M6) — top 3 heroes by game count and a last-10 W/L dot strip —
+  then **filter chips** (All / With you / Against you / Side unknown) that narrow
+  the record itself, updating the W/L line to match, over a **sortable** shared-match
+  table (Map, Mode, Side, Account, When). Local, GEP-only, never
   exported. Players are matched on the name before the `#`, so two BattleTags
   sharing a name fold into one row, flagged with a ⚠.
 - **Maps** — winrate by game mode, then every map ranked best → worst; a **±SR** column/figure
