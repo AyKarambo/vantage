@@ -80,6 +80,8 @@ export interface OwStatsApi {
    */
   playerList(query: PlayerListQuery): Promise<PlayerList>;
   exportNotion(filters: DashboardFilters): Promise<ExportResult>;
+  /** Re-run export for exactly these match ids (W6's "Retry failed") — bypasses the filter bar entirely. */
+  exportNotionMatches(matchIds: string[]): Promise<ExportResult>;
   notionStatus(): Promise<NotionStatus>;
   setNotionToken(token: string): Promise<NotionStatus>;
   clearNotionToken(): Promise<NotionStatus>;
@@ -386,6 +388,7 @@ export const IPC_CHANNELS = {
   playerList: 'dashboard:player-list',
   playerRecords: 'dashboard:player-records',
   exportNotion: 'dashboard:export-notion',
+  exportNotionMatches: 'dashboard:export-notion-matches',
   notionStatus: 'notion:status',
   setNotionToken: 'notion:set-token',
   clearNotionToken: 'notion:clear-token',

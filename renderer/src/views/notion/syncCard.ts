@@ -21,39 +21,49 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
   const competitive = s?.competitiveGames ?? 0;
   const canSync = Boolean(s?.connected) && count > 0;
 
+  // Shared by the main Sync button and "Retry failed" below (W6) — same
+  // progress readout, same result rendering (counts + failures + retry).
+  // Deliberately does NOT call `refresh()`: that rebuilds this whole card
+  // (a fresh `out`/`importOut`/`cleanupOut`), which would immediately wipe
+  // the very result + failures list this just rendered. The persisted
+  // lastSyncResult still reaches the NEXT visit to this screen (or app
+  // restart) via NotionRuntime.export()'s own saveLocalNotionConfig call —
+  // this transient region is this visit's answer.
+  const runSync = async (exportCall: () => Promise<ExportResult>): Promise<void> => {
+    btn.disabled = true;
+    render(out, h('span', { class: 'u-muted' }, 'Syncing…'));
+    const unsub = bridge.onSyncProgress((p) => {
+      render(out, h('span', { class: 'mono u-muted' }, `Syncing ${p.done} / ${p.total}…`));
+    });
+    try {
+      const res = await exportCall();
+      // `error` no longer implies the export never ran — it now also carries the
+      // first per-game failure. Rendering it INSTEAD of the counts would hide the
+      // games that did sync, which is the opposite of what capturing a reason was
+      // for. Show both: what happened, and then why part of it didn't.
+      render(
+        out,
+        res.unavailable
+          ? h('span', { class: 'is-loss' }, res.error ?? 'Connect Notion first.')
+          : h('div', null,
+              syncResult(res),
+              res.error
+                ? h('div', { class: 'is-loss', style: { fontSize: '11.5px', marginTop: '6px' } }, res.error)
+                : null,
+              res.failures?.length ? failuresSection(res.failures, runSync, out) : null,
+            ),
+      );
+    } catch (err) {
+      render(out, h('span', { class: 'is-loss' }, friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion')));
+    }
+    unsub();
+    btn.disabled = false;
+  };
+
   const btn = button(canSync ? `Sync ${count} game${count === 1 ? '' : 's'} to Notion` : 'Sync to Notion', {
     variant: 'primary',
     disabled: !canSync,
-    onClick: async () => {
-      btn.disabled = true;
-      render(out, h('span', { class: 'u-muted' }, 'Syncing…'));
-      // Live per-game progress while the export runs.
-      const unsub = bridge.onSyncProgress((p) => {
-        render(out, h('span', { class: 'mono u-muted' }, `Syncing ${p.done} / ${p.total}…`));
-      });
-      try {
-        const res = await bridge.exportNotion({});
-        // `error` no longer implies the export never ran — it now also carries the
-        // first per-game failure. Rendering it INSTEAD of the counts would hide the
-        // games that did sync, which is the opposite of what capturing a reason was
-        // for. Show both: what happened, and then why part of it didn't.
-        render(
-          out,
-          res.unavailable
-            ? h('span', { class: 'is-loss' }, res.error ?? 'Connect Notion first.')
-            : h('div', null,
-                syncResult(res),
-                res.error
-                  ? h('div', { class: 'is-loss', style: { fontSize: '11.5px', marginTop: '6px' } }, res.error)
-                  : null,
-              ),
-        );
-      } catch (err) {
-        render(out, h('span', { class: 'is-loss' }, friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion')));
-      }
-      unsub();
-      btn.disabled = false;
-    },
+    onClick: () => void runSync(() => bridge.exportNotion({})),
   });
 
   const note = !s
@@ -127,9 +137,7 @@ export function syncCard(s: NotionStatus | null): HTMLElement {
 
   return card({ variant: 'raised', title: 'Sync now', sub: 'push tracked games · pull them back' },
     h('div', { class: 'hint', style: { lineHeight: '1.5' } }, note),
-    s?.lastSyncedAt
-      ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } }, `Last synced ${relTime(s.lastSyncedAt)}`)
-      : null,
+    s ? lastSyncLine(s) : null,
     h('div', { style: { marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' } }, btn, importBtn),
     out,
     canImport
@@ -260,6 +268,51 @@ function importResult(res: ImportResult): HTMLElement {
       ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } },
           'Duplicate rows detected — use "Clean up duplicate rows" below.')
       : null,
+  );
+}
+
+/**
+ * The persisted last-sync readout (W6) — unlike the transient `out` region
+ * (which resets on the next view visit), this reads `NotionStatus.lastSyncResult`,
+ * so the answer to "did the last sync actually work?" survives a repaint or
+ * an app restart instead of only ever saying "Last synced 2h ago" with no
+ * idea whether that run failed.
+ */
+function lastSyncLine(s: NotionStatus): HTMLElement | null {
+  const r = s.lastSyncResult;
+  if (!r) return null;
+  const parts: string[] = [];
+  if (r.ok) parts.push(`${r.ok} synced`);
+  if (r.updated) parts.push(`${r.updated} updated`);
+  if (r.failed) parts.push(`${r.failed} failed${r.firstError ? ` (${r.firstError})` : ''}`);
+  const summary = parts.length ? parts.join(' · ') : r.firstError ?? 'up to date';
+  return h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '6px' } }, `Last synced ${relTime(r.at)} — ${summary}`);
+}
+
+/**
+ * The per-game failure list under a sync result (W6) — what actually failed,
+ * not just a count — plus a "Retry failed" button that re-runs export scoped
+ * to exactly those match ids via `exportNotionMatches`, bypassing the filter
+ * bar entirely so a retry can't silently miss a game the active filters
+ * exclude. Shares `runSync` with the main button so a retry gets the same
+ * progress readout and refresh.
+ */
+function failuresSection(
+  failures: NonNullable<ExportResult['failures']>,
+  runSync: (exportCall: () => Promise<ExportResult>) => Promise<void>,
+  out: HTMLElement,
+): HTMLElement {
+  const matchIds = failures.map((f) => f.matchId);
+  return h('div', { style: { marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--line, rgba(255,255,255,0.08))' } },
+    h('div', { class: 'stack', style: { gap: '4px' } },
+      ...failures.map((f) => h('div', { class: 'u-dim', style: { fontSize: '11px' } }, `${f.map} — ${f.reason}`)),
+    ),
+    h('div', { style: { marginTop: '8px' } },
+      button(`Retry ${failures.length} failed`, {
+        variant: 'ghost',
+        onClick: () => void runSync(() => bridge.exportNotionMatches(matchIds)),
+      }),
+    ),
   );
 }
 

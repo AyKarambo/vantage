@@ -808,7 +808,10 @@ already-exported match's row when its review or mental flags changed since the l
 version, it's **created in your existing database automatically** on connect (additively —
 your own columns are left alone), so exports never silently drop a field or refuse to run.
 (The tray's **Set Notion token** still works too; a hand-edited `appsettings.json`
-database id is still supported as a fallback.)
+database id is still supported as a fallback.) The **last sync's outcome persists** — "Last
+synced 2h ago — 12 synced · 1 failed (Notion rate limit)" — instead of resetting to a bare
+timestamp the moment you leave the screen, and a failed sync lists exactly which matches
+didn't go through with a **Retry failed** button scoped to just those.
 
 ## Architecture
 

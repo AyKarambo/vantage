@@ -749,6 +749,31 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
     expect(create).not.toHaveBeenCalled();
     expect(result.failed).toBe(1);
     expect(result.ok).toBe(0);
+    // W6 — the per-game failure list, not just the count, so the "Sync now"
+    // card can list what actually failed and offer a scoped retry.
+    expect(result.failures).toEqual([{ matchId: 'gep-scan-fails', map: 'Ilios', reason: expect.any(String) }]);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('W6: every per-game failure is collected in order, not just the first (error still carries only the first reason)', async () => {
+    const dir = tmpDir();
+    const outbox = new OutboxStore(dir);
+    const create = vi.fn().mockRejectedValue(new Error('write failed'));
+    const client = { pages: { create }, dataSources: { query: vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null }) } } as any;
+    const writer = new NotionWriter(client, 'db', false, new Set());
+    const maps = stubMaps();
+
+    const games = [game('a', { map: 'Ilios' }), game('b', { map: 'Oasis' })];
+    const exporter = new NotionExporter(writer, maps, outbox, undefined, () => new Set(), { client, gametrackerDatabaseId: 'db', dataSourceId: 'db-ds' });
+    const result = await exporter.export(games);
+
+    expect(result.failed).toBe(2);
+    expect(result.failures).toHaveLength(2);
+    expect(result.failures?.map((f) => f.matchId)).toEqual(['a', 'b']);
+    expect(result.failures?.map((f) => f.map)).toEqual(['Ilios', 'Oasis']);
+    // `error` (the summary reason) is set once, from the FIRST failure.
+    expect(result.error).toBe(result.failures?.[0].reason);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

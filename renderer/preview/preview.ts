@@ -432,6 +432,9 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
     shapeValid: db ? true : undefined,
     shapeIssues: undefined,
     lastSyncedAt: db ? Date.now() - 3_600_000 : undefined,
+    // Canned so the "Last synced ... — N synced · M failed (reason)" line
+    // (W6) has something to render in the preview; a real run overwrites it.
+    lastSyncResult: db ? { at: Date.now() - 3_600_000, ok: 12, updated: 2, failed: 1, firstError: 'Notion rate limit — try again shortly' } : undefined,
     importedMatches: previewImportedMatches,
     // Demo the schema auto-provisioning note: on connect, Vantage added the
     // columns this database was missing so its schema stays in step with the app.
@@ -527,6 +530,15 @@ const mock: OwStatsApi = {
       await new Promise((r) => setTimeout(r, 60));
     }
     return { ok: dataset().length, failed: 0, skipped: 0 };
+  },
+  exportNotionMatches: async (matchIds: string[]) => {
+    if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
+    const total = matchIds.length;
+    for (let done = 1; done <= total; done += 8) {
+      for (const cb of syncListeners) cb({ done: Math.min(done, total), total });
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return { ok: total, failed: 0, skipped: 0 };
   },
   // The preview has no Notion runtime; token state is tracked locally, and the
   // database picker operates against a small canned list (see CANNED_DATABASES).

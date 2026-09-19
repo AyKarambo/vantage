@@ -753,6 +753,27 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   right after a win** ("You tilt 1.4× as often right after a loss — that's the break the
   reminder is for"), and by **map** (top 3, 3+ games) — the triggers behind the tilt tax, not
   just its size (S9).
+- **Settings → Accounts now says which account is your main.** Readiness already picked one
+  (most played, recently active) to weigh your other accounts' games against — it just never
+  told you. The main account now sorts first and wears a **main** pill; the rest sort by games
+  played, with the Unknown bucket always last. The non-destructive "forget this display name"
+  action is now actually called **Forget name** instead of "Delete" — it used to read exactly
+  like the real, data-destroying "Delete…" beside it, which now gets a red danger button so the
+  two can't be confused. An account with no rank set gets a **Set rank…** link straight into the
+  picker instead of a dead "No rank yet". The sidebar's account switcher now lists whichever
+  account you played most recently first, with a "N games · last played Xd" line under each name
+  (W2).
+- **Connecting an AI coach no longer means hunting for a file path.** Turning on **MCP endpoint**
+  in Settings → App behavior now shows the exact path to the bridge script for this install and a
+  **Copy Claude Desktop config** button that puts the ready-to-paste JSON block straight on your
+  clipboard — no more finding it by hand in the README. A new FAQ entry points here too (W4).
+- **Notion sync remembers what actually happened.** "Last synced 2h ago" used to mean nothing
+  once a sync had partly (or entirely) failed — the next visit showed the same happy timestamp
+  with no way to tell. It now says what landed: "Last synced 2h ago — 12 synced · 1 failed
+  (Notion rate limit)", persisted so it survives navigating away or restarting Vantage. A failed
+  sync also lists exactly which matches didn't go through and why, with a **Retry failed** button
+  that re-syncs just those — instead of a blind re-run of everything. The connected-database card
+  also gains an **Open in Notion ↗** link, previously buried in the tray menu (W6).
 
 ## 0.34.0 — 31 July 2026
 

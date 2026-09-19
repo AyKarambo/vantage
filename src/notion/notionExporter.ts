@@ -185,6 +185,9 @@ export class NotionExporter {
     // keeps counting every subsequent failure, it just doesn't keep
     // overwriting the reason with the same (or a noisier) one.
     let firstError: string | undefined;
+    // EVERY per-game failure (W6), not just the first's reason — lets the
+    // "Sync now" card list what failed and offer a scoped retry.
+    const failures: NonNullable<ExportResult['failures']> = [];
     // "Done" must include every outcome bucket, not just ok/failed/skipped —
     // otherwise progress stalls on an update-heavy sync (every row lands in
     // `updated`, so done never advances even though work is completing).
@@ -215,7 +218,9 @@ export class NotionExporter {
         else ok++;
       } catch (err) {
         failed++;
-        if (firstError === undefined) firstError = friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion');
+        const reason = friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion');
+        if (firstError === undefined) firstError = reason;
+        failures.push({ matchId: game.matchId, map: game.map, reason });
       }
       tick();
     }
@@ -261,11 +266,13 @@ export class NotionExporter {
         }
       } catch (err) {
         failed++;
-        if (firstError === undefined) firstError = friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion');
+        const reason = friendlyNetworkMessage(classifyNetworkError(err), 'sync to Notion');
+        if (firstError === undefined) firstError = reason;
+        failures.push({ matchId: game.matchId, map: game.map, reason });
       }
       tick();
     }
-    return { ok, failed, skipped, updated, recreated, error: firstError };
+    return { ok, failed, skipped, updated, recreated, error: firstError, ...(failures.length ? { failures } : {}) };
   }
 
   /** Create a new page and build its `ResolvedMatch` (shared by create + recreate). */
