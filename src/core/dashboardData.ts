@@ -20,7 +20,7 @@ import { buildTargets, activeMeasuredTargets, measuredGradesForMatch, type Autho
 import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from './gradingSettings';
 import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
-import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
+import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type ReadinessSummary } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
@@ -52,6 +52,16 @@ export interface ManualData {
    * doesn't have.
    */
   placementRuns?: PlacementRun[];
+  /**
+   * A pre-computed readiness verdict (W8) — readiness costs ~80ms of a
+   * ~90ms dashboard read and is filter-invariant (computed over the
+   * unfiltered history), so the main edge memoizes it per history revision
+   * and threads the cached result in here instead of paying that cost on
+   * every filter/role/date change. Absent falls back to computing it
+   * fresh, so tests and the browser preview (which never populate this)
+   * keep working unchanged.
+   */
+  readinessSummary?: ReadinessSummary;
 }
 
 export function computeDashboard(
@@ -312,8 +322,9 @@ export function computeDashboard(
     // rank-gated undertraining nudge, masked by the same `suppressed` set every
     // other rank surface uses so a track mid-placements can't read as stagnant.
     // safeReadiness never throws, so a readiness bug can never blank the whole
-    // dashboard.
-    readiness: safeReadiness(all, Date.now(), {
+    // dashboard. `manual.readinessSummary` (W8) is the edge's memoized
+    // result — recomputing here only when the caller didn't supply one.
+    readiness: manual?.readinessSummary ?? safeReadiness(all, Date.now(), {
       targets: manual?.targets ?? [],
       rankAnchors: manual?.rankAnchors,
       suppressed,

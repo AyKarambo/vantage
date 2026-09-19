@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   competitiveOnly, seasonStarts, filteredCompetitiveGames,
   dashboardRead, heroDetailRead, matchDetailRead, playerHistoryRead, playerListRead,
-  resetPlayerDirectoryMemo,
+  resetPlayerDirectoryMemo, resetReadinessMemo,
 } from '../src/main/dashboard/reads';
 import type { DataProvider } from '../src/main/dashboard/provider';
 import type { GameRecord } from '../src/core/analytics';
@@ -171,6 +171,59 @@ describe('dashboardRead', () => {
     const { provider } = fakeProvider({ games: [] });
     expect(() => dashboardRead(provider, undefined)).not.toThrow();
     expect(() => filteredCompetitiveGames(provider, undefined)).not.toThrow();
+  });
+
+  // provider.games() re-reads and JSON.parses the whole history table
+  // synchronously — a caller reading it twice per request doubles that cost.
+  // dashboardRead used to do exactly that (once for the payload, once for
+  // readiness); it must read it exactly once now (W8).
+  it('reads provider.games() exactly once per call', () => {
+    const games = [game({ result: 'Win', map: 'A', role: 'damage' })];
+    const { provider, calls } = fakeProvider({ games });
+    dashboardRead(provider, {});
+    expect(calls.games).toBe(1);
+  });
+});
+
+describe('dashboardRead — readiness memo (W8)', () => {
+  beforeEach(resetReadinessMemo);
+
+  it('serves the same readiness object across a filter change on an unchanged history', () => {
+    const games = [game({ result: 'Win', map: 'A', role: 'damage' })];
+    const { provider } = fakeProvider({ games });
+    const a = dashboardRead(provider, { days: 'all' });
+    const b = dashboardRead(provider, { days: 30, role: 'damage' });
+    // Readiness is filter-invariant by design — same object, not just an
+    // equal one, proves the memo served a cached result rather than
+    // recomputing (a fresh compute always allocates a new object).
+    expect(b.readiness).toBe(a.readiness);
+  });
+
+  it('recomputes when the history revision changes', () => {
+    let rev = 'r1';
+    const games = [game({ result: 'Win', map: 'A', role: 'damage' })];
+    const { provider } = fakeProvider({ games, historyRevision: () => rev });
+    const a = dashboardRead(provider, {});
+    rev = 'r2'; // a match landed
+    const b = dashboardRead(provider, {});
+    expect(b.readiness).not.toBe(a.readiness);
+  });
+
+  it('recomputes when the manual rank-anchor input changes, even with the same revision', () => {
+    const games = [game({ result: 'Win', map: 'A', role: 'damage' })];
+    const { provider } = fakeProvider({ games });
+    const a = dashboardRead(provider, {});
+    provider.rankAnchorMap = () => ({ 'Karambo::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 1000 } });
+    const b = dashboardRead(provider, {});
+    expect(b.readiness).not.toBe(a.readiness);
+  });
+
+  it('never memoizes the demo dataset', () => {
+    const games = [game({ result: 'Win', map: 'A', role: 'damage' })];
+    const { provider } = fakeProvider({ games, isSample: true });
+    const a = dashboardRead(provider, {});
+    const b = dashboardRead(provider, {});
+    expect(b.readiness).not.toBe(a.readiness);
   });
 });
 

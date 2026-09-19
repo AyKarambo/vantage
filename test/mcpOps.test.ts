@@ -58,6 +58,8 @@ function setup(over: {
     pendingMatches: () => over.pending ?? [],
     manualTargets: () => over.targets ?? [],
     demoContext: () => ({ active: over.demo ?? false, preference: 'off', hasRealHistory: true }),
+    isSample: () => over.demo ?? false,
+    historyRevision: () => 'rev-1',
     effectiveMasterData: () => master,
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,
     getStaleness: () => DEFAULT_STALENESS,

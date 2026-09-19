@@ -38,6 +38,8 @@ function setup(over: { demo?: boolean; games?: GameRecord[] } = {}) {
       preference: over.demo ? 'on' : 'off',
       hasRealHistory: !over.demo,
     }),
+    isSample: () => over.demo ?? false,
+    historyRevision: () => 'rev-1',
     effectiveMasterData: () => DEFAULT_MASTER_DATA,
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,
     getStaleness: () => DEFAULT_STALENESS,

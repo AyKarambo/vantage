@@ -253,6 +253,24 @@ describe('computeDashboard', () => {
     expect(computeDashboard(games, { days: 'all', account: 'Smurf' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Smurf', tier: 'Bronze' });
   });
 
+  it('uses a supplied manual.readinessSummary verbatim instead of computing one (W8)', () => {
+    const g = (matchId: string): GameRecord =>
+      ({ matchId, timestamp: 100, account: 'Main', role: 'damage', map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    // A deliberately fake, recognizable summary — proves computeDashboard didn't
+    // recompute (a real compute could never produce this shape from real games).
+    const canned = { band: 'fresh', score: 99, confidence: 'high', headline: 'canned', recommendation: 'none',
+      recommendationText: '', signals: [], load: {} as any, subscores: {} as any, driver: 'neutral',
+      regime: 'manual', trend: [], mainAccount: null } as any;
+
+    const withCanned = computeDashboard([g('a')], { days: 'all' }, demo, { readinessSummary: canned });
+    expect(withCanned.readiness).toBe(canned);
+
+    const withoutCanned = computeDashboard([g('a')], { days: 'all' }, demo, {});
+    expect(withoutCanned.readiness).not.toBe(canned);
+    expect(withoutCanned.readiness.headline).not.toBe('canned');
+  });
+
   it('accountActivity carries each account\'s most recent timestamp, unaffected by the active Role filter (W2)', () => {
     const g = (matchId: string, account: string, role: string, timestamp: number): GameRecord =>
       ({ matchId, timestamp, account, role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);

@@ -108,6 +108,7 @@ function auditProvider(): DataProvider {
     rankAnchorMap: () => ({}),
     placementRuns: () => [],
     isSample: () => false,
+    historyRevision: () => 'rev-1',
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }),
     getDevModeAuthStatus: () => ({ outcome: 'not-attempted' }),
