@@ -165,11 +165,16 @@
 .sidebar.is-collapsed .nav-item {
   position: relative;
 }
-.sidebar.is-collapsed .nav-live-dot {
+.sidebar.is-collapsed .nav-live-indicator {
   margin-left: 0;
   position: absolute;
   top: 5px;
   right: 8px;
+}
+/* No room for the eliminations chip in the icon-only rail — the dot alone
+   (with the same info in its title) still gets through. */
+.sidebar.is-collapsed .nav-live-kills {
+  display: none;
 }
 
 /* The rail toggle: a full-width bar directly below the account chip and above
@@ -352,7 +357,16 @@
 }
 /* Live-match indicator on the Live nav item — present only while a match is
    actually in progress, so it never becomes decoration you stop reading. */
+.nav-live-indicator {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 .nav-live-dot {
+  /* Right-aligns a bare dot used on its own (the Logs nav item's error
+     count); inside .nav-live-indicator the WRAPPER already carries this
+     margin, so the dot itself resets to 0 there. */
   margin-left: auto;
   width: 7px;
   height: 7px;
@@ -360,6 +374,15 @@
   background: var(--win-text, #6fcf97);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--win-text, #6fcf97) 22%, transparent);
   animation: nav-live-pulse 2s ease-in-out infinite;
+}
+.nav-live-indicator .nav-live-dot {
+  margin-left: 0;
+}
+/* The eliminations chip (S5) — deliberately tiny so it reads as a live stat,
+   not a second nav label competing with the item's own text. */
+.nav-live-kills {
+  font-size: 10px;
+  color: var(--muted-2);
 }
 @keyframes nav-live-pulse {
   0%, 100% { opacity: 1; }
@@ -631,6 +654,24 @@
 }
 .next-up-arrow {
   opacity: 0.7;
+}
+
+/* The Overview header's "Live · <map> →" pill (S5). */
+.live-header-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.live-header-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--win-text, #6fcf97);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--win-text, #6fcf97) 22%, transparent);
+  animation: nav-live-pulse 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-header-dot { animation: none; }
 }
 
 /* Notion sync --------------------------------------------------------------- */

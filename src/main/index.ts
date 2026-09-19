@@ -30,6 +30,7 @@ import { createDevModeAuthMonitor } from './devModeAuthMonitor';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
+import { currentSession } from '../core/analytics';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import type { NetErrorKind } from '../core/netError';
@@ -632,9 +633,23 @@ function main(): void {
     prevService = nextNotifyBaseline(prevService, nextService);
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
-  pushGameLogged = (payload) => dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
+  pushGameLogged = (payload) => {
+    dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
+    // The tray's "This sitting" read (S5) — scoped to whichever account the
+    // match just landed on, same gap threshold the dashboard's own Current
+    // session card uses, so the two can never disagree.
+    const scoped = history.all().filter((g) => g.account === payload.account);
+    const session = currentSession(scoped, Date.now(), config.sessionSettings.gapMinutes);
+    tray.setState({ session: session ? { wins: session.wins, losses: session.losses } : undefined });
+  };
   pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
-  pushLiveMatch = (p) => dashboard.push(EVENT_CHANNELS.onLiveMatch, p);
+  pushLiveMatch = (p) => {
+    dashboard.push(EVENT_CHANNELS.onLiveMatch, p);
+    // The tray's "Live: …" read (S5) — outside the dashboard window is where
+    // it's actually needed, since that's the one place a running match was
+    // otherwise invisible.
+    tray.setState({ live: p.live && p.startedAt ? { map: p.map, startedAt: p.startedAt } : undefined });
+  };
   pushDataChanged = () => dashboard.push(EVENT_CHANNELS.onDataChanged, undefined);
   statusMonitor.start();
 

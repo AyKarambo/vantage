@@ -24,7 +24,7 @@ import { mountToastHost, toast } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
-import { pct, relTime, roleLabel, signed, streakText } from '../format';
+import { matchClock, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { getWinrateScheme, setWinrateScheme } from '../theme';
 import { WINRATE_SCHEME_OPTIONS } from '../winrateScheme';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
@@ -798,12 +798,37 @@ export class App {
   private renderLiveNav(): void {
     const btn = this.navButtons.get('live');
     if (!btn) return;
-    const isLive = getLiveMatch()?.live === true;
-    const existing = btn.querySelector('.nav-live-dot');
-    if (isLive && !existing) {
-      btn.append(h('span', { class: 'nav-live-dot', title: 'A match is in progress' }));
-    } else if (!isLive) {
+    const p = getLiveMatch();
+    const isLive = p?.live === true;
+    const existing = btn.querySelector<HTMLElement>('.nav-live-indicator');
+    if (!isLive) {
       existing?.remove();
+      return;
+    }
+    // "Ilios · 12:34 · 4-3 eliminations" once both the map and the kill feed
+    // have reported in; a plain "A match is in progress" before then.
+    const clock = p!.startedAt ? matchClock(p!.startedAt) : undefined;
+    const title = [p!.map, clock, p!.kills.known ? `${p!.kills.yours}–${p!.kills.theirs} eliminations` : undefined]
+      .filter(Boolean).join(' · ') || 'A match is in progress';
+    // A small mono kill chip beside the dot, only once the feed has actually
+    // said which side an attacker was on — the same `known` gate the Live
+    // screen's own tally uses, so the two can never disagree on a number.
+    const chipText = p!.kills.known ? `${p!.kills.yours}–${p!.kills.theirs}` : null;
+    if (existing) {
+      existing.title = title;
+      const dot = existing.querySelector('.nav-live-dot')!;
+      const chip = existing.querySelector('.nav-live-kills');
+      if (chipText) {
+        if (chip) chip.textContent = chipText;
+        else dot.before(h('span', { class: 'nav-live-kills mono' }, chipText));
+      } else {
+        chip?.remove();
+      }
+    } else {
+      btn.append(h('span', { class: 'nav-live-indicator', title },
+        chipText ? h('span', { class: 'nav-live-kills mono' }, chipText) : null,
+        h('span', { class: 'nav-live-dot' }),
+      ));
     }
   }
 

@@ -23,7 +23,7 @@ import { getGepStatus, subscribeGepStatus } from '../gepStatus';
 import { scoreboard } from '../components/scoreboard';
 import { button, card, emptyState, pill, resultPill } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
-import { fmt, games, net, pct, relTime, RELATION_LABEL } from '../format';
+import { fmt, games, matchClock, net, pct, relTime, roleLabel, RELATION_LABEL } from '../format';
 import { wrColor } from '../theme';
 import { readinessCard } from './overview';
 import { stopRuleLine } from '../components/stopRuleLine';
@@ -81,10 +81,22 @@ export function live(ctx: ViewContext): HTMLElement {
     }).catch(() => { recordsLoading = false; });
   };
 
+  // Cached from Settings (S5) so the "Hide" link's effect and the off-state
+  // hint under the tally don't need `appSettings` threaded through the whole
+  // live payload for one flag. Optimistic-true until the real value loads —
+  // the tally/feed cards themselves already degrade honestly from `p.kills.known`.
+  let killFeedEnabled = true;
+  void bridge.getAppSettings().then((s) => { killFeedEnabled = s.liveKillFeed; paint(); });
+  const setKillFeed = (enabled: boolean): void => {
+    killFeedEnabled = enabled;
+    void bridge.setAppSettings({ liveKillFeed: enabled });
+    paint();
+  };
+
   function paint(): void {
     if (pressed) { pendingPaint = true; return; }
     const payload = getLiveMatch();
-    render(host, ...sections(payload, records, recordsLoading, ctx));
+    render(host, ...sections(payload, records, recordsLoading, killFeedEnabled, setKillFeed, ctx));
   }
 
   const unsubscribe = subscribeLiveMatch((payload) => {
@@ -113,6 +125,8 @@ function sections(
   p: LiveMatchPayload | null,
   records: PlayerRecord[],
   recordsLoading: boolean,
+  killFeedEnabled: boolean,
+  setKillFeed: (enabled: boolean) => void,
   ctx: ViewContext,
 ): Node[] {
   if (!p?.live) {
@@ -133,7 +147,8 @@ function sections(
   return [
     viewHead('Live', liveSubtitle(p)),
     getGepStatus()?.state === 'stale' ? staleCard(ctx) : null,
-    tallyCard(p),
+    briefingCard(p, ctx),
+    tallyCard(p, killFeedEnabled, setKillFeed),
     card({ variant: 'raised' },
       h('div', { class: 'review-section-label' }, 'Scoreboard'),
       p.roster.length
@@ -141,14 +156,72 @@ function sections(
         : h('div', { class: 'hint' }, 'Waiting for the game to report the scoreboard…'),
     ),
     knownPlayersCard(p, records, recordsLoading, ctx),
-    p.feed.length ? feedCard(p) : null,
+    p.feed.length ? feedCard(p, setKillFeed) : null,
   ].filter((n): n is HTMLElement => n != null);
+}
+
+/**
+ * "How am I doing here, and what should I be executing?" (S5) — the local
+ * player's own record on this map and the active targets that actually
+ * apply to what they're playing, both already on the snapshot but never
+ * shown while a match is running (the board said who you've met, not how
+ * you personally do here).
+ */
+function briefingCard(p: LiveMatchPayload, ctx: ViewContext): HTMLElement | null {
+  if (!p.map) return null;
+  const d = ctx.data;
+  const record = d.byMap.find((m) => m.key === p.map);
+  const local = p.roster.find((r) => r.isLocal);
+  // heroScope first (the more specific match); falls back to every active
+  // target when nothing scopes to this hero/role — better a full list than
+  // an empty briefing.
+  const scoped = d.targets.filter((t) => t.isActive
+    && (t.heroScope?.length ? Boolean(local?.hero && t.heroScope.includes(local.hero))
+      : t.roleScope ? t.roleScope === local?.role : false));
+  const active = scoped.length ? scoped : d.targets.filter((t) => t.isActive);
+
+  return card({ variant: 'raised' },
+    h('div', { class: 'review-section-label' }, 'Briefing'),
+    record
+      ? h('div', {
+          class: 'row', style: { padding: '2px 0', cursor: 'pointer' },
+          on: { click: () => ctx.navigate('maps', { highlight: p.map! }) },
+        },
+          h('div', { class: 'row-main' },
+            h('div', { class: 'row-name' }, p.map),
+            // byMap follows the hidden filter bar even though Live itself is
+            // filterless — saying the scope stops this reading like an
+            // all-time record when it's actually narrower.
+            h('div', { class: 'row-meta' }, filterScopeCaption(ctx)),
+          ),
+          h('span', { class: 'mono', style: { color: wrColor(record.winrate) } },
+            `${record.wins}W ${record.losses}L · ${pct(record.winrate)}`),
+          h('span', { class: 'u-dim', style: { fontSize: '11px' } }, 'Open map →'),
+        )
+      : h('div', { class: 'hint' }, `First time on ${p.map} in range.`),
+    active.length
+      ? h('div', { class: 'stack', style: { gap: '6px', marginTop: '10px' } },
+          h('div', { class: 'u-muted', style: { fontSize: '11px' } }, 'Active targets'),
+          ...active.slice(0, 4).map((t) => targetRow(t, ctx)),
+        )
+      : null,
+  );
+}
+
+/** "Damage · last 30 days · all accounts" — same scope-text convention Heroes' drawer uses (H7), so a filtered read never passes as an all-time one. */
+function filterScopeCaption(ctx: ViewContext): string {
+  const f = ctx.data.filters;
+  const days = f.days;
+  const range = typeof days === 'object'
+    ? (ctx.data.options.seasons.find((s) => s.id === days.season)?.label ?? 'one season')
+    : days === 'all' ? 'all time' : `last ${days} days`;
+  return `${f.role === 'all' ? 'all roles' : roleLabel(f.role)} · ${range}`;
 }
 
 function liveSubtitle(p: LiveMatchPayload): string {
   const parts = [p.map ?? 'Map not reported yet'];
   if (p.gameType) parts.push(p.gameType);
-  if (p.startedAt) parts.push(`started ${relTime(p.startedAt)}`);
+  if (p.startedAt) parts.push(`${matchClock(p.startedAt)} elapsed`);
   return parts.join(' · ');
 }
 
@@ -343,7 +416,7 @@ function priorityCard(items: DashboardData['focusMaps'], ctx: ViewContext): HTML
  * said which side an attacker was on, nothing is shown at all — a 0–0 would read
  * as "nobody has died yet", which is a different (and wrong) claim.
  */
-function tallyCard(p: LiveMatchPayload): HTMLElement | null {
+function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (enabled: boolean) => void): HTMLElement | null {
   // Eliminations come from the kill feed; damage and healing from the roster —
   // so the two halves appear independently. With the kill feed switched off the
   // damage and healing rows stay, because they are TAB-screen numbers the game
@@ -354,22 +427,30 @@ function tallyCard(p: LiveMatchPayload): HTMLElement | null {
     rows.push({ label: 'damage', yours: p.totals.yours.damage, theirs: p.totals.theirs.damage, compact: true });
     rows.push({ label: 'healing', yours: p.totals.yours.healing, theirs: p.totals.theirs.healing, compact: true });
   }
-  if (!rows.length) return null;
+  // The off-state hint (S5) keeps the card alive even with zero rows, so
+  // switching the setting back on has somewhere to live instead of the
+  // whole card silently vanishing with no explanation.
+  const offHint = !killFeedEnabled
+    ? h('div', { class: 'hint', style: { marginTop: rows.length ? '10px' : '0', lineHeight: '1.5' } },
+        'Kill feed and elimination count are off — ',
+        inlineLink('turn on', { onClick: () => setKillFeed(true) }),
+        '.')
+    : null;
+  if (!rows.length && !offHint) return null;
 
   return card({ variant: 'raised' },
-    // The "this is not the score" caveat is a tooltip rather than a line of body
-    // copy now: with three labelled stats side by side nothing reads as a
-    // scoreline, but Overwatch's feed reporting no objective score is still
-    // worth being able to find.
-    h('div', {
-      class: 'live-tally',
-      title: 'Totals from the game’s own scoreboard. Overwatch’s event feed reports no objective score, so this is not one.',
-    },
-      h('div', { class: 'u-dim live-tally-head' }, 'your team'),
-      h('span', null),
-      h('div', { class: 'u-dim live-tally-head' }, 'enemy team'),
-      ...rows.flatMap((r) => tallyRow(r)),
-    ),
+    rows.length
+      ? h('div', {
+          class: 'live-tally',
+          title: 'Totals from the game’s own scoreboard. Overwatch’s event feed reports no objective score, so this is not one.',
+        },
+          h('div', { class: 'u-dim live-tally-head' }, 'your team'),
+          h('span', null),
+          h('div', { class: 'u-dim live-tally-head' }, 'enemy team'),
+          ...rows.flatMap((r) => tallyRow(r)),
+        )
+      : null,
+    offHint,
   );
 }
 
@@ -465,11 +546,17 @@ function playerRow(r: PlayerRecord, withYou: boolean | undefined, ctx: ViewConte
   );
 }
 
-/** The recent kill feed. Only rendered when the user has it switched on. */
-function feedCard(p: LiveMatchPayload): HTMLElement {
+/** The recent kill feed — renamed from the unlabelled "Recent" (S5), with its own Hide link since the section itself is what the setting controls. */
+function feedCard(p: LiveMatchPayload, setKillFeed: (enabled: boolean) => void): HTMLElement {
   return card({ variant: 'raised' },
-    h('div', { class: 'review-section-label' }, 'Recent'),
-    h('div', { class: 'stack', style: { gap: '4px' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+      h('div', { class: 'review-section-label' }, 'Kill feed'),
+      h('button', {
+        class: 'btn btn--ghost', style: { padding: '2px 8px', fontSize: '10.5px' },
+        on: { click: () => setKillFeed(false) },
+      }, 'Hide'),
+    ),
+    h('div', { class: 'stack', style: { gap: '4px', marginTop: '4px' } },
       ...p.feed.map((k) => h('div', {
         class: 'u-dim',
         style: { fontSize: '11.5px', display: 'flex', gap: '6px', alignItems: 'baseline' },

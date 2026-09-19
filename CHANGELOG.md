@@ -728,6 +728,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   match GEP delivered with no win/loss now gets its own honest read — "The game didn't
   report a win or loss for this one" with a straight link to set it on Review — instead of
   silently falling through to the generic "it's in Matches now" fallback (S2).
+- **A live match is now visible everywhere, not just on Live itself.** The Overview header
+  shows a **"Live · `<map>` · `<hero>` →"** pill the moment a match starts; the nav dot gains
+  a small eliminations chip ("62–32") once the feed says which side an attacker was on; and
+  the Windows tray's tooltip and menu gain a **"Live: `<map>` · started `<N>`m ago"** line and
+  a **"This sitting: `<W>`–`<L>`"** line. On the Live screen itself: a new **Briefing** card
+  leads with your own record on the current map and the active targets that apply to the
+  hero or role you're playing, the header states a real **mm:ss** elapsed clock instead of a
+  coarse "started 12m ago", and the kill feed is relabelled **Kill feed** with its own
+  **Hide** link and an honest off-state hint under the tally when it's switched off (S5).
 
 ## 0.34.0 — 31 July 2026
 
