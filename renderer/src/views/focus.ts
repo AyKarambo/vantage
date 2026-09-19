@@ -8,9 +8,10 @@
  */
 import { h, applyStyle } from '../dom';
 import type { FocusEntry, FocusProgress, Role } from '../../../src/shared/contract';
+import { MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { pct, roleLabel, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
-import { button, card, pill } from '../components/primitives';
+import { button, card, pill, unlockHint } from '../components/primitives';
 import { TREND_META } from '../components/trendArrow';
 import { inlineLink } from '../components/inlineLink';
 import { openPopover } from '../components/popover';
@@ -18,10 +19,17 @@ import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 
 export function focus(ctx: ViewContext): HTMLElement {
-  const items = ctx.data.focusItems;
+  const d = ctx.data;
+  const items = d.focusItems;
   const roles = items.filter((e) => e.dimension === 'role');
   const heroes = items.filter((e) => e.dimension === 'hero');
   const maps = items.filter((e) => e.dimension === 'map');
+  // Distinguishes a genuinely clean season from a first-week player who just
+  // hasn't reached the map floor yet (F1) — the old empty state read the
+  // same "nice, clean season!" either way, which was actively misleading for
+  // the second case. `byMap` carries every map with at least one game (no
+  // floor of its own), so its best count is the honest "how close" answer.
+  const bestMapGames = Math.max(0, ...d.byMap.map((m) => m.games));
 
   return h('div', { class: 'view' },
     viewHead('Focus', 'The roles, heroes and maps that cost you the most points — work on these'),
@@ -30,7 +38,12 @@ export function focus(ctx: ViewContext): HTMLElement {
     focusSection(ctx, 'Maps', 'net = losses − wins · across your maps', maps),
     items.length
       ? null
-      : card({ title: 'Work on these' }, h('div', { class: 'empty empty--good' }, 'Nothing is net-losing right now — nice. 🎯')),
+      : bestMapGames < MAP_MIN_GAMES
+        ? card({ title: 'Work on these' },
+            unlockHint(`Unlocks at ${MAP_MIN_GAMES} games on a map`, [
+              { have: bestMapGames, need: MAP_MIN_GAMES, label: 'games on your most-played map' },
+            ]))
+        : card({ title: 'Work on these' }, h('div', { class: 'empty empty--good' }, 'Nothing is net-losing right now — nice. 🎯')),
     card({ variant: 'glow', title: 'Build a focus routine' },
       h('p', { class: 'hint', style: { lineHeight: '1.6', margin: '0 0 12px' } },
         'Practice your bottom three before ranked and review one replay each. Small, repeatable — that is how the deficit closes.'),

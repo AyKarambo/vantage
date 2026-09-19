@@ -351,7 +351,11 @@ function buildTrend(games: GameRecord[], nowOrdinal: number, ctx: ReadinessConte
   return points;
 }
 
-function insufficientSummary(headline: string, trend: ReadinessTrendPoint[]): ReadinessSummary {
+function insufficientSummary(
+  headline: string,
+  trend: ReadinessTrendPoint[],
+  unlock?: ReadinessSummary['unlock'],
+): ReadinessSummary {
   return {
     band: 'insufficient-data',
     score: null,
@@ -365,6 +369,7 @@ function insufficientSummary(headline: string, trend: ReadinessTrendPoint[]): Re
     driver: 'neutral',
     regime: 'manual',
     trend,
+    ...(unlock ? { unlock } : {}),
   };
 }
 
@@ -414,7 +419,10 @@ export function computeReadiness(
     .sort((a, b) => a.timestamp - b.timestamp);
 
   const nowOrdinal = dayOrdinal(now);
-  if (games.length === 0) return insufficientSummary('Log a few games to unlock readiness.', []);
+  if (games.length === 0) {
+    return insufficientSummary('Log a few games to unlock readiness.', [],
+      { games: 0, minGames: T.minGames, days: 0, minSpanDays: T.minSpanDays });
+  }
 
   const trend = buildTrend(games, nowOrdinal, ctx);
   const firstOrdinal = dayOrdinal(games[0].timestamp);
@@ -423,7 +431,8 @@ export function computeReadiness(
   const restDaysNow = Math.max(0, nowOrdinal - lastOrdinal);
 
   if (spanDays < T.minSpanDays || games.length < T.minGames) {
-    return insufficientSummary('Keep logging games (and your mental state) to unlock readiness.', trend);
+    return insufficientSummary('Keep logging games (and your mental state) to unlock readiness.', trend,
+      { games: games.length, minGames: T.minGames, days: spanDays, minSpanDays: T.minSpanDays });
   }
   if (restDaysNow >= T.staleDays) {
     return staleSummary(restDaysNow, trend);

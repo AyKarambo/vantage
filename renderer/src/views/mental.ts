@@ -5,7 +5,7 @@ import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '..
 import { pct } from '../format';
 import { PALETTE } from '../theme';
 import { sparkline } from '../charts/plots';
-import { badge, card, statBar, statBox } from '../components/primitives';
+import { badge, card, statBar, statBox, unlockHint } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { breakReminderEditor } from '../components/breakReminderEditor';
@@ -115,9 +115,15 @@ function taxRow(
   badFlag?: MatchFlagKey,
 ): HTMLElement {
   if (good.decided < COST_MIN_SAMPLE || bad.decided < COST_MIN_SAMPLE) {
-    return costRow(label,
-      h('span', { class: 'u-dim' }, 'needs data'),
-      `${good.decided}/${COST_MIN_SAMPLE} ${goodLabel} · ${bad.decided}/${COST_MIN_SAMPLE} ${badLabel} decided games`);
+    return h('div', null,
+      h('div', { style: { fontSize: '12.5px', marginBottom: '2px' } }, label),
+      // F1: each side clamps to a check mark the instant IT meets the floor,
+      // instead of the old raw "12/5" once only one side had cleared it.
+      unlockHint(`Needs ${COST_MIN_SAMPLE} decided games on each side`, [
+        { have: good.decided, need: COST_MIN_SAMPLE, label: goodLabel },
+        { have: bad.decided, need: COST_MIN_SAMPLE, label: badLabel },
+      ]),
+    );
   }
   const cost = Math.round((good.winrate - bad.winrate) * 100);
   const badPct = badFlag
@@ -136,8 +142,14 @@ function taxRow(
 function leaverRow(ctx: ViewContext, l: { none: WinrateSide; myTeam: WinrateSide; enemy: WinrateSide }): HTMLElement {
   const side = (s: WinrateSide): string => (s.decided >= COST_MIN_SAMPLE ? pct(s.winrate) : `— (${s.decided}g)`);
   if (l.myTeam.decided < COST_MIN_SAMPLE || l.none.decided < COST_MIN_SAMPLE) {
-    const detail = `${side(l.myTeam)} my team · ${side(l.none)} none · ${side(l.enemy)} enemy`;
-    return costRow('Leaver swing', h('span', { class: 'u-dim' }, 'needs data'), detail);
+    return h('div', null,
+      h('div', { style: { fontSize: '12.5px', marginBottom: '2px' } }, 'Leaver swing'),
+      unlockHint(`Needs ${COST_MIN_SAMPLE} decided games on each side`, [
+        { have: l.myTeam.decided, need: COST_MIN_SAMPLE, label: 'my team' },
+        { have: l.none.decided, need: COST_MIN_SAMPLE, label: 'none' },
+      ]),
+      h('div', { class: 'hint', style: { marginTop: '4px' } }, `${side(l.enemy)} enemy so far`),
+    );
   }
   const cost = Math.round((l.none.winrate - l.myTeam.winrate) * 100);
   const myTeamLink = inlineLink(side(l.myTeam), { title: 'Show the my-team-leaver games', onClick: () => ctx.navigate('matches', { flag: 'leaver' }) });
@@ -149,9 +161,13 @@ function leaverRow(ctx: ViewContext, l: { none: WinrateSide; myTeam: WinrateSide
 /** The performance drop when tilted (0–100 self-rating), gated on rated games. */
 function perfRow(p: { calm: RatedSide; tilted: RatedSide }): HTMLElement {
   if (p.calm.rated < COST_MIN_SAMPLE || p.tilted.rated < COST_MIN_SAMPLE || p.calm.avg === null || p.tilted.avg === null) {
-    return costRow('Performance when tilted',
-      h('span', { class: 'u-dim' }, 'needs data'),
-      `${p.calm.rated}/${COST_MIN_SAMPLE} calm · ${p.tilted.rated}/${COST_MIN_SAMPLE} tilted rated games`);
+    return h('div', null,
+      h('div', { style: { fontSize: '12.5px', marginBottom: '2px' } }, 'Performance when tilted'),
+      unlockHint(`Needs ${COST_MIN_SAMPLE} rated games on each side`, [
+        { have: p.calm.rated, need: COST_MIN_SAMPLE, label: 'calm' },
+        { have: p.tilted.rated, need: COST_MIN_SAMPLE, label: 'tilted' },
+      ]),
+    );
   }
   const drop = Math.round(p.calm.avg - p.tilted.avg);
   return costRow('Performance when tilted', h('span', null, costVerdict(drop, ''), ' / 100 self-rating'),

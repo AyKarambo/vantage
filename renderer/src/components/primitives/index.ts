@@ -22,3 +22,7 @@ export type { PillState } from './labels';
 // Numeric/statistical display
 export { kpiCard, statBar, statBox, calendarHeatmap } from './stats';
 export type { KpiOpts } from './stats';
+
+// Shared "unlocks at N" progress readout (F1)
+export { unlockHint, unlockProgress } from './unlock';
+export type { UnlockPart } from './unlock';

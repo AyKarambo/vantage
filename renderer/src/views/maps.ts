@@ -1,18 +1,23 @@
 /** Maps — by game mode, games-played share, and every map ranked best → worst. */
 import { h } from '../dom';
 import type { DashboardData, Group } from '../../../src/shared/contract';
+import { MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { fmt, pct, signed } from '../format';
 import { wrColor, CATEGORICAL, OTHER_COLOR } from '../theme';
 import { donutChart, horizontalBars, type DonutSlice } from '../charts/plots';
-import { card, statBar } from '../components/primitives';
+import { card, statBar, unlockHint } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { viewHead, type ViewContext } from './view';
 
-const MIN_MAP_GAMES = 3;
 const TOP_SLICES = 10;
 
 export function maps(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
+  // The floor filter below falls back to EVERY map (including 1-game ones)
+  // once nothing meets it, so the "3+ games" subtitle would otherwise keep
+  // claiming a floor that isn't actually being applied (F1).
+  const bestMapGames = Math.max(0, ...d.byMap.map((m) => m.games));
+  const floorActive = bestMapGames >= MAP_MIN_GAMES;
   const view = h('div', { class: 'view' },
     viewHead('Maps', 'Where the games actually go — by mode, then map by map'),
     h('div', { class: 'grid-3' }, ...d.byMapType.map(modeCard)),
@@ -21,7 +26,7 @@ export function maps(ctx: ViewContext): HTMLElement {
     ),
     chartCard({
       title: 'Winrate by map',
-      sub: 'best to worst · 3+ games',
+      sub: floorActive ? `best to worst · ${MAP_MIN_GAMES}+ games` : 'best to worst · every map (none have enough plays yet for a floor)',
       columns: [
         { key: 'map', label: 'Map' },
         { key: 'winrate', label: 'WR', render: (v) => pct(v as number) },
@@ -47,6 +52,10 @@ export function maps(ctx: ViewContext): HTMLElement {
       // than chartCard's generic "first column, descending" default.
       initialSort: { key: 'winrate', dir: -1 },
     }, horizontalBars(rankedMaps(d).map((m) => ({ label: m.key, winrate: m.winrate, games: m.games })))),
+    floorActive ? null : card({ title: 'Unlocking the 3+ games floor' },
+      unlockHint(`The ranking above narrows to your reliable maps once one reaches ${MAP_MIN_GAMES} games`, [
+        { have: bestMapGames, need: MAP_MIN_GAMES, label: 'games on your most-played map' },
+      ])),
   );
   // Palette / cross-link entry: scroll to and flash the requested map's bar.
   const highlight = ctx.params.highlight;
@@ -91,7 +100,7 @@ function mapsPlayed(d: DashboardData): DonutSlice[] {
 }
 
 function rankedMaps(d: DashboardData): Group[] {
-  let list = d.byMap.filter((m) => m.games >= MIN_MAP_GAMES);
+  let list = d.byMap.filter((m) => m.games >= MAP_MIN_GAMES);
   if (!list.length) list = [...d.byMap];
   return list.sort((a, b) => b.winrate - a.winrate);
 }
