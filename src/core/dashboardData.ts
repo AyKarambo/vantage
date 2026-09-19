@@ -343,7 +343,7 @@ export function computeDashboard(
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
-    ...(recapOf(sessionGames, authoredTargets, sessionSettings.gapMinutes, margin) ?? {}),
+    ...(recapOf(sessionGames, authoredTargets, sessionSettings.gapMinutes, margin, suppressed) ?? {}),
   };
 }
 
@@ -358,8 +358,9 @@ function recapOf(
   authoredTargets: AuthoredTarget[],
   gapMinutes: number,
   margin?: number,
+  suppressed?: ReadonlySet<string>,
 ): { recap: NonNullable<DashboardData['recap']> } | null {
-  const debrief = sessionDebrief(sessionGames, authoredTargets, Date.now(), gapMinutes, margin);
+  const debrief = sessionDebrief(sessionGames, authoredTargets, Date.now(), gapMinutes, margin, suppressed);
   return debrief?.closed ? { recap: debrief } : null;
 }
 

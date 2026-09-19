@@ -1027,7 +1027,7 @@ const mock: OwStatsApi = {
   },
   suggestThreshold: async (input: ThresholdSuggestionInput) =>
     suggestMeasuredThreshold(dataset(), input.stat, input.account, {
-      roleScope: input.roleScope, heroScope: input.heroScope,
+      roleScope: input.roleScope, heroScope: input.heroScope, mapScope: input.mapScope,
     }),
   saveReview: async (input: ReviewInput) => {
     // Mirrors the real dataProvider: only a REAL (logged) match can be

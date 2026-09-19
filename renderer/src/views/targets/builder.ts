@@ -258,7 +258,7 @@ export function measuredBlock(state: BuilderState, heroes: HeroEntry[], maps: Ma
     const stat = state.stat;
     const my = ++reqId;
     void bridge.suggestThreshold({
-      stat, account, roleScope: state.roleScope, heroScope: state.heroScope,
+      stat, account, roleScope: state.roleScope, heroScope: state.heroScope, mapScope: state.mapScope,
     }).then((s) => {
       if (my !== reqId) return; // superseded by a newer stat/scope change
       render(suggestionHost, suggestionPanel(stat, s, useValue));

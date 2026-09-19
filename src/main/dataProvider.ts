@@ -225,7 +225,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     suggestThreshold: (input) =>
       suggestMeasuredThreshold(deps.history.all(), input.stat, input.account, {
-        roleScope: input.roleScope, heroScope: input.heroScope,
+        roleScope: input.roleScope, heroScope: input.heroScope, mapScope: input.mapScope,
       }),
     saveReview: (input) => {
       // A demo match (F3) is never in real history — `setReview` reports that

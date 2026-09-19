@@ -200,6 +200,7 @@ export function sessionDebrief(
   now: number = Date.now(),
   gapMinutes: number = 180,
   margin?: number,
+  suppressed?: ReadonlySet<string>,
 ): SessionDebrief | null {
   if (!games.length) return null;
   const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
@@ -231,7 +232,13 @@ export function sessionDebrief(
     }
   }
 
-  const srDeltas = trailing.map((g) => g.srDelta).filter((v): v is number => v != null);
+  // Excludes placement-run games from the SR sum only (games/W-L/tilt above
+  // still count them) — a placement's SR swing isn't comparable to a normal
+  // match's, same stance sessionHistory (below) already takes.
+  const srDeltas = trailing
+    .filter((g) => !suppressed?.has(g.matchId))
+    .map((g) => g.srDelta)
+    .filter((v): v is number => v != null);
 
   // Hit-rate over the merged grade view every self+measured surface already
   // uses (foldMeasuredGradesForExport): stored self-rated grades, with every

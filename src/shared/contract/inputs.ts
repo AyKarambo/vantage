@@ -90,9 +90,10 @@ export interface AuthoredTargetInput {
 export interface ThresholdSuggestionInput {
   stat: string;
   account: string;
-  /** Role/hero scope, shared with the target itself (D) — the suggestion should reflect the same games the target will actually grade. */
+  /** Role/hero/map scope, shared with the target itself (D, R9) — the suggestion should reflect the same games the target will actually grade. */
   roleScope?: Role;
   heroScope?: string[];
+  mapScope?: string[];
 }
 
 /** An edit to an existing target — lifecycle state and accrued grades are kept. */

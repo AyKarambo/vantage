@@ -224,6 +224,22 @@ describe('sessionDebrief (S3)', () => {
     expect(sessionDebrief(none, [], NOW)!.srDelta).toBeUndefined();
   });
 
+  it('sums SR delta, excluding suppressed (placement) games from the sum — same stance sessionHistory takes', () => {
+    const games = [
+      game({ timestamp: hoursAgo(2), result: 'Win', srDelta: 25, matchId: 'p1' }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', srDelta: -18, matchId: 'm2' }),
+    ];
+    const suppressed = new Set(['p1']);
+    const r = sessionDebrief(games, [], NOW, 180, undefined, suppressed)!;
+    expect(r.srDelta).toBe(-18); // p1's +25 excluded — a placement SR isn't comparable
+    expect(r.srDeltaGames).toBe(1);
+    // The games/wins/losses tally itself still counts the placement game —
+    // only the SR sum treats it specially.
+    expect(r.games).toBe(2);
+    expect(r.wins).toBe(1);
+    expect(r.losses).toBe(1);
+  });
+
   it('lists competitive matches in the sitting with no review at all as ungraded', () => {
     const games = [
       game({ timestamp: hoursAgo(2), result: 'Win' }), // no review — ungraded
