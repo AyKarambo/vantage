@@ -69,6 +69,22 @@ export interface PlayerEncounter {
    * rather than zeroes in that case (guardrail 1: blanks, never inferences).
    */
   relationKnown: number;
+  /**
+   * The hero played most often across prior shared matches, with how many of
+   * them, when any game recorded one (S7). Ties break toward whichever hero
+   * `Map` iteration meets first — not itself meaningful, since a tie means
+   * neither hero actually leads.
+   */
+  topHero?: { hero: string; games: number };
+  /** The hero from the most recent prior shared game, when known (S7). */
+  lastHero?: string;
+  /**
+   * Whether they're on the tracked player's team in THIS match — a different
+   * question from {@link sameTeam}/{@link enemyTeam} above, which are the
+   * aggregate historical W/L splits. `undefined` when either row's team
+   * wasn't reported (S7).
+   */
+  withYou?: boolean;
 }
 
 /**
@@ -188,6 +204,10 @@ export interface PlayerRecord {
   sameTeam: { wins: number; losses: number };
   /** W/L for matches where they were on the ENEMY team (team relation known). */
   enemyTeam: { wins: number; losses: number };
+  /** The hero played most often across shared matches, with how many of them, when any game recorded one (S7). */
+  topHero?: { hero: string; games: number };
+  /** The hero from the most recent shared game, when known (S7). */
+  lastHero?: string;
 }
 
 /** Full match drill-down payload. Optional sections degrade per data tier. */

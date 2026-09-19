@@ -159,6 +159,62 @@ describe('playerHistory', () => {
     expect(nova.sameTeam).toEqual(rec.sameTeam);
     expect(nova.enemyTeam).toEqual(rec.enemyTeam);
     expect(nova.encounters).toBe(rec.encounters);
+    // The hero counts must agree too, over the same slice (S7).
+    expect(nova.topHero).toEqual(rec.topHero);
+    expect(nova.lastHero).toEqual(rec.lastHero);
+  });
+
+  // S7: usual hero + which side they're on THIS match.
+  it('counts topHero from the hero played most across prior shared games', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [me, other('Nova#11214')] });
+    const all = [
+      game({ result: 'Win', timestamp: 2000, roster: [me, them('Nova#11214', 0, 'Widowmaker')] }),
+      game({ result: 'Loss', timestamp: 3000, roster: [me, them('Nova#11214', 0, 'Widowmaker')] }),
+      game({ result: 'Win', timestamp: 4000, roster: [me, them('Nova#11214', 0, 'Ashe')] }),
+      target,
+    ];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.topHero).toEqual({ hero: 'Widowmaker', games: 2 });
+  });
+
+  it('reports lastHero from the most recent prior shared game, regardless of array order', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [me, other('Nova#11214')] });
+    // Deliberately out of chronological order — lastHero must go by timestamp, not position.
+    const all = [
+      game({ result: 'Win', timestamp: 4000, roster: [me, them('Nova#11214', 0, 'Ashe')] }),
+      game({ result: 'Win', timestamp: 2000, roster: [me, them('Nova#11214', 0, 'Widowmaker')] }),
+      target,
+    ];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.lastHero).toBe('Ashe');
+  });
+
+  it('leaves topHero/lastHero absent when no prior game recorded a hero for them', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [me, other('Nova#11214')] });
+    const noHero: RosterPlayer = { battleTag: 'Nova#11214' };
+    const all = [game({ result: 'Win', timestamp: 2000, roster: [me, noHero] }), target];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.topHero).toBeUndefined();
+    expect(nova.lastHero).toBeUndefined();
+  });
+
+  it('sets withYou from THIS match, independent of their historical team splits', () => {
+    // Historically always on the enemy team, but on YOUR team in the target match.
+    const target = game({ result: 'Win', matchId: 't', roster: [meT(0), them('Nova#11214', 0)] });
+    const all = [
+      game({ result: 'Loss', timestamp: 2000, roster: [meT(0), them('Nova#11214', 1)] }),
+      target,
+    ];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.withYou).toBe(true);
+    expect(nova.enemyTeam).toEqual({ wins: 0, losses: 1 }); // the historical split is unaffected
+  });
+
+  it('leaves withYou undefined when the target match itself has no team relation', () => {
+    const target = game({ result: 'Win', matchId: 't', roster: [me, other('Nova#11214')] }); // no teams
+    const all = [game({ result: 'Win', timestamp: 2000, roster: [meT(0), them('Nova#11214', 0)] }), target];
+    const nova = playerHistory(all, target)[0];
+    expect(nova.withYou).toBeUndefined();
   });
 });
 
@@ -363,6 +419,25 @@ describe('playerRecords', () => {
     expect(batched.sameTeam).toEqual(single.sameTeam);
     expect(batched.enemyTeam).toEqual(single.enemyTeam);
     expect(batched.encounters).toBe(single.encounters);
+  });
+
+  // S7: usual hero.
+  it('counts topHero across every shared game, and lastHero from the most recent one', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 2000, roster: [meT(0), { battleTag: 'Nova#1', heroName: 'Widowmaker', team: 0 }] }),
+      game({ result: 'Loss', timestamp: 4000, roster: [meT(0), { battleTag: 'Nova#1', heroName: 'Ashe', team: 0 }] }),
+      game({ result: 'Win', timestamp: 3000, roster: [meT(0), { battleTag: 'Nova#1', heroName: 'Widowmaker', team: 0 }] }),
+    ];
+    const nova = playerRecords(all, ['Nova#1'])[0];
+    expect(nova.topHero).toEqual({ hero: 'Widowmaker', games: 2 });
+    expect(nova.lastHero).toBe('Ashe'); // timestamp 4000, the latest, regardless of array order
+  });
+
+  it('leaves topHero/lastHero absent with no recorded hero', () => {
+    const all = [game({ result: 'Win', roster: [meT(0), { battleTag: 'Nova#1', team: 0 }] })];
+    const nova = playerRecords(all, ['Nova#1'])[0];
+    expect(nova.topHero).toBeUndefined();
+    expect(nova.lastHero).toBeUndefined();
   });
 });
 

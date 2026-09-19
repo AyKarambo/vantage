@@ -1094,18 +1094,24 @@ function playerHistorySection(d: MatchDetail, ctx: ViewContext): HTMLElement {
   // Counts are PRIOR games — this match is excluded, so they read one lower than
   // the drill-down's own total. Both surfaces say which they show.
   const anyUnknown = d.playerHistory.some((p) => p.relationKnown < p.encounters);
+  // Sorted your team first, then enemy, then side-unknown (S7) — a stable
+  // sort, so within each group the core's own encounters-desc/recency order survives.
+  const sideRank = (w: boolean | undefined): number => (w === true ? 0 : w === false ? 1 : 2);
+  const sorted = [...d.playerHistory].sort((a, b) => sideRank(a.withYou) - sideRank(b.withYou));
   return card({ title: 'Player history', sub: PLAYER_HISTORY_SUB },
     h('table', { class: 'mini' },
       h('thead', null,
         h('tr', null,
+          h('th', null),
           h('th', null, 'Player'),
+          h('th', null, 'They play'),
           h('th', null, 'Prior'),
           h('th', null, RELATION_LABEL.with.long),
           h('th', null, RELATION_LABEL.against.long),
           h('th', null, 'Last'),
         ),
       ),
-      h('tbody', null, ...d.playerHistory.map((p) => encounterRow(p, ctx))),
+      h('tbody', null, ...sorted.map((p) => encounterRow(p, ctx))),
     ),
     anyUnknown
       ? h('div', { class: 'hint', style: { marginTop: '8px' } },
@@ -1132,15 +1138,38 @@ function splitCell(wl: { wins: number; losses: number }, known: number): HTMLEle
   return h('td', { class: 'mono' }, `${wl.wins}W ${wl.losses}L`);
 }
 
+/** "usually Widowmaker (4 of 6)" — the most actionable pre-match fact stored history can offer, now counted instead of thrown away (S7). */
+function theirsCell(p: PlayerEncounter): HTMLElement {
+  if (!p.topHero) return h('td', { class: 'u-dim' }, '—');
+  return h('td', {
+    class: 'u-dim',
+    title: p.lastHero && p.lastHero !== p.topHero.hero ? `Last played: ${p.lastHero}` : undefined,
+  }, `${p.topHero.hero} (${p.topHero.games} of ${p.encounters})`);
+}
+
 function encounterRow(p: PlayerEncounter, ctx: ViewContext): HTMLElement {
-  return h('tr', null,
+  const open = (): void => ctx.navigate('playerHistory', { playerName: p.name });
+  return h('tr', {
+    style: { cursor: 'pointer' },
+    // The whole row opens their history now (S7), same click-through every
+    // other list in the app gives a name — the name link stays for keyboard
+    // users and stops its own click bubbling into the row's handler.
+    ...clickableRow(open),
+  },
+    h('td', { style: { textAlign: 'center' } },
+      h('span', {
+        class: 'pill',
+        title: p.withYou === undefined ? 'Team not reported this match' : p.withYou ? 'On your team now' : 'On the enemy team now',
+      }, p.withYou === undefined ? '—' : p.withYou ? RELATION_LABEL.with.short : RELATION_LABEL.against.short),
+    ),
     h('td', null,
       inlineLink(p.name, {
         strong: true,
         title: `See every game you have shared with ${p.name}`,
-        onClick: () => ctx.navigate('playerHistory', { playerName: p.name }),
+        onClick: (e) => { e.stopPropagation(); open(); },
       }),
     ),
+    theirsCell(p),
     h('td', { class: 'mono' }, String(p.encounters)),
     splitCell(p.sameTeam, p.relationKnown),
     splitCell(p.enemyTeam, p.relationKnown),

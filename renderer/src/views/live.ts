@@ -497,14 +497,30 @@ function knownPlayersCard(
       return h('div', { class: 'hint' }, 'Nobody here you’ve played with before — or the feed hasn’t named them yet.');
     }
     const sideOf = new Map(p.roster.map((r) => [r.name, r.team]));
+    const heroOf = new Map(p.roster.map((r) => [r.name, r.hero]));
     const mine = p.roster.find((r) => r.isLocal)?.team;
-    return h('div', { class: 'stack', style: { gap: '8px' } },
-      ...records.map((r) => {
-        const team = sideOf.get(r.name);
-        // The relation is about THIS match; absent when the feed didn't say.
-        const withYou = mine !== undefined && team !== undefined ? team === mine : undefined;
-        return playerRow(r, withYou, ctx);
-      }),
+    const withRelation = records.map((r) => {
+      const team = sideOf.get(r.name);
+      // The relation is about THIS match; absent when the feed didn't say.
+      const withYou = mine !== undefined && team !== undefined ? team === mine : undefined;
+      return { r, withYou };
+    });
+    // Sorted by side (S7) — your team first, then the enemy, then anyone
+    // whose side this match isn't known — instead of interleaved by encounter
+    // count, which used to bury a teammate under a more-often-seen opponent.
+    const mineRows = withRelation.filter((x) => x.withYou === true);
+    const enemyRows = withRelation.filter((x) => x.withYou === false);
+    const unknownRows = withRelation.filter((x) => x.withYou === undefined);
+    const section = (title: string, rows: typeof withRelation): Node[] => rows.length
+      ? [
+          h('div', { class: 'review-section-label', style: { fontSize: '10px', marginTop: '10px', marginBottom: '6px' } }, title),
+          ...rows.map(({ r, withYou }) => playerRow(r, withYou, heroOf.get(r.name), ctx)),
+        ]
+      : [];
+    return h('div', { class: 'stack', style: { gap: '4px' } },
+      ...section('On your team', mineRows),
+      ...section('Against you', enemyRows),
+      ...section('Side unknown', unknownRows),
     );
   };
   return card({ variant: 'raised' },
@@ -513,9 +529,8 @@ function knownPlayersCard(
   );
 }
 
-function playerRow(r: PlayerRecord, withYou: boolean | undefined, ctx: ViewContext): HTMLElement {
+function playerRow(r: PlayerRecord, withYou: boolean | undefined, currentHero: string | undefined, ctx: ViewContext): HTMLElement {
   const wl = (s: { wins: number; losses: number }): string => `${s.wins}W ${s.losses}L`;
-  const both = r.sameTeam.wins + r.sameTeam.losses > 0 && r.enemyTeam.wins + r.enemyTeam.losses > 0;
   const stats: Node[] = [];
   if (r.sameTeam.wins + r.sameTeam.losses > 0) {
     stats.push(pill(`with ${wl(r.sameTeam)}`, withYou === true ? 'accent' : undefined));
@@ -527,7 +542,22 @@ function playerRow(r: PlayerRecord, withYou: boolean | undefined, ctx: ViewConte
     // Met, but never in a game with a decided result and a known team relation.
     stats.push(h('span', { class: 'u-dim', style: { fontSize: '11.5px' } }, 'no decided games together'));
   }
-  return h('div', { class: 'review-row' },
+  // A player you generally LOSE against as the enemy is worth flagging (S7) —
+  // "watch out for this one", not a winrate-scheme colour (this is a warning,
+  // not a result), so a plain loss-toned border rather than the tinted pill above.
+  const worrying = withYou === false && r.enemyTeam.losses > r.enemyTeam.wins;
+  const metaBits = [`${r.encounters} shared ${r.encounters === 1 ? 'match' : 'matches'} · last ${relTime(r.lastSeen)}`];
+  if (currentHero) metaBits.push(`now on ${currentHero}`);
+  // "usually Widowmaker (4 of 6) · last Ashe" — the most actionable pre-match
+  // fact stored history can offer, and it was already being counted for
+  // nothing (S7). Omits the "· last" clause when it would just repeat topHero.
+  const usualLine = r.topHero
+    ? `usually ${r.topHero.hero} (${r.topHero.games} of ${r.encounters})${r.lastHero && r.lastHero !== r.topHero.hero ? ` · last ${r.lastHero}` : ''}`
+    : null;
+  return h('div', {
+    class: 'review-row',
+    style: worrying ? { borderLeft: '2px solid var(--loss-text)', paddingLeft: '6px' } : undefined,
+  },
     h('span', {
       class: 'pill',
       title: withYou === undefined ? 'Team not reported this match' : withYou ? 'On your team now' : 'On the enemy team now',
@@ -538,11 +568,10 @@ function playerRow(r: PlayerRecord, withYou: boolean | undefined, ctx: ViewConte
         style: { fontSize: '13px' },
         onClick: () => ctx.navigate('playerHistory', { playerName: r.name }),
       }),
-      h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
-        `${r.encounters} shared ${r.encounters === 1 ? 'match' : 'matches'} · last ${relTime(r.lastSeen)}`),
+      h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } }, metaBits.join(' · ')),
+      usualLine ? h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '1px' } }, usualLine) : null,
     ),
     h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } }, ...stats),
-    both ? null : null,
   );
 }
 
