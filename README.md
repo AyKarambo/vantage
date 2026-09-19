@@ -30,10 +30,17 @@ whichever of SR change, best map, and targets-hit rate the sitting actually has,
 these N games →" link when any are still ungraded, and a "View games →" link; dismissing it
 collapses to a one-line reopen instead of hiding it until tomorrow.
 
-The sidebar **collapses to an icon-only rail** (the `« Collapse` bar directly under the account
-chip, or **Ctrl B**), which sticks between launches — useful on a small screen, or whenever you
-want the chrome out of the way. Collapsed, each icon keeps its name as a tooltip, the toggle
-shrinks to just the `»` glyph, and the Review count shows as a dot. The **Current session**
+Nav items carry a real inline-SVG icon each — a distinct silhouette per screen (K6, e.g. a
+crosshair for Focus, a battery for Readiness, a map pin for Maps) — replacing 15 Unicode text
+glyphs that used to fall through to an inconsistent system symbol font, nine of them geometric
+shapes from a small alphabet and five of those circles differing only by fill. Every nav
+button's tooltip names its `Ctrl+<digit>` shortcut too, and the same icon set shows on the
+command palette's own Screen rows (below), so a screen is recognizable there at a glance
+instead of by label text alone. The sidebar **collapses to an icon-only rail** (the `« Collapse`
+bar directly under the account chip, or **Ctrl B**), which sticks between launches — useful on a
+small screen, or whenever you want the chrome out of the way. Collapsed, each icon keeps its
+name (and shortcut) as a tooltip, the toggle shrinks to just the `»` glyph, and the Review count
+shows as a dot. The **Current session**
 card is the bottom-most thing in the sidebar; if the navigation ever does run out of room it
 scrolls, with the account switcher and session card staying put either side of it. Opening the
 account switcher lists every account as an aligned row — ✓ · name · rank — with the active

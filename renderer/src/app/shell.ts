@@ -35,6 +35,10 @@ import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
 import { maybeOfferPlacements } from './placementOffer';
 import { roleStatus } from '../roleStatus';
 import { sidebarChip } from '../sidebarChip';
+import {
+  overviewIcon, liveIcon, reviewIcon, matchesIcon, playersIcon, focusIcon, targetsIcon, mentalIcon,
+  readinessIcon, heroesIcon, mapsIcon, trendsIcon, notionSyncIcon, logsIcon, settingsIcon, aboutIcon, faqIcon,
+} from '../components/icons';
 import { overview } from '../views/overview';
 import { live } from '../views/live';
 import { matches } from '../views/matches';
@@ -95,8 +99,15 @@ const SWITCHER_ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
 interface NavItem {
   id: ViewId;
   label: string;
-  /** A text glyph (rendered as-is) or a prebuilt inline-SVG node (appended). */
-  icon: string | Node;
+  /**
+   * A text glyph (rendered as-is), or a FACTORY for an inline-SVG node — a
+   * factory, not a built node, since the icon is also reused in the command
+   * palette's Screen rows (K6): a DOM node can only live in one place at a
+   * time, so the persistent sidebar button and a palette row (rebuilt on
+   * every keystroke) each need their own fresh instance, not the same one
+   * fought over.
+   */
+  icon: string | (() => Node);
   /**
    * The digit this screen answers to as `Ctrl+<key>` — a property OF the screen,
    * not of its position. Shortcuts used to be handed out by sidebar order and
@@ -111,8 +122,6 @@ interface NavItem {
   key?: number;
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
 /**
  * Below this width the sidebar auto-collapses to an icon rail when the user
  * hasn't pinned an explicit state (W7) — matches the width `minWidth: 960`
@@ -121,53 +130,6 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * leaving the nav a keyhole at the window's actual minimum size.
  */
 const SIDEBAR_NARROW_QUERY = window.matchMedia('(max-width: 1180px)');
-
-/**
- * The Targets nav glyph: a pennant flying from a pole (a goal flag), drawn inline
- * in `currentColor` so it tracks the nav item's colour and active state — the same
- * technique as {@link ../components/roleIcon}. Deliberately distinct from Review's
- * wavy `⚑` text glyph so the two never read as the same icon.
- */
-function goalFlagIcon(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '15');
-  svg.setAttribute('height', '15');
-  svg.setAttribute('aria-hidden', 'true');
-  const pole = document.createElementNS(SVG_NS, 'line');
-  for (const [k, v] of Object.entries({ x1: 6, y1: 3, x2: 6, y2: 21, stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' })) {
-    pole.setAttribute(k, String(v));
-  }
-  const pennant = document.createElementNS(SVG_NS, 'path');
-  pennant.setAttribute('d', 'M6 4l11 3.2L6 11z');
-  pennant.setAttribute('fill', 'currentColor');
-  svg.appendChild(pole);
-  svg.appendChild(pennant);
-  return svg;
-}
-/**
- * The Players nav glyph: two overlapping head-and-shoulders marks. Drawn inline
- * in `currentColor` like {@link goalFlagIcon} rather than picked from the text
- * glyph set — every unused geometric candidate (⊚, ⊛, ◍) either collides with an
- * existing icon at 15px or is not guaranteed in the bundled font.
- */
-function peopleIcon(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '15');
-  svg.setAttribute('height', '15');
-  svg.setAttribute('aria-hidden', 'true');
-  const back = document.createElementNS(SVG_NS, 'path');
-  back.setAttribute('d', 'M16.5 11a3 3 0 100-6 3 3 0 000 6zm0 1.6c-1 0-1.9.2-2.6.5 1.2.9 2 2.2 2.2 3.9H22v-1c0-2-2.5-3.4-5.5-3.4z');
-  back.setAttribute('fill', 'currentColor');
-  back.setAttribute('opacity', '0.55');
-  const front = document.createElementNS(SVG_NS, 'path');
-  front.setAttribute('d', 'M9 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm0 1.8c-3.3 0-7 1.7-7 3.9V19h14v-1.3c0-2.2-3.7-3.9-7-3.9z');
-  front.setAttribute('fill', 'currentColor');
-  svg.appendChild(back);
-  svg.appendChild(front);
-  return svg;
-}
 
 // Regrouped by moment (K6) rather than the old Workspace/Insights/App split,
 // which mixed screens by "kind of thing" instead of when you'd reach for
@@ -181,16 +143,16 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       // Digits are pinned per screen (see NavItem.key), so this list can be
       // reordered or added to without moving anyone's muscle memory. Players
       // takes Ctrl+0 — the tenth key — rather than displacing Maps..Trends.
-      { id: 'overview', label: 'Overview', icon: '◈', key: 1 },
-      { id: 'live', label: 'Live', icon: '◉', key: 2 },
+      { id: 'overview', label: 'Overview', icon: overviewIcon, key: 1 },
+      { id: 'live', label: 'Live', icon: liveIcon, key: 2 },
     ],
   },
   {
     group: 'After the session',
     items: [
-      { id: 'review', label: 'Review', icon: '⚑', key: 3 },
-      { id: 'matches', label: 'Matches', icon: '▤', key: 4 },
-      { id: 'players', label: 'Players', icon: peopleIcon(), key: 0 },
+      { id: 'review', label: 'Review', icon: reviewIcon, key: 3 },
+      { id: 'matches', label: 'Matches', icon: matchesIcon, key: 4 },
+      { id: 'players', label: 'Players', icon: playersIcon, key: 0 },
     ],
   },
   {
@@ -199,18 +161,18 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     // commits" hierarchy needs Focus to still be reachable on its own.
     group: 'Improve',
     items: [
-      { id: 'focus', label: 'Focus', icon: '◎', key: 7 },
-      { id: 'targets', label: 'Targets', icon: goalFlagIcon() },
-      { id: 'mental', label: 'Mental', icon: '◐', key: 8 },
-      { id: 'readiness', label: 'Readiness', icon: '◆' },
+      { id: 'focus', label: 'Focus', icon: focusIcon, key: 7 },
+      { id: 'targets', label: 'Targets', icon: targetsIcon },
+      { id: 'mental', label: 'Mental', icon: mentalIcon, key: 8 },
+      { id: 'readiness', label: 'Readiness', icon: readinessIcon },
     ],
   },
   {
     group: 'Reference',
     items: [
-      { id: 'heroes', label: 'Heroes', icon: '◍', key: 6 },
-      { id: 'maps', label: 'Maps', icon: '◇', key: 5 },
-      { id: 'trends', label: 'Trends', icon: '◔', key: 9 },
+      { id: 'heroes', label: 'Heroes', icon: heroesIcon, key: 6 },
+      { id: 'maps', label: 'Maps', icon: mapsIcon, key: 5 },
+      { id: 'trends', label: 'Trends', icon: trendsIcon, key: 9 },
     ],
   },
   {
@@ -220,11 +182,11 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     // a whole group header without hiding anything.
     group: 'App',
     items: [
-      { id: 'notion', label: 'Notion sync', icon: '⟳' },
-      { id: 'logs', label: 'Logs', icon: '≡' },
-      { id: 'settings', label: 'Settings', icon: '⚙' },
-      { id: 'about', label: 'About', icon: 'ⓘ' },
-      { id: 'faq', label: 'FAQ', icon: '?' },
+      { id: 'notion', label: 'Notion sync', icon: notionSyncIcon },
+      { id: 'logs', label: 'Logs', icon: logsIcon },
+      { id: 'settings', label: 'Settings', icon: settingsIcon },
+      { id: 'about', label: 'About', icon: aboutIcon },
+      { id: 'faq', label: 'FAQ', icon: faqIcon },
     ],
   },
 ];
@@ -748,13 +710,16 @@ export class App {
           class: 'nav-item',
           // Always set, not only while collapsed: the rail hides the label, and
           // a title that appears and disappears with the rail is a title nobody
-          // learns to expect.
-          title: item.label,
+          // learns to expect. Names the Ctrl+digit too (K6) — collapsed, the
+          // rail shows nothing else that could teach it, so hovering used to be
+          // the only way to learn which icon Trends even was, let alone its
+          // shortcut.
+          title: item.key !== undefined ? `${item.label} · ${comboLabel(`ctrl+${item.key}`)}` : item.label,
           on: { click: () => store.setView(item.id) },
         },
-          // icon is a text glyph or a prebuilt SVG node; h() appends a Node as-is
-          // and stringifies a glyph, so both render correctly.
-          h('span', { class: 'nav-icon' }, item.icon),
+          // icon is a text glyph or an SVG-node factory — a fresh instance per
+          // call, since the same factory also builds the palette's copy (K6).
+          h('span', { class: 'nav-icon' }, typeof item.icon === 'string' ? item.icon : item.icon()),
           // Wrapped rather than a bare text node so the rail can hide the words
           // without hiding the icon beside them.
           h('span', { class: 'nav-label' }, item.label),
@@ -1191,6 +1156,8 @@ export class App {
           nav: NAV.flatMap((g) => g.items.map((i) => ({
             id: i.id, label: i.label,
             kbd: i.key !== undefined ? comboLabel(`ctrl+${i.key}`) : undefined,
+            // A fresh instance, not the sidebar's own node (K6) — see NavItem.icon.
+            icon: typeof i.icon === 'string' ? undefined : i.icon(),
           }))),
           actions: [
             { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
