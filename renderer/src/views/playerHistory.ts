@@ -17,10 +17,11 @@ import { bridge } from '../bridge';
 import { rankLabel, relTime, RELATION_LABEL } from '../format';
 import { card, emptyState, pill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
 import { roleIcon } from '../components/roleIcon';
+import { clickableRow } from '../components/clickableRow';
 import { backControl, viewHead, type ViewContext } from './view';
 
 export function playerHistory(ctx: ViewContext): HTMLElement {
-  const host = h('div', { class: 'view' });
+  const host = h('div', { class: 'view view--fill' });
   const name = ctx.params.playerName;
   if (!name) {
     render(host, backRow(), card({}, emptyState('No player selected.')));
@@ -153,7 +154,8 @@ function playedCell(heroes: string[], role: Role | undefined, title?: string): H
 function matchRow(m: PlayerSharedMatch, ctx: ViewContext): HTMLElement {
   const state = RESULT_STATE[m.result];
   const relation = m.sameTeam === true ? RELATION_LABEL.with.short : m.sameTeam === false ? RELATION_LABEL.against.short : null;
-  const row = h('tr', { class: 'is-clickable' },
+  const open = (): void => ctx.navigate('matchDetail', { matchId: m.matchId });
+  const row = h('tr', { class: 'is-clickable', title: `Open your ${m.map} match`, ...clickableRow(open) },
     h('td', null,
       h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
         h('span', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
@@ -176,7 +178,5 @@ function matchRow(m: PlayerSharedMatch, ctx: ViewContext): HTMLElement {
     rankCell(m.rank),
     h('td', { class: 'u-dim mono' }, relTime(m.timestamp)),
   );
-  row.addEventListener('click', () => ctx.navigate('matchDetail', { matchId: m.matchId }));
-  row.title = `Open your ${m.map} match`;
   return row;
 }

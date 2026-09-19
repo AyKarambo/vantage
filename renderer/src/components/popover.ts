@@ -4,6 +4,7 @@
  * click, or via the handle. Used by the status-bar connection indicator.
  */
 import { h } from '../dom';
+import { firstFocusable } from './focusable';
 
 export interface PopoverHandle {
   close(): void;
@@ -20,12 +21,17 @@ export function openPopover(
   opts: { onClose?: () => void; panelClass?: string } = {},
 ): PopoverHandle {
   const backdrop = h('div', { class: 'popover-backdrop' });
-  const panel = h('div', { class: `popover-panel${opts.panelClass ? ' ' + opts.panelClass : ''}` });
+  const panel = h('div', {
+    class: `popover-panel${opts.panelClass ? ' ' + opts.panelClass : ''}`,
+    role: 'dialog',
+  });
   panel.addEventListener('click', (e) => e.stopPropagation());
 
+  const opener = document.activeElement as HTMLElement | null;
   const close = (): void => {
     backdrop.remove();
     window.removeEventListener('keydown', onKey);
+    if (opener && document.activeElement === document.body) opener.focus();
     opts.onClose?.();
   };
   const onKey = (e: KeyboardEvent): void => {
@@ -38,6 +44,9 @@ export function openPopover(
   panel.append(build(close));
   backdrop.append(panel);
   document.body.append(backdrop);
+  const target = firstFocusable(panel);
+  if (target) target.focus();
+  else { panel.tabIndex = -1; panel.focus(); }
 
   // Position after mount so the panel's size is known.
   const a = anchor.getBoundingClientRect();

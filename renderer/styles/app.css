@@ -453,6 +453,19 @@
   flex-direction: column;
   gap: 16px;
   animation: rise-in 220ms var(--ease);
+  max-width: var(--content-max);
+  width: 100%;
+  margin: 0 auto;
+}
+/* A single-column form/detail read — Review, Targets, Notion — doesn't need
+   the full default width to stay comfortable to read (K5). */
+.view--narrow {
+  max-width: var(--content-max-narrow);
+}
+/* A table-dominant screen — Heroes, Matches — reads better with more room
+   for columns than the default cap gives it. */
+.view--wide {
+  max-width: 1600px;
 }
 .view-head {
   display: flex;
@@ -529,7 +542,12 @@
   gap: 18px;
 }
 .scatter-plot {
-  flex: 1;
+  /* Was `flex: 1`, which stretched this to fill the row even past the SVG's
+     own 960px cap (.scatter-wrap below) — on a wide window that left a
+     growing dead gap between the chart and .scatter-callouts (K5). Capping
+     the flex-basis here keeps the callouts sitting right next to the chart
+     instead of drifting toward the far edge. */
+  flex: 0 1 960px;
   min-width: 0;
 }
 .scatter-callouts {

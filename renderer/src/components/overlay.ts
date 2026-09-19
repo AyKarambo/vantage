@@ -4,6 +4,7 @@
  * modal and the hero drawer stay consistent.
  */
 import { h } from '../dom';
+import { firstFocusable } from './focusable';
 
 export interface OverlayHandle {
   close: () => void;
@@ -38,9 +39,23 @@ export interface OverlayOpts {
 }
 
 function mountOverlay(overlay: HTMLElement, panel: HTMLElement, opts: Pick<OverlayOpts, 'onDismiss'> = {}): OverlayHandle {
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  // #app sits outside `overlay` (a sibling under <body>) — `inert` there blocks
+  // focus and pointer interaction with the whole app underneath while this is
+  // open, standing in for a hand-rolled Tab trap: focus can still move freely
+  // within `overlay` (never marked inert), and just can't escape it.
+  const appRoot = document.getElementById('app');
+  const opener = document.activeElement as HTMLElement | null;
+
   const close = () => {
     window.removeEventListener('keydown', onKey);
     overlay.remove();
+    if (appRoot) appRoot.inert = false;
+    // Only reclaim focus if it's still where we left it — a caller that moved
+    // focus itself as part of closing (e.g. into a freshly opened dialog of
+    // its own) should keep it.
+    if (opener && document.activeElement === document.body) opener.focus();
   };
   const dismiss = () => {
     close();
@@ -56,6 +71,18 @@ function mountOverlay(overlay: HTMLElement, panel: HTMLElement, opts: Pick<Overl
   panel.addEventListener('click', (e) => e.stopPropagation());
   window.addEventListener('keydown', onKey);
   document.body.appendChild(overlay);
+  if (appRoot) appRoot.inert = true;
+  // `build(close)` (openModal/openDrawer) appends the panel's real content
+  // right after this function returns, still in the same synchronous tick —
+  // queue the focus move for the microtask right after, so it lands on
+  // content that actually exists instead of the still-empty panel.
+  queueMicrotask(() => {
+    const target = firstFocusable(panel);
+    if (target) target.focus();
+    // Falls back to the panel itself (tabindex -1, not in the normal tab
+    // order) only if the overlay is still open and truly has nothing focusable.
+    else if (overlay.isConnected) { panel.tabIndex = -1; panel.focus(); }
+  });
   return { close };
 }
 

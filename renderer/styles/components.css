@@ -507,9 +507,38 @@ table.mini tbody tr:last-child td {
 
 /* Data table ---------------------------------------------------------------- */
 .table-wrap {
-  /* Own scroll container so the sticky header row actually engages. */
+  /* Own scroll container so the sticky header row actually engages. A guessed
+     ceiling by default (a chart card's embedded "view as table" toggle, where
+     the table is one card among several, not the page); `.view--fill` below
+     replaces this with a real one for the screens where it drifted. */
   overflow: auto;
   max-height: calc(100vh - 250px);
+}
+/* A view whose whole body IS the table or the log (Heroes, Players, a
+   player's page, Logs) — makes that its one true scroll container, sized by
+   flexbox against the actual space `.content` has left, instead of guessing
+   with the calc() above (or `.log-lines`' own below), which drifted whenever
+   the header wrapped or the GEP banner showed and left two nested scrollbars
+   fighting over the same wheel input (K5). */
+.view--fill {
+  /* A CEILING, not a floor — `min-height` here would only ever grow the view
+     to match `.content`, never shrink it back when the table is tall, so a
+     tall table would still just push `.view--fill` past `.content`'s own
+     box and hand the scrollbar back to `.content` instead of `.table-wrap`. */
+  height: 100%;
+}
+.view--fill .card--flush {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.view--fill .table-wrap,
+.view--fill .log-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
 }
 table.data {
   width: 100%;
@@ -554,6 +583,13 @@ table.data tbody tr.is-clickable {
 }
 table.data tbody tr:hover {
   background: var(--surface-2);
+}
+/* `.table-wrap` clips at its own edge (`overflow: auto`) — the default
+   positive outline-offset from base.css's `:focus-visible` would get cut off
+   on a row/header flush against it, so pull the ring inward instead. */
+table.data th:focus-visible,
+table.data tbody tr:focus-visible {
+  outline-offset: -2px;
 }
 .tag {
   font-size: 10px;

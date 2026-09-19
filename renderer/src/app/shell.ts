@@ -47,7 +47,7 @@ import { logViewer, pauseFollow } from '../views/logViewer';
 import { settings } from '../views/settings';
 import { about } from '../views/about';
 import { faq } from '../views/faq';
-import { filterBar, type ViewContext, type ViewRender } from '../views/view';
+import { filterBar, filterBarReason, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
 import { prefs } from '../prefs';
 import { openLogMatch } from './log-match';
@@ -70,6 +70,17 @@ const VIEWS: Record<ViewId, ViewRender> = { overview, live, review, matches, mat
  *  all-time record under Players, whose own list IS filter-scoped. faq
  *  is static help copy, unaffected by any filter. */
 const FILTERLESS_VIEWS: ReadonlySet<ViewId> = new Set(['readiness', 'about', 'playerHistory', 'faq', 'live']);
+
+/** Why each {@link FILTERLESS_VIEWS} screen doesn't take the global filters —
+ *  shown in the bar's own place (K5) instead of just hiding it, so the answer
+ *  to "where did the filters go?" doesn't cost a trip to a different screen. */
+const FILTERLESS_REASON: Partial<Record<ViewId, string>> = {
+  readiness: 'Readiness reads your whole history, every account — the verdict would be wrong scoped to a slice of it.',
+  about: 'Nothing here is match data.',
+  playerHistory: "This is that player's complete all-time record — the filters never touch it.",
+  faq: 'Nothing here is match data.',
+  live: 'Live shows the match in progress, not a filtered range.',
+};
 
 /** Display order for the account switcher's per-role expansion. */
 const SWITCHER_ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
@@ -142,30 +153,48 @@ function peopleIcon(): SVGSVGElement {
   return svg;
 }
 
+// Regrouped by moment (K6) rather than the old Workspace/Insights/App split,
+// which mixed screens by "kind of thing" instead of when you'd reach for
+// them — Focus and Targets are one workflow but sat three items apart under
+// Insights, Readiness sat under Insights despite rendering without the filter
+// bar, and Live sat between Overview and Review despite being neither.
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
-    group: 'Workspace',
+    group: 'Now',
     items: [
       // Digits are pinned per screen (see NavItem.key), so this list can be
       // reordered or added to without moving anyone's muscle memory. Players
       // takes Ctrl+0 — the tenth key — rather than displacing Maps..Trends.
       { id: 'overview', label: 'Overview', icon: '◈', key: 1 },
       { id: 'live', label: 'Live', icon: '◉', key: 2 },
-      { id: 'review', label: 'Review', icon: '⚑', key: 3 },
-      { id: 'matches', label: 'Matches', icon: '▤', key: 4 },
-      { id: 'players', label: 'Players', icon: peopleIcon(), key: 0 },
-      { id: 'maps', label: 'Maps', icon: '◇', key: 5 },
-      { id: 'heroes', label: 'Heroes', icon: '◍', key: 6 },
     ],
   },
   {
-    group: 'Insights',
+    group: 'After the session',
+    items: [
+      { id: 'review', label: 'Review', icon: '⚑', key: 3 },
+      { id: 'matches', label: 'Matches', icon: '▤', key: 4 },
+      { id: 'players', label: 'Players', icon: peopleIcon(), key: 0 },
+    ],
+  },
+  {
+    // Focus kept as its own screen next to Targets rather than folded into
+    // it — the spec's "Overview teases → Focus prioritizes → Targets
+    // commits" hierarchy needs Focus to still be reachable on its own.
+    group: 'Improve',
     items: [
       { id: 'focus', label: 'Focus', icon: '◎', key: 7 },
-      { id: 'mental', label: 'Mental', icon: '◐', key: 8 },
-      { id: 'trends', label: 'Trends', icon: '◔', key: 9 },
-      { id: 'readiness', label: 'Readiness', icon: '◆' },
       { id: 'targets', label: 'Targets', icon: goalFlagIcon() },
+      { id: 'mental', label: 'Mental', icon: '◐', key: 8 },
+      { id: 'readiness', label: 'Readiness', icon: '◆' },
+    ],
+  },
+  {
+    group: 'Reference',
+    items: [
+      { id: 'heroes', label: 'Heroes', icon: '◍', key: 6 },
+      { id: 'maps', label: 'Maps', icon: '◇', key: 5 },
+      { id: 'trends', label: 'Trends', icon: '◔', key: 9 },
     ],
   },
   {
@@ -251,6 +280,7 @@ export class App {
    *  would tear down its live controls mid-click and swallow the click — the
    *  same class of bug as the sidebar rebuild. Only rebuild on a new snapshot. */
   private lastFilterData: DashboardData | null = null;
+  private lastFilterView: ViewId | null = null;
   /** True while a pointer is held down inside the content host. A same-route
    *  data refresh that lands mid-press is deferred (see {@link renderContent})
    *  rather than tearing the pressed element out from under its click — the same
@@ -482,17 +512,21 @@ export class App {
     });
   }
 
-  /** The one global filter bar — persistent above every screen, unified look,
-   *  except views in {@link FILTERLESS_VIEWS} whose data isn't scoped by it. */
+  /** The one global filter bar — persistent above every screen, unified look.
+   *  A {@link FILTERLESS_VIEWS} screen keeps the same bar mounted but swaps in
+   *  its {@link FILTERLESS_REASON}, so the content column never jumps by the
+   *  bar's height switching to and from one (K5) — only the cold-start skeleton
+   *  (no data yet) hides it outright, since there's nothing to say yet either. */
   private renderFilters(state: AppState): void {
-    const hidden = !state.data || FILTERLESS_VIEWS.has(state.view);
-    this.filterHost.classList.toggle('hidden', hidden);
-    if (!state.data || hidden) return;
-    // Hidden views keep their built bar in the DOM (just CSS-hidden), so a
-    // return to the same snapshot reuses it rather than rebuilding.
-    if (this.lastFilterData === state.data) return;
-    render(this.filterHost, filterBar(state.data, (patch) => store.setFilters(patch)));
+    this.filterHost.classList.toggle('hidden', !state.data);
+    if (!state.data) return;
+    // Reruns on a fresh snapshot (new filter options) or a view change that
+    // flips the reason text; otherwise keeps the DOM (and any open <select>).
+    if (this.lastFilterData === state.data && this.lastFilterView === state.view) return;
+    const reason = FILTERLESS_VIEWS.has(state.view) ? FILTERLESS_REASON[state.view] : undefined;
+    render(this.filterHost, reason ? filterBarReason(reason) : filterBar(state.data, (patch) => store.setFilters(patch)));
     this.lastFilterData = state.data;
+    this.lastFilterView = state.view;
   }
 
   private renderContent(state: AppState): void {
@@ -590,6 +624,10 @@ export class App {
     // The FULL form — the sub-line is clamped to two lines, so the tooltip is
     // the escape hatch that clamp depends on and must not shrink with it.
     this.accountSubEl.title = chip.subFull;
+    // The collapsed rail (Ctrl B) hides `accountNameEl`/`accountSubEl` entirely,
+    // leaving only the avatar glyph — this is the one place that still says
+    // which account and rank are pinned there (K6).
+    this.accountChip.title = `${chip.name} · ${chip.subFull} — click to switch account`;
 
     // Saving a review doesn't refetch, so subtract the games graded since the
     // last snapshot (only those the snapshot still counts as pending).
@@ -702,10 +740,15 @@ export class App {
   private updateReviewBadge(pending: number): void {
     const btn = this.navButtons.get('review');
     if (!btn) return;
-    const existing = btn.querySelector('.nav-badge');
+    const existing = btn.querySelector<HTMLElement>('.nav-badge');
+    // The collapsed rail (app.css `.sidebar.is-collapsed .nav-badge`) shrinks
+    // this to a bare dot with no visible number — the title is the only place
+    // "how many" survives there, so it's set even though the expanded rail's
+    // own visible digits make it redundant there.
+    const title = `${pending} game${pending === 1 ? '' : 's'} to review`;
     if (pending > 0) {
-      if (existing) existing.textContent = String(pending);
-      else btn.append(h('span', { class: 'nav-badge' }, String(pending)));
+      if (existing) { existing.textContent = String(pending); existing.title = title; }
+      else btn.append(h('span', { class: 'nav-badge', title }, String(pending)));
     } else {
       existing?.remove();
     }

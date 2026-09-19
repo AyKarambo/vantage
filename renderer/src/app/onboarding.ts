@@ -34,22 +34,30 @@ const STEPS: Step[] = [
       '“Demo data” badge in the status bar. Your own games replace it automatically once tracking starts.',
   },
   {
-    title: 'Your workspace',
+    // Deliberately not named after a sidebar group (K6 regrouped the nav into
+    // five, and this tour still only has room for two screens of bullets) —
+    // "Your workspace" as a title used to at least gesture at the old
+    // Workspace group; keeping that word here after the regroup would claim a
+    // section that no longer exists.
+    title: 'Your screens',
     points: [
       ['Overview', 'KPIs, the winrate × volume scatter, and your top priorities at a glance.'],
+      ['Live', 'The match you’re in right now, while it’s running.'],
       ['Review', 'Add the human read to recent games — how they actually felt.'],
       ['Matches', 'Your recent game log.'],
+      ['Players', 'Everyone you’ve met, with your record together.'],
       ['Maps', 'Winrate by game mode, then every map ranked best → worst.'],
       ['Heroes', 'The exact per-hero table with a click-through drill-down.'],
     ],
   },
   {
-    title: 'Insights',
+    title: 'Improve',
     points: [
       ['Focus', 'The maps, heroes and roles that cost you the most — what to work on first.'],
-      ['Mental', 'Tilt / comms tracking and the tax tilt puts on your winrate.'],
-      ['Trends', 'Winrate over time, split by role, mode and account.'],
       ['Targets', 'Build an improvement target and see if hitting it moves your winrate.'],
+      ['Mental', 'Tilt / comms tracking and the tax tilt puts on your winrate.'],
+      ['Readiness', 'Whether tonight looks like a good night to climb.'],
+      ['Trends', 'Winrate over time, split by role, mode and account.'],
     ],
   },
   {

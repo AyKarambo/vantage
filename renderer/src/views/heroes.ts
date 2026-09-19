@@ -10,6 +10,7 @@ import { card, chip, emptyState, resultPill, statBox } from '../components/primi
 import { roleIcon } from '../components/roleIcon';
 import { dataTable, type Column } from '../components/table';
 import { infoTip } from '../components/infoTip';
+import { inlineLink } from '../components/inlineLink';
 import { openDrawer } from '../components/overlay';
 import { viewHead, type ViewContext } from './view';
 
@@ -66,7 +67,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
     ),
   );
 
-  return h('div', { class: 'view' },
+  return h('div', { class: 'view view--fill view--wide' },
     viewHead('Heroes',
       `Exact stats, per 10 minutes played · click a hero to drill down${hidden > 0 ? ` · ${hidden} low-sample hidden` : ''}`,
       minGamesChips),
@@ -129,12 +130,12 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
       : null,
     section('By map', d.byMap.length
       ? d.byMap.map((m) => h('div', { class: 'row', style: { padding: '6px 0' } },
-          h('button', {
-            class: 'inline-link row-main',
+          inlineLink(m.key, {
+            class: 'row-main',
             style: { fontSize: '12.5px', textAlign: 'left' },
             title: `Find ${m.key} on the Maps screen`,
-            on: { click: () => { close(); ctx.navigate('maps', { highlight: m.key }); } },
-          }, m.key),
+            onClick: () => { close(); ctx.navigate('maps', { highlight: m.key }); },
+          }),
           h('span', { style: { color: wrColor(m.winrate) } }, pct(m.winrate)),
           h('span', { class: 'u-dim', style: { fontSize: '11px', width: '28px', textAlign: 'right' } }, `${m.games}g`),
         ))

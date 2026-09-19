@@ -21,12 +21,12 @@ import { winSplit, confirmDelete } from './shared';
 export function targetDetail(ctx: ViewContext): HTMLElement {
   const t = ctx.data.targets.find((x) => x.id === ctx.params.targetId);
   if (!t) {
-    return h('div', { class: 'view', style: { maxWidth: '760px' } },
+    return h('div', { class: 'view view--narrow' },
       backRow(),
       card({}, h('div', { class: 'empty' }, 'This target is no longer in your library.')),
     );
   }
-  return h('div', { class: 'view', style: { maxWidth: '760px' } },
+  return h('div', { class: 'view view--narrow' },
     backRow(),
     headerCard(t, ctx),
     t.learning

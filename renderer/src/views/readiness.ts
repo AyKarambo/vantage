@@ -10,6 +10,7 @@ import { h } from '../dom';
 import type { ReadinessBand, ReadinessRegime, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
 import { PALETTE } from '../theme';
 import { badge, button, card, statBox } from '../components/primitives';
+import { inlineLink } from '../components/inlineLink';
 import { readinessChart } from '../charts/plots';
 import { readinessSettingsEditor } from '../components/readinessSettingsEditor';
 import { openReadinessWiki } from '../app/readinessWiki';
@@ -123,11 +124,10 @@ function verdictCard(ctx: ViewContext): HTMLElement {
     BREAK_REMINDER_BANDS.includes(r.band) ? breakReminderHint(ctx) : null,
     h('div', { class: 'hint', style: { marginTop: '10px' } },
       `Confidence: ${r.confidence} · `,
-      h('button', {
-        class: 'inline-link',
+      inlineLink('How is this calculated?', {
         title: 'How the readiness verdict is calculated',
-        on: { click: () => openReadinessWiki(ctx, { view: 'article', id: 'verdict', tier: 'plain' }) },
-      }, 'How is this calculated?'),
+        onClick: () => openReadinessWiki(ctx, { view: 'article', id: 'verdict', tier: 'plain' }),
+      }),
     ),
   );
 }
@@ -141,11 +141,10 @@ function breakReminderHint(ctx: ViewContext): HTMLElement {
     : 'Break reminder is off.';
   return h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } },
     `${status} `,
-    h('button', {
-      class: 'inline-link',
+    inlineLink('Open Mental →', {
       title: 'Open the Mental screen',
-      on: { click: () => ctx.navigate('mental') },
-    }, 'Open Mental →'),
+      onClick: () => ctx.navigate('mental'),
+    }),
   );
 }
 

@@ -1,6 +1,7 @@
 /** A self-contained sortable table. Owns its sort state and re-renders in place. */
 import { h, render } from '../dom';
 import { prefs, type HeroSortPref } from '../prefs';
+import { clickableRow } from './clickableRow';
 
 export interface Column<T> {
   key: string;
@@ -55,31 +56,41 @@ export function dataTable<T>(opts: TableOpts<T>): HTMLElement {
     const thead = h('thead', null,
       h('tr', null, ...opts.columns.map((c) => {
         const sorted = c.key === sort.key;
+        const runSort = (): void => {
+          sort = { key: c.key, dir: sort.key === c.key ? (-sort.dir as 1 | -1) : -1 };
+          if (opts.persistSortAs) prefs.set(opts.persistSortAs, sort);
+          // Deliberately no local redraw here: the caller re-renders with the
+          // newly-ordered page, so the arrow can never move without the rows.
+          if (opts.onSort) opts.onSort(sort);
+          else draw();
+        };
         const th = h('th', {
           class: `${sorted ? 'is-sorted' : ''}${sorted && sort.dir === 1 ? ' is-asc' : ''}`,
+          // Native columnheader semantics stay; aria-sort on top says which way
+          // this column is ordered so a screen reader doesn't need the arrow glyph.
+          'aria-sort': c.sortable === false ? undefined : sorted ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none',
+          tabindex: c.sortable === false ? undefined : '0',
+          on: c.sortable === false ? undefined : {
+            click: runSort,
+            keydown: (e) => {
+              const key = (e as KeyboardEvent).key;
+              if (key === 'Enter' || key === ' ') { e.preventDefault(); runSort(); }
+            },
+          },
         }, c.label);
-        if (c.sortable !== false) {
-          th.addEventListener('click', () => {
-            sort = { key: c.key, dir: sort.key === c.key ? (-sort.dir as 1 | -1) : -1 };
-            if (opts.persistSortAs) prefs.set(opts.persistSortAs, sort);
-            // Deliberately no local redraw here: the caller re-renders with the
-            // newly-ordered page, so the arrow can never move without the rows.
-            if (opts.onSort) opts.onSort(sort);
-            else draw();
-          });
-        } else {
-          th.style.cursor = 'default';
-        }
+        if (c.sortable === false) th.style.cursor = 'default';
         return th;
       })),
     );
 
     const tbody = rows.length
       ? h('tbody', null, ...rows.map((row) => {
-          const tr = h('tr', { class: opts.onRowClick ? 'is-clickable' : undefined },
+          const tr = h('tr', {
+            class: opts.onRowClick ? 'is-clickable' : undefined,
+            ...(opts.onRowClick ? clickableRow(() => opts.onRowClick!(row)) : null),
+          },
             ...opts.columns.map((c) => h('td', null, c.render ? c.render(row) : cellText(c.get(row)))),
           );
-          if (opts.onRowClick) tr.addEventListener('click', () => opts.onRowClick!(row));
           return tr;
         }))
       : opts.empty

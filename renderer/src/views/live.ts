@@ -20,11 +20,12 @@ import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { scoreboard } from '../components/scoreboard';
 import { card, emptyState, pill } from '../components/primitives';
+import { inlineLink } from '../components/inlineLink';
 import { fmt, relTime, RELATION_LABEL } from '../format';
 import { viewHead, type ViewContext } from './view';
 
 export function live(ctx: ViewContext): HTMLElement {
-  const host = h('div', { class: 'view', style: { maxWidth: '980px' } });
+  const host = h('div', { class: 'view' });
 
   /**
    * A live board repaints about once a second. Replacing the subtree between a
@@ -256,11 +257,10 @@ function playerRow(r: PlayerRecord, withYou: boolean | undefined, ctx: ViewConte
       style: { minWidth: '38px', textAlign: 'center' },
     }, withYou === undefined ? '—' : withYou ? RELATION_LABEL.with.short : RELATION_LABEL.against.short),
     h('div', { class: 'row-main', style: { minWidth: '0' } },
-      h('button', {
-        class: 'inline-link',
+      inlineLink(r.name, {
         style: { fontSize: '13px' },
-        on: { click: () => ctx.navigate('playerHistory', { playerName: r.name }) },
-      }, r.name),
+        onClick: () => ctx.navigate('playerHistory', { playerName: r.name }),
+      }),
       h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
         `${r.encounters} shared ${r.encounters === 1 ? 'match' : 'matches'} · last ${relTime(r.lastSeen)}`),
     ),

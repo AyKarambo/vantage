@@ -39,7 +39,7 @@ export function targets(ctx: ViewContext): HTMLElement {
   // Real mode with no authored targets shows an honest empty state (not the
   // demo sample library, and not an empty "Your targets" shell).
   const noTargets = !ctx.data.isSample && ctx.data.targets.length === 0;
-  return h('div', { class: 'view', style: { maxWidth: '760px' } },
+  return h('div', { class: 'view view--narrow' },
     viewHead('Improvement Target', 'Self-rated by default, measurable if you want — pick per target'),
     builder.el,
     activeSetCard(ctx),

@@ -4,6 +4,7 @@
  * views read consistently. Pure DOM composition over {@link h}.
  */
 import { h } from '../../dom';
+import { inlineLink } from '../../components/inlineLink';
 
 type Child = Node | string | number | null | undefined | false;
 
@@ -19,5 +20,5 @@ export function wikiHeading(text: string): HTMLElement {
 
 /** An inline navigation link (e.g. "See the scenarios →"). */
 export function wikiLink(label: string, onClick: () => void): HTMLElement {
-  return h('button', { class: 'inline-link inline-link--strong', on: { click: onClick } }, label);
+  return inlineLink(label, { strong: true, onClick });
 }

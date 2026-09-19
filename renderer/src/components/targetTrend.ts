@@ -12,6 +12,7 @@ import { MIN_VERDICT } from '../../../src/core/targets';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
 import { statBox } from './primitives';
+import { inlineLink } from './inlineLink';
 import { chartCard } from './chartCard';
 import { learningCurveChart, learningCurveRows, LEARNING_CURVE_COLUMNS } from '../charts/plots';
 import { openFocusTrendGuide } from '../app/focusTrendGuide';
@@ -66,12 +67,11 @@ export function targetTrend(curve: TargetLearningCurve): HTMLElement {
       h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '13px', fontWeight: '600' } }, HEADER),
       // Local-only affordance: opening the guide drawer is modal and never notifies
       // the store, so no re-render can land mid-click (the mid-press swallow, PR #36).
-      h('button', {
-        class: 'inline-link',
+      inlineLink('? How to read this', {
         title: 'How to read this chart',
         style: { fontSize: '11.5px', flex: '0 0 auto', whiteSpace: 'nowrap' },
-        on: { click: () => openFocusTrendGuide() },
-      }, '? How to read this'),
+        onClick: () => openFocusTrendGuide(),
+      }),
     ),
     h('div', { class: 'hint', style: { marginTop: '3px', lineHeight: '1.5' } }, SUB),
     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' } },

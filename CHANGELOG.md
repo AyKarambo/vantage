@@ -220,6 +220,51 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   time** when you've got history outside the current range — matching how Overview, Matches and
   Players already handle it.
 
+### Changed
+
+- **The sidebar is grouped by moment, not by kind.** **Now** (Overview, Live) · **After the
+  session** (Review, Matches, Players) · **Improve** (Focus, Targets, Mental, Readiness) ·
+  **Reference** (Heroes, Maps, Trends) · **App**. Replaces Workspace/Insights/App, which split
+  Focus and Targets — one workflow — three items apart and put Readiness, which ignores the
+  filter bar, under the same "Insights" label as screens that don't. Every **Ctrl+1…0** shortcut
+  stays exactly where it was.
+- **The filter bar says why on a screen it doesn't apply to**, instead of just disappearing —
+  Readiness, Live, About, FAQ and a player's page. It used to vanish outright, which both yanked
+  the page up by its height and left "where did the filters go?" unanswered.
+- **A screen keeps its own width now**, instead of five different ones bolted on ad hoc (or none
+  at all, stretching edge to edge on a wide monitor). Review, Targets and Notion sync stay a
+  comfortable single-column read; Heroes and Matches, whose tables want the room, get more; every
+  other screen gets a shared middle width, centred.
+
+### Fixed
+
+- **Dragging across a name, map or player couldn't select the text** (issue #197) — the twelve
+  spots that used a `<button>` for what was really a link (a match's map, a hero cross-link, a
+  scoreboard name, "How is this calculated?", …) now use one that can be drag-selected, still
+  reachable by keyboard.
+- **Rows and sortable column headers were mouse-only.** Heroes, Players, Matches, Maps/Trends'
+  table toggle, and a player's shared-match list can now be reached and opened with Tab and
+  Enter/Space, headers included — a header also states `aria-sort` for a screen reader instead of
+  only drawing an arrow.
+- **A dialog or drawer never trapped focus or gave it back.** Tab could walk straight out into the
+  dimmed sidebar underneath, and closing one left keyboard focus on nothing in particular. Every
+  modal and drawer now moves focus in on open, keeps it there while open, and returns it to
+  whatever was focused before, on close.
+- **Heroes, Players, a player's page and Logs had two scrollbars fighting over the same wheel
+  input** — an inner one for the table sized by a guess that drifted whenever the header wrapped
+  or the GEP banner showed, and the page's own underneath it. Down to one, sized against the real
+  space left, wheel input goes to the table you're looking at.
+- **The Overview scatter chart's callouts sat far from the chart on a wide window**, with a
+  growing dead gap between them — the chart stretched to fill the row even past its own 960px
+  cap. It now stops growing with the chart instead of past it.
+- **The `←` back button showed up on every screen after the first navigation**, since a plain
+  sidebar click recorded the screen it left just like a real drill-down did. It's back to meaning
+  what it looks like — "up out of a match, a player, or a target" — everywhere else, **Esc**,
+  **Alt+←** and the mouse back button still reach the same history.
+- **The collapsed sidebar rail's account chip and Review count had no tooltip.** Collapsed to
+  icons, there was no way to check which account was pinned, or how many games were waiting, short
+  of expanding the rail again.
+
 ## 0.34.0 — 31 July 2026
 
 ### Added

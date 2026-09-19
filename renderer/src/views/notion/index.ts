@@ -33,7 +33,7 @@ export function notion(_ctx: ViewContext): HTMLElement {
   paint(); // placeholder while the first status loads
   void refresh();
 
-  return h('div', { class: 'view', style: { maxWidth: '720px' } },
+  return h('div', { class: 'view view--narrow' },
     viewHead(
       'Notion sync',
       'Connect a Notion database and push your tracked games to it — deduped, so re-syncing never doubles up.',
