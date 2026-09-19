@@ -91,14 +91,53 @@ export function statBox(value: Child, label: string, title?: string): HTMLElemen
 }
 
 /**
+ * `dayKey`'s "YYYY-MM-DD" is a UTC calendar day (see `core/analytics`'s own
+ * doc comment); parsing it back through `new Date(string)` reads it as UTC
+ * MIDNIGHT and then `.getDay()`/`.getMonth()` report the LOCAL weekday/month
+ * at that instant — a day off for anyone west of UTC (O5). Parsing the y/m/d
+ * digits into a plain `new Date(y, m-1, d)` instead treats them as calendar
+ * facts, not an instant to reinterpret through the viewer's own offset.
+ */
+function localDateFromKey(dateKey: string): Date {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Every other row (Mon/Wed/Fri) — labelling all seven would be denser than the 13px cells can read. */
+const WEEKDAY_ROW_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+
+/**
  * GitHub-style activity heatmap: small fixed-size cells laid out as columns of
  * weeks × rows of weekdays. Colour encodes winrate, opacity the game count.
  * `onPick` (optional) makes cells with `games > 0` clickable — cells with no
- * games stay inert either way.
+ * games stay inert either way. A weekday column (O5) and a month label above
+ * the first column of each new month orient a grid that can now span up to
+ * 13 weeks (see `activityWindowDays`), not just a fixed 5.
  */
 export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => void): HTMLElement {
   const wrap = h('div', { class: 'heatmap-wrap' });
   const tips = tooltipLayer(wrap);
+
+  const firstWeekday = days.length ? localDateFromKey(days[0].date).getDay() : 0;
+  // Column 0 runs from index 0 to the first Saturday (a partial week when the
+  // range doesn't start on a Sunday); every column after that is a full 7.
+  const colStart = (col: number): number => (col === 0 ? 0 : (7 - firstWeekday) + (col - 1) * 7);
+  const columns = days.length ? Math.ceil((firstWeekday + days.length) / 7) : 0;
+
+  const monthsRow = h('div', { class: 'heatmap-months' });
+  let prevMonth = -1;
+  for (let col = 0; col < columns; col++) {
+    const day = days[colStart(col)];
+    const month = day ? localDateFromKey(day.date).getMonth() : prevMonth;
+    const isNewMonth = day !== undefined && month !== prevMonth;
+    if (day) prevMonth = month;
+    monthsRow.append(h('div', { class: 'heatmap-month-label' },
+      isNewMonth ? localDateFromKey(day!.date).toLocaleDateString(undefined, { month: 'short' }) : ''));
+  }
+
+  const weekdaysCol = h('div', { class: 'heatmap-weekdays' },
+    ...WEEKDAY_ROW_LABELS.map((label) => h('div', { class: 'heatmap-weekday-label' }, label)));
+
   const grid = h('div', { class: 'heatmap' });
   days.forEach((d, i) => {
     const clickable = Boolean(onPick && d.games);
@@ -113,7 +152,7 @@ export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => 
     });
     tips.attach(cell, d.games ? `${d.date} · ${d.games}g · ${pct(d.winrate ?? 0)}` : `${d.date} · no games`);
     // Align the first cell to its weekday row; the rest flow down each column.
-    if (i === 0) cell.style.gridRowStart = String(new Date(d.date).getDay() + 1);
+    if (i === 0) cell.style.gridRowStart = String(firstWeekday + 1);
     grid.append(cell);
   });
 
@@ -121,8 +160,15 @@ export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => 
     heatSwatch(PALETTE.loss, 'Losing'),
     heatSwatch(PALETTE.mid, 'Even'),
     heatSwatch(PALETTE.win, 'Winning'),
+    // Colour is winrate; opacity is volume (O5) — without this the legend
+    // never said what the faint-vs-solid cells actually meant.
+    h('span', { class: 'legend-item u-dim', style: { fontSize: '10px' } }, '1 · 3 · 6+ games (opacity)'),
   );
-  wrap.append(grid, legend, tips.tip);
+  wrap.append(
+    h('div', { class: 'heatmap-main' }, monthsRow, h('div', { class: 'heatmap-body' }, weekdaysCol, grid)),
+    legend,
+    tips.tip,
+  );
   return wrap;
 }
 

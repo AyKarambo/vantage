@@ -5,7 +5,7 @@
  * readiness module). `sessionFade` reads the position split for the point where
  * winrate falls off — the "stop before game N" coach signal.
  */
-import type { GameRecord, Group } from './types';
+import type { GameRecord, Group, WeekdayDayPartCell } from './types';
 import { winLoss } from './grouping';
 
 /** Day-part buckets in display order. Bounds are [from, to) local hours. */
@@ -35,6 +35,33 @@ export function byTimeOfDay(games: GameRecord[]): Group[] {
   return DAY_PARTS
     .map((p) => ({ key: p.key, ...winLoss(buckets.get(p.key)!) }))
     .filter((g) => g.games > 0);
+}
+
+/** Display order for {@link byWeekdayDayPart}'s rows — Monday first, matching the calendar-week convention the Activity heatmap's own weekday labels use (O5). */
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** `Date.getDay()` (0=Sun..6=Sat) → {@link WEEKDAYS} row index (0=Mon..6=Sun). */
+function weekdayRow(getDay: number): number {
+  return (getDay + 6) % 7;
+}
+
+/**
+ * Winrate crossed by weekday AND day-part — a 7×4 grid (rows Mon..Sun,
+ * columns the same {@link DAY_PARTS} {@link byTimeOfDay} uses, so "Friday
+ * evening" here can never name a different window than the Time-of-day
+ * card's own Evening row). Local time, empty cells still present (zeroed
+ * `WinLoss`) so the renderer can lay out a complete grid without holes (O5).
+ */
+export function byWeekdayDayPart(games: GameRecord[]): WeekdayDayPartCell[][] {
+  const buckets: GameRecord[][][] = WEEKDAYS.map(() => DAY_PARTS.map(() => []));
+  for (const g of games) {
+    const d = new Date(g.timestamp);
+    const part = dayPartAt(d.getHours());
+    const col = DAY_PARTS.findIndex((p) => p.key === part);
+    buckets[weekdayRow(d.getDay())][col].push(g);
+  }
+  return WEEKDAYS.map((weekday, row) =>
+    DAY_PARTS.map((p, col) => ({ weekday, dayPart: p.key, ...winLoss(buckets[row][col]) })));
 }
 
 /** Gap between match-end timestamps that starts a new sitting (readiness convention). */

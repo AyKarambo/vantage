@@ -713,6 +713,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   **Top priority** map row is a real clickable control now (not a dead div) and gets Focus's
   own **"Track as target"** quick-create, so you don't have to leave the landing screen to act
   on it (O4).
+- **The Activity heatmap orients itself, and follows your filter.** A weekday column (Mon,
+  Wed, Fri) and a month label above each new month replace the old bare grid of cells, and a
+  legend note ("1 · 3 · 6+ games") finally explains what the fainter cells mean. The window
+  itself now follows the active filter instead of always showing a fixed 35 days — a season
+  or "All time" view can show up to 13 weeks, and the card says how many days it's covering.
+  Fixed a real bug along the way: the old weekday alignment parsed dates through UTC midnight
+  and landed a day off for anyone west of UTC. On **Trends**, the old 4-bucket "Time of day"
+  card is now a **weekday × time-of-day grid** (7 rows, 4 columns) — colour = winrate, opacity
+  = games, same reading as the heatmap above — so the best-window callout can name "Friday
+  evening" instead of just "evening" (O5).
 
 ## 0.34.0 — 31 July 2026
 

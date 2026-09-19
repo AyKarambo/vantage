@@ -629,7 +629,9 @@ function overviewHeroesCard(ctx: ViewContext): HTMLElement {
 function activityCard(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   return card(
-    { title: 'Activity', style: { flex: '1' } },
+    // The window now follows the active filter (O5) rather than a fixed 35 —
+    // saying the real span here is the honest "what am I looking at" answer.
+    { title: 'Activity', sub: `last ${d.calendar.length} days`, style: { flex: '1' } },
     calendarHeatmap(d.calendar, (date) => ctx.navigate('matches', { day: date })),
     h('div', { class: 'hint', style: { marginTop: '11px', lineHeight: '1.45' } },
       'games/day · colour = winrate · click a day to open its matches'),

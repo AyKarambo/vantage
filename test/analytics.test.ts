@@ -5,7 +5,7 @@ import {
 import { generateSampleGames } from '../src/core/sampleData';
 import { PLAYED_TIME_ESTIMATE, setupMinutes, type MapModeResolver } from '../src/core/playedTime';
 import type { HeroStat, Result, Role } from '../src/core/model';
-import { computeDashboard, previousDateRange } from '../src/core/dashboardData';
+import { computeDashboard, previousDateRange, activityWindowDays, ACTIVITY_WINDOW_CAP_DAYS } from '../src/core/dashboardData';
 import { buildTargets, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 import type { MasterData } from '../src/core/masterData';
 
@@ -573,6 +573,52 @@ describe('previousDateRange (C3)', () => {
     const starts = [Date.parse('2026-06-01T00:00:00Z')];
     const games = [game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-06-15T00:00:00Z') })];
     expect(previousDateRange(games, { days: { season: 'S:2026-06-01' } }, starts, now)).toBeUndefined();
+  });
+});
+
+describe('activityWindowDays (O5)', () => {
+  const day = 86_400_000;
+  const now = Date.parse('2026-06-30T12:00:00Z');
+
+  it('is the cap for "all time" and for no filter at all', () => {
+    expect(activityWindowDays('all', now)).toBe(ACTIVITY_WINDOW_CAP_DAYS);
+    expect(activityWindowDays(undefined, now)).toBe(ACTIVITY_WINDOW_CAP_DAYS);
+  });
+
+  it('stays the familiar 35 for ranges at or under 30 days', () => {
+    expect(activityWindowDays(7, now)).toBe(35);
+    expect(activityWindowDays(30, now)).toBe(35);
+  });
+
+  it('follows the real range past 30 days, capped at the ceiling', () => {
+    expect(activityWindowDays(45, now)).toBe(45);
+    expect(activityWindowDays(90, now)).toBe(90);
+    expect(activityWindowDays(200, now)).toBe(ACTIVITY_WINDOW_CAP_DAYS);
+  });
+
+  it('a season resolves to its real [start, next-start) span', () => {
+    // Two known season starts pin the window to an exact, deterministic
+    // [s1, s2) span regardless of where "now" falls — same resolution
+    // previousDateRange's own season test above relies on.
+    const s1 = Date.parse('2026-05-01T00:00:00Z');
+    const s2 = Date.parse('2026-06-15T00:00:00Z'); // 45-day season
+    expect(activityWindowDays({ season: 'S:2026-05-01' }, s2, [s1, s2])).toBe(45);
+  });
+
+  it('floors a shorter-than-35-day season at 35 rather than a cramped grid', () => {
+    const s1 = Date.parse('2026-06-20T00:00:00Z');
+    const s2 = Date.parse('2026-06-25T00:00:00Z'); // 5-day season
+    expect(activityWindowDays({ season: 'S:2026-06-20' }, s2, [s1, s2])).toBe(35);
+  });
+
+  it('caps a longer-than-13-week season at the ceiling', () => {
+    const s1 = Date.parse('2026-01-01T00:00:00Z');
+    const s2 = Date.parse('2026-07-01T00:00:00Z'); // 181-day season
+    expect(activityWindowDays({ season: 'S:2026-01-01' }, s2, [s1, s2])).toBe(ACTIVITY_WINDOW_CAP_DAYS);
+  });
+
+  it('falls back to 35 for an unresolvable season id', () => {
+    expect(activityWindowDays({ season: 'S:not-a-real-id' }, now, [now - 60 * day])).toBe(35);
   });
 });
 

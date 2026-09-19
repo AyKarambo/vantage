@@ -54,7 +54,9 @@ account's per-role lines beneath it.
   *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
   short-name label beside every priority dot, and numeric axis ticks — with a top-priority
   callout (each row now a real clickable control with Focus's own **"Track as target"**
-  quick-create, O4), an activity heatmap (games/day, click a day to open its matches), and a
+  quick-create, O4), an activity heatmap (games/day, click a day to open its matches — the
+  window now follows the active filter instead of a fixed 35 days, weekday and month labels
+  orient the grid, and the legend explains what the opacity axis means, O5), and a
   mental snapshot. A **"Next up" strip** under the greeting names whatever needs attention right
   now — matches awaiting a result, games to review, a placement run ready to confirm — gone
   entirely with nothing pending (O3). The bottom row also carries **Active targets** (name,
@@ -240,8 +242,10 @@ account's per-role lines beneath it.
   key with no year, thin markers label every season (and ladder reset) the chart crosses, and
   a dense chart's hit targets no longer overlap and steal the hover from the wrong point. A
   **By season** card answers "how did each season go" in one place — click a season to jump
-  straight to it. Then splits by role/account, **when you win** (time-of-day
-  winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
+  straight to it. Then splits by role/account, **when you win** — a **weekday × time-of-day
+  grid** (O5, 7 rows × 4 columns, colour = winrate, opacity = games, same encoding the
+  Overview Activity heatmap uses) with a best-window callout that can now name a specific
+  "Friday evening" instead of just a day-part — and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and
   **your self-rating over time** (the 0–100 performance slider with the same real rolling
   average plus the avg-rating-on-wins vs -losses split — does your self-read track

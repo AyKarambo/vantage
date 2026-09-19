@@ -15,7 +15,7 @@ export type {
   WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry,
   HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak, StreakStats,
   DayGroup, SessionDebrief, SessionSummary, PerformanceStats, PerformanceBucket, PerformanceTrendPoint,
-  TrendGroup, Momentum, ScoreSplit,
+  TrendGroup, Momentum, ScoreSplit, WeekdayDayPartCell,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
