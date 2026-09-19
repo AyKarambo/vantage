@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { byTimeOfDay, dayPartAt, bySessionPosition, sessionPositionGroups, sessionFade } from '../src/core/analytics';
+import { byTimeOfDay, byWeekdayDayPart, dayPartAt, bySessionPosition, sessionPositionGroups, sessionFade } from '../src/core/analytics';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
 
@@ -74,6 +74,59 @@ describe('dayPartAt', () => {
     expect(dayPartAt(22)).toBe('Night');
     expect(dayPartAt(4)).toBe('Night');
     expect(dayPartAt(0)).toBe('Night');
+  });
+});
+
+describe('byWeekdayDayPart (O5)', () => {
+  const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  /** Row index a fixture's own `at(day, hour)` lands on, computed the same way the JS `Date` the fixture builds would — Mon-first, matching the module's own display order. */
+  const rowOf = (day: number, hour: number): number => (new Date(at(day, hour)).getDay() + 6) % 7;
+
+  it('is always a 7×4 grid, empty cells zeroed rather than omitted', () => {
+    const grid = byWeekdayDayPart([]);
+    expect(grid).toHaveLength(7);
+    for (const row of grid) {
+      expect(row).toHaveLength(4);
+      for (const cell of row) expect(cell).toMatchObject({ games: 0, wins: 0, losses: 0 });
+    }
+  });
+
+  it('rows are labelled Mon..Sun in that order', () => {
+    const grid = byWeekdayDayPart([]);
+    expect(grid.map((row) => row[0].weekday)).toEqual(WEEKDAYS);
+  });
+
+  it('columns are labelled with the same day-parts byTimeOfDay uses, in order', () => {
+    const grid = byWeekdayDayPart([]);
+    expect(grid[0].map((cell) => cell.dayPart)).toEqual(['Morning', 'Afternoon', 'Evening', 'Night']);
+  });
+
+  it('buckets a game into its own weekday row and day-part column', () => {
+    const day = 1; // whatever weekday June 2nd, 2026 actually is — computed via rowOf, not assumed
+    const grid = byWeekdayDayPart([game({ timestamp: at(day, 9) })]); // 9:00 → Morning
+    const row = rowOf(day, 9);
+    expect(grid[row][0]).toMatchObject({ weekday: WEEKDAYS[row], dayPart: 'Morning', games: 1, wins: 1 });
+    // Every other cell in the grid stays empty.
+    const total = grid.flat().reduce((n, c) => n + c.games, 0);
+    expect(total).toBe(1);
+  });
+
+  it('the same weekday+day-part aggregates across games, including losses', () => {
+    const games = [...run(0, 19, 2), ...run(7, 20, 1, 'Loss')]; // two Mondays-or-whatever-day-0-is apart by exactly a week → same weekday, both Evening
+    const row = rowOf(0, 19);
+    expect(rowOf(7, 20)).toBe(row); // sanity: +7 days is the same weekday
+    const grid = byWeekdayDayPart(games);
+    const cell = grid[row][grid[row].findIndex((c) => c.dayPart === 'Evening')];
+    expect(cell).toMatchObject({ games: 3, wins: 2, losses: 1 });
+  });
+
+  it('different weekdays land in different rows even at the same hour', () => {
+    const grid = byWeekdayDayPart([game({ timestamp: at(0, 9) }), game({ timestamp: at(1, 9) })]);
+    const r0 = rowOf(0, 9);
+    const r1 = rowOf(1, 9);
+    expect(r0).not.toBe(r1);
+    expect(grid[r0].find((c) => c.dayPart === 'Morning')!.games).toBe(1);
+    expect(grid[r1].find((c) => c.dayPart === 'Morning')!.games).toBe(1);
   });
 });
 

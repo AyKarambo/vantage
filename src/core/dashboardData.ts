@@ -4,7 +4,7 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
+  byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, byWeekdayDayPart, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
@@ -250,10 +250,11 @@ export function computeDashboard(
     ...(previous ? { previous } : {}),
     bySeason,
     timeOfDay: byTimeOfDay(games),
+    weekGrid: byWeekdayDayPart(games),
     // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.
     sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
-    calendar: calendar(games, 35),
+    calendar: calendar(games, activityWindowDays(filters.days, Date.now(), seasonStartsList)),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
     // The Focus screen's cross-dimension hub (H1: maps, heroes AND roles):
     // ranked/trended over the FILTERED range (the list describes what you
@@ -390,6 +391,34 @@ export function previousDateRange(
   const n = filters.days;
   const dayMs = 86_400_000;
   return { start: now - 2 * n * dayMs, end: now - n * dayMs, label: `the previous ${n} days` };
+}
+
+/** The Activity heatmap never shows more than this many trailing days — it's a one-third-width card, and a longer grid would be unreadable. */
+export const ACTIVITY_WINDOW_CAP_DAYS = 91;
+
+/**
+ * How many trailing days the Activity heatmap should cover for the active
+ * filter (O5) — it used to be a hard-coded 35 regardless of range, so "Last
+ * 7 days" always showed 28 empty cells and a season or "All time" view only
+ * ever showed its last 5 weeks. Short ranges keep the familiar 35-day grid
+ * (a shorter one would feel cramped even with most cells empty); longer
+ * ranges get the real span, capped at {@link ACTIVITY_WINDOW_CAP_DAYS} (13
+ * weeks). An unresolvable season id falls back to 35, the same graceful
+ * default {@link applyFilters} itself uses for the games behind it.
+ */
+export function activityWindowDays(
+  days: DashboardFilters['days'],
+  now: number,
+  seasonStartsList?: readonly number[],
+): number {
+  if (days === undefined || days === 'all') return ACTIVITY_WINDOW_CAP_DAYS;
+  if (typeof days === 'object') {
+    const w = seasonWindowById(days.season, now, seasonStartsList);
+    if (!w) return 35;
+    const span = Math.ceil((Math.min(now, w.end) - w.start) / 86_400_000);
+    return Math.min(ACTIVITY_WINDOW_CAP_DAYS, Math.max(35, span));
+  }
+  return days <= 30 ? 35 : Math.min(ACTIVITY_WINDOW_CAP_DAYS, days);
 }
 
 /**

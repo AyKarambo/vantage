@@ -181,6 +181,12 @@ export interface Group extends WinLoss {
   key: string;
 }
 
+/** One cell of {@link ../temporal byWeekdayDayPart}'s weekday × day-part grid (O5). */
+export interface WeekdayDayPartCell extends WinLoss {
+  weekday: string;
+  dayPart: string;
+}
+
 /**
  * A `trend` bucket (C6) with its trailing rolling winrate attached — see
  * {@link rollingWinrate}. Its own type rather than a field on the shared

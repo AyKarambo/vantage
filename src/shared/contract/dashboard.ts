@@ -6,7 +6,7 @@
 import type { Role, Result } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit, WeekdayDayPartCell } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
@@ -262,8 +262,11 @@ export interface DashboardData {
   bySeason: SeasonBreakdown[];
   /** Winrate per local day-part (Morning/Afternoon/Evening/Night). */
   timeOfDay: Group[];
+  /** Winrate crossed by weekday AND day-part — 7 rows (Mon..Sun) × 4 columns (the same day-parts `timeOfDay` uses) (O5). */
+  weekGrid: WeekdayDayPartCell[][];
   /** Winrate by game number within a session ('1'..'5', '6+'). */
   sessionPosition: Group[];
+  /** Trailing days behind {@link calendar} — resolved from the active filter (O5), not a fixed 35; see `activityWindowDays`. */
   calendar: CalendarDay[];
   /** Map-only ranking that annotates the Overview scatter ("Top priority" callout). */
   focusMaps: FocusItem[];

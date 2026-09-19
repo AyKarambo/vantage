@@ -1,6 +1,6 @@
 /** Trends — winrate over time, splits by role/mode/account, and when you play. */
 import { h } from '../dom';
-import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup } from '../../../src/shared/contract';
+import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup, WeekdayDayPartCell } from '../../../src/shared/contract';
 import { sessionFade, bucketStart } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
@@ -55,7 +55,7 @@ export function trends(ctx: ViewContext): HTMLElement {
     ),
     bySeasonCard(ctx),
     h('div', { class: 'grid-3' },
-      timeOfDayCard(d.timeOfDay),
+      timeOfDayCard(d.weekGrid),
       sessionPositionCard(d.sessionPosition),
       gameLengthCard(d.byDuration),
     ),
@@ -123,28 +123,67 @@ function rankTrendCard(ctx: ViewContext): HTMLElement | null {
   ));
 }
 
+/** {@link WeekdayDayPartCell.weekday}'s short label spelled out, for the best-window sentence — the grid itself stays short-labelled for space. */
+const WEEKDAY_FULL: Record<string, string> = {
+  Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday',
+};
+
+const DAY_PART_SHORT: Record<string, string> = { Morning: 'AM', Afternoon: 'Aft', Evening: 'Eve', Night: 'Night' };
+
+/**
+ * Weekday × day-part winrate grid (O5) — replaces the old bare 4-bucket
+ * time-of-day breakdown with the real crossing (there is no weekday
+ * dimension anywhere else in the app), reusing the Activity heatmap's own
+ * colour = winrate / opacity = games encoding so the two read the same way.
+ */
+function weekdayDayPartGrid(grid: WeekdayDayPartCell[][]): HTMLElement {
+  const cols = grid[0] ?? [];
+  const out = h('div', { class: 'week-grid' },
+    h('div', { class: 'week-grid-corner' }),
+    ...cols.map((c) => h('div', { class: 'week-grid-col-label' }, DAY_PART_SHORT[c.dayPart] ?? c.dayPart)),
+  );
+  for (const row of grid) {
+    out.append(h('div', { class: 'week-grid-row-label' }, row[0]?.weekday ?? ''));
+    for (const cell of row) {
+      out.append(h('div', {
+        class: 'week-grid-cell',
+        style: {
+          background: cell.games ? wrColor(cell.winrate) : 'var(--surface-3)',
+          opacity: cell.games ? String(0.4 + Math.min(cell.games, 6) / 6 * 0.6) : '1',
+        },
+        title: cell.games
+          ? `${WEEKDAY_FULL[cell.weekday] ?? cell.weekday} ${cell.dayPart} · ${cell.wins}W ${cell.losses}L · ${pct(cell.winrate)}`
+          : `${WEEKDAY_FULL[cell.weekday] ?? cell.weekday} ${cell.dayPart} · no games`,
+      }));
+    }
+  }
+  return out;
+}
+
 /** Best/worst window callout only when the sample is worth reading (≥10 decided games)
  *  AND that best bucket is actually a winning one — a 38% bucket topping the
  *  pack is still a losing window, not one worth queuing ranked into. */
-function timeOfDayCard(groups: Group[]): HTMLElement {
+function timeOfDayCard(grid: WeekdayDayPartCell[][]): HTMLElement {
   const DECIDED_FLOOR = 10;
-  const solid = groups.filter((g) => g.wins + g.losses >= DECIDED_FLOOR);
+  const flat = grid.flat();
+  const solid = flat.filter((c) => c.wins + c.losses >= DECIDED_FLOOR);
   const best = solid.length >= 2 ? [...solid].sort((a, b) => b.winrate - a.winrate)[0] : null;
-  // Needs a SECOND day-part to reach the floor too, not just the first — the
+  // Needs a SECOND slot to reach the floor too, not just the first — the
   // 2nd-highest decided count is the honest "how close" answer either way,
-  // whether 0 or 1 day-parts currently qualify (F1).
-  const secondBestDecided = [...groups].map((g) => g.wins + g.losses).sort((a, b) => b - a)[1] ?? 0;
-  return card({ title: 'Time of day', sub: 'when you actually win' },
-    breakdownOrdered(groups),
+  // whether 0 or 1 slots currently qualify (F1).
+  const secondBestDecided = flat.map((c) => c.wins + c.losses).sort((a, b) => b - a)[1] ?? 0;
+  const bestLabel = best ? `${WEEKDAY_FULL[best.weekday] ?? best.weekday} ${best.dayPart.toLowerCase()}` : null;
+  return card({ title: 'Time of day', sub: 'winrate by weekday × time of day' },
+    weekdayDayPartGrid(grid),
     h('div', { style: { marginTop: '10px' } },
       best
         ? h('div', { class: 'hint', style: { lineHeight: '1.5' } },
             best.winrate >= 0.5
-              ? h('span', null, 'Your best window is ', h('span', { class: 'is-win' }, best.key.toLowerCase()),
+              ? h('span', null, 'Your best window is ', h('span', { class: 'is-win' }, bestLabel),
                   ` (${pct(best.winrate)} over ${best.wins + best.losses} decided games). Queue ranked when you're sharp, not just when you're free.`)
-              : 'No winning window in this range yet — every day-part is under 50%.')
-        : unlockHint(`Needs 2 day-parts with ${DECIDED_FLOOR}+ decided games to compare`, [
-            { have: secondBestDecided, need: DECIDED_FLOOR, label: 'decided games in your 2nd-best window' },
+              : 'No winning window in this range yet — every slot is under 50%.')
+        : unlockHint(`Needs 2 weekday × time-of-day slots with ${DECIDED_FLOOR}+ decided games to compare`, [
+            { have: secondBestDecided, need: DECIDED_FLOOR, label: 'decided games in your 2nd-best slot' },
           ])),
   );
 }
