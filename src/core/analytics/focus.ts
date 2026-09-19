@@ -1,14 +1,13 @@
 /**
- * Map-focus derivation — the "work on these" hub behind the Focus screen.
- * Ranks net-losing maps (net = losses − wins), adds a per-entry trend verdict
- * (is it getting better or worse?), and links entries to authored improvement
+ * Cross-dimension focus derivation — the "work on these" hub behind the Focus
+ * screen. Ranks net-losing maps, heroes and roles (net = losses − wins) by a
+ * sample-aware deficit score (H1), adds a per-entry trend verdict (is it
+ * getting better or worse?), and links entries to authored improvement
  * targets so the screen can show whether focusing is actually working. Pure
  * and I/O-free — consumed by dashboardData.
- *
- * Maps-only for now (issue #B) — the deeper cross-dimension rework (hero/role
- * focus) is deferred; {@link FocusEntry.dimension} always holds `'map'` here.
  */
 import { focusBy, winLoss } from './grouping';
+import { wilson } from '../targets/wilson';
 import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm, WinLoss } from './types';
 import type { AuthoredTarget } from '../targets/types';
 // Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
@@ -18,8 +17,19 @@ import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 /** Minimum sample before a map can be flagged. */
 const MAP_MIN_GAMES = 3;
 
-/** List cap — enough to fill the screen, short enough to stay a priority list. */
-const MAX_ENTRIES = 12;
+/**
+ * Minimum sample before a hero or role can be flagged (H1) — higher than the
+ * map floor because a hero/role bucket pools far more games than any one map,
+ * so a low floor here would surface noise faster than it surfaces signal.
+ */
+const HERO_MIN_GAMES = 8;
+const ROLE_MIN_GAMES = 8;
+
+/** Per-dimension list cap — three short sections beat one long undifferentiated list. */
+const MAX_PER_DIMENSION = 6;
+
+/** Top-N heroes attached to a map entry's per-hero record (H2). */
+const MAP_TOP_HEROES = 3;
 
 /** A trend needs at least this many games to split into two meaningful halves. */
 const TREND_MIN_GAMES = 6;
@@ -40,21 +50,79 @@ export function focusGamesFor(games: GameRecord[], dimension: FocusDimension, ke
   return games.filter((g) => g.heroes.includes(key));
 }
 
+export interface FocusEntriesOptions {
+  /**
+   * In-pool lookup for map entries (H1), same injection convention as
+   * `mapModeOf` elsewhere — a map the lookup marks inactive still gets a row
+   * (history stays visible) but sorts behind every in-pool row. Absent (or
+   * the lookup itself returning nothing) reads as in-pool, matching master
+   * data's own "missing isActive ⇒ active" convention.
+   */
+  isMapActive?: (map: string) => boolean;
+}
+
 /**
- * The "work on these" ranking: net-losing (net > 0) maps, worst deficit first
- * (ties: more games first), capped at {@link MAX_ENTRIES}. Entries with
- * enough games in range also carry a {@link FocusTrend} verdict.
+ * The "work on these" ranking (H1): net-losing (net > 0) maps, heroes AND
+ * roles, each dimension ranked separately by a sample-aware deficit —
+ * `net × (0.5 − Wilson-lower-bound(winrate))`, so a real deficit backed by a
+ * big sample outranks a same-sized deficit that's really just a small,
+ * unreliable sample — and capped at {@link MAX_PER_DIMENSION} per dimension
+ * (three short sections, not one list one dimension can crowd out). Map
+ * entries additionally carry {@link FocusEntry.heroes} (H2) and
+ * {@link FocusEntry.inPool} (H1, in-pool rows sort first within the maps
+ * section). Entries with enough games in range also carry a
+ * {@link FocusTrend} verdict and its point delta.
  */
-export function focusEntries(games: GameRecord[]): FocusEntry[] {
-  const tagged = withDimension(focusByMap(games), 'map');
-  return tagged
-    .filter((e) => e.net > 0)
-    .sort((a, b) => b.net - a.net || b.games - a.games)
-    .slice(0, MAX_ENTRIES)
-    .map((e) => {
-      const trend = focusTrend(focusGamesFor(games, e.dimension, e.key));
-      return trend ? { ...e, trend } : e;
-    });
+export function focusEntries(games: GameRecord[], opts: FocusEntriesOptions = {}): FocusEntry[] {
+  const withTrend = (e: FocusEntry): FocusEntry => {
+    const detail = focusTrendDetail(focusGamesFor(games, e.dimension, e.key));
+    return detail ? { ...e, trend: detail.trend, trendPts: detail.pts } : e;
+  };
+
+  const rank = (entries: FocusEntry[]): FocusEntry[] =>
+    entries
+      .filter((e) => e.net > 0)
+      .sort((a, b) => {
+        const aPool = a.inPool !== false;
+        const bPool = b.inPool !== false;
+        if (aPool !== bPool) return aPool ? -1 : 1;
+        return sampleAwareDeficit(b) - sampleAwareDeficit(a);
+      })
+      .slice(0, MAX_PER_DIMENSION)
+      .map(withTrend);
+
+  const mapEntries = rank(
+    withDimension(focusByMap(games), 'map').map((e) => ({
+      ...e,
+      heroes: topHeroesFor(focusGamesFor(games, 'map', e.key)),
+      inPool: opts.isMapActive ? opts.isMapActive(e.key) : true,
+    })),
+  );
+  const heroEntries = rank(withDimension(focusByHero(games), 'hero'));
+  const roleEntries = rank(withDimension(focusBy(games, (g) => g.role, ROLE_MIN_GAMES), 'role'));
+
+  return [...roleEntries, ...heroEntries, ...mapEntries];
+}
+
+/**
+ * Sample-aware deficit score (H1): `net × (0.5 − Wilson-lower-bound(winrate))`.
+ * A losing record backed by a big sample has a Wilson lower bound close to its
+ * true (low) winrate, so `0.5 − low` stays large; the same observed winrate on
+ * a tiny sample has a wide interval that pulls the lower bound down toward 0
+ * regardless of `n`, so the factor caps near the same ceiling either way —
+ * `net` (which DOES scale with sample size) is what keeps a real, well-evidenced
+ * deficit ranked above a same-net entry that's really just a coin-flip sample.
+ */
+function sampleAwareDeficit(e: FocusItem): number {
+  const decidedGames = e.wins + e.losses;
+  if (decidedGames === 0) return 0;
+  return e.net * (0.5 - wilson(e.wins, decidedGames).low);
+}
+
+/** Recent-half vs earlier-half winrate verdict plus the raw point delta behind it. */
+interface FocusTrendDetail {
+  trend: FocusTrend;
+  pts: number;
 }
 
 /**
@@ -64,7 +132,7 @@ export function focusEntries(games: GameRecord[]): FocusEntry[] {
  * falls back to a 0% winrate for an all-draw half, which would otherwise
  * fabricate a verdict from a baseline that was never actually measured.
  */
-export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
+function focusTrendDetail(entryGames: GameRecord[]): FocusTrendDetail | undefined {
   if (entryGames.length < TREND_MIN_GAMES) return undefined;
   const sorted = [...entryGames].sort((a, b) => a.timestamp - b.timestamp);
   const mid = Math.floor(sorted.length / 2);
@@ -74,8 +142,13 @@ export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
   // Compare in whole points to dodge IEEE-754 wobble (e.g. 0.55 - 0.5 landing
   // a hair above 0.05) right at the dead-band boundary.
   const pts = Math.round((recent.winrate - earlier.winrate) * 1000) / 10;
-  if (Math.abs(pts) <= TREND_DEADBAND * 100) return 'flat';
-  return pts > 0 ? 'improving' : 'declining';
+  const trend = Math.abs(pts) <= TREND_DEADBAND * 100 ? 'flat' : pts > 0 ? 'improving' : 'declining';
+  return { trend, pts };
+}
+
+/** Public trend-only read — the {@link FocusTrendDetail} wrapper used everywhere that only needs the verdict (Heroes table/drawer, H6). */
+export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
+  return focusTrendDetail(entryGames)?.trend;
 }
 
 /**
@@ -148,6 +221,53 @@ export function linkFocusTargets(
  */
 function focusByMap(games: GameRecord[]): FocusItem[] {
   return focusBy(games, (g) => g.map, MAP_MIN_GAMES).filter((g) => g.key !== 'Unknown');
+}
+
+/**
+ * Hero variant of {@link focusBy} (H1): unlike a map or a role, a game can
+ * belong to SEVERAL heroes at once (a swap), so this can't reuse `groupBy`'s
+ * one-key-per-game bucketing — every hero in `g.heroes` gets the whole game's
+ * result, the same "which games count toward this entry" rule
+ * {@link focusGamesFor} already applies to hero rows elsewhere.
+ */
+function focusByHero(games: GameRecord[]): FocusItem[] {
+  const buckets = new Map<string, GameRecord[]>();
+  for (const g of games) {
+    for (const hero of g.heroes) {
+      (buckets.get(hero) ?? buckets.set(hero, []).get(hero)!).push(g);
+    }
+  }
+  return [...buckets.entries()]
+    .map(([key, gs]) => {
+      const wl = winLoss(gs);
+      return { key, ...wl, net: wl.losses - wl.wins };
+    })
+    .filter((e) => e.games >= HERO_MIN_GAMES)
+    .sort((a, b) => b.net - a.net);
+}
+
+/**
+ * The top {@link MAP_TOP_HEROES} heroes played in a map entry's games, by
+ * game count, each with its own PER-GAME win/loss record (H2) — deliberately
+ * per-game credit (every hero in a game earns the whole result), not the
+ * Heroes screen's time-share credit, since a swap segment isn't "most of the
+ * game" on either hero the way time-share reasons about it.
+ */
+function topHeroesFor(entryGames: GameRecord[]): Array<{ hero: string; wins: number; losses: number }> {
+  const tally = new Map<string, { games: number; wins: number; losses: number }>();
+  for (const g of entryGames) {
+    for (const h of g.heroes) {
+      const t = tally.get(h) ?? { games: 0, wins: 0, losses: 0 };
+      t.games += 1;
+      if (g.result === 'Win') t.wins += 1;
+      else if (g.result === 'Loss') t.losses += 1;
+      tally.set(h, t);
+    }
+  }
+  return [...tally.entries()]
+    .sort((a, b) => b[1].games - a[1].games)
+    .slice(0, MAP_TOP_HEROES)
+    .map(([hero, t]) => ({ hero, wins: t.wins, losses: t.losses }));
 }
 
 function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntry[] {
