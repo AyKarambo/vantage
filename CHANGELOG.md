@@ -853,6 +853,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   sentence saying why, and a link to set a rank anchor when that's the actual fix. The With
   you/Against you columns on Players now show the exact winrate they sort by, and a
   name-collision (`⚠`) is explained by name on both screens instead of hover-only (M6).
+- **The sidebar has real icons now.** 15 nav items that used to be Unicode text glyphs —
+  several of them circles that only differed by which part was filled in — are now distinct
+  inline-SVG icons: a crosshair for Focus, a battery for Readiness, a map pin for Maps, and so
+  on. Every nav button's tooltip also names its `Ctrl+<digit>` shortcut, and the command
+  palette's Screen rows show the same icon, so a screen reads at a glance there too (K6).
 
 ## 0.34.0 — 31 July 2026
 

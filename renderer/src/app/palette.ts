@@ -26,6 +26,8 @@ interface PaletteItem {
   group: string;
   /** Extra match text beyond the label (e.g. hero names on a match row). */
   keywords?: string;
+  /** A Screen row's own sidebar icon (K6) — a fresh Node per row, never the sidebar's own instance. */
+  icon?: Node;
   run: () => void;
 }
 
@@ -34,6 +36,8 @@ export interface PaletteNav {
   label: string;
   /** Pre-formatted digit shortcut ('Ctrl 4'), when this screen has one. */
   kbd?: string;
+  /** The same inline-SVG icon the sidebar shows for this screen (K6), reused so a Screen row is recognizable at a glance instead of relying on the label alone. */
+  icon?: Node;
 }
 
 export interface PaletteExtras {
@@ -128,6 +132,7 @@ export function openPalette(ctx: ViewContext, extras: PaletteExtras): void {
                 },
               },
                 h('span', { class: 'palette-group' }, item.group),
+                item.icon ? h('span', { class: 'palette-icon' }, item.icon) : null,
                 h('span', { class: 'palette-label' }, item.label),
                 item.kbd
                   ? h('span', { class: 'kbd' }, item.kbd)
@@ -177,7 +182,7 @@ function buildItems(ctx: ViewContext, extras: PaletteExtras): PaletteItem[] {
     items.push({ label: a.label, hint: a.hint, kbd: a.kbd, group: 'Action', run: a.run });
   }
   for (const n of extras.nav) {
-    items.push({ label: n.label, kbd: n.kbd, group: 'Screen', run: () => ctx.navigate(n.id) });
+    items.push({ label: n.label, kbd: n.kbd, icon: n.icon, group: 'Screen', run: () => ctx.navigate(n.id) });
   }
   for (const m of d.byMap) {
     items.push({

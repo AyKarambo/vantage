@@ -1660,6 +1660,17 @@ table.data tbody tr:focus-visible {
 .palette-label {
   color: var(--text);
 }
+/* A Screen row's own sidebar icon (K6) — recognizable at a glance instead of
+   relying on the label text alone, the same icon the sidebar itself shows. */
+.palette-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--text-2);
+}
+.palette-icon svg {
+  width: 14px;
+  height: 14px;
+}
 .palette-hint {
   margin-left: auto;
   color: var(--dim);
