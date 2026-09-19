@@ -170,6 +170,8 @@ export interface DataProviderDeps {
     choose(): Promise<DataLocationResult>;
     set(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
     chooseFirstRun(): Promise<DataLocationResult>;
+    /** Open the current data folder in the OS file manager — the composition root's `shell.openPath` (W3). */
+    reveal(): void;
   };
 }
 
@@ -806,6 +808,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     chooseDataFolder: () => deps.dataLocation.choose(),
     setDataFolder: (input) => deps.dataLocation.set(input),
     chooseFirstRunDataFolder: () => deps.dataLocation.chooseFirstRun(),
+    revealDataFolder: () => deps.dataLocation.reveal(),
     clearReview: (matchId) => {
       deps.history.clearReview(matchId);
     },

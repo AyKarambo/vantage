@@ -774,6 +774,8 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   sync also lists exactly which matches didn't go through and why, with a **Retry failed** button
   that re-syncs just those — instead of a blind re-run of everything. The connected-database card
   also gains an **Open in Notion ↗** link, previously buried in the tray menu (W6).
+- **A "Show in Explorer" button on Data storage.** The folder path was text you had to copy and
+  paste into a file manager yourself — one click now opens it directly (W3).
 
 ## 0.34.0 — 31 July 2026
 

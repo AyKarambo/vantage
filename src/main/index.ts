@@ -564,6 +564,10 @@ function main(): void {
         if (target === dataDir) return keepDefaultDataFolder();
         return applyDataFolder(target, hasExistingData(target));
       },
+      // W3 — a convenience shortcut, same class as `openConfigFile` (tray.ts);
+      // local-only, opens the CURRENT folder (reads the live `dataDir`
+      // closure var, never a stale snapshot from when the provider was built).
+      reveal: () => { void shell.openPath(dataDir); },
     },
   });
 

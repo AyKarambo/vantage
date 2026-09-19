@@ -281,6 +281,8 @@ export interface OwStatsApi {
   setDataFolder(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
   /** First-run folder picker; validates + adopts existing Vantage data automatically. */
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
+  /** Open the current data folder in the OS file manager (Settings "Show in Explorer…", W3). Local-only, no new outbound path. */
+  revealDataFolder(): Promise<void>;
   /** Remove a game's review — the undo of a first-time review save. */
   clearReview(matchId: string): Promise<void>;
   /**
@@ -459,6 +461,7 @@ export const IPC_CHANNELS = {
   chooseDataFolder: 'settings:choose-data-folder',
   setDataFolder: 'settings:set-data-folder',
   chooseFirstRunDataFolder: 'settings:choose-first-run-data-folder',
+  revealDataFolder: 'settings:reveal-data-folder',
   clearReview: 'manual:clear-review',
   resolvePendingMatch: 'manual:resolve-pending-match',
   dismissPendingMatch: 'manual:dismiss-pending-match',
