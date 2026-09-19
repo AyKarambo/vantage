@@ -33,5 +33,12 @@ export function breakReminderEditor(ctx: ViewContext): HTMLElement {
       h('span', { class: 'hint' }, 'after'),
       thresholdSelect,
     ),
+    // Says what actually happens on trigger — a Windows tray notification,
+    // not anything inside the app — which neither copy of this editor used
+    // to state (S10).
+    h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+      r.enabled
+        ? `Sends a Windows notification after ${r.afterLosses} loss${r.afterLosses === 1 ? '' : 'es'} in a row, again every ${r.afterLosses} more.`
+        : 'Off — no notification fires.'),
   );
 }

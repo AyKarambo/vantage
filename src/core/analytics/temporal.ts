@@ -16,6 +16,14 @@ const DAY_PARTS: Array<{ key: string; from: number; to: number }> = [
   { key: 'Night', from: 22, to: 5 }, // wraps midnight
 ];
 
+/** Which {@link DAY_PARTS} bucket a local hour (0–23) falls in — the same
+ *  bucketing {@link byTimeOfDay} uses, so "it's evening" and the Evening row
+ *  it reads a winrate from can never name two different windows. */
+export function dayPartAt(hour: number): string {
+  const part = DAY_PARTS.find((p) => (p.from < p.to ? hour >= p.from && hour < p.to : hour >= p.from || hour < p.to));
+  return part!.key;
+}
+
 /** Winrate per local day-part (Morning/Afternoon/Evening/Night), empty buckets omitted. */
 export function byTimeOfDay(games: GameRecord[]): Group[] {
   const buckets = new Map<string, GameRecord[]>(DAY_PARTS.map((p) => [p.key, []]));

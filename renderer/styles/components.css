@@ -1246,6 +1246,19 @@ table.data tbody tr:focus-visible {
   font-size: 12px;
   padding: 3px 0;
 }
+/* The lead row when a `lastError` is present — scheme-independent like every
+   other --warn use (K4), so it can't drift toward looking like a loss. */
+.gep-popover-row.is-warn span {
+  color: var(--warn-text);
+}
+.gep-popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
 
 /* Account switcher menu (top-left chip popover) */
 .acct-menu {

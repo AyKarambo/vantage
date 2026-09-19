@@ -29,8 +29,9 @@ One behavior layer that makes the app *feel* like a polished daily companion: a 
 ## Status-bar connection indicator
 
 - Dot + label rendering the four-state model from `src/core/gepHealth.ts` (`no-game` · `connected` · `live` · `stale`) with truthful labels: "No game" · "Connected — waiting for events" · "Receiving data" · "⚠ No data for Ns" (stale, with live seconds-of-silence). A non-GEP sensor (`counterwatch`, demo/no-live-feed runs) always renders the no-game dot with "No live feed" — it can never claim Connected or Live.
-- Click opens a live-updating details popover: state, last event (relative time), events this session, match-in-progress flag, feed attach time, and the feed's last error when present; relative times re-render on a 10s tick while open.
+- Click opens a live-updating details popover (S6): the last error first, in a warning tone, when one is present; then state, source (GEP vs. counterwatch), the loaded GEP package version, last event (relative time), events this session, match-in-progress flag, and feed attach time. A footer of next steps — **Logs →**, **Alerts…** (Settings), and **Open Live →** while a match is in progress — replaces what used to be a diagnostic dead end. Relative times re-render on a 10s tick while open.
 - Renderer mirror (`gepStatus.ts`): one snapshot pull at startup and on window focus, then push updates over `onGepStatus`. The main-process monitor re-evaluates on every feed signal and on a 15s tick; every transition is logged and mirrored onto the tray icon + tooltip.
+- The app-wide `.gep-banner` (top of content, above the filter bar) shows, in priority order: a "restart to apply" prompt while a GEP fix is staged, an outage explanation while Overwolf's service is degraded/down, or — lowest priority, S6 — a "feed's gone quiet" heads-up while `state === 'stale'`, with an **Open Logs →** action. The Live screen also prepends its own inline version of the last one, next to the scoreboard it's warning about, and subscribes to `gepStatus` so it appears/clears live rather than waiting for the next unrelated repaint.
 
 ## Toast + undo layer (`components/toast.ts`)
 

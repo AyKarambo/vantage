@@ -265,6 +265,37 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   icons, there was no way to check which account was pinned, or how many games were waiting, short
   of expanding the rail again.
 
+### Added
+
+- **Live, when nothing's running, is a pre-queue briefing.** This sitting's tally, the time-of-day
+  read ("it's evening — you're 60% over 12 decided evening games"), your stop rule, your active
+  targets, a readiness read, and your top-priority maps — instead of one sentence over empty
+  space. On demo data, or without live tracking approved, it now says so and links to what's
+  needed.
+- **Live shows a "Just finished" card the moment a match ends**, with a direct link to it (and to
+  Review, if it's still waiting to be graded) — instead of clearing the screen and leaving you to
+  go find it yourself.
+- **A combined stop rule.** "Your stop rule: end after game 3 or 2 losses in a row" — Mental, the
+  Overview Mental card and the idle Live screen all now say the same thing, combining your tilt
+  peak (or your winrate fade, when tilt has no clean read yet) with the break reminder's
+  threshold. Offers to turn the reminder on when a stop point is readable but nothing's armed to
+  back it up.
+- **A heads-up when the game feed goes quiet mid-match.** Overwatch's events can stall for a
+  stretch without anything actually being wrong — Live now says so next to the scoreboard it
+  might affect, and every other screen gets the same word in the banner up top. The feed status
+  popover leads with the last error (when there is one) instead of burying it at the bottom, adds
+  the source and the loaded GEP package version, and a Logs / Alerts / Open Live footer.
+
+### Fixed
+
+- **The Mental "Calm"/"Tilted" bars had no unit and read like a pair that should sum to 100** —
+  they're independent 0–100 reads, and now say `57%`/`31%` with the formula behind each on hover,
+  and the card says so once. Every "What it costs you" verdict now says what "pts" means (winrate
+  percentage points on the bad side of a flag) instead of repeating an undefined unit five times,
+  and its bad-side percentage links straight into the matches behind it. The non-zero flag boxes
+  below now look like the drill-downs they are — an accent border, a lift on hover, a trailing
+  arrow — instead of being visually identical to the hero drawer's plain, non-clickable stat grid.
+
 ## 0.34.0 — 31 July 2026
 
 ### Added
