@@ -108,6 +108,43 @@ describe('totality', () => {
   });
 });
 
+// ---- mainAccount (W2) ------------------------------------------------------
+// Settings → Accounts reads this straight off ReadinessSummary rather than
+// re-deriving it, so it must surface in every band — not just the full-score
+// path — and match the same `mainAccountOf` verdict `state.perf` computes.
+
+describe('mainAccount', () => {
+  const now = ts(35, 20);
+
+  it('is null for an empty history', () => {
+    expect(computeReadiness([], now).mainAccount).toBeNull();
+  });
+
+  it('is set even on an insufficient-data read (too few games/days)', () => {
+    const r = computeReadiness(span(34, 35, { perDay: 10 }), now); // 20 games, span 1
+    expect(r.band).toBe('insufficient-data');
+    expect(r.mainAccount).toBe('Main');
+  });
+
+  it('is set on a stale (rusty) read', () => {
+    const games = span(0, 18, { perDay: 3, mental: CALM }); // ends day 18
+    const r = computeReadiness(games, ts(40, 20)); // 22 rest days
+    expect(r.band).toBe('rusty');
+    expect(r.mainAccount).toBe('Main');
+  });
+
+  it('is set on a full-score read, and null on an exact-tie mixed history', () => {
+    const solo = computeReadiness(span(5, 35, { perDay: 3, mental: CALM }), now);
+    expect(solo.mainAccount).toBe('Main');
+
+    const tied = computeReadiness([
+      ...span(5, 35, { perDay: 3, mental: CALM, account: 'Main' }),
+      ...span(5, 35, { perDay: 3, mental: CALM, account: 'Alt' }),
+    ], now);
+    expect(tied.mainAccount).toBeNull();
+  });
+});
+
 // ---- AC A: insufficient data ---------------------------------------------
 
 describe('AC A — insufficient data', () => {

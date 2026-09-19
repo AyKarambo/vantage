@@ -78,7 +78,7 @@ function quickLogBlock(ctx: ViewContext): HTMLElement {
 /** Accounts, Coaching (incl. Quick Log), App Behavior, Appearance, Diagnostics, Data Storage, Import. */
 export function generalTab(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'stack', style: { gap: '18px' } },
-    section(accountsCard(), 'accounts'),
+    section(accountsCard(ctx), 'accounts'),
     h('div', { class: 'grid-2' },
       section(card({ title: 'Coaching', sub: 'nudges and thresholds used across the app' },
         quickLogBlock(ctx),
