@@ -26,6 +26,7 @@ import { MatchAggregator } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { generateSampleGames } from '../core/sampleData';
 import { computeDevModeAttempted, hasDevCredentials, decideDevModeAuthStrategy } from '../core/devMode';
+import { clampZoom } from '../core/zoom';
 import { createDevModeAuthMonitor } from './devModeAuthMonitor';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
@@ -311,6 +312,10 @@ function main(): void {
   let pushSyncProgress: (done: number, total: number) => void = () => {};
   // Filled in once the dashboard window exists (mirrors pushEntry/pushSyncProgress).
   let pushGameLogged: (payload: GameLoggedPayload) => void = () => {};
+  // Filled in once the dashboard window exists — the Settings apply-closure
+  // below needs to reach the LIVE window (W7's Ctrl+=/Settings text-size),
+  // same reason pushGameLogged is deferred.
+  let applyZoom: (factor: number) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
@@ -448,6 +453,7 @@ function main(): void {
         liveKillFeed: config.ui.liveKillFeed,
         lastSeenVersion: config.ui.lastSeenVersion,
         mcpEnabled: config.ui.mcpEnabled,
+        uiZoom: config.ui.uiZoom,
       }),
       apply: (patch) => {
         if (patch.closeToTray !== undefined) {
@@ -493,6 +499,17 @@ function main(): void {
           config = loadConfig();
           setMcpEnabled(config.ui.mcpEnabled);
         }
+        // Text-size zoom (W7) — a running-window resource like mcpEnabled
+        // above: applied to the live webContents now, not just next launch.
+        // Clamped here too (not just in the renderer) since this is the one
+        // path every caller — Settings select or the Ctrl+=/- shortcuts —
+        // actually goes through.
+        if (patch.uiZoom !== undefined) {
+          const clamped = clampZoom(patch.uiZoom);
+          saveLocalUiConfig({ uiZoom: clamped });
+          config = loadConfig();
+          applyZoom(clamped);
+        }
         return {
           closeToTray: config.ui.closeToTray,
           runAtLogin: config.runAtLogin,
@@ -502,6 +519,7 @@ function main(): void {
           liveKillFeed: config.ui.liveKillFeed,
           lastSeenVersion: config.ui.lastSeenVersion,
           mcpEnabled: config.ui.mcpEnabled,
+          uiZoom: config.ui.uiZoom,
         };
       },
     },
@@ -625,7 +643,9 @@ function main(): void {
       saveLocalUiConfig({ windowBounds });
       config = loadConfig();
     },
+    zoomFactor: () => config.ui.uiZoom ?? 1,
   });
+  applyZoom = (factor) => dashboard.setZoomFactor(factor);
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
   publishDevModeAuth = (p) => dashboard.push(EVENT_CHANNELS.onDevModeAuthStatus, p);
   let prevService: ServiceStatus | null = null;

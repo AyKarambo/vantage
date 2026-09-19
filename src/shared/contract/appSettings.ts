@@ -45,6 +45,13 @@ export interface AppUiSettings {
    * Not a user preference — no Settings UI toggle for it.
    */
   lastSeenVersion?: string;
+  /**
+   * Renderer text-size zoom factor (W7) — 1 = 100%, clamped 0.9–1.3 (90%–130%).
+   * Absent means never set (100%). Applied live via `webContents.setZoomFactor`
+   * when set through Settings/`Ctrl+=`/`Ctrl+-`/`Ctrl+Shift+0`, and reapplied
+   * on every launch once the window loads.
+   */
+  uiZoom?: number;
 }
 
 export interface AppInfo {
