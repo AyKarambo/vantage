@@ -185,36 +185,61 @@ const JUST_FINISHED_WINDOW_MS = 30 * 60_000;
  * A direct link to the match that JUST ended, so alt-tabbing back doesn't land
  * on a screen that cleared everything with nowhere to go (S2). Checks the
  * review inbox first (unfiltered) since a fresh tracked game lands there,
- * then the filtered match list, for a row timestamped at/after `endedAt`
- * minus a small grace window for clock skew between the two writes.
+ * then the filtered match list, then the held-pending set (a competitive
+ * match GEP delivered with no win/loss), for a row timestamped at/after
+ * `endedAt` minus a small grace window for clock skew between the two writes.
  */
 function justFinishedCard(p: LiveMatchPayload, ctx: ViewContext): HTMLElement {
   const cutoff = p.endedAt! - 5 * 60_000;
   const found = ctx.data.reviewInbox.find((m) => m.timestamp >= cutoff)
     ?? ctx.data.matches.find((m) => m.timestamp >= cutoff);
-  if (!found) {
-    // The refetch this match triggers hasn't landed yet, or it fell outside
-    // the current filter scope — still say where it went instead of nothing.
+  if (found) {
+    const inInbox = ctx.data.reviewInbox.some((m) => m.matchId === found.matchId);
     return card({ variant: 'raised' },
-      emptyState('That match is over — it’s in Matches now.', true),
-      h('div', { style: { marginTop: '10px' } },
-        button('Open Matches →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('matches') }),
+      h('div', { class: 'review-section-label' }, 'Just finished'),
+      h('div', { class: 'row', style: { padding: '2px 0' } },
+        resultPill(found.result),
+        h('div', { class: 'row-main' },
+          h('div', { class: 'row-name' }, found.map),
+          h('div', { class: 'row-meta' }, found.heroes.join(', ') || '—'),
+        ),
+        found.eliminations !== undefined
+          ? h('span', { class: 'mono u-dim', style: { fontSize: '11px' }, title: 'Eliminations / Assists / Deaths' },
+              `${found.eliminations}/${found.assists}/${found.deaths}`)
+          : null,
+      ),
+      h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px' } },
+        button('Open match →', { variant: 'soft', onClick: () => ctx.navigate('matchDetail', { matchId: found.matchId }) }),
+        inInbox ? button('Grade it on Review →', { variant: 'soft', onClick: () => ctx.navigate('review') }) : null,
       ),
     );
   }
-  const inInbox = ctx.data.reviewInbox.some((m) => m.matchId === found.matchId);
-  return card({ variant: 'raised' },
-    h('div', { class: 'review-section-label' }, 'Just finished'),
-    h('div', { class: 'row', style: { padding: '2px 0' } },
-      resultPill(found.result),
-      h('div', { class: 'row-main' },
-        h('div', { class: 'row-name' }, found.map),
-        h('div', { class: 'row-meta' }, found.heroes.join(', ') || '—'),
+  // No recorded row yet — a competitive match GEP delivered with no win/loss
+  // is held separately (never in history/analytics until confirmed), so it
+  // never shows up in reviewInbox/matches at all.
+  const pending = ctx.data.pendingMatches.find((m) => m.timestamp >= cutoff);
+  if (pending) {
+    return card({ variant: 'raised' },
+      h('div', { class: 'review-section-label' }, 'Just finished'),
+      h('div', { class: 'row', style: { padding: '2px 0' } },
+        h('div', { class: 'row-main' },
+          h('div', { class: 'row-name' }, pending.map),
+          h('div', { class: 'row-meta' }, pending.heroes.join(', ') || '—'),
+        ),
       ),
-    ),
-    h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px' } },
-      button('Open match →', { variant: 'soft', onClick: () => ctx.navigate('matchDetail', { matchId: found.matchId }) }),
-      inInbox ? button('Grade it on Review →', { variant: 'soft', onClick: () => ctx.navigate('review') }) : null,
+      h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
+        'The game didn’t report a win or loss for this one.'),
+      h('div', { style: { marginTop: '10px' } },
+        button('Set result on Review →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('review') }),
+      ),
+    );
+  }
+  // The refetch this match triggers hasn't landed yet, or it fell outside
+  // the current filter scope — still say where it went instead of nothing.
+  return card({ variant: 'raised' },
+    emptyState('That match is over — it’s in Matches now.', true),
+    h('div', { style: { marginTop: '10px' } },
+      button('Open Matches →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('matches') }),
     ),
   );
 }

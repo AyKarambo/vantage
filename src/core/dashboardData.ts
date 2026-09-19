@@ -10,6 +10,7 @@ import {
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
+import { heroCredits } from './playedTime';
 import { playerDirectory } from './playerIndex';
 import { DEFAULT_MASTER_DATA, makeMapActive, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
@@ -617,11 +618,38 @@ export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeas
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
     ...(g.groupSize !== undefined ? { groupSize: g.groupSize } : {}),
+    ...(matchStatTotals(g) ?? {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
     ...(targetGrades ? { targetGrades } : {}),
     reviewed: g.review != null,
   };
+}
+
+/**
+ * Match totals (E/A/D) for the row, summed across whichever heroes were
+ * played — the same resolution `heroCredits` already gives the per-hero
+ * card (merged rows when trustworthy, an even split of the match total
+ * otherwise), so this can never disagree with what the per-hero breakdown
+ * adds up to. `undefined` when the match has no hero stats recorded at all
+ * (S2's Live "Just finished" card is the first reader; a bare-header-tier
+ * legacy record just omits the line rather than showing zeros).
+ */
+function matchStatTotals(g: GameRecord): Pick<MatchRow, 'eliminations' | 'assists' | 'deaths'> | undefined {
+  // heroCredits() itself would still return one all-zero row here — evenly
+  // "splitting" an unknown total across game.heroes is right for the
+  // per-hero SHARE computation, but wrong for this: a match with no
+  // recorded perHero stats truly has no numbers to show, not zeros.
+  if (!g.perHero?.length) return undefined;
+  const credits = heroCredits(g);
+  return credits.reduce(
+    (a, c) => ({
+      eliminations: a.eliminations + c.stats.eliminations,
+      assists: a.assists + c.stats.assists,
+      deaths: a.deaths + c.stats.deaths,
+    }),
+    { eliminations: 0, assists: 0, deaths: 0 },
+  );
 }
 
 /**

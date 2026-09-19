@@ -723,6 +723,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   card is now a **weekday × time-of-day grid** (7 rows, 4 columns) — colour = winrate, opacity
   = games, same reading as the heatmap above — so the best-window callout can name "Friday
   evening" instead of just "evening" (O5).
+- **The Live screen's "Just finished" card now shows how the match went, not just that it
+  ended.** An **E/A/D** line joins the result and map when hero stats were recorded, and a
+  match GEP delivered with no win/loss now gets its own honest read — "The game didn't
+  report a win or loss for this one" with a straight link to set it on Review — instead of
+  silently falling through to the generic "it's in Matches now" fallback (S2).
 
 ## 0.34.0 — 31 July 2026
 

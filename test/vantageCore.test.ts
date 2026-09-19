@@ -582,6 +582,25 @@ describe('computeDashboard', () => {
     expect(d.matches.find((m) => m.matchId === withoutGroup.matchId)).not.toHaveProperty('groupSize');
   });
 
+  it('toMatchRow sums E/A/D across heroes played, and omits them with no hero stats at all (S2)', () => {
+    const withStats = game({
+      result: 'Win', map: 'Ilios', role: 'damage', heroes: ['Tracer', 'Genji'],
+      perHero: [
+        { hero: 'Tracer', role: 'damage', eliminations: 10, deaths: 2, assists: 3, damage: 5000, healing: 0, mitigation: 0 },
+        { hero: 'Genji', role: 'damage', eliminations: 8, deaths: 1, assists: 4, damage: 6000, healing: 0, mitigation: 0 },
+      ],
+    });
+    const withoutStats = game({ result: 'Loss', map: 'Ilios', role: 'damage' });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard([withStats, withoutStats], { days: 'all' }, demo);
+    const row = d.matches.find((m) => m.matchId === withStats.matchId);
+    expect(row).toMatchObject({ eliminations: 18, deaths: 3, assists: 7 });
+    const bare = d.matches.find((m) => m.matchId === withoutStats.matchId);
+    expect(bare).not.toHaveProperty('eliminations');
+    expect(bare).not.toHaveProperty('assists');
+    expect(bare).not.toHaveProperty('deaths');
+  });
+
   it('populates measuredGrades on match-list rows for active measured targets and omits it otherwise (#68)', () => {
     const line: HeroStat = { hero: 'Tracer', role: 'damage', eliminations: 0, deaths: 0, assists: 0, damage: 11000, healing: 0, mitigation: 0 };
     // playedMinutes is the per-10 divisor (measured); without it the 10-minute
