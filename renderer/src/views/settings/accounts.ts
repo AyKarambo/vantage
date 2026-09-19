@@ -4,10 +4,12 @@ import { bridge } from '../../bridge';
 import { button, card, confirmButton, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
 import { openPlacementComplete, maybeConfirmPlacementRank } from '../../app/placementComplete';
+import { inlineLink } from '../../components/inlineLink';
 import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
 import { ROLE_ORDER, accountRoleSummary, roleStatus } from '../../roleStatus';
 import { store } from '../../store';
+import type { ViewContext } from '../view';
 
 /** Full role names — the manage-ranks modal has room for "Open Queue" where the sidebar only has room for "Open Q". */
 const ROLE_NAME: Readonly<Record<Role, string>> = { tank: 'Tank', damage: 'Damage', support: 'Support', openQ: 'Open Queue' };
@@ -34,8 +36,12 @@ interface RanksFlow {
  * role-specific (rank anchors, placement runs) lives in the manage-ranks
  * modal behind each row's "Manage ranks…" button.
  */
-export function accountsCard(): HTMLElement {
+export function accountsCard(ctx: ViewContext): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '12px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
+  // Readiness already picks a main account (most played, recently active) and
+  // down-weights alts against it — this card just SHOWS that pick rather than
+  // computing its own (W2). Null when no account leads by the required margin.
+  const mainAccount = ctx.data.readiness.mainAccount;
 
   const reload = (): void => {
     void Promise.all([bridge.listAccounts(), bridge.getRanks(), bridge.getPlacements()])
@@ -45,6 +51,17 @@ export function accountsCard(): HTMLElement {
   // rank from — reload this card AND refresh the dashboard store, so the
   // always-visible sidebar chip and the Overview Rank KPI never go stale.
   const changed = (): void => { reload(); void store.refresh(); };
+
+  /** Main first, then games descending, the Unknown bucket always last (W2) — never alphabetical or insertion order. */
+  function sortAccounts(accounts: AccountSummary[]): AccountSummary[] {
+    return [...accounts].sort((a, b) => {
+      if (a.kind === 'unknown' && b.kind !== 'unknown') return 1;
+      if (b.kind === 'unknown' && a.kind !== 'unknown') return -1;
+      const aMain = a.label === mainAccount, bMain = b.label === mainAccount;
+      if (aMain !== bMain) return aMain ? -1 : 1;
+      return b.games - a.games;
+    });
+  }
 
   function paint(accounts: AccountSummary[], ranks: RankSummary[], placements: PlacementRunSummary[]): void {
     render(body,
@@ -56,7 +73,7 @@ export function accountsCard(): HTMLElement {
               h('span', null, 'Ranks'),
               h('span', null, ''),
             ),
-            ...accounts.map((a) => accountRow(a, ranks, placements)))
+            ...sortAccounts(accounts).map((a) => accountRow(a, ranks, placements)))
         : h('div', { class: 'hint' }, 'No accounts yet — add one below so you can pick it when logging a match.'),
       addForm(),
     );
@@ -88,22 +105,32 @@ export function accountsCard(): HTMLElement {
       ];
       if (a.kind === 'configured') {
         actions.push(button('Edit', { variant: 'ghost', onClick: edit }));
-        actions.push(button('Delete', {
+        // Non-destructive — only the display name goes away, the matches stay
+        // and reappear under the raw BattleTag. "Delete" read as the same
+        // irreversible action the OTHER row kind's button is, so it's named
+        // for what it actually does instead (W2); that row keeps "Delete…"
+        // and the danger variant for the real, data-destroying path.
+        actions.push(button('Forget name', {
           variant: 'ghost',
-          title: 'Forgets the display name only — logged matches are kept and show up under the BattleTag again.',
+          title: 'Keeps the matches — they show under the BattleTag again.',
           onClick: () => void bridge.deleteAccount(a.battleTag).then(changed),
         }));
       } else {
         if (a.kind === 'unlabeled') actions.push(button('Label', { variant: 'ghost', onClick: label }));
-        actions.push(button('Delete…', { variant: 'ghost', onClick: () => confirmDestructiveDelete(a) }));
+        actions.push(button('Delete…', { variant: 'danger', onClick: () => confirmDestructiveDelete(a) }));
       }
       render(row,
         h('div', { class: 'acct-grid-name-cell' },
-          h('div', { class: 'acct-grid-name' }, a.label),
+          h('div', { class: 'acct-grid-name-line' },
+            h('div', { class: 'acct-grid-name' }, a.label),
+            a.label === mainAccount
+              ? pill('main', 'accent', { title: 'Readiness treats this as your main — most played, recently active. Games on other accounts move that read less.' })
+              : null,
+          ),
           h('div', { class: 'acct-grid-sub mono' }, subLine),
         ),
         h('div', { class: 'acct-grid-games' }, String(a.games)),
-        h('div', { class: 'acct-role-summary' }, ...roleChips(a.label, ranks, placements)),
+        h('div', { class: 'acct-role-summary' }, ...roleChips(a, ranks, placements)),
         h('div', { class: 'acct-grid-actions' }, ...actions),
       );
     };
@@ -144,10 +171,24 @@ export function accountsCard(): HTMLElement {
     return row;
   }
 
-  /** The per-role chips of one list row; an account that tracks nothing gets one muted "No rank yet". */
-  function roleChips(account: string, ranks: RankSummary[], placements: PlacementRunSummary[]): Node[] {
-    const chips = accountRoleSummary(account, ranks, placements);
-    if (!chips.length) return [h('span', { class: 'acct-role-chip is-empty' }, 'No rank yet')];
+  /**
+   * The per-role chips of one list row; an account that tracks nothing gets a
+   * "Set rank…" jump-link straight into the picker instead of an inert "No
+   * rank yet" span (W2) — closing the manage-ranks modal is three clicks away
+   * from here otherwise. `onReturn` reopens manage-ranks so cancelling (or
+   * saving) lands the user back on a familiar screen, not this bare list.
+   */
+  function roleChips(a: AccountSummary, ranks: RankSummary[], placements: PlacementRunSummary[]): Node[] {
+    const chips = accountRoleSummary(a.label, ranks, placements);
+    if (!chips.length) {
+      return [inlineLink('Set rank…', {
+        class: 'acct-role-chip is-empty',
+        onClick: () => openSetRank(a.label, ranks.filter((r) => r.account === a.label), {
+          onChange: changed,
+          onReturn: () => openManageRanks(a.label, changed),
+        }),
+      })];
+    }
     return chips.map((c) => h('span', { class: `acct-role-chip is-${c.tone}` }, c.text));
   }
 
@@ -199,7 +240,12 @@ export function accountsCard(): HTMLElement {
   }
 
   reload();
-  return card({ title: 'Accounts', sub: 'used when logging a match; rank is tracked per role, per account' }, body);
+  return card({
+    title: 'Accounts',
+    sub: mainAccount
+      ? `used when logging a match; readiness weighs games on your other accounts by how close their rank is to ${mainAccount}'s`
+      : 'used when logging a match; rank is tracked per role, per account',
+  }, body);
 }
 
 /** A small label-over-control wrapper for the account forms. */

@@ -930,6 +930,19 @@ export class App {
           }),
         );
       };
+      // A muted "N games · last played Xd" line under the name (W2) — games
+      // from the already-filtered byAccount breakdown (the same number every
+      // other by-X split on this payload uses), last-played from the
+      // UNFILTERED accountActivity map so a Role filter can't hide that this
+      // account was just played on a different role tonight.
+      const activityLine = (account: string): HTMLElement | null => {
+        const games = d.byAccount.find((g) => g.key === account)?.games ?? 0;
+        const lastPlayed = d.accountActivity[account];
+        if (!games && lastPlayed === undefined) return null;
+        const parts = [`${games} game${games === 1 ? '' : 's'}`];
+        if (lastPlayed !== undefined) parts.push(`last played ${relTime(lastPlayed)}`);
+        return h('span', { class: 'acct-menu-activity' }, parts.join(' · '));
+      };
       // Every row is one grid (see .acct-menu-item): check | name | rank, with
       // the active account's per-role table spanning the name and rank columns
       // beneath. Flat children rather than nested flex columns, so names, rank
@@ -939,12 +952,20 @@ export class App {
           active ? h('span', { class: 'acct-menu-check' }, '✓') : null,
           h('span', { class: 'acct-menu-name' }, label),
           account ? rankSub(account) : null,
+          account ? activityLine(account) : null,
           active && account ? roleRows(account) : null,
         );
       };
+      // Tonight's account first (W2) — most-recently-played account leads the
+      // list instead of the alphabetical order `options.accounts` is sorted
+      // in; an account never played (no accountActivity entry, shouldn't
+      // happen for a real one) sorts last rather than crashing the compare.
+      const byRecency = [...d.options.accounts].sort(
+        (a, b) => (d.accountActivity[b] ?? -Infinity) - (d.accountActivity[a] ?? -Infinity),
+      );
       return h('div', { class: 'acct-menu' },
         item('All accounts', current === 'all', () => store.setFilters({ account: 'all' })),
-        ...d.options.accounts.map((a) => item(a, current === a, () => store.setFilters({ account: a }), a)),
+        ...byRecency.map((a) => item(a, current === a, () => store.setFilters({ account: a }), a)),
         h('div', { class: 'acct-menu-sep' }),
         item('Manage accounts →', false, () => store.setView('settings')),
       );

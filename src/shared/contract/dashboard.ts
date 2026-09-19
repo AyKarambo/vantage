@@ -228,6 +228,14 @@ export interface DashboardData {
    */
   accountRoleRanks: Record<string, Partial<Record<Role, { tier: string; division: number; progressPct: number; protected: boolean }>>>;
   /**
+   * Most recent timestamp per account across every role, from the UNFILTERED
+   * history (W2) — the account switcher's "last played" ordering, so tonight's
+   * account sorts first regardless of the active Role filter. An account with
+   * no games (shouldn't happen — every entry here came from real history) is
+   * simply absent.
+   */
+  accountActivity: Record<string, number>;
+  /**
    * Rank over time (C1): one {@link RankSeriesPoint} series per anchored
    * (account, role) that has a competitive match in the active FILTERED
    * range, keyed like {@link accountRoleRanks} — `rankKey(account, role)`.

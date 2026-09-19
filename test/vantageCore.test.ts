@@ -253,6 +253,21 @@ describe('computeDashboard', () => {
     expect(computeDashboard(games, { days: 'all', account: 'Smurf' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Smurf', tier: 'Bronze' });
   });
 
+  it('accountActivity carries each account\'s most recent timestamp, unaffected by the active Role filter (W2)', () => {
+    const g = (matchId: string, account: string, role: string, timestamp: number): GameRecord =>
+      ({ matchId, timestamp, account, role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [] } as GameRecord);
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const games = [
+      g('a', 'Main', 'tank', 100),
+      g('b', 'Main', 'damage', 300), // Main's most recent game, on a DIFFERENT role
+      g('c', 'Smurf', 'damage', 200),
+    ];
+    const d = computeDashboard(games, { days: 'all', role: 'tank' }, demo);
+    // Main's latest game (b) sits outside the active Role=tank filter —
+    // accountActivity reads the unfiltered history, so it must still see it.
+    expect(d.accountActivity).toEqual({ Main: 300, Smurf: 200 });
+  });
+
   describe('rankTrend (C1)', () => {
     const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
     const g = (matchId: string, account: string, role: string, timestamp: number, srDelta?: number): GameRecord =>

@@ -1492,6 +1492,13 @@ table.data tbody tr:focus-visible {
   font-size: 11px;
   text-align: right;
 }
+/* "N games · last played Xd" (W2) — under the name, same column so it never
+   crowds the rank text beside it. */
+.acct-menu-activity {
+  grid-column: 2;
+  font-size: 10.5px;
+  color: var(--dim);
+}
 /* The active account's per-role expansion — one line per tracked role, so the
    switcher can show every role's rank without dumping it for every account.
    Its own two-column grid (role | status) under the name and rank columns;
@@ -1984,9 +1991,17 @@ table.data tbody tr:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.acct-grid-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
 .acct-grid-name {
   font-size: 13px;
   font-weight: 600;
+  min-width: 0;
 }
 .acct-grid-sub {
   font-size: 11px;

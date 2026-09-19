@@ -103,6 +103,14 @@ export interface ReadinessSummary {
   regime: ReadinessRegime;
   trend: ReadinessTrendPoint[];
   /**
+   * The account readiness treats as the player's main (most played, recently
+   * active) and weighs other accounts' games against — null when no account
+   * leads by the required margin, or there isn't enough history to say (W2).
+   * Same value `mainAccountOf` computes; surfaced here so Settings → Accounts
+   * can show which account that actually is instead of only a note string.
+   */
+  mainAccount: string | null;
+  /**
    * Progress toward the `insufficient-data` gate (F1) — set only on that
    * band, so the UI can show real unlock progress instead of `load`'s
    * all-zero placeholder as if it were a measured reading. `games`/`days`

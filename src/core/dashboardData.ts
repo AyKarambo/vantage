@@ -225,6 +225,7 @@ export function computeDashboard(
     ...(primaryRank ? { primaryRank } : {}),
     accountRanks,
     accountRoleRanks,
+    accountActivity: accountLastPlayedAt(all),
     rankTrend,
     placements,
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
@@ -705,6 +706,20 @@ const ROLES: Role[] = ['tank', 'damage', 'support', 'openQ'];
 /** The most recently played timestamp for `account`/`role` in `all`, or -Infinity if never played. */
 function lastPlayedAt(all: GameRecord[], account: string, role: Role): number {
   return all.reduce((ts, g) => (g.account === account && g.role === role && g.timestamp > ts ? g.timestamp : ts), -Infinity);
+}
+
+/**
+ * Most recent timestamp per account across every role, from the UNFILTERED
+ * history — the account switcher's "last played" ordering (W2). Unfiltered so
+ * a Role filter can never hide that an account was just played on a different
+ * role tonight, which `lastPlayedAt` (a single role) would.
+ */
+function accountLastPlayedAt(all: GameRecord[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const g of all) {
+    if (!(g.account in out) || g.timestamp > out[g.account]) out[g.account] = g.timestamp;
+  }
+  return out;
 }
 
 /**

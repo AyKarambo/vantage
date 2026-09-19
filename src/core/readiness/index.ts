@@ -15,7 +15,7 @@ import { READINESS_TUNING as T, DEFAULT_READINESS, normalizeReadiness } from './
 import { dayOrdinal, ordinalToKey } from './day';
 import { gamesByDay } from './sessions';
 import { bandForState, computeStateAt, scoreAt, scoreFromState, type StateAt } from './score';
-import { EMPTY_CONTEXT, type ReadinessContext } from './performance';
+import { EMPTY_CONTEXT, mainAccountOf, type ReadinessContext } from './performance';
 import type {
   ReadinessBand,
   ReadinessConfidence,
@@ -355,6 +355,7 @@ function insufficientSummary(
   headline: string,
   trend: ReadinessTrendPoint[],
   unlock?: ReadinessSummary['unlock'],
+  mainAccount: string | null = null,
 ): ReadinessSummary {
   return {
     band: 'insufficient-data',
@@ -369,6 +370,7 @@ function insufficientSummary(
     driver: 'neutral',
     regime: 'manual',
     trend,
+    mainAccount,
     ...(unlock ? { unlock } : {}),
   };
 }
@@ -377,7 +379,7 @@ function insufficientSummary(
 // story: rest past the recovery window is detraining. The verdict is honest
 // about the rust while the load numbers stay empty (a weeks-old baseline says
 // nothing about today's fitness).
-function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): ReadinessSummary {
+function staleSummary(restDays: number, trend: ReadinessTrendPoint[], mainAccount: string | null): ReadinessSummary {
   return {
     band: 'rusty',
     score: null,
@@ -394,6 +396,7 @@ function staleSummary(restDays: number, trend: ReadinessTrendPoint[]): Readiness
     driver: 'rust',
     regime: 'manual',
     trend,
+    mainAccount,
   };
 }
 
@@ -424,6 +427,11 @@ export function computeReadiness(
       { games: 0, minGames: T.minGames, days: 0, minSpanDays: T.minSpanDays });
   }
 
+  // Cheap enough to compute up front, and useful even in every early-return
+  // band below (W2) — Settings → Accounts wants to know the main account as
+  // soon as one has a real lead, not only once the full score unlocks.
+  const mainAccount = mainAccountOf(games);
+
   const trend = buildTrend(games, nowOrdinal, ctx);
   const firstOrdinal = dayOrdinal(games[0].timestamp);
   const lastOrdinal = dayOrdinal(games[games.length - 1].timestamp);
@@ -432,10 +440,10 @@ export function computeReadiness(
 
   if (spanDays < T.minSpanDays || games.length < T.minGames) {
     return insufficientSummary('Keep logging games (and your mental state) to unlock readiness.', trend,
-      { games: games.length, minGames: T.minGames, days: spanDays, minSpanDays: T.minSpanDays });
+      { games: games.length, minGames: T.minGames, days: spanDays, minSpanDays: T.minSpanDays }, mainAccount);
   }
   if (restDaysNow >= T.staleDays) {
-    return staleSummary(restDaysNow, trend);
+    return staleSummary(restDaysNow, trend, mainAccount);
   }
 
   const state = computeStateAt(games, nowOrdinal, ctx);
@@ -455,6 +463,7 @@ export function computeReadiness(
     driver: state.driver,
     regime: state.regime,
     trend,
+    mainAccount: state.perf.mainAccount,
   };
 }
 
