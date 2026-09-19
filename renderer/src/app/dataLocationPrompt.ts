@@ -1,16 +1,19 @@
 /**
- * First-run data-location choice. Shown once, before the demo-data prompt,
- * whenever `getDataLocation()` reports `needsFirstRunChoice` (see shell.ts's
+ * First-run data-location choice. Shown once, before the intro tour, whenever
+ * `getDataLocation()` reports `needsFirstRunChoice` (see shell.ts's
  * `maybeFirstRun`). The default folder is preselected and shown up front;
  * "Use this folder" accepts it as-is (no dialog — just persists the choice so
  * the first-run flag self-clears per spec C5). "Choose folder…" opens the
  * native picker via `chooseFirstRunDataFolder`, which validates the target
  * (creatable + writable) and, if it already holds Vantage data, adopts it in
  * place — no migration, no overwrite. An invalid choice shows the specific
- * reason and re-prompts; nothing is written until a folder is confirmed.
+ * reason and re-prompts; nothing is written until a folder is confirmed —
+ * built on `openModal` with both dismissal paths off (F5): there is no safe
+ * default here, unlike the intro tour's demo-data step.
  */
 import { h, render } from '../dom';
 import { button } from '../components/primitives';
+import { openModal } from '../components/overlay';
 import { bridge } from '../bridge';
 import { store } from '../store';
 import type { DataLocation } from '../../../src/shared/contract';
@@ -19,20 +22,20 @@ const SYNC_NOTE = 'Synced folders (OneDrive, Dropbox) are great for backup — u
   'only, since editing the same files from two machines at once can corrupt them.';
 
 export function openDataLocationPrompt(onDone: () => void): void {
-  const panel = h('div', { class: 'modal-card', style: { width: '480px', maxWidth: '92vw' } });
-  const overlay = h('div', { class: 'overlay overlay--center' }, panel);
+  const body = h('div');
   let settled = false;
   let busy = false;
+  let current: DataLocation | null = null;
 
   const finish = (): void => {
     if (settled) return;
     settled = true;
-    overlay.remove();
+    handle.close();
     onDone();
   };
 
   const paint = (loc: DataLocation | null, error?: string): void => {
-    render(panel,
+    render(body,
       h('div', { style: { padding: '22px 22px 8px' } },
         h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '17px', fontWeight: '600', marginBottom: '8px' } },
           'Where should Vantage keep your data?'),
@@ -44,7 +47,7 @@ export function openDataLocationPrompt(onDone: () => void): void {
           ? h('div', { class: 'mono u-dim', style: { fontSize: '11px', wordBreak: 'break-all', marginTop: '10px' } }, loc.folder)
           : h('div', { class: 'hint', style: { marginTop: '10px' } }, 'Loading…'),
         h('div', { class: 'hint', style: { marginTop: '10px' } }, SYNC_NOTE),
-        error ? h('div', { class: 'hint', style: { marginTop: '10px', color: 'var(--danger, #e5484d)' } }, `⚠ ${error}`) : null,
+        error ? h('div', { style: { marginTop: '10px', color: 'var(--danger, #e5484d)' } }, `⚠ ${error}`) : null,
       ),
       h('div', { style: { display: 'flex', gap: '10px', padding: '14px 22px 22px' } },
         button('Use this folder', { variant: 'primary', disabled: busy || !loc, onClick: useDefault }),
@@ -52,9 +55,6 @@ export function openDataLocationPrompt(onDone: () => void): void {
       ),
     );
   };
-
-  let current: DataLocation | null = null;
-  void bridge.getDataLocation().then((loc) => { current = loc; paint(current); });
 
   const useDefault = (): void => {
     if (busy || settled || !current) return;
@@ -89,6 +89,6 @@ export function openDataLocationPrompt(onDone: () => void): void {
     });
   };
 
-  panel.addEventListener('click', (e) => e.stopPropagation());
-  document.body.appendChild(overlay);
+  const handle = openModal(() => body, { dismissOnBackdrop: false, dismissOnEscape: false });
+  void bridge.getDataLocation().then((loc) => { current = loc; paint(current); });
 }

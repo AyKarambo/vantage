@@ -29,6 +29,20 @@ export interface OverlayOpts {
   /** Adds a modifier class to the panel (e.g. `modal-card--wide`). */
   panelClass?: string;
   /**
+   * `false` suppresses backdrop-click dismissal (default `true`) — for a
+   * choice with no safe "just walked away" default (F5, e.g. the first-run
+   * data-location prompt, which must complete before meaningful data is
+   * written).
+   */
+  dismissOnBackdrop?: boolean;
+  /**
+   * `false` additionally suppresses Escape (default `true`). Pair with
+   * `dismissOnBackdrop: false` for a genuinely mandatory choice; leave at the
+   * default when Escape has a sensible fallback meaning (skipping the intro
+   * tour, say) even without `onDismiss` doing anything special.
+   */
+  dismissOnEscape?: boolean;
+  /**
    * Runs when the USER dismisses the overlay — Escape or a backdrop click —
    * after it has closed. Not called for a programmatic `close()` (a Save or
    * Cancel button), so a dialog that chains into another one can decide what
@@ -38,7 +52,11 @@ export interface OverlayOpts {
   onDismiss?: () => void;
 }
 
-function mountOverlay(overlay: HTMLElement, panel: HTMLElement, opts: Pick<OverlayOpts, 'onDismiss'> = {}): OverlayHandle {
+function mountOverlay(
+  overlay: HTMLElement,
+  panel: HTMLElement,
+  opts: Pick<OverlayOpts, 'onDismiss' | 'dismissOnBackdrop' | 'dismissOnEscape'> = {},
+): OverlayHandle {
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   // #app sits outside `overlay` (a sibling under <body>) — `inert` there blocks
@@ -62,10 +80,10 @@ function mountOverlay(overlay: HTMLElement, panel: HTMLElement, opts: Pick<Overl
     opts.onDismiss?.();
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') dismiss();
+    if (e.key === 'Escape' && opts.dismissOnEscape !== false) dismiss();
   };
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismiss();
+    if (e.target === overlay && opts.dismissOnBackdrop !== false) dismiss();
   });
   // Clicks inside the panel must not bubble to the backdrop handler.
   panel.addEventListener('click', (e) => e.stopPropagation());
@@ -93,7 +111,11 @@ export function openModal(
 ): OverlayHandle {
   const panel = h('div', { class: `modal-card${opts?.panelClass ? ' ' + opts.panelClass : ''}` });
   const overlay = h('div', { class: 'overlay overlay--center' }, panel);
-  const handle = mountOverlay(overlay, panel, { onDismiss: opts?.onDismiss });
+  const handle = mountOverlay(overlay, panel, {
+    onDismiss: opts?.onDismiss,
+    dismissOnBackdrop: opts?.dismissOnBackdrop,
+    dismissOnEscape: opts?.dismissOnEscape,
+  });
   panel.append(build(handle.close));
   return handle;
 }

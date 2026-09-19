@@ -61,7 +61,6 @@ import { prefs } from '../prefs';
 import { openLogMatch } from './log-match';
 import { openPalette } from './palette';
 import { openOnboarding, shouldOnboard } from './onboarding';
-import { openFirstRunPrompt } from './firstRunPrompt';
 import { openDataLocationPrompt } from './dataLocationPrompt';
 import { openWhatsNewPrompt } from './whatsNewPrompt';
 import { changelogSince, shouldShowWhatsNew } from '../../../src/core/whatsNew';
@@ -525,30 +524,29 @@ export class App {
 
   /**
    * Once, after the first real snapshot: ask where to keep data (only on a
-   * fresh install — `needsFirstRunChoice`), then the demo question (if never
-   * asked), then the tour, then (only if the tour didn't just run) "What's
-   * new". The data-location step runs first because it must complete before
-   * meaningful data is written (spec C1/C4).
+   * fresh install — `needsFirstRunChoice`), then the tour — its own second
+   * step folds in the demo-data choice when `demoPreference` is still
+   * `'unset'` (F5: one ask, in place, instead of a separate blocking prompt
+   * immediately followed by the tour restating the same choice) — then
+   * (only if the tour didn't just run) "What's new". The data-location step
+   * runs first because it must complete before meaningful data is written
+   * (spec C1/C4).
    */
   private maybeFirstRun(state: AppState): void {
     if (this.firstRunHandled || !state.data) return;
     this.firstRunHandled = true;
     const openTour = (): void => {
       if (shouldOnboard()) {
-        openOnboarding(store.get().data?.isSample ?? false);
+        openOnboarding(state.data!.demoPreference === 'unset');
         // Never show "What's new" on the same launch as the intro tour — a
         // brand-new (or still-touring) user doesn't need release notes on top.
       } else {
         this.maybeWhatsNew();
       }
     };
-    const openDemoPrompt = (): void => {
-      if (state.data!.demoPreference === 'unset') openFirstRunPrompt(openTour);
-      else openTour();
-    };
     void bridge.getDataLocation().then((loc) => {
-      if (loc.needsFirstRunChoice) openDataLocationPrompt(openDemoPrompt);
-      else openDemoPrompt();
+      if (loc.needsFirstRunChoice) openDataLocationPrompt(openTour);
+      else openTour();
     });
   }
 
@@ -1197,7 +1195,7 @@ export class App {
           actions: [
             { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
             { label: 'Keyboard shortcuts', kbd: '?', run: () => this.openCheatsheet() },
-            { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
+            { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding() },
             { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
             ...settingsActions(appSettings, logLevel, breakReminder),
             ...WINRATE_SCHEME_OPTIONS.map((opt) => ({

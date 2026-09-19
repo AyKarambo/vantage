@@ -813,6 +813,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   plainly when no map has reached the floor yet, instead of silently showing everything with no
   explanation (F4).
 
+### Changed
+
+- **A shorter first-run flow.** The demo-data choice is now the intro tour's own second step
+  ("Your workspace") instead of a separate prompt shown right before a tour that then talked
+  about the same choice again — asked once, in one place. The tour itself is four steps instead
+  of seven (F5).
+- **The FAQ can search itself, and "What's new" doesn't dump the whole history on you.** A filter
+  box narrows every question to what you typed; **What's new** starts collapsed to the two most
+  recent releases with **Show all** to expand it. Three new topics — **Accounts & ranks** (rank
+  anchors, placement runs, the `Unknown` bucket), **Demo data**, and **Coaching nudges** — cover
+  the questions the app's own screens tend to raise (F5).
+
 ## 0.34.0 — 31 July 2026
 
 ### Added
