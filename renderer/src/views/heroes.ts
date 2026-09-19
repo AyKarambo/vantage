@@ -36,6 +36,9 @@ export function heroes(ctx: ViewContext): HTMLElement {
     // signal or a coin-flip sample — Focus and Matches already show W-L.
     { key: 'wl', label: 'W-L', sortable: false, get: () => null, render: (r) => h('span', { class: 'mono', style: { color: wrColor(r.winrate) } }, `${r.wins}W ${r.losses}L`) },
     { key: 'winrate', label: 'WR', get: (r) => r.winrate, render: (r) => h('span', { style: { color: wrColor(r.winrate) } }, pct(r.winrate)) },
+    // ±SR (C2): a rounded credited-games count can't say whether a hero's
+    // losses cost 5% or 50% — the data was already on disk, just never shown.
+    { key: 'sr', label: '±SR', get: (r) => r.srNet ?? null, render: (r) => (r.srNet === undefined ? '–' : `${signed(Math.round(r.srNet))}%`) },
     // Trend (H6): recent-vs-earlier verdict, reusing Focus's dimension-agnostic
     // read — 'is my Genji getting better this season?' used to need a drawer
     // open per hero; this answers it at a glance across the whole table.

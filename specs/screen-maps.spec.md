@@ -10,9 +10,9 @@
 
 ## Layout & behaviour
 
-- **One card per game mode** (`byMapType`): mode name, winrate (colour-coded), games count, signed net, winrate stat bar.
+- **One card per game mode** (`byMapType`): mode name, winrate (colour-coded), games count, signed net, winrate stat bar. When any game in the mode logged an SR change, the bar's value text also states the net SR swing (C2, `"+3 · +11%"`) — a 3-loss mode and a 3-loss mode aren't equally costly if one bled far more rank; absent when nothing in the mode logged a delta.
 - **Maps played donut:** share of games per map — the top 10 maps by games individually, the remainder rolled into one "Other (n maps)" slice. Slices carry a hover tooltip (label · games · share).
-- **Winrate by map** horizontal bars: best → worst, restricted to maps with ≥3 games. The card is a `chartCard` with a **Chart/Table** toggle in the header — the table renders the same data as text (columns Map · WR · Net · Games, sortable) for accessibility and copy-friendly numbers.
+- **Winrate by map** horizontal bars: best → worst, restricted to maps with ≥3 games. The card is a `chartCard` with a **Chart/Table** toggle in the header — the table renders the same data as text (columns Map · WR · Net · **±SR** (C2, `Group.srNet` — a signed, rounded percentage, or "—" when the map logged no SR change) · Games · RTG, sortable) for accessibility and copy-friendly numbers.
 - **Chart tooltips:** the winrate bars use the shared cursor-following tooltip layer (with a native `<title>` fallback), the same pattern the scatter and donut use.
 - **Highlight entry:** navigated to with `{ highlight: <map> }`, the view scrolls that map's bar into view (centered) and flashes it (`is-highlighted`, ~2.4s) — the landing behavior for palette Map results and Matches-row map cross-links.
 
@@ -28,3 +28,4 @@
 - Charts are dependency-free SVG; the tooltip layer and the table toggle are hand-rolled (guardrail #4).
 - A `highlight` for a map not present in the current range simply doesn't flash anything — no error, no filter change.
 - Map names are canonical (`src/core/maps.ts`); legacy raw GEP ids and older misspellings (e.g. the numeric `4140` that stands in for **Neon Junction**) normalize to their canonical name on load, so a map is never double-listed.
+- **Net SR (C2)** never changes the win/loss tally or the ranking — only the `±SR` sum excludes placement-run matches (their SR swing isn't comparable to a normal match's, the same stance `sessionHistory` takes); the games themselves still count toward every other column.

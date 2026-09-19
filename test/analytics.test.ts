@@ -103,6 +103,43 @@ describe('grouping', () => {
       expect(wl.wins + wl.losses + wl.draws).toBe(wl.games);
     }
   });
+
+  describe('net SR (C2)', () => {
+    it('byMap sums srDelta over games that logged one; absent when none did', () => {
+      const g = [
+        game({ result: 'Win', map: 'Ilios', role: 'tank', srDelta: 25 }),
+        game({ result: 'Loss', map: 'Ilios', role: 'tank', srDelta: -18 }),
+        game({ result: 'Win', map: 'Busan', role: 'tank' }), // no srDelta logged
+      ];
+      const m = Object.fromEntries(byMap(g).map((x) => [x.key, x]));
+      expect(m.Ilios.srNet).toBeCloseTo(7, 9);
+      expect(m.Ilios.srLogged).toBe(2);
+      expect(m.Busan.srNet).toBeUndefined();
+      expect(m.Busan.srLogged).toBeUndefined();
+    });
+
+    it('excludes suppressed (placement) matches from the sum, but not from win/loss', () => {
+      const placement = game({ result: 'Win', map: 'Ilios', role: 'tank', srDelta: 999, matchId: 'p1' });
+      const normal = game({ result: 'Loss', map: 'Ilios', role: 'tank', srDelta: -18, matchId: 'm2' });
+      const m = byMap([placement, normal], { suppressed: new Set(['p1']) })[0];
+      expect(m).toMatchObject({ games: 2, wins: 1, losses: 1 }); // both games still count
+      expect(m.srNet).toBe(-18); // the placement's swing is excluded
+      expect(m.srLogged).toBe(1);
+    });
+
+    it('byHero credits a weighted share of the delta, same as games/wins', () => {
+      // Tracer 6 min + Genji 2 min in one +20%-SR win → 0.75 / 0.25 of the swing.
+      const g = [game({
+        result: 'Win', map: 'A', role: 'damage', heroes: ['Tracer', 'Genji'],
+        durationMinutes: 8, playedMinutes: 8, srDelta: 20,
+        perHero: [line('Tracer', { minutes: 6 }), line('Genji', { minutes: 2 })],
+      })];
+      const h = Object.fromEntries(byHero(g).map((x) => [x.key, x]));
+      expect(h.Tracer.srNet).toBeCloseTo(15, 9); // 0.75 × 20
+      expect(h.Genji.srNet).toBeCloseTo(5, 9); // 0.25 × 20
+      expect(h.Tracer.srLogged).toBe(1);
+    });
+  });
 });
 
 /** A per-hero line with the counting stats zeroed unless given. */
@@ -164,6 +201,23 @@ describe('heroStats', () => {
     ];
     const [ana] = heroStats(games);
     expect(ana.minutes).toBeCloseTo(18, 9);
+  });
+
+  it('carries net SR (C2), excluding suppressed placement matches', () => {
+    const games: GameRecord[] = [
+      game({ result: 'Win', map: 'A', role: 'support', heroes: ['Ana'], srDelta: 25, matchId: 'm1',
+        perHero: [line('Ana', { role: 'support' })] }),
+      game({ result: 'Loss', map: 'B', role: 'support', heroes: ['Ana'], srDelta: 999, matchId: 'p1', // placement — excluded
+        perHero: [line('Ana', { role: 'support' })] }),
+      game({ result: 'Win', map: 'C', role: 'support', heroes: ['Ana'], matchId: 'm3', // no srDelta logged
+        perHero: [line('Ana', { role: 'support' })] }),
+    ];
+    const [ana] = heroStats(games, { suppressed: new Set(['p1']) });
+    expect(ana.srNet).toBe(25);
+    expect(ana.srLogged).toBe(1);
+
+    const [anaUnsuppressed] = heroStats(games);
+    expect(anaUnsuppressed.srLogged).toBe(2); // without the mask, the placement's delta counts too
   });
 
   it('per-10 divides by the measured PLAYED time, not the wall-clock duration', () => {
