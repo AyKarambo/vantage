@@ -50,7 +50,12 @@ account's per-role lines beneath it.
   *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
   short-name label beside every priority dot, and numeric axis ticks — with a top-priority
   callout, an activity heatmap (games/day, click a day to open its matches), and a mental
-  snapshot.
+  snapshot. A **"Next up" strip** under the greeting names whatever needs attention right
+  now — matches awaiting a result, games to review, a placement run ready to confirm — gone
+  entirely with nothing pending (O3). The bottom row also carries **Active targets** (name,
+  hit-rate sparkline, a stale tag when one's overdue for rotation) and **Heroes** (top 5 by
+  games, click-through to Heroes with that row highlighted) — both previously invisible from
+  the landing screen even though the data rides on every payload (O3).
 - **Live** — the match you're in right now, updated as it plays: the scoreboard the game
   is showing (heroes, K/A/D, damage, healing, mitigation, split into your team and theirs),
   and **players you've met** — everyone on this roster you've shared a game with before,
