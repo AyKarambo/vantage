@@ -27,10 +27,15 @@ export function openPopover(
   });
   panel.addEventListener('click', (e) => e.stopPropagation());
 
+  // K3: `mountOverlay` (overlay.ts) already traps Tab this way; popovers had
+  // the same dialog role but not the same trap, so Tab could walk out of an
+  // open popover into the dimmed sidebar/filter bar underneath it.
+  const appRoot = document.getElementById('app');
   const opener = document.activeElement as HTMLElement | null;
   const close = (): void => {
     backdrop.remove();
     window.removeEventListener('keydown', onKey);
+    if (appRoot) appRoot.inert = false;
     if (opener && document.activeElement === document.body) opener.focus();
     opts.onClose?.();
   };
@@ -44,6 +49,7 @@ export function openPopover(
   panel.append(build(close));
   backdrop.append(panel);
   document.body.append(backdrop);
+  if (appRoot) appRoot.inert = true;
   const target = firstFocusable(panel);
   if (target) target.focus();
   else { panel.tabIndex = -1; panel.focus(); }

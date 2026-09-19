@@ -6,7 +6,7 @@
 import { h } from '../dom';
 import type { BreakReminderSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { chip, select } from './primitives';
+import { select, toggleRow } from './primitives';
 import type { ViewContext } from '../views/view';
 
 export function breakReminderEditor(ctx: ViewContext): HTMLElement {
@@ -27,9 +27,8 @@ export function breakReminderEditor(ctx: ViewContext): HTMLElement {
   thresholdSelect.disabled = !r.enabled;
 
   return h('div', { class: 'stack', style: { gap: '10px', marginTop: '12px' } },
+    toggleRow({ label: 'Break reminder', on: r.enabled, onChange: () => set({ enabled: !r.enabled }) }),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-      chip(r.enabled ? 'Break reminder: on' : 'Break reminder: off', r.enabled,
-        () => set({ enabled: !r.enabled })),
       h('span', { class: 'hint' }, 'after'),
       thresholdSelect,
     ),

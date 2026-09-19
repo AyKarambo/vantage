@@ -1,7 +1,7 @@
 import { h, render } from '../../dom';
 import type { AppInfo, AppUiSettings } from '../../../../src/shared/contract';
 import { bridge } from '../../bridge';
-import { button, card, chip, select } from '../../components/primitives';
+import { button, card, select, toggleRow } from '../../components/primitives';
 import { toast } from '../../components/toast';
 import { formatClaudeDesktopMcpConfig } from '../../../../src/core/mcpConfig';
 import { ZOOM_OPTIONS, ZOOM_DEFAULT, syncZoom } from '../../zoom';
@@ -99,19 +99,17 @@ function devModeSection(s: AppUiSettings): HTMLElement {
     const show = unlocked || (info?.devModeAttempted ?? false);
     return h('div', { class: show ? 'stack' : 'hidden', style: { gap: '10px', marginTop: '4px' } },
       h('div', { style: { fontSize: '11.5px', fontWeight: '600', color: 'var(--text-1)' } }, 'Dev Mode'),
-      h('div', null,
-        // Packaged builds can never run Dev Mode → show it as unavailable and inert,
-        // not a fake "on" (AC5: never a silent no-op).
-        chip(
-          packaged ? 'Dev Mode: unavailable' : (s.devMode ? 'Dev Mode: on' : 'Dev Mode: off'),
-          packaged ? false : s.devMode,
-          packaged ? undefined : () => apply({ devMode: !s.devMode }),
-        ),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          packaged
-            ? 'Unavailable in the installed build — Dev Mode only runs in the unpackaged dev build.'
-            : 'When on, the launcher loads real Overwatch (GEP) data using your dev key. Applies on the next launch.'),
-      ),
+      // Packaged builds can never run Dev Mode → show it disabled (K3, still
+      // announced as a real switch), not a fake "on" (AC5: never a silent no-op).
+      toggleRow({
+        label: packaged ? 'Dev Mode (unavailable)' : 'Dev Mode',
+        on: !packaged && s.devMode,
+        disabled: packaged,
+        onChange: () => apply({ devMode: !s.devMode }),
+        hint: packaged
+          ? 'Unavailable in the installed build — Dev Mode only runs in the unpackaged dev build.'
+          : 'When on, the launcher loads real Overwatch (GEP) data using your dev key. Applies on the next launch.',
+      }),
       // The dev-key field is meaningless in a packaged build; hide it there.
       h('div', { class: packaged ? 'hidden' : '' }, devKeyInput, devKeyHint),
     );
@@ -120,12 +118,14 @@ function devModeSection(s: AppUiSettings): HTMLElement {
   function paint(s: AppUiSettings): void {
     last = s;
     render(body,
-      h('div', null,
-        chip(s.closeToTray ? '✕ keeps Vantage in the tray' : '✕ quits Vantage', s.closeToTray,
-          () => apply({ closeToTray: !s.closeToTray })),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          'When on, closing the window keeps tracking games in the background.'),
-      ),
+      toggleRow({
+        label: 'Keep Vantage in the tray on close',
+        on: s.closeToTray,
+        onChange: () => apply({ closeToTray: !s.closeToTray }),
+        hint: s.closeToTray
+          ? 'On — closing the window (✕) keeps tracking games in the background.'
+          : 'Off — closing the window (✕) quits Vantage entirely.',
+      }),
       h('div', null,
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
           h('span', { class: 'field-label', style: { margin: '0' } }, 'Text size'),
@@ -138,44 +138,46 @@ function devModeSection(s: AppUiSettings): HTMLElement {
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           'Zooms the whole app. Also Ctrl+= / Ctrl+- to step, Ctrl+Shift+0 to reset — see the ? cheatsheet.'),
       ),
-      h('div', null,
-        chip(s.runAtLogin ? 'Run at login: on' : 'Run at login: off', s.runAtLogin,
-          () => apply({ runAtLogin: !s.runAtLogin })),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          'Starts hidden in the tray so it never steals focus from a game.'),
-      ),
-      h('div', null,
-        chip(s.demoPreference === 'on' ? 'Demo data: on' : 'Demo data: off', s.demoPreference === 'on',
-          () => apply({ demoPreference: s.demoPreference === 'on' ? 'off' : 'on' })),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          ctx.data.hasRealHistory
-            ? 'You have tracked games, so this has no visible effect — real data always wins. It applies again only if your history is empty.'
-            : 'Preload a realistic sample season to explore the app. Turn it off to start from a clean slate.'),
-      ),
-      h('div', null,
-        chip(s.gepNotifications ? 'GEP alerts: on' : 'GEP alerts: off', s.gepNotifications,
-          () => apply({ gepNotifications: !s.gepNotifications })),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          'Notify me when Overwatch game events go down (an Overwolf outage) and when they recover. The in-app banner shows either way.'),
-      ),
-      h('div', null,
-        chip(s.liveKillFeed ? 'Live kill feed: on' : 'Live kill feed: off', s.liveKillFeed,
-          () => apply({ liveKillFeed: !s.liveKillFeed })),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          'Show the kill feed and its elimination count on the Live screen. Turning it off leaves the live '
+      toggleRow({
+        label: 'Run at login',
+        on: s.runAtLogin,
+        onChange: () => apply({ runAtLogin: !s.runAtLogin }),
+        hint: 'Starts hidden in the tray so it never steals focus from a game.',
+      }),
+      toggleRow({
+        label: 'Demo data',
+        on: s.demoPreference === 'on',
+        onChange: () => apply({ demoPreference: s.demoPreference === 'on' ? 'off' : 'on' }),
+        hint: ctx.data.hasRealHistory
+          ? 'You have tracked games, so this has no visible effect — real data always wins. It applies again only if your history is empty.'
+          : 'Preload a realistic sample season to explore the app. Turn it off to start from a clean slate.',
+      }),
+      toggleRow({
+        label: 'GEP alerts',
+        on: s.gepNotifications,
+        onChange: () => apply({ gepNotifications: !s.gepNotifications }),
+        hint: 'Notify me when Overwatch game events go down (an Overwolf outage) and when they recover. The in-app banner shows either way.',
+      }),
+      toggleRow({
+        label: 'Live kill feed',
+        on: s.liveKillFeed,
+        onChange: () => apply({ liveKillFeed: !s.liveKillFeed }),
+        hint: 'Show the kill feed and its elimination count on the Live screen. Turning it off leaves the live '
           + 'scoreboard and the players-you’ve-met section exactly as they are — and stops the feed being sent '
-          + 'to the window at all, rather than just hiding it.'),
-      ),
+          + 'to the window at all, rather than just hiding it.',
+      }),
       h('div', null,
-        chip(s.mcpEnabled ? 'MCP endpoint: on' : 'MCP endpoint: off', s.mcpEnabled,
-          () => apply({ mcpEnabled: !s.mcpEnabled })),
-        // Say plainly what turning this on exposes. It is off by default
-        // because the pipe is reachable by any program running as this user,
-        // and someone enabling it deserves to know that before they do.
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          s.mcpEnabled
+        toggleRow({
+          label: 'MCP endpoint',
+          on: s.mcpEnabled,
+          onChange: () => apply({ mcpEnabled: !s.mcpEnabled }),
+          // Say plainly what turning this on exposes. It is off by default
+          // because the pipe is reachable by any program running as this user,
+          // and someone enabling it deserves to know that before they do.
+          hint: s.mcpEnabled
             ? 'On — an AI coach connected to Vantage can read your match history and record matches, reviews and targets. Any program running as you can reach it while it is on. Turn it off when you are not using it.'
-            : 'Off. Lets an AI assistant (Claude Desktop or Claude Code) read your stats and log matches for you, over a local-only connection. Nothing is sent anywhere by Vantage itself. Takes effect immediately.'),
+            : 'Off. Lets an AI assistant (Claude Desktop or Claude Code) read your stats and log matches for you, over a local-only connection. Nothing is sent anywhere by Vantage itself. Takes effect immediately.',
+        }),
         // W4 — turning the toggle on used to leave you to find the absolute
         // bridge path by hand from the README; the main process already
         // resolves it (packaged vs dev), so show it and offer the exact
