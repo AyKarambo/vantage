@@ -600,8 +600,14 @@ export class App {
     // inside the content host, defer it: replacing the pressed element mid-click
     // makes the browser drop the click (down/up must share a target), which is
     // how an in-content navigation click gets swallowed. Flushed on release
-    // (see bindGlobals). Route/epoch changes fall through and render at once.
-    if (this.contentPressed && last && last.view === key.view && last.matchId === key.matchId
+    // (see bindGlobals). Same deferral when a text SELECTION (not a press) is
+    // sitting inside the content host (K2, issue #197) — a background refresh
+    // (notably the window-focus refetch) used to wipe a selection made just
+    // before alt-tabbing away to paste it, with nothing having been pressed at
+    // all by the time it fired; flushed by the `selectionchange` listener in
+    // `bindGlobals` once the selection clears or moves elsewhere. Route/epoch
+    // changes fall through and render at once either way.
+    if ((this.contentPressed || this.hasSelectionInContent()) && last && last.view === key.view && last.matchId === key.matchId
       && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
       && last.map === key.map
       && last.prefillName === key.prefillName
@@ -633,6 +639,13 @@ export class App {
       if (view) view.style.animation = 'none';
       this.contentHost.scrollTop = priorScroll;
     }
+  }
+
+  /** True while a non-collapsed text selection sits inside the content host (K2) — a background refresh must not silently wipe it. */
+  private hasSelectionInContent(): boolean {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return false;
+    return !!sel.anchorNode && this.contentHost.contains(sel.anchorNode);
   }
 
   /** Cold-start failure: nothing to show — offer an explicit retry. */
@@ -1338,6 +1351,16 @@ export class App {
     };
     window.addEventListener('pointerup', releasePress, true);
     window.addEventListener('pointercancel', releasePress, true);
+    // Flushes a render deferred purely for a lingering SELECTION (K2) — a
+    // press's own release already flushes above; this covers the case where
+    // nothing is currently pressed (the selection outlived its own mouseup,
+    // e.g. the user alt-tabbed away and back) and only clears once the
+    // selection itself collapses or moves outside the content host.
+    document.addEventListener('selectionchange', () => {
+      if (!this.pendingContentRender || this.contentPressed || this.hasSelectionInContent()) return;
+      this.pendingContentRender = false;
+      this.renderContent(store.get());
+    });
     // Thumb buttons: MouseEvent.button 3 = Back, 4 = Forward. Only Back is bound
     // — there is no forward stack. BOTH are preventDefault()ed so the embedding
     // Chromium can't start its own history navigation underneath: a no-op in the
