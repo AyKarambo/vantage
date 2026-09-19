@@ -1,6 +1,7 @@
 /** Matches — the recent game log, grouped by day (my interpretation of the Matches screen). */
 import { h } from '../dom';
-import type { MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
+import type { DashboardFilters, MatchFlagKey, MatchRow, TargetGrade } from '../../../src/shared/contract';
+import { bridge } from '../bridge';
 import { aggregateGrade, dayKey, groupByDay, groupBySitting } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { prettyDay, rankLabel, relTime, roleLabel, signed } from '../format';
@@ -17,6 +18,7 @@ import { prefs, MATCH_COLUMNS_DEFAULT, type MatchColumnKey, type MatchColumnsPre
 import { store } from '../store';
 import { deleteMatch } from '../matchActions';
 import { openMatchEditorById } from './matchDetail';
+import { MATCHES_PAGE_SIZE } from '../../../src/core/dashboardData';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
 const FLAG_LABELS: Record<MatchFlagKey, string> = {
@@ -46,15 +48,41 @@ const FIELD_LABELS: Record<MatchColumnKey, string> = {
   flags: 'Flags',
 };
 
+/**
+ * "Show older games" (M1) — rows loaded past `DashboardData.matches`'s own
+ * capped page, appended client-side. Keyed to the current filters so a role/
+ * account/date change (a genuinely different filtered set) drops any extra
+ * page instead of mixing rows from two different scopes; a background
+ * refresh under the SAME filters (a new live match landing) leaves it alone
+ * — the older rows already loaded are still exactly as valid.
+ */
+let extraOlderMatches: MatchRow[] = [];
+let extraOlderFiltersKey: string | null = null;
+let loadingOlder = false;
+
+function filtersKey(f: DashboardFilters): string {
+  return JSON.stringify(f);
+}
+
 export function matches(ctx: ViewContext): HTMLElement {
   const { day, flag, map } = ctx.params;
+  const key = filtersKey(ctx.data.filters);
+  if (extraOlderFiltersKey !== key) {
+    extraOlderMatches = [];
+    extraOlderFiltersKey = key;
+    loadingOlder = false;
+  }
+  // Drill-downs (day/flag/map) scope to what's ALREADY loaded — "show older"
+  // only makes sense on the unscoped list, since a drill-down's own count is
+  // usually tiny and its filtering can't be expressed in the paging IPC call.
+  const allMatches = day || flag || map ? ctx.data.matches : [...ctx.data.matches, ...extraOlderMatches];
   const rows = day
-    ? ctx.data.matches.filter((m) => dayKey(m.timestamp) === day)
+    ? allMatches.filter((m) => dayKey(m.timestamp) === day)
     : flag
-      ? ctx.data.matches.filter((m) => m.flags?.[flag])
+      ? allMatches.filter((m) => m.flags?.[flag])
       : map
-        ? ctx.data.matches.filter((m) => m.map === map)
-        : ctx.data.matches;
+        ? allMatches.filter((m) => m.map === map)
+        : allMatches;
   // By day / by sitting (S4) — a single-day drill-down (from the heatmap)
   // keeps calendar grouping; grouping any further by sitting inside one
   // already-picked day would be a distinction with no real difference.
@@ -70,18 +98,54 @@ export function matches(ctx: ViewContext): HTMLElement {
   if (!day) headActions.push(groupingToggle(grouping));
   headActions.push(customizeViewButton());
 
+  // Honesty (M1): `matches` itself silently caps at MATCHES_PAGE_SIZE rows,
+  // so the header used to claim a count that could flatly disagree with the
+  // status bar's own (uncapped) one on any range past 150 games.
+  const loadedTotal = allMatches.length;
+  const capped = !day && !flag && !map && ctx.data.matchesTotal > loadedTotal;
+  const headline = capped
+    ? `Showing the ${loadedTotal} most recent of ${ctx.data.matchesTotal} games in range · newest first · click a match for details`
+    : `${rows.length} games in range · newest first · click a match for details`;
+
   return h('div', { class: 'view view--wide' },
-    viewHead('Matches', `${rows.length} games in range · newest first · click a match for details`, headActions),
+    viewHead('Matches', headline, headActions),
     scopeChip,
     card({ class: 'card--flush', style: { padding: '8px' } },
       rows.length
-        ? h('div', null, ...groups.flatMap((g) => [
-            dayHeader(g.label, g.wins, g.losses, bySitting ? netSR(g.items) : undefined),
-            ...g.items.map((m) => matchRow(m, ctx, columns)),
-          ]))
+        ? h('div', null,
+            ...groups.flatMap((g) => [
+              dayHeader(g.label, g.wins, g.losses, bySitting ? netSR(g.items) : undefined),
+              ...g.items.map((m) => matchRow(m, ctx, columns)),
+            ]),
+            capped ? showOlderRow(ctx) : null,
+          )
         : (day || flag || map) ? emptyState('No games match this drill-down — clear the scope above to see everything.') : emptyActions(ctx),
     ),
   );
+}
+
+/** "Show older games" (M1) — fetches the next page via `bridge.matchesPage` and appends it client-side; no data refetch, so the rest of the dashboard (KPIs, Focus, etc.) stays exactly as it was. */
+function showOlderRow(ctx: ViewContext): HTMLElement {
+  const oldest = ctx.data.matches[ctx.data.matches.length - 1]?.timestamp;
+  const btn = button(loadingOlder ? 'Loading…' : 'Show older games', {
+    variant: 'ghost', class: 'btn--block',
+    disabled: loadingOlder || oldest == null,
+    onClick: () => {
+      if (loadingOlder || oldest == null) return;
+      loadingOlder = true;
+      store.rerender();
+      const oldestLoaded = [...ctx.data.matches, ...extraOlderMatches]
+        .reduce((min, m) => Math.min(min, m.timestamp), oldest);
+      void bridge.matchesPage({ filters: ctx.data.filters, before: oldestLoaded, limit: MATCHES_PAGE_SIZE })
+        .then((page) => {
+          extraOlderMatches = [...extraOlderMatches, ...page];
+          loadingOlder = false;
+          store.rerender();
+        })
+        .catch(() => { loadingOlder = false; store.rerender(); });
+    },
+  });
+  return h('div', { style: { padding: '10px' } }, btn);
 }
 
 /** "By day / By sitting" (S4) — persisted, triggers a full re-render since regrouping needs the whole list re-walked. */

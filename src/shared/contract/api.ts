@@ -10,7 +10,7 @@ import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { ThresholdSuggestion } from '../../core/targets';
-import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
+import type { DashboardFilters, DashboardData, HeroDetail, MatchRow } from './dashboard';
 import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
 import type { PlayerList, PlayerListQuery } from './players';
 import type { LiveMatchPayload } from './liveMatch';
@@ -44,6 +44,13 @@ export interface OwStatsApi {
   heroDetail(hero: string, filters: DashboardFilters): Promise<HeroDetail>;
   /** Full drill-down for one match; null when the id is unknown. */
   matchDetail(matchId: string, filters: DashboardFilters): Promise<MatchDetail | null>;
+  /**
+   * "Show older games" (M1) — the next page of the same filtered match list
+   * `getDashboard`'s own `matches` field caps at `matchesTotal`. `before` is
+   * the oldest timestamp already shown, so the page never re-includes a row
+   * the caller already has.
+   */
+  matchesPage(input: { filters?: DashboardFilters; before: number; limit: number }): Promise<MatchRow[]>;
   /** Every stored match shared with a player (local index); null for an empty/unknown name. */
   playerHistory(name: string): Promise<PlayerMatchHistory | null>;
   /**
@@ -363,6 +370,7 @@ export const IPC_CHANNELS = {
   getDashboard: 'dashboard:data',
   heroDetail: 'dashboard:hero-detail',
   matchDetail: 'dashboard:match-detail',
+  matchesPage: 'dashboard:matches-page',
   playerHistory: 'dashboard:player-history',
   playerList: 'dashboard:player-list',
   playerRecords: 'dashboard:player-records',

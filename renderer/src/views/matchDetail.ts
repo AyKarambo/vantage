@@ -101,7 +101,14 @@ function backRow(ctx: ViewContext): HTMLElement {
       variant: 'ghost', disabled: !older, title: 'Previous match (←)',
       onClick: () => older && ctx.navigate('matchDetail', { matchId: older.matchId }),
     }),
-    idx >= 0 ? h('span', { class: 'mono u-dim', style: { fontSize: '11px' } }, `${idx + 1} / ${matches.length}`) : null,
+    // "loaded" (M1) when `matches` is the capped page, not the true filtered
+    // total — `n / 150` alone implied 150 was the whole range, and a match
+    // past the cap couldn't be reached from here (Older stops at the edge of
+    // what's loaded) even though it plainly existed.
+    idx >= 0
+      ? h('span', { class: 'mono u-dim', style: { fontSize: '11px' } },
+          `${idx + 1} / ${matches.length}${ctx.data.matchesTotal > matches.length ? ' loaded' : ''}`)
+      : null,
     button('Newer ›', {
       variant: 'ghost', disabled: !newer, title: 'Next match (→)',
       onClick: () => newer && ctx.navigate('matchDetail', { matchId: newer.matchId }),
