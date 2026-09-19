@@ -22,7 +22,8 @@ import { h, render } from '../dom';
 import type { MatchMental, MatchRow, PendingMatch, PlacementRunSummary, RankEntryPreview, Result, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { matchInTargetScope, parseMeasuredRule } from '../../../src/core/targets';
 import { classifyGameType } from '../../../src/core/matchFilter';
-import { relTime, roleLabel } from '../format';
+import { dayKey, groupByDay, type DayGroup } from '../../../src/core/analytics';
+import { prettyDay, relTime, roleLabel } from '../format';
 import { badge, button, card, chip, confirmButton, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow, quickGradeChip, type BoolFlagKey } from '../components/reviewControls';
 import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
@@ -92,23 +93,49 @@ export function review(ctx: ViewContext): HTMLElement {
 
   // A sibling-aware chain (R2): each item's Skip opens the next pending one
   // and scrolls to it — plain "collapse and hope the player finds the next
-  // row" was the opposite of a triage flow.
-  const items = pending.map((m, i) => item(m, active, i === 0, d.placements));
+  // row" was the opposite of a triage flow. The chain runs across day
+  // boundaries (R3) even though the rows below render grouped by day; a
+  // cross-day Skip sets `forceOpenMatchId` before forcing this render. When
+  // it's set, it's the ONLY card that should start open — falling through to
+  // "also open pending[0]" would leave two cards open after a Skip that
+  // landed anywhere but the top of the list.
+  const items = pending.map((m, i) => {
+    const startOpen = forceOpenMatchId ? m.matchId === forceOpenMatchId : i === 0;
+    return item(m, active, startOpen, d.placements, m.matchId === forceOpenMatchId);
+  });
   for (let i = 0; i < items.length; i++) items[i].next = items[i + 1] ?? null;
+  forceOpenMatchId = null;
+  const itemByMatchId = new Map(pending.map((m, i) => [m.matchId, items[i]]));
+
+  // Day groups (R3): the newest day is always expanded (it holds the one
+  // pre-opened card); older ones start collapsed so a deep backlog isn't one
+  // giant flat scroll, and stay open once the player opens them —
+  // `expandedDays` survives a re-render the same way `gradedThisSession` does.
+  const dayGroups = groupByDay(pending);
+  if (dayGroups[0]) expandedDays.add(dayGroups[0].key);
 
   return h('div', { class: 'view view--narrow' },
     head,
     activeStrip(active),
     needsResultSection,
-    h('div', { class: 'stack', style: { gap: '10px' } }, ...items.map((it) => it.host)),
+    h('div', { class: 'stack', style: { gap: '10px' } },
+      ...dayGroups.flatMap((g) => daySection(g, itemByMatchId))),
   );
 }
 
-/** The Review head subtitle, reflecting both the needs-result and grading backlogs. */
+/** The Review head subtitle — a live session counter once grading has started, else the plain backlog count. */
 function subtitle(gradeCount: number, needsResultCount: number): string {
   const parts: string[] = [];
   if (needsResultCount) parts.push(`${needsResultCount} match${needsResultCount === 1 ? '' : 'es'} to confirm or dismiss`);
-  if (gradeCount) parts.push(`${gradeCount} tracked game${gradeCount === 1 ? '' : 's'} need your read`);
+  // Session progress (R3): once something's been graded this session, "3 of
+  // 12 need your read" says less than "9 of 12 graded this session" — same
+  // backlog, but framed as progress instead of a shrinking-but-still-there count.
+  const gradedThisSessionCount = gradedThisSession.size;
+  if (gradedThisSessionCount) {
+    parts.push(`${gradedThisSessionCount} of ${gradeCount + gradedThisSessionCount} graded this session`);
+  } else if (gradeCount) {
+    parts.push(`${gradeCount} tracked game${gradeCount === 1 ? '' : 's'} need your read`);
+  }
   return parts.length
     ? `${parts.join(' · ')} — grade your targets and flag how it felt`
     : 'Grade your targets and flag how it felt on the games you play';
@@ -119,6 +146,16 @@ function subtitle(gradeCount: number, needsResultCount: number): string {
  * before the pending-store refetch arrives (mirrors {@link gradedThisSession}).
  */
 const resolvedThisSession = new Set<string>();
+
+/**
+ * Day-group keys (R3) the player has expanded — every `review()` call
+ * rebuilds the inbox from scratch (same as `gradedThisSession`/
+ * `resolvedThisSession`), so without this a day opened to grade one game
+ * would collapse again the instant anything elsewhere triggers a re-render.
+ * The newest day is always added back in on each render, so it never has to
+ * be seeded here.
+ */
+const expandedDays = new Set<string>();
 
 /**
  * "Needs review" — played matches GEP didn't confirm as clean trackable games:
@@ -300,12 +337,83 @@ function activeStrip(active: TargetSummary[]): HTMLElement {
   );
 }
 
-/** An inbox entry's controller — its host node plus the sibling {@link item} Skip opens next (R2). */
+/** One day group's rendered rows (R3): its header, plus its items' hosts when the day is expanded. */
+function daySection(g: DayGroup<MatchRow>, itemByMatchId: Map<string, ReviewItem>): Node[] {
+  const open = expandedDays.has(g.key);
+  return [
+    reviewDayHeader(g, open),
+    ...(open ? g.items.map((m) => itemByMatchId.get(m.matchId)!.host) : []),
+  ];
+}
+
+/** A day header (R3): record + game count, a click anywhere to expand/collapse, and a "Mark as no-read" action for that day alone. */
+function reviewDayHeader(g: DayGroup<MatchRow>, open: boolean): HTMLElement {
+  const noRead = button('Mark as no-read', {
+    variant: 'ghost',
+    title: `Clear all ${g.items.length} of ${prettyDay(g.label)}'s games from the inbox without grading them`,
+  });
+  noRead.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void markDayNoRead(g);
+  });
+  const header = h('div', { class: 'day-header review-day-header' },
+    h('span', { class: 'review-day-chevron' }, open ? '▾' : '▸'),
+    h('span', { class: 'day-header-label' }, prettyDay(g.label)),
+    h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${g.items.length} game${g.items.length === 1 ? '' : 's'}`),
+    h('span', { class: 'mono u-dim', style: { fontSize: '11px' } }, `${g.wins}-${g.losses}`),
+    h('span', { style: { marginLeft: 'auto' } }, noRead),
+  );
+  header.addEventListener('click', () => {
+    if (open) expandedDays.delete(g.key); else expandedDays.add(g.key);
+    store.rerender();
+  });
+  return header;
+}
+
+/**
+ * "Mark this day as no-read" (R3) — the row-level bulk-clear scoped to one
+ * already-visible day's matchIds, so no popover/preview is needed (the
+ * header already states the count). Reuses `importReviews`, an existing
+ * bulk-review write, to save an empty review on each — same "leaves the
+ * inbox without being counted as graded" convention as {@link applyNoRead}.
+ */
+async function markDayNoRead(g: DayGroup<MatchRow>): Promise<void> {
+  const matchIds = g.items.map((m) => m.matchId);
+  try {
+    await bridge.importReviews(matchIds.map((matchId) => ({ matchId, grades: {}, flags: {} })));
+  } catch (err) {
+    toast(`Couldn't clear those games — ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  await store.refresh();
+  toast(
+    `Marked ${matchIds.length} game${matchIds.length === 1 ? '' : 's'} as no-read — ${prettyDay(g.label)}`,
+    {
+      ttl: 12_000,
+      action: {
+        label: 'Undo',
+        run: () => { void bridge.clearReviews(matchIds).then(() => store.refresh()); },
+      },
+    },
+  );
+}
+
+/** An inbox entry's controller — its host node plus the sibling {@link item} Skip opens next (R2), and the day group (R3) Skip has to expand if it lands on a collapsed one. */
 interface ReviewItem {
   host: HTMLElement;
   next: ReviewItem | null;
   open: () => void;
+  matchId: string;
+  dayKey: string;
 }
+
+/**
+ * Set by a cross-day Skip (R3) just before it forces a full re-render, so
+ * the fresh {@link item} call for that match starts open and scrolls itself
+ * into view once mounted — a same-day Skip doesn't need this at all, since
+ * its target host is already in the tree and can be flipped open in place.
+ */
+let forceOpenMatchId: string | null = null;
 
 /** In-scope, self-rated (hand-graded) targets for a match — measured targets auto-grade and never appear here. Shared by the collapsed quick-grade row and the expanded card so they can't disagree on which targets a game needs. */
 function selfTargetsFor(m: MatchRow, active: TargetSummary[]): TargetSummary[] {
@@ -343,10 +451,14 @@ function item(
   active: TargetSummary[],
   startOpen: boolean,
   placements: PlacementRunSummary[],
+  scrollOnMount = false,
 ): ReviewItem {
   const host = h('div');
   let open = startOpen;
-  const controller: ReviewItem = { host, next: null, open: () => { open = true; draw(); } };
+  const controller: ReviewItem = {
+    host, next: null, open: () => { open = true; draw(); },
+    matchId: m.matchId, dayKey: dayKey(m.timestamp),
+  };
   const skipToNext = (): void => {
     open = false;
     draw();
@@ -354,9 +466,21 @@ function item(
     // only collapse the current card, leaving the player to scroll down and
     // click "Grade" themselves; "Skip" still means "later", not "graded"
     // (the game stays in the inbox either way).
-    if (controller.next) {
+    if (!controller.next) return;
+    if (expandedDays.has(controller.next.dayKey)) {
+      // The next game's day is already open, so its host is already mounted
+      // — flip it open in place, same as before R3.
       controller.next.open();
       controller.next.host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      // Its day is still collapsed (R3): that host was never mounted, so a
+      // local .open() would render into thin air. Expand the day and force a
+      // full re-render instead — `forceOpenMatchId` (read at the top of
+      // `review()`) makes the fresh item() call for that match start open
+      // and scroll itself into view once actually in the document.
+      expandedDays.add(controller.next.dayKey);
+      forceOpenMatchId = controller.next.matchId;
+      store.rerender();
     }
   };
   // The full card's own "saved" refresh — reused by the collapsed row's
@@ -369,6 +493,10 @@ function item(
       : collapsed(m, active, () => { open = true; draw(); }, onSaved));
   };
   draw();
+  // Deferred: `host` isn't attached to the document yet at this point —
+  // `review()` is still assembling its returned tree, and the top-level
+  // render that inserts it hasn't run. A rAF fires after that render lands.
+  if (scrollOnMount) requestAnimationFrame(() => host.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   return controller;
 }
 
@@ -398,7 +526,7 @@ function collapsed(m: MatchRow, active: TargetSummary[], onOpen: () => void, onG
     h('div', { class: 'row-main', style: { minWidth: '0' } },
       h('div', { style: { fontSize: '13px' } }, m.map),
       h('div', { class: 'u-dim', style: { fontSize: '11px', marginTop: '2px' } },
-        `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
+        `${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)} · ${m.account}`),
     ),
     grid,
     button('Grade', { onClick: onOpen }),
@@ -619,7 +747,7 @@ function expanded(
       resultPill(m.result),
       h('span', { style: { fontSize: '13.5px', fontWeight: '600' } }, m.map),
       h('span', { class: 'u-dim', style: { fontSize: '12px' } },
-        `· ${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)}`),
+        `· ${m.heroes[0] ?? '—'} · ${roleLabel(m.role)} · ${relTime(m.timestamp)} · ${m.account}`),
     ),
     section('Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
       ...(targetEls.length
@@ -630,7 +758,9 @@ function expanded(
     section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
     // Competitive only — GEP can't report SR, so the player enters what the game
     // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
-    isComp ? section(run ? '◎ Predicted rank' : '◎ Skill rating', srSection()) : null,
+    // The label names the account (R3) — with more than one tracked, "±%"
+    // alone doesn't say which track it moves.
+    isComp ? section(`◎ ${run ? 'Predicted rank' : 'Skill rating'} · ${m.account}`, srSection()) : null,
     h('div', { style: { display: 'flex', gap: '10px', marginTop: '15px', alignItems: 'center' } },
       button('Save & next', { variant: 'primary', onClick: doSave }),
       button('Skip', { variant: 'ghost', onClick: onSkip }),
