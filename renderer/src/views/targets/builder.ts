@@ -6,13 +6,13 @@
  */
 import { h, render } from '../../dom';
 import type { HeroEntry, Role, TargetMode, TargetSummary } from '../../../../src/shared/contract';
-import { stepFor, parseMeasuredRule, MEASURED_STATS } from '../../../../src/core/targets';
+import { stepFor, parseMeasuredRule, roundToStep, MEASURED_STATS, type ThresholdSuggestion } from '../../../../src/core/targets';
 import { PALETTE } from '../../theme';
 import { badge, button, card, segmented, select } from '../../components/primitives';
 import { attachStepper } from '../../components/wheelStepper';
 import { paintHeroChips } from '../../components/heroPicker';
 import { roleIcon } from '../../components/roleIcon';
-import { roleLabel } from '../../format';
+import { roleLabel, fmt, fmt1, ratio } from '../../format';
 import { inlineLink } from '../../components/inlineLink';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
@@ -94,7 +94,7 @@ export function builderCard(ctx: ViewContext, opts: { startOpen: boolean }): Bui
     const drawGrade = (): void => {
       render(gradeBlock, state.mode === 'self'
         ? selfBlock(state, ctx.data.masterData.heroes, dirty)
-        : measuredBlock(state, ctx.data.masterData.heroes, dirty));
+        : measuredBlock(state, ctx.data.masterData.heroes, dirty, ctx));
     };
     const drawFooter = (): void => {
       render(footer,
@@ -211,7 +211,22 @@ const ROLE_SCOPE_OPTIONS: Array<{ value: Role | undefined; label: string }> = [
   { value: 'support', label: 'Support' },
 ];
 
-export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void): HTMLElement {
+/** A measured stat's suggested value, formatted the same way the rest of the app shows that stat (H5-style: one decimal for the small count rates, k-suffixed for the big volume ones, a plain ratio for KDA). */
+function formatStatValue(stat: string, n: number): string {
+  if (stat === 'KDA') return ratio(n);
+  if (stat === 'Damage' || stat === 'Healing' || stat === 'Mitigation') return `${fmt(n)}/10`;
+  return `${fmt1(n)}/10`;
+}
+
+/** The account the suggestion (R7) should read from — the switcher's current
+ *  pick, or the first known account while "All accounts" is selected (a
+ *  suggestion has to be per-account; there's no meaningful "usual" blended
+ *  across a main and a smurf). `undefined` on a genuinely fresh install. */
+export function suggestionAccount(ctx: ViewContext): string | undefined {
+  return ctx.data.filters.account !== 'all' ? ctx.data.filters.account : ctx.data.options.accounts[0];
+}
+
+export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange: () => void, ctx: ViewContext): HTMLElement {
   const preview = badge(previewText(state), 'auto');
   const update = (): void => { preview.textContent = previewText(state); onChange(); };
 
@@ -223,10 +238,36 @@ export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange
   // Wheel + Shift-coarse adjust; the step is read live so it tracks the stat.
   attachStepper(numInput, { step: () => stepFor(state.stat), onChange: (v) => { state.value = v; update(); } });
 
+  // "Your usual: …" (R7) — the player's own median/stretch for the chosen
+  // stat + scope, fetched live and re-fetched whenever either changes.
+  // `reqId` discards a stale response that resolves after a newer request
+  // has already gone out (a fast stat/scope change firing two round-trips).
+  const suggestionHost = h('div', { style: { marginTop: '10px' } });
+  const account = suggestionAccount(ctx);
+  let reqId = 0;
+  const useValue = (v: number): void => {
+    state.value = String(v);
+    numInput.value = String(v);
+    update();
+  };
+  const refreshSuggestion = (): void => {
+    if (!account) { render(suggestionHost); return; }
+    const stat = state.stat;
+    const my = ++reqId;
+    void bridge.suggestThreshold({
+      stat, account, roleScope: state.roleScope, heroScope: state.heroScope,
+    }).then((s) => {
+      if (my !== reqId) return; // superseded by a newer stat/scope change
+      render(suggestionHost, suggestionPanel(stat, s, useValue));
+    });
+  };
+  refreshSuggestion();
+
   const statSelect = select(STATS.map((s) => ({ value: s, label: s })), state.stat, (v) => {
     state.stat = v;
     numInput.step = String(stepFor(v)); // keep arrow-key/spinner step in sync with the stat
     update();
+    refreshSuggestion();
   });
 
   return h('div', { class: 'card' },
@@ -240,7 +281,38 @@ export function measuredBlock(state: BuilderState, heroes: HeroEntry[], onChange
     ),
     h('div', { class: 'hint', style: { lineHeight: '1.5', marginTop: '10px' } },
       'Auto-graded from your end-of-match stats — Damage, Healing and Mitigation are read per 10 minutes. Scroll the number to adjust (hold Shift for bigger steps); matches the game does not report the stat for are skipped.'),
-    scopeBlock(state, heroes, onChange),
+    suggestionHost,
+    // Scope changes also affect the suggestion — it must re-fetch, not just
+    // repaint the picker.
+    scopeBlock(state, heroes, () => { onChange(); refreshSuggestion(); }),
+  );
+}
+
+/** The "Your usual: …" line + one-click chips that write a personal, rounded
+ *  value into the threshold (R7). `null` reads as "no stats yet" rather than
+ *  silently showing nothing — a blank pane would look broken, not empty. */
+function suggestionPanel(stat: string, s: ThresholdSuggestion | null, onUse: (v: number) => void): HTMLElement {
+  if (!s) {
+    return h('div', { class: 'hint' },
+      'No stats yet for this stat and scope — play a few more games and your usual will show up here.');
+  }
+  const median = roundToStep(s.median, stat);
+  const stretch = roundToStep(s.median * 1.1, stat);
+  const best = roundToStep(s.p75, stat);
+  return h('div', { class: 'stack', style: { gap: '6px' } },
+    h('div', { class: 'hint' },
+      `Your usual: ${formatStatValue(stat, median)} (median, ${s.n} game${s.n === 1 ? '' : 's'})`),
+    h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+      button(`Use median (${formatStatValue(stat, median)})`, {
+        variant: 'ghost', title: 'Set the threshold to your median for this stat', onClick: () => onUse(median),
+      }),
+      button(`Use +10% (${formatStatValue(stat, stretch)})`, {
+        variant: 'ghost', title: 'A modest stretch above your median', onClick: () => onUse(stretch),
+      }),
+      button(`Use my average (${formatStatValue(stat, best)})`, {
+        variant: 'ghost', title: 'Your 75th percentile — how you play on your better games', onClick: () => onUse(best),
+      }),
+    ),
   );
 }
 

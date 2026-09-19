@@ -19,6 +19,7 @@ import { classifyGameType } from '../core/matchFilter';
 import { sourceOf } from '../core/source';
 import { parseVantageImport } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
+import { suggestMeasuredThreshold } from '../core/targets';
 import { pendingReviewMatches, eligibleForNoRead } from '../core/dashboardData';
 import { mergeAccountList, UNKNOWN_ACCOUNT } from '../core/accountsManage';
 import { resolveRole } from '../core/resolvers/role';
@@ -212,6 +213,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         id: `t-${now}`, createdAt: now, isActive: true, activatedAt: now, scope: 'season', ...input,
       });
     },
+    suggestThreshold: (input) =>
+      suggestMeasuredThreshold(deps.history.all(), input.stat, input.account, {
+        roleScope: input.roleScope, heroScope: input.heroScope,
+      }),
     saveReview: (input) => {
       deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });

@@ -36,6 +36,9 @@ export { matchInTargetScope } from './scope';
 // Wheel/stepper step sizes for the measured threshold field
 export { stepFor, COARSE_FACTOR } from './stepSizes';
 
+// Personal measured-target threshold suggestions (R7) — "what do I actually average?"
+export { suggestMeasuredThreshold, roundToStep, type ThresholdSuggestion } from './suggestedThreshold';
+
 // Notion export bookkeeping: the hidden internal-id constant + the export
 // content signature that drives changed-since-last-export detection, plus the
 // pure "needs sync" / unsynced-count helpers the Notion status card reads.

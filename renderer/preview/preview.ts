@@ -13,10 +13,10 @@ import type {
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
   PlacementOffer, LiveMatchPayload,
-  GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput,
+  GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
-import { activeMeasuredTargets, type AuthoredTarget } from '../../src/core/targets';
+import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } from '../../src/core/targets';
 import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
@@ -961,6 +961,10 @@ const mock: OwStatsApi = {
     targets.push({ id: `t-${now}`, createdAt: now, isActive: true, activatedAt: now, scope: 'season', ...input });
     save(TARGETS_KEY, targets);
   },
+  suggestThreshold: async (input: ThresholdSuggestionInput) =>
+    suggestMeasuredThreshold(dataset(), input.stat, input.account, {
+      roleScope: input.roleScope, heroScope: input.heroScope,
+    }),
   saveReview: async (input: ReviewInput) => {
     previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.flags };
     save(REVIEWS_KEY, previewReviews);

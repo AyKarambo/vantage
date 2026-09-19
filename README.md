@@ -277,9 +277,16 @@ account's per-role lines beneath it.
   **All / Tank / DPS / Support / Measured only** chip row; each entry shows a one-line coaching
   blurb and role tag, and you either **Customize** it (loads into the builder to review first)
   or hit its one-click **Add** to save it exactly as written — with a toast offering **Edit** —
-  and an entry you already have marks itself **"✓ in your targets"**. A measured stat within a
-  **configurable partial-credit margin** of its threshold (default 20%, in Settings → General →
-  Coaching) scores **Partial** rather than Missed. Any target — self-rated or measured — can be
+  and an entry you already have marks itself **"✓ in your targets"**. A measured entry's fixed
+  threshold is personalized before either path saves it, when you have the data for it — the
+  library ships one number for everyone, equally wrong for a GM Genji and a Bronze Reaper; Add's
+  toast says "— adjusted to your last 30 games" when it found one. The builder's own Measured
+  pane shows the same idea live: a **"Your usual: …"** line under the rule (your median for that
+  stat over your last 30 games, honoring the current scope) with **Use median** / **Use +10%** /
+  **Use my average** buttons that write it straight into the threshold, updating as you change
+  the stat or scope. A measured stat within a **configurable partial-credit margin** of its
+  threshold (default 20%, in Settings → General → Coaching) scores **Partial** rather than
+  Missed. Any target — self-rated or measured — can be
   **scoped to a role and/or one or more heroes** (collapsed behind a one-line "Applies to: …"
   summary until you hit **Change**, since the full picker otherwise pushes Save off-screen), so
   it only applies to games it's actually relevant to: a scoped-out match skips a measured

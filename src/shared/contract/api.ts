@@ -9,6 +9,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
+import type { ThresholdSuggestion } from '../../core/targets';
 import type { DashboardFilters, DashboardData, HeroDetail } from './dashboard';
 import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
 import type { PlayerList, PlayerListQuery } from './players';
@@ -19,7 +20,7 @@ import type {
 } from './notion';
 import type {
   ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput,
-  IgnorePendingReviewsInput,
+  IgnorePendingReviewsInput, ThresholdSuggestionInput,
 } from './inputs';
 import type {
   AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary,
@@ -162,6 +163,14 @@ export interface OwStatsApi {
   cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
   /** Persist a new authored improvement target. */
   saveTarget(input: AuthoredTargetInput): Promise<void>;
+  /**
+   * The player's own median/75th-percentile value for a measured stat, over
+   * their last 30 in-scope games on one account (R7) — the Measured builder
+   * pane's "Your usual: …" line and its Use-median/Use-average chips. `null`
+   * when nothing qualifies yet (a brand-new account, or zero coverage for
+   * that stat).
+   */
+  suggestThreshold(input: ThresholdSuggestionInput): Promise<ThresholdSuggestion | null>;
   /** Persist the manual review (grades + flags) onto a tracked match. */
   saveReview(input: ReviewInput): Promise<void>;
   /** One-time legacy localStorage migration; skips unknown matchIds and existing reviews. */
@@ -383,6 +392,7 @@ export const IPC_CHANNELS = {
   deleteFileImports: 'import:delete-file',
   fileImportedCount: 'import:file-count',
   saveTarget: 'manual:save-target',
+  suggestThreshold: 'manual:suggest-threshold',
   saveReview: 'manual:save-review',
   importReviews: 'manual:import-reviews',
   updateTarget: 'manual:update-target',
