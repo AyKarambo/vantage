@@ -66,6 +66,38 @@ describe('groupByDay', () => {
   it('returns no groups for no rows', () => {
     expect(groupByDay([], NOW)).toEqual([]);
   });
+
+  it('counts draws separately rather than dropping them from the tally (M3)', () => {
+    const rows = [
+      { timestamp: hoursAgo(1), result: 'Win' },
+      { timestamp: hoursAgo(2), result: 'Loss' },
+      { timestamp: hoursAgo(3), result: 'Draw' },
+    ];
+    const [today] = groupByDay(rows, NOW);
+    expect(today).toMatchObject({ wins: 1, losses: 1, draws: 1 });
+    expect(today.items).toHaveLength(3);
+  });
+
+  it('sums only the rows with a known srDelta into srNet, and counts them in srKnown (M3)', () => {
+    const rows = [
+      { timestamp: hoursAgo(1), result: 'Win', srDelta: 20 },
+      { timestamp: hoursAgo(2), result: 'Loss', srDelta: -8 },
+      { timestamp: hoursAgo(3), result: 'Win' }, // no srDelta logged
+    ];
+    const [today] = groupByDay(rows, NOW);
+    expect(today.srNet).toBe(12);
+    expect(today.srKnown).toBe(2);
+  });
+
+  it('leaves srNet undefined — never a fabricated 0 — when no row in the day logged an srDelta', () => {
+    const rows = [
+      { timestamp: hoursAgo(1), result: 'Win' },
+      { timestamp: hoursAgo(2), result: 'Loss' },
+    ];
+    const [today] = groupByDay(rows, NOW);
+    expect(today.srNet).toBeUndefined();
+    expect(today.srKnown).toBe(0);
+  });
 });
 
 describe('currentSession', () => {
@@ -391,6 +423,16 @@ describe('groupBySitting (S4)', () => {
 
   it('returns no groups for no rows', () => {
     expect(groupBySitting([], 180, NOW)).toEqual([]);
+  });
+
+  it('carries the same draws/srNet/srKnown tally as groupByDay (M3)', () => {
+    const rows = [
+      { timestamp: hoursAgo(1), result: 'Win' as Result, srDelta: 15 },
+      { timestamp: hoursAgo(2), result: 'Draw' as Result },
+      { timestamp: hoursAgo(3), result: 'Loss' as Result, srDelta: -20 },
+    ];
+    const [sitting] = groupBySitting(rows, 180, NOW);
+    expect(sitting).toMatchObject({ wins: 1, losses: 1, draws: 1, srNet: -5, srKnown: 2 });
   });
 });
 

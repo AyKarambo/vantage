@@ -4,7 +4,7 @@ import type { DashboardFilters, MatchFlagKey, MatchRow, Result, TargetGrade } fr
 import { bridge } from '../bridge';
 import { aggregateGrade, dayKey, groupByDay, groupBySitting } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
-import { prettyDay, rankLabel, relTime, roleLabel, signed } from '../format';
+import { pct, prettyDay, rankLabel, relTime, roleLabel, signed, time } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
@@ -221,24 +221,45 @@ export function matches(ctx: ViewContext): HTMLElement {
     // the status bar's own (uncapped) one on any range past 150 games.
     const loadedTotal = allMatches.length;
     const moreToLoad = !day && !flag && !map && loadedTotal < ctx.data.matchesTotal;
-    const headline = textActive
-      ? `${rows.length} of ${allMatches.length} loaded games match your filter${moreToLoad ? ` (${ctx.data.matchesTotal} total in range)` : ''} · click a match for details`
-      : moreToLoad
-        ? `Showing the ${loadedTotal} most recent of ${ctx.data.matchesTotal} games in range · newest first · click a match for details`
-        : `${rows.length} games in range · newest first · click a match for details`;
+
+    // Truthful drill-down subtitles (M3): a day/flag chip used to sit right
+    // above a headline that still read the generic "N games in range" — for
+    // `day` that flatly repeated the chip's own date, and neither scope's
+    // subtitle stated its own tally even though every row already carries it.
+    let headline: string;
+    if (day) {
+      const tally = groupByDay(scoped)[0] ?? { wins: 0, losses: 0, draws: 0, srNet: undefined };
+      headline = textActive
+        ? `${rows.length} of ${scoped.length} games on ${prettyDay(day)} match your filter · ${tallyText(tally)}`
+        : `${scoped.length} game${scoped.length === 1 ? '' : 's'} on ${prettyDay(day)} · ${tallyText(tally)}`;
+    } else if (flag) {
+      const flagLabel = FLAG_LABELS[flag];
+      headline = textActive
+        ? `${rows.length} of ${scoped.length} ${flagLabel} games match your filter`
+        : `${scoped.length} ${flagLabel} game${scoped.length === 1 ? '' : 's'} in range`;
+    } else {
+      headline = textActive
+        ? `${rows.length} of ${allMatches.length} loaded games match your filter${moreToLoad ? ` (${ctx.data.matchesTotal} total in range)` : ''} · click a match for details`
+        : moreToLoad
+          ? `Showing the ${loadedTotal} most recent of ${ctx.data.matchesTotal} games in range · newest first · click a match for details`
+          : `${rows.length} games in range · newest first · click a match for details`;
+    }
 
     const headActions: Node[] = [];
     if (!day) headActions.push(groupingToggle(grouping));
     headActions.push(customizeViewButton());
     render(headHost, viewHead('Matches', headline, headActions));
 
-    render(scopeHost, day || flag || map ? drillDownChip(ctx, day, flag, map) : null);
+    render(scopeHost, day || flag || map ? drillDownChip(ctx, day, flag, map, allMatches) : null);
 
     render(listHost,
       rows.length
         ? h('div', null,
+            // A day drill-down's single group would just repeat the chip's own
+            // date directly under it (M3) — the header stays for every other
+            // grouping (all days, and every sitting).
             ...groups.flatMap((g) => [
-              dayHeader(g.label, g.wins, g.losses, bySitting ? netSR(g.items) : undefined),
+              day ? null : dayHeader(g.label, g),
               ...g.items.map((m) => matchRow(m, ctx, columns)),
             ]),
             moreToLoad ? showOlderRow(ctx, repaint) : null,
@@ -319,12 +340,6 @@ function groupingToggle(value: 'day' | 'sitting'): HTMLElement {
   });
 }
 
-/** Sum of the group's known SR deltas; undefined when none logged one — same "absent, not zero" convention as everywhere else. */
-function netSR(items: MatchRow[]): number | undefined {
-  const deltas = items.map((m) => m.srDelta).filter((v): v is number => v != null);
-  return deltas.length ? deltas.reduce((a, b) => a + b, 0) : undefined;
-}
-
 /** "Customize view" affordance — opens the per-field hidden/inline/column popover (spec F1). */
 function customizeViewButton(): HTMLElement {
   const btn = button('Customize view', { variant: 'soft' });
@@ -362,12 +377,43 @@ function customizeViewRow(key: MatchColumnKey, current: MatchColumnsPref): HTMLE
   );
 }
 
-/** Dismissible "Only <scope> ✕" chip shown while a day/flag drill-down is active. */
-function drillDownChip(ctx: ViewContext, day: string | undefined, flag: MatchFlagKey | undefined, map: string | undefined): HTMLElement {
+/**
+ * Dismissible "Only <scope> ✕" chip shown while a day/flag/map drill-down is
+ * active. A day drill-down additionally gets ‹ › day-stepping (M3) — before
+ * this, the only way to look at the day before was back to Overview, find
+ * the heatmap cell, click again. Stepping is scoped to days actually present
+ * in `allMatches` (the loaded page, same list the drill-down itself reads
+ * from) rather than `ctx.data.calendar`, which only spans the last 35 days.
+ */
+function drillDownChip(
+  ctx: ViewContext,
+  day: string | undefined,
+  flag: MatchFlagKey | undefined,
+  map: string | undefined,
+  allMatches: MatchRow[],
+): HTMLElement {
   const label = day ? prettyDay(day) : map ? map : FLAG_LABELS[flag as MatchFlagKey];
-  return h('div', { style: { margin: '0 0 12px' } },
-    chip(`Only ${label} ✕`, true, () => ctx.navigate('matches')),
+  const scopeChip = chip(`Only ${label} ✕`, true, () => ctx.navigate('matches'));
+  if (!day) return h('div', { style: { margin: '0 0 12px' } }, scopeChip);
+
+  const dayKeys = groupByDay(allMatches).map((g) => g.key); // newest first
+  const idx = dayKeys.indexOf(day);
+  const olderDay = idx >= 0 && idx + 1 < dayKeys.length ? dayKeys[idx + 1] : null;
+  const newerDay = idx > 0 ? dayKeys[idx - 1] : null;
+  return h('div', { style: { margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '6px' } },
+    dayStepButton('‹', olderDay, ctx, 'Previous day with games'),
+    scopeChip,
+    dayStepButton('›', newerDay, ctx, 'Next day with games'),
   );
+}
+
+function dayStepButton(label: string, target: string | null, ctx: ViewContext, hint: string): HTMLElement {
+  return button(label, {
+    variant: 'ghost',
+    disabled: !target,
+    title: target ? hint : undefined,
+    onClick: () => { if (target) ctx.navigate('matches', { day: target }); },
+  });
 }
 
 /** Empty in range — offer the next step instead of a dead end. */
@@ -387,14 +433,36 @@ function emptyActions(ctx: ViewContext): HTMLElement {
   );
 }
 
-function dayHeader(label: string, wins: number, losses: number, netSR?: number): HTMLElement {
-  return h('div', { class: 'day-header' },
+/** `wins–losses`, extended `wins–losses–draws` only when the group actually has a draw (M3) — a draw used to vanish from the tally entirely. */
+function winLossText(g: { wins: number; losses: number; draws: number }): string {
+  return g.draws > 0 ? `${g.wins}–${g.losses}–${g.draws}` : `${g.wins}–${g.losses}`;
+}
+
+/** {@link winLossText} plus the group's SR net, when any row in it logged one — never a fabricated 0%. */
+function tallyText(g: { wins: number; losses: number; draws: number; srNet?: number }): string {
+  const wl = winLossText(g);
+  return g.srNet !== undefined ? `${wl} · ${signed(Math.round(g.srNet))}%` : wl;
+}
+
+/**
+ * A day/sitting header used to read "0–1" then a redundant "−1 net" restating
+ * the same subtraction, with the day's own SR swing never shown even though
+ * every row carries `srDelta` (M3). Now: the tally (draws only when present),
+ * the SR net tinted win/loss like the row's own srDelta cell, and the day's
+ * winrate moved into the header's title instead of a third inline number.
+ */
+function dayHeader(label: string, g: { wins: number; losses: number; draws: number; srNet?: number }): HTMLElement {
+  const decided = g.wins + g.losses;
+  const title = decided > 0 ? `${pct(g.wins / decided)} winrate` : undefined;
+  return h('div', { class: 'day-header', title },
     h('span', { class: 'day-header-label' }, prettyDay(label)),
-    h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${wins}–${losses}`),
-    h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${signed(wins - losses)} net`),
-    // A sitting header additionally states its SR swing (S4) — day headers
-    // never have, since a calendar day isn't the unit an SR run is judged by.
-    netSR !== undefined ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(Math.round(netSR))}%`) : null,
+    h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, winLossText(g)),
+    g.srNet !== undefined
+      ? h('span', {
+          class: 'mono',
+          style: { fontSize: '11px', color: g.srNet >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
+        }, `${signed(Math.round(g.srNet))}%`)
+      : null,
   );
 }
 
@@ -575,7 +643,15 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '84px' } },
       pill(m.mapType, 'accent'),
     ),
-    h('div', { class: 'mono u-muted', style: { fontSize: '11px', width: '46px', textAlign: 'right' } }, relTime(m.timestamp)),
+    // Clock time, not a relative age (M3) — a day header already carries the
+    // date, so "1d, 1d, 1d" under a "YESTERDAY" header told you nothing a
+    // row's own pacing within the day couldn't; the relative age still lives
+    // in the title for a quick hover. Widened from 46px to fit the locale's
+    // longest clock form ("12:34 PM").
+    h('div', {
+      class: 'mono u-muted', style: { fontSize: '11px', width: '64px', textAlign: 'right' },
+      title: relTime(m.timestamp),
+    }, time(m.timestamp)),
     rowMenuButton(m, ctx),
   );
 }
@@ -657,7 +733,7 @@ function openRowMenu(anchor: HTMLElement, m: MatchRow, ctx: ViewContext): void {
  */
 function matchRowGridTemplate(columnCount: number): string {
   const columnTracks = Array(columnCount).fill('auto').join(' ');
-  return ['44px', '1fr', columnTracks, '84px', '46px', '24px'].filter(Boolean).join(' ');
+  return ['44px', '1fr', columnTracks, '84px', '64px', '24px'].filter(Boolean).join(' ');
 }
 
 /** Interleave ` · ` only between present segments — never leading/trailing/doubled. */
