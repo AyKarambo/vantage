@@ -68,7 +68,13 @@ account's per-role lines beneath it.
   and **players you've met** — everyone on this roster you've shared a game with before,
   with your record **`with`** them when they're on your team this match and **`vs`** them
   when they're not. A green dot appears on the nav item while a match is running; the
-  screen returns to an idle state the moment it ends, or if the game closes.
+  screen returns to an idle state the moment it ends, or if the game closes — but for the
+  next 30 minutes that idle state is a **"Just finished"** card (S2) linking straight to
+  where the match landed, instead of the plain "it's in Matches now" copy with nowhere to
+  go: result, map, heroes and an **E/A/D** line when hero stats were recorded, **Open
+  match →**, and **Grade it on Review →** when it's still ungraded. A match GEP delivered
+  with no result at all reads **"The game didn't report a win or loss for this one"** with
+  a **Set result on Review →** link instead.
   Above it, **eliminations, damage and healing totalled per team** — the side ahead on each line
   is the brighter one. Damage and healing are read off the game's own scoreboard, so they remain
   when the kill feed is off. Rows are ordered the way the game orders them: your team first,

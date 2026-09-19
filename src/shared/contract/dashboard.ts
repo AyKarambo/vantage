@@ -77,6 +77,10 @@ export interface MatchRow {
   finalScore?: string;
   /** Party size the player queued with (1 = solo), when GEP reported one. */
   groupSize?: number;
+  /** Match totals (summed across heroes played), when per-hero stats were recorded — the Live "Just finished" card's E/A/D line (S2). */
+  eliminations?: number;
+  assists?: number;
+  deaths?: number;
   /**
    * Self-rated performance for this match, 0-100, when the player (or an import)
    * set one. Carried so the Review card's "How you played" slider seeds from an
