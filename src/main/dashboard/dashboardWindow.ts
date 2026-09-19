@@ -5,6 +5,7 @@ import type { DataProvider } from './provider';
 import { registerDashboardIpc, registerWindowControls } from './ipcHandlers';
 import { hardenWebContents } from './webContentsSecurity';
 import { shouldEnableDevTools } from '../../core/devMode';
+import { fitBounds, type Rect } from './windowBounds';
 
 /**
  * The dashboard BrowserWindow lifecycle: a frameless, CSP-friendly window
@@ -72,10 +73,16 @@ export class DashboardWindow {
       this.win.focus();
       return;
     }
-    const saved = this.restorableBounds();
+    const saved = this.ui.savedBounds();
+    // The display the SAVED bounds used to sit on (getDisplayMatching), or —
+    // no saved bounds, or that display is gone (a monitor changed under us,
+    // e.g. undocking) — the primary display. Either way fitBounds (W7) always
+    // gets a real work area to clamp/center against, never a stale guess.
+    const workArea = this.workAreaFor(saved);
+    const fitted = fitBounds(saved, workArea, WINDOW);
     this.win = new BrowserWindow({
       ...WINDOW,
-      ...(saved ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height } : {}),
+      x: fitted.x, y: fitted.y, width: fitted.width, height: fitted.height,
       title: 'Vantage',
       // Overwolf-compliant frameless desktop app with its own title bar.
       frame: false,
@@ -95,7 +102,7 @@ export class DashboardWindow {
     // from the loaded page (defense-in-depth behind Guardrail 1). Registered
     // before loadFile — programmatic loads don't trip these guards.
     hardenWebContents(this.win.webContents);
-    if (saved?.maximized) this.win.maximize();
+    if (fitted.maximize) this.win.maximize();
     // The persisted text-size zoom (W7) — set on the webContents before load
     // so it's already in effect for the very first paint, not a visible jump
     // once the page finishes loading.
@@ -119,23 +126,22 @@ export class DashboardWindow {
     });
   }
 
-  /** Saved placement, only if it still lands on a connected display. */
-  private restorableBounds(): WindowBounds | undefined {
-    const saved = this.ui.savedBounds();
-    if (!saved) return undefined;
-    try {
-      const area = screen.getDisplayMatching(saved).workArea;
-      const intersects =
-        saved.x < area.x + area.width && saved.x + saved.width > area.x &&
-        saved.y < area.y + area.height && saved.y + saved.height > area.y;
-      if (!intersects) return undefined;
-      return {
-        ...saved,
-        width: Math.max(WINDOW.minWidth, saved.width),
-        height: Math.max(WINDOW.minHeight, saved.height),
-      };
-    } catch {
-      return undefined; // a monitor changed under us — fall back to defaults
+  /**
+   * The work area {@link fitBounds} should clamp/center against (W7): the
+   * display the saved bounds used to sit on, via Electron's own "best match"
+   * (`getDisplayMatching` scores every display by overlap with the given
+   * rect, so a partially-off-screen or since-rearranged position still
+   * resolves sensibly) — or the primary display when there's nothing saved,
+   * or `getDisplayMatching` itself throws (a monitor changed under us).
+   */
+  private workAreaFor(saved: WindowBounds | undefined): Rect {
+    if (saved) {
+      try {
+        return screen.getDisplayMatching(saved).workArea;
+      } catch {
+        /* fall through to the primary display */
+      }
     }
+    return screen.getPrimaryDisplay().workArea;
   }
 }
