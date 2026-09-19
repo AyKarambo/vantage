@@ -10,9 +10,10 @@ import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } 
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
 import { scatterChart, sparkline, type ScatterPoint } from '../charts/plots';
-import { button, calendarHeatmap, card, kpiCard, statBar, statBox, unlockHint } from '../components/primitives';
+import { button, calendarHeatmap, card, chip, kpiCard, statBar, statBox, unlockHint } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
 import { inlineLink } from '../components/inlineLink';
+import { practiceTargetButton } from '../components/practiceTargetButton';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
@@ -37,8 +38,33 @@ export function overview(ctx: ViewContext): HTMLElement {
     firstWeekUnlockCard(ctx),
     recapCard(ctx),
     kpiRow(ctx),
+    roleStrip(ctx),
     scatterCard(ctx),
     bottomRow(ctx),
+  );
+}
+
+/**
+ * A per-role winrate strip under the KPIs (O4) — the default "All roles"
+ * filter blends every role into one Winrate number, so "which role is
+ * bleeding?" used to need a trip to Trends even though `byRole` was already
+ * on the payload and the Role filter is one click away. Hidden with fewer
+ * than 2 roles (nothing to compare). Labels stay plain text (not the
+ * winrate-tinted colour Trends' breakdown uses) since `chip` — reused here
+ * rather than a bespoke control — only takes a string label.
+ */
+function roleStrip(ctx: ViewContext): HTMLElement | null {
+  const d = ctx.data;
+  const roles = d.options.roles;
+  if (roles.length < 2) return null;
+  const byRole = new Map(d.byRole.map((g) => [g.key, g]));
+  return h('div', { class: 'role-strip' },
+    chip('All', d.filters.role === 'all', () => ctx.setFilter({ role: 'all' })),
+    ...roles.map((role) => {
+      const g = byRole.get(role);
+      const label = g ? `${roleLabel(role)} ${pct(g.winrate)} · ${g.games}g` : roleLabel(role);
+      return chip(label, d.filters.role === role, () => ctx.setFilter({ role }));
+    }),
   );
 }
 
@@ -248,6 +274,10 @@ function kpiRow(ctx: ViewContext): HTMLElement {
     ? `vs ${prev.label}: ${signed(Math.round((d.overall.winrate - prev.overall.winrate) * 1000) / 10)} pts`
     : undefined;
   const gamesSub = prev ? `vs ${prev.label}: ${signed(d.overall.games - prev.overall.games)} games` : undefined;
+  // O4: every KPI now drills down somewhere — the spec's old "no per-KPI
+  // navigation" line predated the app-wide back-stack drill-down model the
+  // scatter dot and every other cross-link already follow, and was stale
+  // rather than protective.
   return h('div', { class: 'kpi-row' },
     kpiCard({
       label: 'Winrate',
@@ -257,11 +287,14 @@ function kpiRow(ctx: ViewContext): HTMLElement {
         : undefined,
       title: trendDelta != null ? `Mean winrate of your last 5 ${bucketWord} vs the range average` : undefined,
       sub: winrateSub,
+      onClick: () => ctx.navigate('trends'),
     }),
     kpiCard({
       label: 'Games', value: int(d.overall.games),
-      delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` },
+      // The draws that WinLoss already carries were silently missing here.
+      delta: { text: `${d.overall.wins}W · ${d.overall.losses}L${d.overall.draws > 0 ? ` · ${d.overall.draws}D` : ''}` },
       sub: gamesSub,
+      onClick: () => ctx.navigate('matches'),
     }),
     rankKpi(ctx),
     kpiCard({
@@ -272,6 +305,7 @@ function kpiRow(ctx: ViewContext): HTMLElement {
       // C7: the "ride it"/"reset it" cue is the actionable read; best/worst
       // in range is real context that doesn't need to fight it for space.
       title: `Best W${d.extremes.longestWin} · worst L${d.extremes.longestLoss} in range`,
+      onClick: () => ctx.navigate('matches'),
     }),
   );
 }
@@ -317,6 +351,10 @@ function rankKpi(ctx: ViewContext): HTMLElement {
         // Colour the arrow only when it actually points — neutral stays unstyled.
         ...(p.movementDir === 'up' ? { dir: 'up' as const } : p.movementDir === 'down' ? { dir: 'down' as const } : {}),
       },
+      // O4: this branch has no action button of its own — the anchored
+      // account is already known, so the drill-down skips the "which
+      // account" guess the winrate-heuristic branch below needs.
+      onClick: () => openManageRanks(r.account, () => ctx.refresh()),
     });
   }
   // No anchored rank — but check for an open run before falling back to the
@@ -333,7 +371,10 @@ function rankKpi(ctx: ViewContext): HTMLElement {
   if (scoped.length > 1) {
     // Several tracks placing and nothing to disambiguate them: say that plainly
     // rather than picking one arbitrarily or reverting to the heuristic.
-    return kpiCard({ label: 'Rank', value: 'Placements', delta: { text: `${scoped.length} tracks in progress` } });
+    return kpiCard({
+      label: 'Rank', value: 'Placements', delta: { text: `${scoped.length} tracks in progress` },
+      onClick: () => ctx.navigate('settings', { section: 'accounts' }),
+    });
   }
   // Goes through `rankParts` like the anchored branch above rather than
   // composing the label by hand — the inline version bypassed the shared
@@ -383,7 +424,9 @@ function placementKpi(run: PlacementRunSummary, ctx: ViewContext): HTMLElement {
             }),
           },
         }
-      : {}),
+      // Still placing (not yet awaiting a result): no action button of its
+      // own, so the card itself drills down to where the run can be managed.
+      : { onClick: () => ctx.navigate('settings', { section: 'accounts' }) }),
   });
 }
 
@@ -418,7 +461,10 @@ function scatterCard(ctx: ViewContext): HTMLElement {
     ...(focus.length
       ? focus.map((m) => h('div', {
           class: 'row', style: { cursor: 'pointer' },
-          on: { click: () => ctx.navigate('matches', { map: m.key }) },
+          // O4: a real clickable row (keyboard-reachable, same as every other
+          // row in the app) instead of a plain div with a click handler —
+          // the obvious click, the map name, used to do nothing.
+          ...clickableRow(() => ctx.navigate('matches', { map: m.key })),
         },
           h('span', { class: 'dot', style: { background: wrHsl(m.winrate) } }),
           h('div', { class: 'row-main' },
@@ -427,7 +473,12 @@ function scatterCard(ctx: ViewContext): HTMLElement {
               isActive.get(m.key) === false
                 ? h('span', { class: 'tag', title: 'Not in the current competitive map pool' }, 'Out of pool')
                 : null),
-            h('div', { class: 'row-meta' }, `${m.games} games · net ${signed(m.wins - m.losses)}`),
+            h('div', { class: 'row-meta', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+              `${m.games} games · net ${signed(m.wins - m.losses)}`,
+              // O4: the same "＋ target" quick-create Focus gives every row —
+              // the Overview tease used to make you go to Focus just to act on it.
+              practiceTargetButton(ctx, 'map', m.key),
+            ),
           ),
           h('span', { class: 'mono', style: { fontSize: '14px', color: wrColor(m.winrate) } }, pct(m.winrate)),
         ))

@@ -704,6 +704,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   invisible without a trip to Targets or Heroes, even though the data rides on every payload.
   Clicking a hero jumps to Heroes with that row highlighted. Five cards now share the bottom
   row, which wraps to two columns under 1300px so nothing gets squeezed (O3).
+- **Every Overview tile now goes somewhere.** The four KPIs were dead ends — clicking
+  **Winrate** now opens Trends, **Games** and **Streak** open Matches, and **Rank** opens
+  either Manage-ranks or Settings → Accounts depending on what it's showing. **Games** also
+  stops hiding draws (`70W · 68L · 10D`, when there are any). A **role strip** under the KPIs
+  breaks the blended winrate down by role — "Tank 43% · 56g" — since the default "All roles"
+  filter used to hide which one was actually bleeding; click a chip to filter to it. Each
+  **Top priority** map row is a real clickable control now (not a dead div) and gets Focus's
+  own **"Track as target"** quick-create, so you don't have to leave the landing screen to act
+  on it (O4).
 
 ## 0.34.0 — 31 July 2026
 

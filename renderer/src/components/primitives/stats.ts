@@ -25,11 +25,23 @@ export interface KpiOpts {
   title?: string;
   /** A second, unaccented line below `delta` — e.g. "vs 2026 Season 3: +12 games" (C3), a period-over-period read that doesn't need the smoothed delta's up/down styling. */
   sub?: string;
+  /**
+   * Makes the whole tile a drill-down button (O4) — the Overview KPI row's
+   * tiles used to be dead ends. Never combine with {@link action}: `action`
+   * already renders its own `<button>`, and nesting one inside the whole-card
+   * button this produces would be invalid HTML and double-fire on click.
+   */
+  onClick?: () => void;
 }
 
 /** Headline metric tile with an optional up/down delta and an optional CTA. */
 export function kpiCard(o: KpiOpts): HTMLElement {
-  return h('div', { class: `kpi${o.accent ? ' kpi--accent' : ''}`, title: o.title },
+  const tag = o.onClick ? 'button' : 'div';
+  return h(tag, {
+    class: `kpi${o.accent ? ' kpi--accent' : ''}${o.onClick ? ' kpi--clickable' : ''}`,
+    title: o.title,
+    ...(o.onClick ? { on: { click: o.onClick } } : {}),
+  },
     h('div', { class: 'kpi-label' }, o.label),
     // `.kpi-value` is nowrap + ellipsis so one long value can't push its card
     // taller than the other three in the row. A KPI value has no other home for

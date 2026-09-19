@@ -46,11 +46,16 @@ account's per-role lines beneath it.
   like a measured number, and the Winrate delta states its own window, "▾ 16 pts · last 5
   days"; Winrate and Games each also carry a period-over-period line against the window
   immediately before this one, "vs 2026 Season 3: +3.2 pts" / "vs the previous 30 days: +12
-  games"), the flagship
+  games"; Games also shows draws when the range has any, "70W · 68L · 10D"). **Every KPI
+  drills down** now — Winrate → Trends, Games/Streak → Matches, Rank → Manage-ranks or
+  Settings → Accounts (O4) — and a **role strip** under them breaks the blended winrate down
+  per role, "Tank 43% · 56g", one click to filter to it (hidden with fewer than 2 roles). The
+  flagship
   *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
   short-name label beside every priority dot, and numeric axis ticks — with a top-priority
-  callout, an activity heatmap (games/day, click a day to open its matches), and a mental
-  snapshot. A **"Next up" strip** under the greeting names whatever needs attention right
+  callout (each row now a real clickable control with Focus's own **"Track as target"**
+  quick-create, O4), an activity heatmap (games/day, click a day to open its matches), and a
+  mental snapshot. A **"Next up" strip** under the greeting names whatever needs attention right
   now — matches awaiting a result, games to review, a placement run ready to confirm — gone
   entirely with nothing pending (O3). The bottom row also carries **Active targets** (name,
   hit-rate sparkline, a stale tag when one's overdue for rotation) and **Heroes** (top 5 by

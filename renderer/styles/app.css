@@ -525,6 +525,14 @@
   display: flex;
   gap: 12px;
 }
+/* Per-role winrate strip under the KPIs (O4) — a filter shortcut, not a
+   second data table, so it stays a single wrapping line of chips. */
+.role-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -571,6 +579,17 @@
   padding-left: 16px;
   display: flex;
   flex-direction: column;
+}
+/* O4: each row is a real click target (opens that map's games) now, not a
+   dead-end div — the hover/focus cue makes that discoverable. */
+.scatter-callouts .row:hover,
+.scatter-callouts .row:focus-visible {
+  background: var(--surface-2);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: var(--r-md);
+  outline: none;
 }
 .overview-bottom {
   display: flex;

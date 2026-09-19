@@ -7,14 +7,14 @@
  * Maps/Trends stay the raw reference tables → Targets is the commitment.
  */
 import { h, applyStyle } from '../dom';
-import type { FocusEntry, FocusProgress, Role } from '../../../src/shared/contract';
+import type { FocusEntry, FocusProgress } from '../../../src/shared/contract';
 import { MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { pct, roleLabel, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
 import { button, card, pill, unlockHint } from '../components/primitives';
 import { TREND_META } from '../components/trendArrow';
 import { inlineLink } from '../components/inlineLink';
-import { openPopover } from '../components/popover';
+import { practiceTargetButton } from '../components/practiceTargetButton';
 import { openHeroDrawer } from './heroes';
 import { viewHead, type ViewContext } from './view';
 
@@ -85,7 +85,7 @@ function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement 
           : null,
         h('span', { class: 'mono', style: { color: wrColor(e.winrate) } }, pct(e.winrate)),
         h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${e.games}g`),
-        e.progress || e.inPool === false ? null : targetButton(ctx, e),
+        e.progress || e.inPool === false ? null : practiceTargetButton(ctx, e.dimension, e.key),
       ),
     ),
     h('div', { class: 'track track--slim' }, fill),
@@ -183,44 +183,3 @@ function progressLine(p: FocusProgress): HTMLElement {
   );
 }
 
-/** Quick-create a practice target for an entry that isn't tracked yet — pre-fills the
- *  matching hero/role/map scope (H1, R9) so the builder opens already scoped, not just
- *  named. Explains what that commits to (R9) before navigating, via {@link openTrackPopover}. */
-function targetButton(ctx: ViewContext, e: FocusEntry): HTMLElement {
-  const label = e.dimension === 'role' ? roleLabel(e.key) : e.key;
-  const name = `Practice ${label}: warm up unranked + review one replay`;
-  const params = {
-    prefillName: name,
-    ...(e.dimension === 'role' ? { prefillRole: e.key as Role } : {}),
-    ...(e.dimension === 'hero' ? { prefillHeroes: [e.key] } : {}),
-    ...(e.dimension === 'map' ? { prefillMap: [e.key] } : {}),
-  };
-  const btn = h('button', {
-    class: 'btn btn--ghost',
-    style: { padding: '3px 8px', fontSize: '10.5px' },
-    title: `Create a practice target for ${label}`,
-  }, 'Track as target');
-  btn.addEventListener('click', () => openTrackPopover(btn, name, label, () => ctx.navigate('targets', params)));
-  return btn;
-}
-
-/**
- * Explains what "Track as target" actually creates before committing (R9) —
- * a returning player clicking a bare "＋ target" button had no idea it
- * silently created a self-rated target and navigated away; this spells out
- * the prefilled name and what tracking means (graded every matching game,
- * progress shown back on this row) with a single confirm action.
- */
-function openTrackPopover(anchor: HTMLElement, name: string, label: string, onConfirm: () => void): void {
-  openPopover(anchor, (close) =>
-    h('div', { class: 'stack', style: { gap: '10px', minWidth: '240px', maxWidth: '280px' } },
-      h('div', { class: 'field-label' }, 'Track as target'),
-      h('div', { class: 'hint', style: { lineHeight: '1.5' } },
-        `Creates a self-rated target scoped to ${label}, named “${name}”. You grade it Hit/Partial/Missed after every matching game, and this row will show your progress since you started tracking it.`),
-      button('Track as target', {
-        variant: 'primary', class: 'btn--block',
-        onClick: () => { close(); onConfirm(); },
-      }),
-    ),
-  );
-}
