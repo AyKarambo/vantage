@@ -1239,6 +1239,8 @@ const mock: OwStatsApi = {
     previewNeedsFirstRunChoice = false;
     return { ok: true, location: { folder: previewDataFolder, isDefault: false }, changed: true };
   },
+  // No OS file manager in the browser harness — echo the intent, same as openExternal.
+  revealDataFolder: async () => { console.info('[preview] revealDataFolder', previewDataFolder); },
   clearReview: async (matchId: string) => {
     delete previewReviews[matchId];
     save(REVIEWS_KEY, previewReviews);

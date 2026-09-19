@@ -23,7 +23,10 @@ export function dataLocationCard(): HTMLElement {
       h('div', { style: { fontSize: '12px', fontWeight: '600' } }, loc.isDefault ? 'Default location' : 'Custom folder'),
       h('div', { class: 'mono u-dim', style: { fontSize: '11px', wordBreak: 'break-all' } }, loc.folder),
       message ? h('div', { class: 'hint' }, message) : null,
-      h('div', { style: { marginTop: '2px' } }, button('Change…', { variant: 'soft', onClick: choose })),
+      h('div', { style: { marginTop: '2px', display: 'flex', gap: '8px' } },
+        button('Show in Explorer', { variant: 'ghost', onClick: () => void bridge.revealDataFolder() }),
+        button('Change…', { variant: 'soft', onClick: choose }),
+      ),
       h('div', { class: 'hint', style: { marginTop: '6px' } },
         'All match history and targets move together. Point this at a cloud-synced folder ' +
         '(OneDrive, Dropbox) for off-machine backup — use from one machine only, since editing the synced ' +

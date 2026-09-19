@@ -193,6 +193,8 @@ export interface DataProvider {
   setDataFolder(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
   /** First-run folder picker; validates the choice and adopts existing Vantage data automatically. */
   chooseFirstRunDataFolder(): Promise<DataLocationResult>;
+  /** Open the current data folder in the OS file manager (W3). */
+  revealDataFolder(): void;
   /** Remove a game's review (undo of a first-time save). */
   clearReview(matchId: string): void;
   /** Read-only: how many pending-review rows "Mark older games as no-read" would affect right now (R1). */

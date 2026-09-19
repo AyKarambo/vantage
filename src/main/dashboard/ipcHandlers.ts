@@ -216,6 +216,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
     provider.setDataFolder(input),
   );
   handle(ch.chooseFirstRunDataFolder, () => provider.chooseFirstRunDataFolder());
+  handle(ch.revealDataFolder, () => provider.revealDataFolder());
 
   handle(ch.clearReview, (_e, matchId: string) => {
     provider.clearReview(matchId);
