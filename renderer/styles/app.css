@@ -788,6 +788,22 @@
   cursor: pointer;
 }
 
+/* Match detail's session-aware stepper (M4) — the current match's day group
+   as a strip of small W/L/D letters, reusing .match-result's colour language
+   at a fraction of its size. */
+.match-result--sm {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  font-size: 9px;
+  cursor: pointer;
+}
+.match-result--sm.is-current {
+  cursor: default;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Match detail ---------------------------------------------------------------- */
 .detail-head {
   display: flex;

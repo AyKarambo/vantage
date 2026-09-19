@@ -84,14 +84,21 @@ account's per-role lines beneath it.
   net SR swing, tinted win/loss, when any row logged one; each row shows a **clock time**
   instead of a relative age (hover for that); and opening a single day states its own tally
   ("6 games on Sat, Sep 12 · 4–2") with **‹ ›** buttons to step to the next day that has games
-  (M3). Click any row for a full **match detail page**
+  (M3). Click any row for a full **match detail page** — its map name, account and every
+  hero pill are click-through too (to Maps, a filter, and the hero drawer), the meta line
+  states the **absolute date and time** rather than just a relative age, and a strip of
+  small W/L/D letters between the Older/Newer buttons shows the current match's own day,
+  captioned "Game 3 of 7 · Yesterday · 4–3", each one clickable straight to that match (M4) —
   (scoreboard with role icons and **5v5-ordered rosters** — tank, then damage ×2, then
-  support ×2, per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
+  support ×2, a **per-team totals row** summing E/A/D/DMG/HEAL/MIT (blank, never zero-filled,
+  when a team's rows don't report a stat), the higher team brightened per column — fewest,
+  not most, wins the highlight on Deaths, on both the totals row and every individual row
+  (M4) — per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
   wall-clock duration — the fight time those rates divide by, marked *est.* on older captures
   (see *Played time* below) — competitive progress, a read-only **Grades card** with
-  the match's target grades, performance rating and feel/leaver flags, and player
-  history — each section degrades gracefully to whatever the game feed actually
-  reported for that match). **Click any player's name** — on the scoreboard, in the
+  the match's target grades, performance rating and feel/leaver flags (also shown right in
+  the header, M4), and player history — each section degrades gracefully to whatever the
+  game feed actually reported for that match). **Click any player's name** — on the scoreboard, in the
   match's player-history table, on the Live roster, or from the **Players** screen —
   to open their **shared-match history**: a table of every game you played with or
   against them, showing what they played, what you played, on which account and

@@ -6,11 +6,11 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { applyStyle, h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { HeroStat, MatchDetail, MatchMental, MatchRow, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, fmt1, rankLabel, relTime, roleLabel, signed, RELATION_LABEL } from '../format';
+import { dateLong, fmt, fmt1, prettyDay, rankLabel, relTime, roleLabel, signed, time, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
-import { button, card, confirmButton, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
+import { button, card, confirmButton, pill, RESULT_LETTER, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
@@ -25,6 +25,7 @@ import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelt
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import { toast } from '../components/toast';
 import { inlineLink } from '../components/inlineLink';
+import { clickableRow } from '../components/clickableRow';
 import { scoreboard } from '../components/scoreboard';
 import { store } from '../store';
 import { gradedThisSession } from '../reviews';
@@ -34,7 +35,9 @@ import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
 import { matchInTargetScope } from '../../../src/core/targets';
+import { groupByDay } from '../../../src/core/analytics';
 import { PALETTE, wrHsl } from '../theme';
+import { openHeroDrawer } from './heroes';
 import { backControl, type ViewContext } from './view';
 
 const ROLE_OPTS: Array<{ value: Role; label: string }> = [
@@ -89,7 +92,8 @@ export function matchDetail(ctx: ViewContext): HTMLElement {
 /** Back control + prev/next steppers through the filtered match list (also ←/→). */
 function backRow(ctx: ViewContext): HTMLElement {
   const matches = ctx.data.matches;
-  const idx = matches.findIndex((m) => m.matchId === ctx.params.matchId);
+  const matchId = ctx.params.matchId;
+  const idx = matches.findIndex((m) => m.matchId === matchId);
   const older = idx >= 0 ? matches[idx + 1] : undefined;
   const newer = idx >= 0 ? matches[idx - 1] : undefined;
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
@@ -101,18 +105,49 @@ function backRow(ctx: ViewContext): HTMLElement {
       variant: 'ghost', disabled: !older, title: 'Previous match (←)',
       onClick: () => older && ctx.navigate('matchDetail', { matchId: older.matchId }),
     }),
-    // "loaded" (M1) when `matches` is the capped page, not the true filtered
-    // total — `n / 150` alone implied 150 was the whole range, and a match
-    // past the cap couldn't be reached from here (Older stops at the edge of
-    // what's loaded) even though it plainly existed.
-    idx >= 0
-      ? h('span', { class: 'mono u-dim', style: { fontSize: '11px' } },
-          `${idx + 1} / ${matches.length}${ctx.data.matchesTotal > matches.length ? ' loaded' : ''}`)
-      : null,
+    idx >= 0 && matchId ? dayStrip(ctx, matches, matchId) : null,
     button('Newer ›', {
       variant: 'ghost', disabled: !newer, title: 'Next match (→)',
       onClick: () => newer && ctx.navigate('matchDetail', { matchId: newer.matchId }),
     }),
+  );
+}
+
+/**
+ * Session-aware stepper (M4): the plain "n / 150" over the whole filtered
+ * list gave no sense of where this game sat in its OWN sitting — game 2 of 7?
+ * third loss in a row? — and reaching game 5 of yesterday meant five blind
+ * "Older" clicks. Renders the current match's day group (always by calendar
+ * day, renderer-only — independent of the Matches screen's own by-day/by-
+ * sitting pref) as a strip of small W/L/D letters, oldest first, the current
+ * one outlined and every other one clickable straight to that match. The
+ * global "n / N [loaded]" stays underneath as smaller, secondary text.
+ */
+function dayStrip(ctx: ViewContext, matches: MatchRow[], matchId: string): HTMLElement | null {
+  const group = groupByDay(matches).find((g) => g.items.some((m) => m.matchId === matchId));
+  if (!group) return null;
+  const chronological = [...group.items].sort((a, b) => a.timestamp - b.timestamp);
+  const gameNumber = chronological.findIndex((m) => m.matchId === matchId) + 1;
+  const wl = group.draws > 0 ? `${group.wins}–${group.losses}–${group.draws}` : `${group.wins}–${group.losses}`;
+  const idx = matches.findIndex((m) => m.matchId === matchId);
+  const loaded = idx >= 0 && ctx.data.matchesTotal > matches.length;
+  return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' } },
+    h('div', { style: { display: 'flex', gap: '3px' } },
+      ...chronological.map((m) => {
+        const isCurrent = m.matchId === matchId;
+        return h('span', {
+          class: `match-result match-result--sm is-${RESULT_STATE[m.result]}${isCurrent ? ' is-current' : ''}`,
+          title: isCurrent ? 'This match' : `${RESULT_TEXT[m.result] ?? m.result} · ${relTime(m.timestamp)} ago`,
+          ...(isCurrent ? {} : clickableRow(() => ctx.navigate('matchDetail', { matchId: m.matchId }))),
+        }, RESULT_LETTER[m.result]);
+      }),
+    ),
+    h('div', { class: 'mono u-dim', style: { fontSize: '10.5px' } },
+      `Game ${gameNumber} of ${chronological.length} · ${prettyDay(group.label)} · ${wl}`),
+    idx >= 0
+      ? h('div', { class: 'mono u-dim', style: { fontSize: '9.5px', opacity: '0.7' } },
+          `${idx + 1} / ${matches.length}${loaded ? ' loaded' : ''}`)
+      : null,
   );
 }
 
@@ -139,16 +174,28 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
     pill(d.mapType, 'accent'),
     showMode ? h('span', null, d.gameType) : null,
     showMode ? h('span', null, '·') : null,
-    h('span', null, `${roleLabel(d.role)} · ${d.account}`),
+    h('span', null, roleLabel(d.role), ' · ', accountLink(d.account, ctx)),
     h('span', null, '·'),
-    h('span', null, relTime(d.timestamp)),
+    // The absolute date and time (M4), not just a relative age — a match from
+    // three weeks ago used to never state WHEN it was played; the relative
+    // age still lives in the title for a quick hover.
+    h('span', { title: `${relTime(d.timestamp)} ago` }, `${dateLong(d.timestamp)} · ${time(d.timestamp)}`),
     d.factsEditedAt != null ? editedPill() : null,
   );
   return card({ class: 'detail-head' },
     h('div', { class: 'detail-head-main' },
       h('div', { class: `detail-result is-${state}` }, RESULT_TEXT[d.result] ?? d.result),
-      h('h1', { class: 'detail-map' }, d.map),
+      // The richest page about a match used to have fewer exits than its own
+      // row — the row already links the map and every hero (M4).
+      h('h1', { class: 'detail-map' },
+        inlineLink(d.map, {
+          strong: true,
+          title: `Find ${d.map} on the Maps screen`,
+          onClick: () => ctx.navigate('maps', { highlight: d.map }),
+        }),
+      ),
       meta,
+      mentalFlags(d),
       h('div', { style: { marginTop: '10px', display: 'flex', gap: '8px' } },
         button('✎ Edit match', {
           variant: 'soft',
@@ -191,11 +238,28 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
       d.heroes.length
         ? h('div', { class: 'detail-heroes' },
             h('div', { class: 'stat-box-label' }, 'Heroes played'),
-            h('div', { class: 'detail-hero-pills' }, ...d.heroes.map((name) => pill(name))),
+            h('div', { class: 'detail-hero-pills' }, ...d.heroes.map((name) => heroPillLink(name, ctx))),
           )
         : null,
     ),
   );
+}
+
+/** The account name as a click-through to filter the whole app to it (M4) — mirrors the map/hero links right beside it. */
+function accountLink(account: string, ctx: ViewContext): HTMLElement {
+  return inlineLink(account, {
+    title: `Filter to ${account}`,
+    onClick: (e) => { e.stopPropagation(); ctx.setFilter({ account }); },
+  });
+}
+
+/** A heroes-played pill that opens that hero's drill-down (M4) — same pill styling, now clickable like the row's own hero links. */
+function heroPillLink(name: string, ctx: ViewContext): HTMLElement {
+  return h('span', {
+    class: 'pill',
+    title: `Open ${name}'s drill-down`,
+    ...clickableRow(() => openHeroDrawer(ctx, name)),
+  }, name);
 }
 
 /**
@@ -231,7 +295,7 @@ function scoreboardSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null
       sub: localOnly ? 'only your own line was recorded for this match' : 'as reported by the game feed',
       class: 'card--flush detail-scoreboard',
     },
-    scoreboard(d.scoreboard, (name) => ctx.navigate('playerHistory', { playerName: name })),
+    scoreboard(d.scoreboard, (name) => ctx.navigate('playerHistory', { playerName: name }), { totals: true }),
   );
 }
 
