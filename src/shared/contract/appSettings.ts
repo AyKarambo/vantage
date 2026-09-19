@@ -87,6 +87,13 @@ export interface AppInfo {
   devModeAttempted: boolean;
   /** Loaded Overwolf GEP package version (e.g. '309.0.0'); '' until it reports ready. Changes when Overwolf ships a fix. */
   gepPackageVersion: string;
+  /**
+   * Absolute path to the MCP stdio bridge script (W4) — `<install dir>/resources/mcp/stdio.js`
+   * in a packaged build (via `extraResources` in package.json), `dist/mcp/stdio.js` in dev.
+   * Settings uses this to render a copyable Claude Desktop config once the MCP endpoint is on,
+   * instead of sending the user to hand-find it in the README.
+   */
+  mcpBridgePath: string;
 }
 
 /** Where Vantage's data folder (DB + manual data) currently lives (Settings screen). */

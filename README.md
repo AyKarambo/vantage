@@ -746,8 +746,10 @@ AI coach can read your real match history and record matches, reviews and target
 The dashboard read includes solo-vs-grouped and game-length splits and close-vs-decisive
 score margins (round-tally modes only) alongside the map/hero/mental picture (H9).
 
-It is **off by default**. Turn on **MCP endpoint** in *Settings → App behavior*, then point
-your client at the bridge:
+It is **off by default**. Turn on **MCP endpoint** in *Settings → App behavior* — the card
+then shows the exact, resolved path to the bridge script for **this machine** plus a
+**Copy Claude Desktop config** button (W4), so you don't have to hand-find the path or type
+the JSON block yourself:
 
 ```jsonc
 // Claude Desktop: claude_desktop_config.json
@@ -766,7 +768,9 @@ In an installed build the bundle ships **unpacked**, at `<install dir>/resources
 an ordinary resource (`build.extraResources`) rather than app content. Being a self-contained
 esbuild bundle, it needs no `node_modules` beside it. In a dev checkout, `npm run build`
 produces `dist/mcp/stdio.js` (and `npm run mcp` runs it directly, which is only useful for a
-smoke test — the client normally spawns it).
+smoke test — the client normally spawns it). `AppInfo.mcpBridgePath` (`src/main/index.ts`)
+resolves between the two at the main edge, so Settings and the copyable config always name
+the path this exact install actually uses.
 
 **How it works.** The bridge is a small separate process that holds no data of its own. It
 forwards each call over a **local named pipe** to the running Vantage app, which answers it
