@@ -230,18 +230,18 @@ describe('tiltTrendDirection', () => {
 
   it('reads a clearly falling tilt rate as improving, with both half-rates', () => {
     const points = tiltTrend([...dayGames('2026-07-01', 6, 4), ...dayGames('2026-07-02', 6, 0)]);
-    expect(tiltTrendDirection(points)).toEqual({ direction: 'improving', earlyRate: 4 / 6, lateRate: 0 });
+    expect(tiltTrendDirection(points)).toEqual({ direction: 'improving', earlyRate: 4 / 6, lateRate: 0, flaggedGames: 4 });
   });
 
   it('reads a clearly rising tilt rate as worsening', () => {
     const points = tiltTrend([...dayGames('2026-07-01', 6, 0), ...dayGames('2026-07-02', 6, 4)]);
-    expect(tiltTrendDirection(points)).toEqual({ direction: 'worsening', earlyRate: 0, lateRate: 4 / 6 });
+    expect(tiltTrendDirection(points)).toEqual({ direction: 'worsening', earlyRate: 0, lateRate: 4 / 6, flaggedGames: 4 });
   });
 
   it('reads a move inside the dead zone as flat', () => {
     // 1/6 vs 1/6 — identical halves, well inside the 3-point dead zone.
     const points = tiltTrend([...dayGames('2026-07-01', 6, 1), ...dayGames('2026-07-02', 6, 1)]);
-    expect(tiltTrendDirection(points)).toEqual({ direction: 'flat', earlyRate: 1 / 6, lateRate: 1 / 6 });
+    expect(tiltTrendDirection(points)).toEqual({ direction: 'flat', earlyRate: 1 / 6, lateRate: 1 / 6, flaggedGames: 2 });
   });
 
   it('splits halves by game count, not by day count', () => {
@@ -261,6 +261,14 @@ describe('tiltTrendDirection', () => {
     // null. Early (day 1) rate 1, late (day 2) rate 0 → improving.
     const points = tiltTrend([...dayGames('2026-07-01', 6, 6), ...dayGames('2026-07-02', 7, 0)]);
     expect(tiltTrendDirection(points)?.direction).toBe('improving');
+  });
+
+  it('flaggedGames (F6) sums tilted games across both halves, independent of the game-count gate', () => {
+    // A big enough sample (10 + 10 games) to clear the 5-per-half gate, but
+    // only 1 flagged game per half — a real move should still not read as
+    // confidently sampled at the flag level.
+    const points = tiltTrend([...dayGames('2026-07-01', 10, 1), ...dayGames('2026-07-02', 10, 1)]);
+    expect(tiltTrendDirection(points)?.flaggedGames).toBe(2);
   });
 });
 

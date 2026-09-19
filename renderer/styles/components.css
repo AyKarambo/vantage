@@ -719,10 +719,22 @@ table.data tbody tr:focus-visible {
   background: var(--track);
   border-radius: 7px;
   overflow: hidden;
+  position: relative;
 }
 .hbar-fill {
   height: 100%;
   border-radius: 7px;
+}
+/* Reference tick (F6, `opts.marker`) — the caller's own overall winrate, so a
+   breakdown bar reads against "better or worse than average" without hunting
+   for the number elsewhere on the card. */
+.hbar-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text-2);
+  opacity: 0.7;
 }
 .hbar-value {
   font-family: var(--font-mono);

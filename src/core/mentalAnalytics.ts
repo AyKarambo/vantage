@@ -135,6 +135,13 @@ export interface TiltTrendRead {
   earlyRate: number;
   /** Tilt rate over the recent half of the range, 0..1. */
   lateRate: number;
+  /**
+   * Flagged (tilted) games across BOTH halves (F6) — the 5-games-per-half
+   * gate above only guards the RATE being meaningful; a 5-and-5-game split
+   * can still turn on as few as 1 or 2 actual tilt flags, which is not
+   * enough sample to hang an imperative "Worsening — shorter sessions" on.
+   */
+  flaggedGames: number;
 }
 
 /** Tilt-rate move (0..1) the halves must differ by before the trend leaves 'flat'. */
@@ -168,13 +175,13 @@ export function tiltTrendDirection(
   if (a.games < minGames || b.games < minGames) return null;
   const delta = b.rate - a.rate;
   const direction: TiltTrendDirection = Math.abs(delta) <= TREND_DEAD_ZONE ? 'flat' : delta < 0 ? 'improving' : 'worsening';
-  return { direction, earlyRate: a.rate, lateRate: b.rate };
+  return { direction, earlyRate: a.rate, lateRate: b.rate, flaggedGames: a.tilted + b.tilted };
 }
 
-function halfRate(points: TiltTrendPoint[]): { games: number; rate: number } {
+function halfRate(points: TiltTrendPoint[]): { games: number; tilted: number; rate: number } {
   const games = points.reduce((n, p) => n + p.games, 0);
   const tilted = points.reduce((n, p) => n + p.tilted, 0);
-  return { games, rate: games ? tilted / games : 0 };
+  return { games, tilted, rate: games ? tilted / games : 0 };
 }
 
 /** Tilt rate at one session position ('1'..'5', '6+'). */

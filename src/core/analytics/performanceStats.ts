@@ -35,6 +35,12 @@ export interface PerformanceStats {
   /** Mean self-rating on wins / on losses (draws excluded); null when that bucket has no rated games. */
   winAvg: number | null;
   lossAvg: number | null;
+  /** Rated games behind {@link winAvg}/{@link lossAvg} (F6) — the win/loss-gap
+   *  verdict on Trends gates its interpretive sentence on the thinner of the
+   *  two rather than trusting a non-null average alone (as few as one rated
+   *  game per side is enough for `avgOf` to return a number). */
+  winRated: number;
+  lossRated: number;
   byHero: PerformanceBucket[];
   byMap: PerformanceBucket[];
 }
@@ -105,6 +111,8 @@ export function performanceStats(games: GameRecord[]): PerformanceStats {
     ),
     winAvg: avgOf(rated.filter((g) => g.result === 'Win')),
     lossAvg: avgOf(rated.filter((g) => g.result === 'Loss')),
+    winRated: rated.filter((g) => g.result === 'Win').length,
+    lossRated: rated.filter((g) => g.result === 'Loss').length,
     byHero: buckets(rated, (g) => (g.heroes.length ? g.heroes : ['Unknown'])),
     byMap: buckets(rated, (g) => [g.map]),
   };
