@@ -696,6 +696,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   round-tally modes. And **Matches → Customize view** gains a **Party** field (Solo / Duo /
   *N*-stack). All three cuts, plus the round-margin split, are now in the payload the **MCP**
   dashboard tool returns too (H9).
+- **The Overview now tells you what to do next.** A **"Next up"** strip under the greeting
+  names whatever needs you — matches waiting on a result, games to review, or a placement run
+  ready to confirm — each a one-click jump, gone entirely once nothing's pending. The bottom row
+  gains two cards: **Active targets** (name, hit-rate sparkline, a **stale** tag when one's
+  overdue for rotation) and **Heroes** (your top 5 by games this range) — both previously
+  invisible without a trip to Targets or Heroes, even though the data rides on every payload.
+  Clicking a hero jumps to Heroes with that row highlighted. Five cards now share the bottom
+  row, which wraps to two columns under 1300px so nothing gets squeezed (O3).
 
 ## 0.34.0 — 31 July 2026
 

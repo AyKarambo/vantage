@@ -94,7 +94,13 @@ export function heroes(ctx: ViewContext): HTMLElement {
   ];
 
   const minGames = prefs.get('minGames') ?? 1;
-  const rows = ctx.data.heroStats.filter((r) => r.games >= minGames);
+  // A cross-link (the Overview Heroes card, O3) must always land, even on a
+  // hero below the persisted floor — scoped to just this visit, same
+  // effective-floor-only-for-the-highlight pattern Maps' own cross-link uses (H4).
+  const highlight = ctx.params.highlight;
+  const highlightRow = highlight ? ctx.data.heroStats.find((r) => r.hero === highlight) : undefined;
+  const effectiveMinGames = highlightRow && highlightRow.games < minGames ? 1 : minGames;
+  const rows = ctx.data.heroStats.filter((r) => r.games >= effectiveMinGames);
   const hidden = ctx.data.heroStats.length - rows.length;
   const hint = worstHeroHint(ctx);
 
@@ -116,7 +122,7 @@ export function heroes(ctx: ViewContext): HTMLElement {
     ),
   );
 
-  return h('div', { class: 'view view--fill view--wide' },
+  const view = h('div', { class: 'view view--fill view--wide' },
     viewHead('Heroes',
       `Exact stats, per 10 minutes played · click a hero to drill down${hidden > 0 ? ` · ${hidden} low-sample hidden` : ''}`,
       minGamesChips),
@@ -150,6 +156,18 @@ export function heroes(ctx: ViewContext): HTMLElement {
       }),
     ),
   );
+  if (highlight) {
+    setTimeout(() => {
+      const target = [...view.querySelectorAll('table.data tbody tr td:first-child')]
+        .find((el) => el.textContent?.trim() === highlight);
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ block: 'center' });
+        target.classList.add('is-highlighted');
+        setTimeout(() => target.classList.remove('is-highlighted'), 2400);
+      }
+    }, 0);
+  }
+  return view;
 }
 
 /** Open the hero drill-down drawer (also reachable from the command palette / cross-links). */

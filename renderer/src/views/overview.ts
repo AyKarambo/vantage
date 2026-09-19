@@ -4,12 +4,14 @@ import type { DashboardData, Group, PlacementRunSummary, SessionDebrief } from '
 import { dayKey, dayPartAt, MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
 import { READINESS_TUNING } from '../../../src/core/readiness';
+import { isStale } from '../../../src/core/staleness';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
-import { scatterChart, type ScatterPoint } from '../charts/plots';
+import { scatterChart, sparkline, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox, unlockHint } from '../components/primitives';
+import { clickableRow } from '../components/clickableRow';
 import { inlineLink } from '../components/inlineLink';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
@@ -30,6 +32,7 @@ export function overview(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view' },
     head,
+    nextUpStrip(ctx),
     hiddenHistoryBanner(ctx),
     firstWeekUnlockCard(ctx),
     recapCard(ctx),
@@ -37,6 +40,41 @@ export function overview(ctx: ViewContext): HTMLElement {
     scatterCard(ctx),
     bottomRow(ctx),
   );
+}
+
+/**
+ * "What do I do next?" (O3) — the landing screen used to never say. Highest
+ * urgency first: matches GEP delivered with no result (invisible everywhere
+ * but Review until now), then the ungraded backlog, then a placement run
+ * waiting on the player to confirm its outcome (reusing {@link placementKpi}'s
+ * own CTA so there's only one place that wiring lives). Hidden entirely with
+ * nothing pending — this is an alert strip, not a permanent fixture.
+ */
+function nextUpStrip(ctx: ViewContext): HTMLElement | null {
+  const d = ctx.data;
+  const items: HTMLElement[] = [];
+  if (d.pendingMatches.length > 0) {
+    const n = d.pendingMatches.length;
+    items.push(nextUpItem(`${n} match${n === 1 ? '' : 'es'} need${n === 1 ? 's' : ''} a result`, () => ctx.navigate('review')));
+  }
+  if (d.pendingReviews > 0) {
+    items.push(nextUpItem(`${d.pendingReviews} game${d.pendingReviews === 1 ? '' : 's'} to review`, () => ctx.navigate('review')));
+  }
+  const awaiting = d.placements.find((p) => p.awaitingRank);
+  if (awaiting) {
+    items.push(nextUpItem('Confirm your rank', () => openPlacementComplete({
+      account: awaiting.account,
+      role: awaiting.role,
+      suggestion: awaiting.latestPrediction,
+      onDone: () => ctx.refresh(),
+    })));
+  }
+  if (!items.length) return null;
+  return h('div', { class: 'next-up' }, ...items);
+}
+
+function nextUpItem(label: string, onClick: () => void): HTMLElement {
+  return h('button', { class: 'next-up-item', on: { click: onClick } }, label, h('span', { class: 'next-up-arrow' }, '→'));
 }
 
 /**
@@ -437,9 +475,13 @@ function scatterLegend(points: ScatterPoint[]): HTMLElement {
 }
 
 /**
- * Bottom row = Mental + Readiness + Activity. The old "Focus queue" card was
- * removed deliberately (issue #71): the scatter's "Top priority" callout above
- * is the Overview's single Focus tease — Focus itself is the hub.
+ * Bottom row = Activity + Mental + Readiness + Active targets + Heroes (O3).
+ * The old "Focus queue" card was removed deliberately (issue #71): the
+ * scatter's "Top priority" callout above is the Overview's single Focus
+ * tease — Focus itself is the hub. Active targets and Heroes are a
+ * different tease: the coaching-loop and per-hero pictures TargetSummary and
+ * byHero already carry on every payload, previously visible only after a
+ * trip to Targets or Heroes.
  */
 function bottomRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
@@ -463,7 +505,72 @@ function bottomRow(ctx: ViewContext): HTMLElement {
     stopRuleLine(ctx),
   );
 
-  return h('div', { class: 'overview-bottom' }, activityCard(ctx), mental, readinessCard(ctx));
+  return h('div', { class: 'overview-bottom' },
+    activityCard(ctx), mental, readinessCard(ctx), activeTargetsCard(ctx), overviewHeroesCard(ctx));
+}
+
+/**
+ * "What am I actively grading?" (O3) — the coaching loop is improvement
+ * targets, but the Overview used to only tease them as the recap's
+ * "targets hit" box (usually just "—"). One row per active, non-archived
+ * target: name, hit-rate sparkline (the same trend Targets' own screen
+ * plots), and a stale tag when it's overdue for rotation — the same
+ * {@link isStale} check the Targets active-set panel already gates its own
+ * nudge on, so this can never disagree with it.
+ */
+function activeTargetsCard(ctx: ViewContext): HTMLElement {
+  const d = ctx.data;
+  const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
+  if (!active.length) {
+    return card({ title: 'Active targets', style: { flex: '1' } },
+      h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+        'No active target — pick one from the library → ',
+        inlineLink('Targets', { onClick: () => ctx.navigate('targets') })));
+  }
+  const now = Date.now();
+  return card({ title: 'Active targets', style: { flex: '1' } },
+    h('div', { class: 'stack', style: { gap: '8px' } },
+      ...active.map((t) => {
+        const stale = isStale(t.activatedAt, t.matchesSinceActive, now, d.staleness);
+        return h('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '9px', cursor: 'pointer' },
+          ...clickableRow(() => ctx.navigate('targetDetail', { targetId: t.id })),
+        },
+          h('span', {
+            class: 'row-main', style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12.5px' },
+          }, t.name),
+          sparkline(t.spark, { width: 46, height: 16, color: wrColor(t.hitRate) }),
+          h('span', { class: 'mono', style: { fontSize: '12.5px', color: wrColor(t.hitRate), flex: '0 0 auto' } }, pct(t.hitRate)),
+          stale ? h('span', { style: { fontSize: '10px', color: 'var(--warn-text)', flex: '0 0 auto' }, title: 'Overdue for rotation' }, 'stale') : null,
+        );
+      }),
+    ),
+  );
+}
+
+/**
+ * "How am I doing on the heroes I actually play?" (O3) — the scatter and
+ * Focus tease are maps-only, so hero form ("Hazard 40% over 5 games") was
+ * only ever visible on the Heroes screen even though `byHero` rides on every
+ * payload. Top 5 by games; clicking one flashes its row on Heroes (same
+ * cross-link pattern Maps' mode cards use for the ranking below them).
+ */
+function overviewHeroesCard(ctx: ViewContext): HTMLElement {
+  const d = ctx.data;
+  const top = [...d.byHero].sort((a, b) => b.games - a.games).slice(0, 5);
+  if (!top.length) {
+    return card({ title: 'Heroes', style: { flex: '1' } }, h('div', { class: 'hint' }, 'No hero data in this range yet.'));
+  }
+  return card({ title: 'Heroes', style: { flex: '1' } },
+    h('div', { class: 'stack', style: { gap: '5px' } },
+      ...top.map((hs) => h('div', {
+        style: { cursor: 'pointer' },
+        ...clickableRow(() => ctx.navigate('heroes', { highlight: hs.key })),
+      },
+        statBar({ label: hs.key, frac: hs.winrate, color: wrColor(hs.winrate), valueText: `${pct(hs.winrate)} · ${hs.games}g` }),
+      )),
+    ),
+  );
 }
 
 /** Games/day activity heatmap, moved here from Trends (issue #116) — an

@@ -576,6 +576,43 @@
   display: flex;
   gap: 12px;
 }
+/* Five cards (O3 added Active targets + Heroes to the original three) no
+   longer fit one legible row below ~1300px — a 2-column grid keeps every
+   card readable instead of squeezing all five edge to edge. */
+@media (max-width: 1300px) {
+  .overview-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* "What do I do next?" alert strip (O3) — hidden entirely with nothing
+   pending, so it never competes for space with the greeting header below it. */
+.next-up {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 2px 0 16px;
+}
+.next-up-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  background: var(--accent-soft-2);
+  border: 1px solid rgba(124, 108, 245, 0.45);
+  color: var(--accent-text);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.next-up-item:hover {
+  background: var(--accent-soft);
+}
+.next-up-arrow {
+  opacity: 0.7;
+}
 
 /* Notion sync --------------------------------------------------------------- */
 .notion-status {
