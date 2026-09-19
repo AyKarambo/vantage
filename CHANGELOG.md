@@ -653,6 +653,19 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   right there, and the **`?`** cheatsheet no longer leads with Log-match/Review shortcuts ahead of
   the ones that actually matter most of the time — it's ordered Global → Navigate → Review → Log
   match, with `Ctrl+0` (Players) sorted after `Ctrl+9` instead of wherever it happened to land.
+- **Backfill a game from further back than "2h ago" — and fix the time later if you got it wrong.**
+  The Played chips on Log match stopped at 2 hours, so a session logged the next morning, or a game
+  from 3-4 hours back, couldn't be placed honestly. A fifth **Other…** chip now opens a plain date
+  and time picker (never later than now), and the header badge names the date too once the chosen
+  moment isn't today. "Save & log another" carries that instant into the next form (instead of
+  measuring "30m ago" from an ever-later "now" on every single game), so backfilling a whole missed
+  session means picking the time once and nudging it forward from there. Once saved, the match
+  editor can now correct it too — a **Played** field sits under Role, for a hand-logged match only;
+  fixing it re-sorts the match everywhere its timestamp matters, including which day it falls under
+  on the Matches list. The editor also finally caught up with the log card in three other ways:
+  **Enter** saves it (it never used to), **↑ / ↓ / H / P / M** grade your active targets from the
+  keyboard the same way Review does, and its header now matches the log card's own — a close **✕**,
+  and the same `⚡ auto` / `◎ manual` badge with the time right on it.
 
 ## 0.34.0 — 31 July 2026
 

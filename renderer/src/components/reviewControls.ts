@@ -99,6 +99,41 @@ function gradeControl(onChange: (g: TargetGrade) => void): { el: HTMLElement; se
   };
 }
 
+/**
+ * ↑/↓ moves `.is-focused` across a list of {@link targetGradeRow}s, H/P/M
+ * grades whichever one is focused (advancing focus afterward, unless it's the
+ * last row) — Review's own keyboard grading model (R2), shared here so the
+ * quick-log card and the match-detail editor (L5) get it too, instead of
+ * click-only rows. `scope` must be focusable so the keydown actually reaches
+ * it; a no-op when there are no rows (nothing active to grade).
+ */
+export function bindTargetGradeKeys(
+  scope: HTMLElement,
+  rows: Array<{ el: HTMLElement; set: (g: TargetGrade) => void }>,
+): void {
+  if (!rows.length) return;
+  let focusIdx = 0;
+  const markFocus = (): void => rows.forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
+  markFocus();
+  scope.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusIdx = (focusIdx + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+      markFocus();
+      return;
+    }
+    const byKey: Record<string, TargetGrade> = { h: 'hit', p: 'partial', m: 'missed' };
+    const grade = byKey[e.key.toLowerCase()];
+    if (!grade) return;
+    e.preventDefault();
+    rows[focusIdx].set(grade);
+    if (focusIdx < rows.length - 1) { focusIdx++; markFocus(); }
+  });
+}
+
 /** The boolean-valued mental flags the binary chips toggle (comms is separate — see below). */
 export type BoolFlagKey = 'tilt' | 'toxicMates' | 'leaver' | 'leaverMyTeam' | 'leaverEnemyTeam';
 

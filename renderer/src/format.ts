@@ -116,6 +116,26 @@ export function dateLong(ts = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+/** True when `ts` falls on today's LOCAL calendar day — used to decide when a badge/label needs to name the date at all, not just the time (L5). */
+export function isToday(ts: number): boolean {
+  const d = new Date(ts);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+/**
+ * epoch ms → a `<input type="datetime-local">` value, in LOCAL time (no
+ * timezone suffix — matches how the browser itself both displays and
+ * re-parses the field, so the round trip through `new Date(value).getTime()`
+ * lands back on the same instant, L5's Played backfill on the log card and
+ * the match editor).
+ */
+export function toDatetimeLocal(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** A `groupByDay` key/label ("Today", "Yesterday", or a raw `YYYY-MM-DD`) → a friendly short date. Shared by Matches and Review's day headers. */
 export function prettyDay(label: string): string {
   if (label === 'Today' || label === 'Yesterday') return label;

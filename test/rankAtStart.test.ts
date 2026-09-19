@@ -174,6 +174,41 @@ describe('rankAtStart — the snapshot', () => {
   });
 });
 
+describe('editMatch — playedAt (L5)', () => {
+  it('moves a hand-logged match\'s timestamp', () => {
+    const { provider, at } = harness([g(1)]);
+    const moved = T0 + 5 * MINUTE;
+    provider.editMatch({ matchId: 'm-1', playedAt: moved } as never);
+    expect(at('m-1')!.timestamp).toBe(moved);
+  });
+
+  it('is ignored on an auto-tracked (GEP) match — the capture instant stays locked', () => {
+    const { provider, at } = harness([g(1, { source: 'gep' })]);
+    const original = at('m-1')!.timestamp;
+    provider.editMatch({ matchId: 'm-1', playedAt: T0 + 5 * MINUTE } as never);
+    expect(at('m-1')!.timestamp).toBe(original);
+  });
+
+  it('is clamped to the past — a skewed/future value can never produce future-stamped history', () => {
+    const { provider, at } = harness([g(1)]);
+    const future = Date.now() + 24 * 60 * MINUTE;
+    provider.editMatch({ matchId: 'm-1', playedAt: future } as never);
+    expect(at('m-1')!.timestamp).toBeLessThanOrEqual(Date.now());
+    expect(at('m-1')!.timestamp).toBeGreaterThan(T0);
+  });
+
+  it('re-syncs rankAtStart (write-once, same as any other edit) — moving an already-snapshotted match leaves ITS OWN snapshot untouched', () => {
+    const { provider, at } = harness([g(1), g(2)], anchor());
+    provider.saveReview(review('m-1', 20) as never);
+    provider.saveReview(review('m-2', -10) as never);
+    const before = at('m-1')!.rankAtStart;
+
+    provider.editMatch({ matchId: 'm-1', playedAt: T0 + 10 * MINUTE } as never);
+
+    expect(at('m-1')!.rankAtStart).toEqual(before);
+  });
+});
+
 describe('rankEnteringMatch', () => {
   const map = (a: ReturnType<typeof anchor>): RankAnchorMap => ({
     [rankKey(a.account, a.role)]: { tier: a.tier, division: a.division, progressPct: a.progressPct, setAt: a.setAt },

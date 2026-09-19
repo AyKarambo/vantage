@@ -321,6 +321,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // saving, so there is no absolute-rank branch to maintain here.
       if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
       if (input.performance !== undefined) patch.performance = input.performance;
+      // Played time is honoured for a hand-logged match only — a GEP capture's
+      // timestamp is the instant the game itself ended, not something a player
+      // can honestly correct after the fact. Clamped to the past like the log
+      // card's own playedAt (a skewed clock can never produce future history).
+      if (input.playedAt !== undefined && isManual) patch.timestamp = Math.min(input.playedAt, Date.now());
       // Stamp a review when there are grades to save, OR when the match is
       // already reviewed — an edit with no targets shouldn't mark an otherwise-
       // ungraded match as reviewed, but if it's already reviewed we must
@@ -340,7 +345,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // it — and can move the match's role/timestamp, which changes which track
       // and which neighbour the snapshot comes from. Re-syncing here covers all
       // of those; it is a no-op when a snapshot already stands.
-      if (patch.srDelta !== undefined || input.role !== undefined) syncRankAtStart(deps, input.matchId);
+      if (patch.srDelta !== undefined || input.role !== undefined || patch.timestamp !== undefined) syncRankAtStart(deps, input.matchId);
       return { saved: true };
     },
     deleteMatch: (matchId) => {

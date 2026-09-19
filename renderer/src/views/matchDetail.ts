@@ -8,15 +8,16 @@
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, MatchRow, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { dateLong, fmt, fmt1, prettyDay, rankLabel, relTime, roleLabel, signed, time, RELATION_LABEL } from '../format';
+import { dateLong, fmt, fmt1, isToday, prettyDay, rankLabel, relTime, roleLabel, signed, time, toDatetimeLocal, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
-import { button, card, confirmButton, pill, RESULT_LETTER, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
+import { badge, button, card, confirmButton, pill, RESULT_LETTER, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
 import { srEntryMode } from '../../../src/core/placements';
-import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
-import { resultChooser, bindResultKeys } from '../components/resultChooser';
+import { GRADES, targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
+import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
+import { dialogHeader } from '../components/dialogHeader';
 import { performanceSlider } from '../components/performanceSlider';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, notKnownMapHint, type MapPickerEntry } from '../components/mapPicker';
@@ -588,6 +589,11 @@ function buildMatchEditor(
   let srDelta: number | undefined =
     d.srDelta ?? (isComp && state.result !== 'Draw' ? Number(suggestedSrDelta(state.result)) : undefined);
   let performance: number | undefined = d.performance;
+  // Played time (L5) — editable only for a hand-logged match; a GEP capture's
+  // timestamp is the instant the game itself ended, not something correctable
+  // after the fact (the same "facts stay locked" rule the header note states).
+  const isManual = d.source === 'manual';
+  let playedAt = d.timestamp;
   // SR entry mirrors the log card: nudge the change, or set the rank you ended
   // at (main back-computes the %). The Set-current fields seed from the rank shown
   // on the card (reconstructed as of this match), so a drift-correction starts
@@ -703,7 +709,42 @@ function buildMatchEditor(
     );
     mapField.append(mapError);
 
-    // Canonical field order shared with the log card: Result, Map, Role, Heroes.
+    // Played time (L5) — a hand-logged match only; honest correction of a
+    // backfill chip picked in a hurry (or too generously) on the log card.
+    // A GEP capture's timestamp is the instant the game itself ended, so it
+    // stays locked like every other auto-tracked fact does.
+    const playedInput = h('input', {
+      type: 'datetime-local',
+      class: 'vt-input',
+      max: toDatetimeLocal(Date.now()),
+      value: toDatetimeLocal(playedAt),
+    }) as HTMLInputElement;
+    playedInput.addEventListener('change', () => {
+      if (!playedInput.value) return;
+      const ms = new Date(playedInput.value).getTime();
+      if (Number.isNaN(ms)) return;
+      playedAt = Math.min(ms, Date.now());
+      paintTimeBadge();
+    });
+    const playedField = isManual
+      ? field(optionalLabel('Played', '— when this match actually ended'), playedInput)
+      : null;
+
+    // The header badge (L5, shared layout with the log card via dialogHeader)
+    // — reflects a live played-time edit immediately, the same way the log
+    // card's own badge tracks its Played chip.
+    const timeBadgeHost = h('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } });
+    const paintTimeBadge = (): void => {
+      const ts = isManual ? playedAt : d.timestamp;
+      const when = isToday(ts) ? time(ts) : `${dateLong(ts)} · ${time(ts)}`;
+      render(timeBadgeHost,
+        badge(`${d.source === 'gep' ? '⚡ auto' : '◎ manual'} · ${when}`, d.source === 'gep' ? 'auto' : 'manual'),
+        d.factsEditedAt != null ? editedPill() : null,
+      );
+    };
+    paintTimeBadge();
+
+    // Canonical field order shared with the log card: Result, Map, Role, Played, Heroes.
     // Every match is editable now — an auto-tracked result the feed got wrong can
     // be hand-corrected (the record keeps its ⚡ auto provenance + gains an
     // "edited" marker); nothing about the match is locked.
@@ -724,6 +765,7 @@ function buildMatchEditor(
           }
         },
       })),
+      playedField,
       field(optionalLabel('Heroes', '— tap all you played'), heroEditHost),
       // No Mode control — Vantage is competitive-only (spec D1); matches stay
       // competitive, mirroring the quick-log's removed mode picker.
@@ -835,6 +877,9 @@ function buildMatchEditor(
         // number sets, null clears — performance applies to any match, comp or not.
         performance: performance ?? null,
         grades,
+        // Manual only (isManual gates the field's very existence); main also
+        // re-gates it, so this can never move a GEP capture's locked instant.
+        ...(isManual && playedAt !== d.timestamp ? { playedAt } : {}),
       });
       // A track with no anchor yet: the entered rank defines where tracking
       // starts, since there is no rank-before for it to be a change from.
@@ -888,13 +933,13 @@ function buildMatchEditor(
     updateSaveEnabled();
 
     // L2: its own sticky footer (bottom: 0 within the scrolling .modal-card),
-    // same treatment as the log card's Save row — negative margins cancel
-    // root's own padding so it still sits flush against the card's edges.
+    // same treatment as the log card's Save row — root carries no padding of
+    // its own now (L5, dialogHeader), so this sits flush without a negative-
+    // margin hack to cancel it.
     const actions = h('div', {
       style: {
-        display: 'flex', gap: '10px', alignItems: 'center',
-        margin: '0 -18px -18px', padding: '14px 18px', borderTop: '1px solid var(--border)',
-        position: 'sticky', bottom: '-18px', background: 'var(--card)',
+        display: 'flex', gap: '10px', alignItems: 'center', padding: '14px 18px',
+        borderTop: '1px solid var(--border)', position: 'sticky', bottom: '0', background: 'var(--card)',
       },
     },
       saveBtn,
@@ -906,40 +951,55 @@ function buildMatchEditor(
     // tabindex -1: focusable via script (for the mount-time focus below) but not
     // part of the natural Tab order — mirrors the log card's keyboard handling.
     // Field order and label convention are the log card's (its Account/Played
-    // fields are log-only): Result, Map, Role, Heroes, Skill rating,
+    // fields are log-only): Result, Map, Role, Played, Heroes, Skill rating,
     // Performance, Comms, Flags, Targets.
-    const root = h('div', { class: 'stack', tabindex: '-1', style: { gap: '14px', padding: '18px', outline: 'none' } },
-      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, 'Edit match'),
-      h('div', { class: 'u-muted', style: { fontSize: '12px' } },
-        `${d.map} · ${roleLabel(d.role)} · ${relTime(d.timestamp)} · ${d.source === 'gep' ? '⚡ auto' : '◎ manual'}${d.factsEditedAt != null ? ' · edited' : ''}`),
-      // Two columns mirroring the log card: match facts + Skill rating on the
-      // left, the manual self-report (Performance / Comms / Flags / Targets) on
-      // the right. Collapses to one column on a narrow viewport (shared .log-grid).
-      h('div', { class: 'log-grid' },
-        h('div', { class: 'log-col' },
-          factsBlock,
-          srBlock,
-        ),
-        h('div', { class: 'log-col' },
-          field(optionalLabel('Performance', '— how did you play?'),
-            performanceSlider(performance, (v) => (performance = v))),
-          field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
-          field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
-          field(optionalLabel('Targets', '— grade now or later on Review'),
-            h('div', { class: 'stack', style: { gap: '11px' } },
-              ...(rows.length
-                ? rows.map((r) => r.el)
-                : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
-            )),
+    //
+    // Header and footer sit OUTSIDE the padded content (L5, matching the log
+    // card's own form structure) rather than the old single stack-with-padding
+    // root a negative-margin hack had to cancel just for the footer.
+    const root = h('div', { tabindex: '-1', style: { outline: 'none' } },
+      dialogHeader({
+        title: 'Edit match',
+        extra: [h('span', { class: 'u-muted', style: { fontSize: '12px' } }, `${d.map} · ${roleLabel(d.role)}`)],
+        badge: timeBadgeHost,
+        onClose: close,
+      }),
+      h('div', { style: { padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' } },
+        // Two columns mirroring the log card: match facts + Skill rating on the
+        // left, the manual self-report (Performance / Comms / Flags / Targets) on
+        // the right. Collapses to one column on a narrow viewport (shared .log-grid).
+        h('div', { class: 'log-grid' },
+          h('div', { class: 'log-col' },
+            factsBlock,
+            srBlock,
+          ),
+          h('div', { class: 'log-col' },
+            field(optionalLabel('Performance', '— how did you play?'),
+              performanceSlider(performance, (v) => (performance = v))),
+            field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
+            field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
+            field(optionalLabel('Targets', '— grade now or later on Review'),
+              h('div', { class: 'stack', style: { gap: '11px' } },
+                ...(rows.length
+                  ? rows.map((r) => r.el)
+                  : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+              )),
+          ),
         ),
       ),
       actions,
     );
 
     // W/L/D drive the result chooser (every match is editable now) — the same
-    // shared binding as the log card. openModal appends the panel after build
-    // returns, so defer the focus to the next frame once it's actually in the DOM.
+    // shared binding as the log card. Enter/Ctrl+Enter save (L5, bindSaveKeys
+    // — no "save & next" here, so Ctrl+Enter falls back to plain save), and
+    // ↑/↓ + H/P/M grade the focused target row (L5, bindTargetGradeKeys —
+    // Review's own keyboard grading model). openModal appends the panel after
+    // build returns, so defer the focus to the next frame once it's actually
+    // in the DOM.
     bindResultKeys(root, resultRow);
+    bindSaveKeys(root, { save });
+    bindTargetGradeKeys(root, rows);
     requestAnimationFrame(() => root.focus());
     return root;
   }, { panelClass: 'modal-card--wide' });

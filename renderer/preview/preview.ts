@@ -697,6 +697,11 @@ const mock: OwStatsApi = {
       if (input.performance === null) delete patch.performance;
       else patch.performance = input.performance;
     }
+    // Played time (L5) — hand-logged matches only; mirrors the real
+    // dataProvider's clamp-to-the-past + manual-only gate.
+    if (input.playedAt !== undefined && sourceOf(game) === 'manual') {
+      patch.timestamp = Math.min(input.playedAt, Date.now());
+    }
     previewEdits[input.matchId] = patch;
     save(EDITS_KEY, previewEdits);
     if (input.grades && Object.keys(input.grades).length) {
