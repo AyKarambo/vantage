@@ -13,14 +13,14 @@ import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
 import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
+import { coachHeadline } from '../coachHeadline';
 
 export function overview(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
-  const wr = d.overall.winrate;
 
   const head = viewHead(
     `${greeting()}, ${d.greetingName}`,
-    `${dateLong()} · you're ${pct(wr)} — here's where the points are hiding`,
+    headlineSub(ctx),
     button('Log match', { variant: 'primary', onClick: ctx.openLogMatch }),
   );
 
@@ -32,6 +32,35 @@ export function overview(ctx: ViewContext): HTMLElement {
     scatterCard(ctx),
     bottomRow(ctx),
   );
+}
+
+/**
+ * The Overview subtitle (O1): the strongest computed coaching read in place
+ * of the same "you're 51% — here's where the points are hiding" line every
+ * day regardless of what's actually going on. A "Why →" jump follows it
+ * straight to the screen that explains the number, when there is one.
+ */
+function headlineSub(ctx: ViewContext): Node {
+  const headline = coachHeadline(ctx.data);
+  const text = `${dateLong()} · ${headline.text}`;
+  if (!headline.source) return document.createTextNode(text);
+  const source = headline.source;
+  const params = headline.params;
+  return h('span', {},
+    `${text} `,
+    jumpLink('Why →', () => ctx.navigate(source, params)),
+  );
+}
+
+/** A button styled as a link, for in-app jumps — the same idiom as About's `aboutLink`. */
+function jumpLink(label: string, onClick: () => void): HTMLElement {
+  return h('button', {
+    style: {
+      background: 'none', border: 'none', padding: '0', cursor: 'pointer',
+      font: 'inherit', fontSize: 'inherit', color: 'var(--accent)',
+    },
+    on: { click: onClick },
+  }, label);
 }
 
 /**

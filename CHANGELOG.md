@@ -411,6 +411,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   instead of a movement arrow glued to an unrelated number (the arrow stays reserved for a real
   anchored rank). The Winrate KPI's delta now says which window it means — "▾ 16 pts · last 5
   days" (or weeks) — instead of a bare "recent".
+- **Overview's subtitle says something, not just your winrate.** It now leads with whichever
+  read is strongest right now — a real rank swing, a role costing you net losses over a real
+  sample, or a late-session fade — instead of the same "here's where the points are hiding"
+  line every day regardless of what's actually going on. A **"Why →"** link jumps straight to
+  the screen that explains it (Trends or Focus). With nothing strong enough to say, it falls
+  back to "No strong signal yet — keep logging."
 
 ## 0.34.0 — 31 July 2026
 
