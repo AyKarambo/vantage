@@ -1,103 +1,71 @@
 /**
  * First-time user experience — a short guided tour. Runs once on first launch
- * (gated by a localStorage flag) and is re-openable from Help in the status bar.
- * Built on the same centered-overlay look as the other modals, but manages its
- * own step state so the user can page Back / Next / Finish.
+ * (gated by a localStorage flag) and is re-openable from Help in the status
+ * bar or the FAQ screen. Four steps (F5, down from seven): welcome + the
+ * account-safety note, "Your workspace" (which also folds in the demo-data
+ * choice on a genuine first run — asked once, in place, rather than a
+ * separate blocking prompt immediately followed by this tour restating the
+ * same choice), the log/review loop, and Notion + support. Built on
+ * `openModal` (shared focus trap / Tab order); Escape and ✕ both just skip
+ * the tour, same as before — a demo choice left unmade this way reads as
+ * `'off'` functionally (`effectiveDemo`, `src/core/demoPreference.ts`) and is
+ * fully recoverable from Settings any time.
  */
 import { h, render } from '../dom';
 import { button } from '../components/primitives';
+import { openModal } from '../components/overlay';
+import { bridge } from '../bridge';
+import { store } from '../store';
 
 const KEY = 'vantageOnboarded';
-const SUPPORT = 'timo.seikel@gmail.com';
+/** Until `getAppInfo()` resolves — same fallback `about.ts` uses. */
+const FALLBACK_SUPPORT_EMAIL = 'timo.seikel@gmail.com';
 
-interface Step {
-  title: string;
-  lead?: string;
-  points?: Array<[string, string]>;
-  note?: string;
-}
-
-const STEPS: Step[] = [
+/**
+ * One line per screen, grouped the way the sidebar is (K6). Hand-kept in step
+ * with `shell.ts`'s `NAV` rather than generated from it: the tour needs a
+ * blurb per screen that `NavItem` itself doesn't carry, and NAV's `App` group
+ * (Notion sync, Logs, Settings, About, FAQ) isn't "your workspace" — Notion
+ * gets its own step below, the rest are about the app rather than your
+ * stats, and none of the four belong crowded into one already-dense step.
+ */
+const WORKSPACE: Array<{ group: string; items: Array<[string, string]> }> = [
   {
-    title: 'Welcome to Vantage',
-    lead:
-      'Your Overwatch stats coach. Vantage turns your match history into priority maps, exact ' +
-      'per-hero stats, mental tracking and improvement targets — so you can see where the points are hiding.',
-    note:
-      'Account-safe by design: it uses only Overwolf’s official Game Events Provider — the same ' +
-      'sanctioned feed other apps use. It never reads game memory or injects anything.',
-  },
-  {
-    title: 'You’re seeing demo data',
-    lead:
-      'Until real games flow in, the dashboard shows a realistic demo dataset — look for the ' +
-      '“Demo data” badge in the status bar. Your own games replace it automatically once tracking starts.',
-  },
-  {
-    // Deliberately not named after a sidebar group (K6 regrouped the nav into
-    // five, and this tour still only has room for two screens of bullets) —
-    // "Your workspace" as a title used to at least gesture at the old
-    // Workspace group; keeping that word here after the regroup would claim a
-    // section that no longer exists.
-    title: 'Your screens',
-    points: [
+    group: 'Now',
+    items: [
       ['Overview', 'KPIs, the winrate × volume scatter, and your top priorities at a glance.'],
       ['Live', 'The match you’re in right now, while it’s running.'],
-      ['Review', 'Add the human read to recent games — how they actually felt.'],
-      ['Matches', 'Your recent game log.'],
-      ['Players', 'Everyone you’ve met, with your record together.'],
-      ['Maps', 'Winrate by game mode, then every map ranked best → worst.'],
-      ['Heroes', 'The exact per-hero table with a click-through drill-down.'],
     ],
   },
   {
-    title: 'Improve',
-    points: [
+    group: 'After the session',
+    items: [
+      ['Review', 'Add the human read to recent games — how they actually felt.'],
+      ['Matches', 'Your recent game log.'],
+      ['Players', 'Everyone you’ve met, with your record together.'],
+    ],
+  },
+  {
+    group: 'Improve',
+    items: [
       ['Focus', 'The maps, heroes and roles that cost you the most — what to work on first.'],
       ['Targets', 'Build an improvement target and see if hitting it moves your winrate.'],
       ['Mental', 'Tilt / comms tracking and the tax tilt puts on your winrate.'],
       ['Readiness', 'Whether tonight looks like a good night to climb.'],
-      ['Trends', 'Winrate over time, split by role, mode and account.'],
     ],
   },
   {
-    title: 'Log a match in seconds',
-    lead:
-      'Press Ctrl L anytime to log a match — result, map, role, hero and how it felt (Ctrl K finds it too). The tilt / ' +
-      'comms flags you add feed straight into the Mental view.',
-  },
-  {
-    title: 'Sync to Notion (optional)',
-    lead:
-      'On the Notion sync screen, connect a Notion database to export your tracked games with one click. ' +
-      'It’s deduped by match, so re-syncing never double-writes.',
-  },
-  {
-    title: 'You’re all set',
-    lead:
-      `That’s the tour. Questions or feedback? Reach support at ${SUPPORT}. ` +
-      'You can replay this tour anytime from Help in the status bar.',
+    group: 'Reference',
+    items: [
+      ['Heroes', 'The exact per-hero table with a click-through drill-down.'],
+      ['Maps', 'Winrate by game mode, then every map ranked best → worst.'],
+      ['Trends', 'Winrate over time, split by role, mode and account.'],
+    ],
   },
 ];
 
-/** Step 2 reflects the actual data mode: demo season vs. a fresh start. */
-function demoStep(demoActive: boolean): Step {
-  return demoActive
-    ? {
-        title: 'You’re seeing demo data',
-        lead:
-          'You chose to explore with a realistic demo dataset — look for the “Demo data” badge in the ' +
-          'status bar. Your own games replace it automatically once tracking starts, and you can turn ' +
-          'demo data off anytime in Settings.',
-      }
-    : {
-        title: 'You’re starting fresh',
-        lead:
-          'No demo data and no fabricated targets — every screen starts empty and fills in with your own ' +
-          'games and targets as you track them. Prefer to explore with sample data first? Turn demo data ' +
-          'on anytime in Settings.',
-      };
-}
+const STEP_TITLES = ['Welcome to Vantage', 'Your workspace', 'Log a match in seconds', 'Sync to Notion (optional)'];
+const STEP_COUNT = STEP_TITLES.length;
 
 /** True when the tour hasn’t been completed yet. */
 export function shouldOnboard(): boolean {
@@ -116,37 +84,57 @@ function markDone(): void {
   }
 }
 
-export function openOnboarding(demoActive = false): void {
-  // Step 2 is computed per demo/fresh mode; the rest are static.
-  const steps = STEPS.map((s, n) => (n === 1 ? demoStep(demoActive) : s));
-  const panel = h('div', { class: 'modal-card', style: { width: '520px', maxWidth: '92vw' } });
-  const overlay = h('div', { class: 'overlay overlay--center' }, panel);
-  let i = 0;
+function workspaceGrid(): HTMLElement {
+  return h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' } },
+    ...WORKSPACE.map((section) =>
+      h('div', null,
+        h('div', { class: 'u-dim', style: { fontSize: '10.5px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' } }, section.group),
+        h('div', { class: 'stack', style: { gap: '7px' } },
+          ...section.items.map(([label, desc]) =>
+            h('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline' } },
+              h('span', { class: 'is-accent', style: { fontSize: '12px', fontWeight: '600', width: '58px', flex: '0 0 auto' } }, label),
+              h('span', { style: { fontSize: '11.5px', color: 'var(--text-2)', lineHeight: '1.4' } }, desc),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
-  const close = (): void => {
-    window.removeEventListener('keydown', onKey);
-    overlay.remove();
-  };
+/**
+ * @param offerDemoChoice True only on a genuine first run (`demoPreference`
+ *   still `'unset'`) — step 2 swaps its Next button for the demo-choice pair.
+ *   A replay (Help menu, FAQ) always passes `false`: the choice is already
+ *   made, so step 2 is just the workspace rundown with normal navigation —
+ *   the status bar's "Demo data" badge is the persistent, always-visible
+ *   answer to "am I looking at real games", so the tour doesn't restate it.
+ */
+export function openOnboarding(offerDemoChoice = false): void {
+  let i = 0;
+  let choosingDemo = offerDemoChoice;
+  let supportEmail = FALLBACK_SUPPORT_EMAIL;
+  const body = h('div');
+
+  void bridge.getAppInfo().then((info) => {
+    supportEmail = info.supportEmail;
+    if (i === STEP_COUNT - 1) draw();
+  });
+
   const finish = (): void => {
     markDone();
-    close();
+    handle.close();
   };
-  const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') finish();
-    else if (e.key === 'ArrowRight' && i < steps.length - 1) go(i + 1);
-    else if (e.key === 'ArrowLeft' && i > 0) go(i - 1);
-  };
-  const go = (n: number): void => {
-    i = n;
-    draw();
-  };
+  const go = (n: number): void => { i = n; draw(); };
 
-  panel.addEventListener('click', (e) => e.stopPropagation());
-  window.addEventListener('keydown', onKey);
+  const chooseDemo = (pref: 'on' | 'off'): void => {
+    choosingDemo = false;
+    void bridge.setAppSettings({ demoPreference: pref }).then(() => store.refresh()).then(() => go(2));
+  };
 
   const dots = (): HTMLElement =>
     h('div', { style: { display: 'flex', gap: '5px' } },
-      ...steps.map((_, n) =>
+      ...Array.from({ length: STEP_COUNT }, (_, n) =>
         h('span', {
           style: {
             width: '6px', height: '6px', borderRadius: '50%',
@@ -156,43 +144,75 @@ export function openOnboarding(demoActive = false): void {
       ),
     );
 
-  const stepBody = (s: Step): HTMLElement =>
-    h('div', { class: 'stack', style: { gap: '12px' } },
-      s.lead ? h('div', { style: { fontSize: '13.5px', lineHeight: '1.55', color: 'var(--text-2)' } }, s.lead) : null,
-      s.points
-        ? h('div', { class: 'stack', style: { gap: '9px' } },
-            ...s.points.map(([label, desc]) =>
-              h('div', { style: { display: 'flex', gap: '10px', alignItems: 'baseline' } },
-                h('span', { class: 'is-accent', style: { fontSize: '12.5px', fontWeight: '600', width: '74px', flex: '0 0 auto' } }, label),
-                h('span', { style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.5' } }, desc),
-              ),
-            ),
-          )
-        : null,
-      s.note ? h('div', { class: 'hint', style: { lineHeight: '1.5' } }, s.note) : null,
+  const stepBody = (n: number): Node => {
+    if (n === 0) {
+      return h('div', { class: 'stack', style: { gap: '12px' } },
+        h('div', { style: { fontSize: '13.5px', lineHeight: '1.55', color: 'var(--text-2)' } },
+          'Your Overwatch stats coach. Vantage turns your match history into priority maps, exact ' +
+          'per-hero stats, mental tracking and improvement targets — so you can see where the points are hiding.'),
+        h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+          'Account-safe by design: it uses only Overwolf’s official Game Events Provider — the same ' +
+          'sanctioned feed other apps use. It never reads game memory or injects anything.'),
+      );
+    }
+    if (n === 1) {
+      return h('div', { class: 'stack', style: { gap: '12px' } },
+        choosingDemo
+          ? h('div', { style: { fontSize: '13.5px', lineHeight: '1.55', color: 'var(--text-2)' } },
+              'Want to explore with a realistic demo dataset first, or start fresh and track your own games ' +
+              'right away? You can change this anytime in Settings.')
+          : null,
+        workspaceGrid(),
+      );
+    }
+    if (n === 2) {
+      return h('div', { class: 'stack', style: { gap: '12px' } },
+        h('div', { style: { fontSize: '13.5px', lineHeight: '1.55', color: 'var(--text-2)' } },
+          'Press Ctrl L anytime to log a match — result, map, role, hero and how it felt (Ctrl K finds it too). ' +
+          'Add the human read afterward on Review — how the game actually went — and the tilt / comms flags ' +
+          'you add there feed straight into the Mental view.'),
+      );
+    }
+    return h('div', { class: 'stack', style: { gap: '12px' } },
+      h('div', { style: { fontSize: '13.5px', lineHeight: '1.55', color: 'var(--text-2)' } },
+        'On the Notion sync screen, connect a Notion database to export your tracked games with one click. ' +
+        'It’s deduped by match, so re-syncing never double-writes.'),
+      h('div', { class: 'hint', style: { lineHeight: '1.5' } },
+        `Questions or feedback? Reach support at ${supportEmail}. You can replay this tour anytime from Help ` +
+        'in the status bar.'),
     );
+  };
+
+  const footer = (): HTMLElement => {
+    if (i === 1 && choosingDemo) {
+      return h('div', { style: { display: 'flex', gap: '10px' } },
+        button('Show me demo data', { variant: 'primary', onClick: () => chooseDemo('on') }),
+        button('Start fresh', { variant: 'soft', onClick: () => chooseDemo('off') }),
+      );
+    }
+    const last = i === STEP_COUNT - 1;
+    return h('div', { style: { display: 'flex', gap: '10px' } },
+      i > 0 ? button('Back', { class: 'btn--ghost', onClick: () => go(i - 1) }) : null,
+      last
+        ? button('Get started', { variant: 'primary', onClick: finish })
+        : button('Next', { variant: 'primary', onClick: () => go(i + 1) }),
+    );
+  };
 
   const draw = (): void => {
-    const s = steps[i];
-    const last = i === steps.length - 1;
-    render(panel,
+    render(body,
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
-        h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, s.title),
+        h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, STEP_TITLES[i]),
         h('button', { class: 'overlay-close', title: 'Skip', on: { click: finish } }, '✕'),
       ),
-      h('div', { style: { padding: '20px' } }, stepBody(s)),
+      h('div', { style: { padding: '20px' } }, stepBody(i)),
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)' } },
         dots(),
-        h('div', { style: { display: 'flex', gap: '10px' } },
-          i > 0 ? button('Back', { class: 'btn--ghost', onClick: () => go(i - 1) }) : null,
-          last
-            ? button('Get started', { variant: 'primary', onClick: finish })
-            : button('Next', { variant: 'primary', onClick: () => go(i + 1) }),
-        ),
+        footer(),
       ),
     );
   };
 
-  document.body.appendChild(overlay);
+  const handle = openModal(() => body, { panelClass: 'modal-card--onboarding' });
   draw();
 }

@@ -1053,6 +1053,10 @@ table.data tbody tr:focus-visible {
 .modal-card--wide {
   width: 760px;
 }
+/* The intro tour (F5) — wide enough for its "Your workspace" step's two-column grid. */
+.modal-card--onboarding {
+  width: 640px;
+}
 
 /* Log Match two-column body: match facts left, self-report right. Collapses to
    a single column when the modal can't be wide enough (narrow viewport). */
