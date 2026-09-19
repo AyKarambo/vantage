@@ -16,7 +16,7 @@ One behavior layer that makes the app *feel* like a polished daily companion: a 
 
 ## Command palette (`Ctrl+K`, or the titlebar "Search or log a match" button)
 
-- Item groups, in curated default order: **Action** (Log match · Keyboard shortcuts · Replay the intro tour), **Screen** (every sidebar entry), **Map** (each map → Maps view with `{ highlight }`), **Hero** (each hero with stats → hero drill-down drawer), **Match** (the 30 most recent rows → match detail; hero names, game type, and account are matchable keywords).
+- Item groups, in curated default order: **Action** (Log match · Keyboard shortcuts · Replay the intro tour), **Screen** (every sidebar entry), **Map** (each map → that map's own games on Matches, `{ map }`, H3), **Hero** (each hero with stats → hero drill-down drawer), **Match** (the 30 most recent rows → match detail; hero names, game type, and account are matchable keywords).
 - Hand-rolled fuzzy ranking (`fuzzy.ts`), max 12 results; the empty query shows the curated order with actions first, so `Ctrl+K` → `Enter` still logs a match.
 - Fully keyboard-driven: type to filter, ↑/↓ to move (wraps), Enter to run, Escape closes; mouse hover moves the selection. Guarded against double-open; opens only once a data snapshot exists.
 

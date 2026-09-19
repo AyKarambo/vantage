@@ -117,8 +117,9 @@ account's per-role lines beneath it.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
   credited to each hero by its share of the match time, the way the in-game career profile
-  does it — see *Played time* below), with a click-through drill-down drawer (per-map winrate,
-  recent games, aggregates).
+  does it — see *Played time* below), with a click-through drill-down drawer: a role icon and a
+  scope line stating which filters the numbers follow, per-map winrate (each map opening that
+  map's own games on Matches), and recent games that open straight into that match's detail page.
 - **Focus** — the "what to work on" hub: your net-losing **maps** in one
   deficit-ranked list, each with a trend arrow (improving/declining) and — once you
   track it as a target — the winrate movement since you flagged it.
@@ -306,8 +307,10 @@ between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/Pag
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
 Review, `W/L/D`+`Enter` in the log dialog), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
-everywhere** (click a heatmap day or a Mental flag count to open exactly those matches; hero-drawer
-map rows and Overview scatter dots jump to the Maps screen), remembered role + account in the
+everywhere** (click a heatmap day, a Mental flag count, or any "open the map" surface app-wide —
+the Overview scatter and its Top-priority callouts, Live's priority card, a hero drawer's By-map
+rows, Focus's map rows, the command palette's Map entries — to open exactly those matches on
+Matches), remembered role + account in the
 quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
 window-position memory, and a **Settings** screen with an

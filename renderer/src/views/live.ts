@@ -300,7 +300,7 @@ function priorityCard(items: DashboardData['focusMaps'], ctx: ViewContext): HTML
     h('div', { class: 'stack', style: { gap: '8px' } },
       ...items.map((m) => h('div', {
         class: 'row', style: { cursor: 'pointer' },
-        on: { click: () => ctx.navigate('maps', { highlight: m.key }) },
+        on: { click: () => ctx.navigate('matches', { map: m.key }) },
       },
         h('div', { class: 'row-main' },
           h('div', { class: 'row-name' }, m.key),

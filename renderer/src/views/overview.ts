@@ -218,7 +218,10 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   const callouts = h('div', { class: 'scatter-callouts' },
     h('div', { style: { fontSize: '12px', fontWeight: '600', color: 'var(--loss-text)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' } }, 'Top priority'),
     ...(focus.length
-      ? focus.map((m) => h('div', { class: 'row' },
+      ? focus.map((m) => h('div', {
+          class: 'row', style: { cursor: 'pointer' },
+          on: { click: () => ctx.navigate('matches', { map: m.key }) },
+        },
           h('span', { class: 'dot', style: { background: wrHsl(m.winrate) } }),
           h('div', { class: 'row-main' },
             h('div', { class: 'row-name' }, m.key),
@@ -236,10 +239,10 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   );
 
   return card(
-    { title: 'Every map · winrate × volume', sub: 'Below the line = losing. Further right = you play it a lot. Fix the bottom-right first. Click a dot to open the map.', style: { flex: '1' } },
+    { title: 'Every map · winrate × volume', sub: 'Below the line = losing. Further right = you play it a lot. Fix the bottom-right first. Click a dot to open its matches.', style: { flex: '1' } },
     h('div', { class: 'overview-scatter' },
       h('div', { class: 'scatter-plot' },
-        scatterChart(points, (name) => ctx.navigate('maps', { highlight: name })),
+        scatterChart(points, (name) => ctx.navigate('matches', { map: name })),
         scatterLegend(points)),
       callouts,
     ),

@@ -32,6 +32,7 @@ export const PARAM_KINDS: Required<{ [K in keyof ViewParams]: ParamKind }> = {
   matchId: 'route',
   day: 'route',
   flag: 'route',
+  map: 'route',
   playerName: 'route',
   targetId: 'route',
   // maps.ts re-runs its scroll-and-flash on every render while this is set.
@@ -115,6 +116,7 @@ export function routeParams(p: ViewParams): ViewParams {
   if (p.matchId !== undefined) out.matchId = p.matchId;
   if (p.day !== undefined) out.day = p.day;
   if (p.flag !== undefined) out.flag = p.flag;
+  if (p.map !== undefined) out.map = p.map;
   if (p.playerName !== undefined) out.playerName = p.playerName;
   if (p.targetId !== undefined) out.targetId = p.targetId;
   return out;

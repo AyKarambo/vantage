@@ -46,14 +46,16 @@ const FIELD_LABELS: Record<MatchColumnKey, string> = {
 };
 
 export function matches(ctx: ViewContext): HTMLElement {
-  const { day, flag } = ctx.params;
+  const { day, flag, map } = ctx.params;
   const rows = day
     ? ctx.data.matches.filter((m) => dayKey(m.timestamp) === day)
     : flag
       ? ctx.data.matches.filter((m) => m.flags?.[flag])
-      : ctx.data.matches;
+      : map
+        ? ctx.data.matches.filter((m) => m.map === map)
+        : ctx.data.matches;
   const groups = groupByDay(rows);
-  const scopeChip = day || flag ? drillDownChip(ctx, day, flag) : null;
+  const scopeChip = day || flag || map ? drillDownChip(ctx, day, flag, map) : null;
   const columns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
 
   return h('div', { class: 'view view--wide' },
@@ -66,7 +68,7 @@ export function matches(ctx: ViewContext): HTMLElement {
             dayHeader(g.label, g.wins, g.losses),
             ...g.items.map((m) => matchRow(m, ctx, columns)),
           ]))
-        : (day || flag) ? emptyState('No games match this drill-down — clear the scope above to see everything.') : emptyActions(ctx),
+        : (day || flag || map) ? emptyState('No games match this drill-down — clear the scope above to see everything.') : emptyActions(ctx),
     ),
   );
 }
@@ -109,8 +111,8 @@ function customizeViewRow(key: MatchColumnKey, current: MatchColumnsPref): HTMLE
 }
 
 /** Dismissible "Only <scope> ✕" chip shown while a day/flag drill-down is active. */
-function drillDownChip(ctx: ViewContext, day: string | undefined, flag: MatchFlagKey | undefined): HTMLElement {
-  const label = day ? prettyDay(day) : FLAG_LABELS[flag as MatchFlagKey];
+function drillDownChip(ctx: ViewContext, day: string | undefined, flag: MatchFlagKey | undefined, map: string | undefined): HTMLElement {
+  const label = day ? prettyDay(day) : map ? map : FLAG_LABELS[flag as MatchFlagKey];
   return h('div', { style: { margin: '0 0 12px' } },
     chip(`Only ${label} ✕`, true, () => ctx.navigate('matches')),
   );

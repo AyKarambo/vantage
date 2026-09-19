@@ -10,6 +10,7 @@ import { pct, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
 import { button, card } from '../components/primitives';
 import { infoTip } from '../components/infoTip';
+import { inlineLink } from '../components/inlineLink';
 import { viewHead, type ViewContext } from './view';
 
 const TREND_META: Record<FocusTrend, { arrow: string; color: string; label: string }> = {
@@ -45,7 +46,23 @@ function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement 
   return h('div', null,
     h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' } },
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', minWidth: '0' } },
-        h('div', { class: 'row-name', style: { fontSize: '13.5px' } }, name),
+        // The primary action opens the games behind this row (H3) — the plain
+        // div this used to be was a dead end, the one thing every other
+        // "open the map" surface in the app already promised. A secondary
+        // "↗ Maps" keeps today's flash-jump to the aggregate ranking, for
+        // "how does this map look overall" rather than "which games".
+        inlineLink(name, {
+          class: 'row-name',
+          style: { fontSize: '13.5px' },
+          title: `Open your ${name} matches`,
+          onClick: () => ctx.navigate('matches', { map: name }),
+        }),
+        inlineLink('↗ Maps', {
+          class: 'u-dim',
+          style: { fontSize: '11px' },
+          title: `See ${name} on the Maps ranking`,
+          onClick: () => ctx.navigate('maps', { highlight: name }),
+        }),
         trendArrow(e.trend),
       ),
       h('div', { style: { display: 'flex', gap: '12px', alignItems: 'baseline' } },

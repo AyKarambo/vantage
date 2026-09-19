@@ -179,7 +179,7 @@ export function heroDetail(games: GameRecord[], hero: string, opts: HeroStatsOpt
     hero,
     overall: weightedWinLoss(weighted),
     byMap: weightedGroupBy(weighted, (e) => e.game.map).slice(0, 12),
-    recent: gs.slice(0, 10).map((g) => ({ map: g.map, role: g.role, result: g.result, account: g.account, timestamp: g.timestamp })),
+    recent: gs.slice(0, 10).map((g) => ({ matchId: g.matchId, map: g.map, role: g.role, result: g.result, account: g.account, timestamp: g.timestamp })),
     stats: heroStats(gs, opts).find((h) => h.hero === hero) ?? null,
   };
 }
