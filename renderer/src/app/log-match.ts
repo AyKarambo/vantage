@@ -372,7 +372,11 @@ function buildForm(
     } finally {
       saving = false;
     }
-    ctx.refresh();
+    // No explicit refresh here (W8): `bridge.logMatch` already wrote through
+    // `matchPipeline.recordGame`, which pushes `onGameLogged` — the shell's
+    // one subscription to that push refetches the dashboard on its own. An
+    // explicit `ctx.refresh()` here used to race it, paying for a second full
+    // dashboard read on every single logged match.
     return true;
   };
 

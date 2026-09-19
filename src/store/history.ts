@@ -132,6 +132,7 @@ export class HistoryStore {
   private countStmt!: StatementSync;
   private changesStmt!: StatementSync;
   private openId = 0;
+  private allCache: { revision: string; games: GameRecord[] } | null = null;
   private importedCountStmt!: StatementSync;
   private lastImportedAtStmt!: StatementSync;
   private selectImportedStmt!: StatementSync;
@@ -152,9 +153,26 @@ export class HistoryStore {
     this.open();
   }
 
-  /** Snapshot of every stored game, in insertion order. */
+  /**
+   * Snapshot of every stored game, in insertion order. Cached by {@link
+   * revision} (W8): re-running the SELECT and JSON-parsing every blob cost
+   * ~25ms at 3,700 rows, and a single user action reads this several times
+   * over (opening Log match alone used to trigger four full parses) before
+   * anything underneath it has actually changed. A write always bumps
+   * `revision()` (it's SQLite's own `total_changes()`), so the cache can
+   * never observe a stale write.
+   *
+   * Callers must treat the result as read-only and copy before sorting or
+   * otherwise mutating it in place — true of every caller today (they either
+   * `.filter()`/`.map()` into a fresh array, or spread before `.sort()`), so
+   * this documents an existing contract rather than imposing a new one.
+   */
   all(): GameRecord[] {
-    return this.allStmt.all().map((row) => parseGame(row.data));
+    const revision = this.revision();
+    if (this.allCache?.revision === revision) return this.allCache.games;
+    const games = this.allStmt.all().map((row) => parseGame(row.data));
+    this.allCache = { revision, games };
+    return games;
   }
 
   /** True if a game with this match id is already stored. */
