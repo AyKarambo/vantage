@@ -463,6 +463,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   typing or picking "Log match", then Enter). The titlebar's search pill now splits into
   `Ctrl K · Search` and a real `+ Log match · Ctrl L` button beside it, and Ctrl+L opens the
   log dialog directly from any screen — the intro tour and the palette's own hint now say so.
+- **The log card actually fits.** Its header and Save row now stay on screen (sticky top/bottom)
+  on a card taller than the window, instead of the whole card scrolling as one block with the
+  Save button off the bottom — the same fix applied to the match editor's Save/Cancel row. The
+  rarely-changed **Account** field moved into the header; **Played** (the backfill control) moved
+  next to Targets on the right, out of the way of the fields you touch on every log — Result,
+  Map, Role, Heroes and Skill rating now run straight down the left column. The skill-rating
+  wheel nudge takes **Shift for a ±5 step**, not just ±1 (a full ±25 swing used to take 65 scroll
+  ticks to dial in by hand), and the same nudge now also reaches the placement-completion
+  dialog's % field, which previously had none at all. "Save & next" reads **Ctrl ⏎**, not the
+  macOS **⌃⏎** glyph this Windows-only app never should have shown.
 
 ## 0.34.0 — 31 July 2026
 

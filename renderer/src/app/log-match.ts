@@ -33,7 +33,6 @@ import type { ViewContext } from '../views/view';
 
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 
-/** Preset SR delta for a result — the game moves rank ~±25 per competitive game. */
 /** "Played" backfill choices — end-of-game time relative to now, in minutes. */
 const PLAYED_OFFSETS: Array<{ label: string; minutes: number }> = [
   { label: 'Just now', minutes: 0 },
@@ -145,8 +144,10 @@ function buildForm(
   const prefill = prefs.get('logPrefill');
   // Prefill Account/Role from the active dashboard filter when it names a specific
   // value — logging while scoped to an account/role should target it — otherwise
-  // fall back to the last-logged values. Role only when the log form can represent
-  // it (Tank/Damage/Support; Open Queue isn't a log option).
+  // fall back to the last-logged values. Role only reaches Tank/Damage/Support this
+  // way: the filter bar's Role select doesn't offer Open Queue, so a filter can
+  // never seed it — Open Queue is still a perfectly loggable choice below, it just
+  // has no filter path in.
   const { account: filterAccount, role: filterRole } = ctx.data.filters;
   const seededAccount = filterAccount !== 'all' ? accountOptions.find((o) => o.value === filterAccount)?.value : undefined;
   const defaultAccount = seededAccount ?? accountOptions.find((o) => o.value === prefill?.account)?.value ?? accountOptions[0].value;
@@ -352,9 +353,35 @@ function buildForm(
   };
   paintTime();
 
-  const header = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
+  // L2: a compact select in the header, not a full labeled field in the left
+  // column — Account is rarely changed (most sessions stay on one), so it no
+  // longer sits between the fields touched on every log.
+  const accountSelect = select(accountOptions, state.account, (v) => {
+    // Account scopes both the rank (per account+role) and the hero-picker
+    // shortlist (per-account most-played) — repaint both. Re-seed the
+    // Set-current rank picker too, if it's the active mode, so it reflects
+    // the new account.
+    state.account = v;
+    if (state.srMode === 'set-current') seedAnchorFromRanks();
+    seedPrediction();
+    paintRank();
+    paintHeroes();
+  });
+  accountSelect.classList.add('log-header-account');
+
+  // L2: sticky (top: 0 within the scrolling .modal-card) so it — and the Save
+  // row's sticky footer, below — stay visible on a card taller than the
+  // window, instead of the whole card scrolling as one block with the header
+  // and the Save/Save & next row both off-screen at once.
+  const header = h('div', {
+    style: {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px',
+      borderBottom: '1px solid var(--border)', position: 'sticky', top: '0', background: 'var(--card)', zIndex: '1',
+    },
+  },
     h('div', { style: { fontFamily: 'var(--font-head)', fontSize: '16px', fontWeight: '600' } }, 'Log match'),
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+      accountSelect,
       timeBadgeHost,
       h('button', { class: 'overlay-close', on: { click: close } }, '✕'),
     ),
@@ -371,19 +398,6 @@ function buildForm(
       paintRank();
     },
   });
-
-  const accountField = field('Account',
-    // Account scopes both the rank (per account+role) and the hero-picker
-    // shortlist (per-account most-played) — repaint both. Re-seed the Set-current
-    // rank picker too, if it's the active mode, so it reflects the new account.
-    select(accountOptions, state.account, (v) => {
-      state.account = v;
-      if (state.srMode === 'set-current') seedAnchorFromRanks();
-      seedPrediction();
-      paintRank();
-      paintHeroes();
-    }),
-  );
 
   const mapError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } });
   const mapField = field('Map',
@@ -588,10 +602,21 @@ function buildForm(
   };
 
   const saveBtn = button('Save ⏎', { variant: 'primary', class: 'btn--block', onClick: saveAndClose });
-  const saveNextBtn = button('Save & next  ⌃⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext });
+  // Ctrl+⏎, not the macOS ⌃⏎ glyph — Vantage is Windows-only, and every other
+  // shortcut hint in the app already spells it "Ctrl" (L2).
+  const saveNextBtn = button('Save & next  Ctrl ⏎', { title: 'Save and log another (Ctrl+Enter)', onClick: saveAndNext });
   saveButtons.push(saveBtn, saveNextBtn);
   updateSaveEnabled();
-  const actions = h('div', { style: { display: 'flex', gap: '10px', paddingTop: '2px' } }, saveBtn, saveNextBtn);
+  // L2: its own sticky footer (bottom: 0 within the scrolling .modal-card),
+  // not the last thing in the padded, scrolling body — Save/Save & next used
+  // to end up below the fold on a card taller than the window, and a player
+  // who didn't know Enter saves had to scroll every single time.
+  const actions = h('div', {
+    style: {
+      display: 'flex', gap: '10px', padding: '14px 20px', borderTop: '1px solid var(--border)',
+      position: 'sticky', bottom: '0', background: 'var(--card)',
+    },
+  }, saveBtn, saveNextBtn);
 
   const performanceBlock = field(
     optionalLabel('Performance', '— how did you play?'),
@@ -601,18 +626,22 @@ function buildForm(
   // Two columns: the match facts (what happened) on the left, the manual
   // self-report (how it felt / how you played) on the right — keeps the card
   // short. Collapses to one column on a narrow viewport (see .log-grid CSS).
+  // L2: left is now Result → Map → Role → Heroes → Skill rating — the fields
+  // touched on every log — with the rarely-changed Account moved to the
+  // header and the backfill-only Played moved to the right column below
+  // Targets, out of the way of the common path.
   // tabindex -1: focusable via script (for the mount-time focus below) but not
   // part of the natural Tab order.
   const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
     h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
       h('div', { class: 'log-grid' },
         h('div', { class: 'log-col' },
-          field('Result', resultRow), accountField, mapField, roleField, playedField, heroField, rankHost),
+          field('Result', resultRow), mapField, roleField, heroField, rankHost),
         h('div', { class: 'log-col' },
-          performanceBlock, commsBlock, flagsBlock, targetsBlock),
+          performanceBlock, commsBlock, flagsBlock, targetsBlock, playedField),
       ),
-      actions,
     ),
+    actions,
   );
 
   // Keyboard flow: W/L/D pick the result when not typing (shared binding);

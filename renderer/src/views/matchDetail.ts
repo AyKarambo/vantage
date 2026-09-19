@@ -766,6 +766,22 @@ function buildMatchEditor(
     const saveBtn = button('Save', { variant: 'primary', onClick: save });
     updateSaveEnabled();
 
+    // L2: its own sticky footer (bottom: 0 within the scrolling .modal-card),
+    // same treatment as the log card's Save row — negative margins cancel
+    // root's own padding so it still sits flush against the card's edges.
+    const actions = h('div', {
+      style: {
+        display: 'flex', gap: '10px', alignItems: 'center',
+        margin: '0 -18px -18px', padding: '14px 18px', borderTop: '1px solid var(--border)',
+        position: 'sticky', bottom: '-18px', background: 'var(--card)',
+      },
+    },
+      saveBtn,
+      button('Cancel', { variant: 'ghost', onClick: close }),
+      h('span', { style: { flex: '1' } }),
+      d.review ? button('Clear grades', { variant: 'ghost', onClick: clear }) : null,
+    );
+
     // tabindex -1: focusable via script (for the mount-time focus below) but not
     // part of the natural Tab order — mirrors the log card's keyboard handling.
     // Field order and label convention are the log card's (its Account/Played
@@ -796,12 +812,7 @@ function buildMatchEditor(
             )),
         ),
       ),
-      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' } },
-        saveBtn,
-        button('Cancel', { variant: 'ghost', onClick: close }),
-        h('span', { style: { flex: '1' } }),
-        d.review ? button('Clear grades', { variant: 'ghost', onClick: clear }) : null,
-      ),
+      actions,
     );
 
     // W/L/D drive the result chooser (every match is editable now) — the same

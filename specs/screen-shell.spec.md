@@ -59,12 +59,14 @@ One behavior layer that makes the app *feel* like a polished daily companion: a 
 - Per-route scroll positions are remembered in-session and restored when navigating back (notably Matches ↔ matchDetail); a data refresh on the same route keeps the current scroll.
 - Status text "N games · updated Xm ago" is re-derived every 60s while idle, so the relative time never lies.
 
-## Quick-log modal (`app/log-match.ts`, opened from the Overview CTA or the palette's Log match action)
+## Quick-log modal (`app/log-match.ts`, opened from the Overview CTA, the titlebar's `+ Log match` button, `Ctrl L`, or the palette's Log match action)
 
 - Prefills **role** from the last logged match (`prefs.logPrefill`); result/map/hero always start fresh; mental flags start empty. Every quick-logged match is sent as `gameType: 'Competitive'` (there is no mode picker).
 - The hero field is a typeahead over the canonical hero list (`src/core/heroes.ts`) plus any hero already in the player's data; free text stays allowed.
 - Active improvement targets are listed with optional inline 3-way grading; a competitive log can also enter the match's SR %.
-- "Save ⏎" and "Save & next" (reopens for the next game); saving shows a confirmation toast and refreshes the dashboard.
+- "Save ⏎" and "Save & next Ctrl ⏎" (reopens for the next game, prefilling this game's heroes); saving shows a confirmation toast and refreshes the dashboard.
+- **Layout (L2):** the header and the Save row are both `position: sticky` within the card's own scroll — the header pins to the top, the Save/Save & next row to the bottom — so both stay visible on a card taller than the window, instead of the whole card scrolling as one block with the header and the save buttons both off-screen at once. The **Account** select lives in the header (beside the `◎ manual · hh:mm` badge), compact, since it's rarely changed mid-session; the left column is Result → Map → Role → Heroes → Skill rating (the fields touched on every log); the right column is Performance → Comms → Flags → Targets → **Played** (the backfill control, used far less often than the fields above it). The match-detail editor's own Save/Cancel row gets the same sticky-footer treatment (`views/matchDetail.ts`).
+- SR/%-into-division fields share a wheel nudge (±1 per tick, **Shift for ±5**, tooltip "Scroll to nudge ±1 · Shift for ±5") — the quick-log SR field, the Set-current-rank picker, the match editor's, and the placement-completion dialog's % field all go through the same `nudgedInput` (`components/srControls.ts`).
 
 ## Accessibility, motion & error forwarding
 
