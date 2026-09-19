@@ -8,7 +8,7 @@ import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit, WeekdayDayPartCell } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
-import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
+import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
 import type { StalenessSettings } from '../../core/staleness';
@@ -51,7 +51,7 @@ export interface CalendarDay {
 // Re-exported so renderer/main keep importing match-row vocabulary from the contract.
 export type { MatchFlagKey };
 // Re-exported so the Mental view reads its analytics vocabulary from the contract too.
-export type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide };
+export type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide };
 
 /** A single match for the Matches list. */
 export interface MatchRow {
@@ -293,6 +293,12 @@ export interface DashboardData {
   tiltTrend: TiltTrendPoint[];
   /** Tilt rate by game number within a sitting — numbered over the UNFILTERED history, aggregating only filtered games (same convention as {@link sessionPosition}). */
   tiltBySession: TiltPositionBucket[];
+  /** Tilt rate by local day-part over the FILTERED range — "do I tilt at night?" (S9). */
+  tiltByTimeOfDay: TiltBucket[];
+  /** Tilt rate in games right after a win vs right after a loss in the same sitting — "do I tilt after a loss?" (S9). */
+  tiltAfterResult: { afterWin: TiltBucket; afterLoss: TiltBucket };
+  /** Tilt rate by map, top 3 by rate, 3+ games — "which maps tilt me?" (S9). */
+  tiltByMap: TiltBucket[];
   /** Self-rated performance rollups over the FILTERED range (issue #44 analytics). */
   performance: PerformanceStats;
   targets: TargetSummary[];

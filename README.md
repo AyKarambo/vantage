@@ -248,9 +248,11 @@ account's per-role lines beneath it.
   its name.
 - **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
   winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
-  and the performance drop when tilted — each sample-gated), a **tilt-rate trend** sparkline
-  with an improving/worsening read, **tilt by game # in a sitting** (the "stop after game N"
-  read), flag counts with leavers split by team, and a **break-reminder setting**
+  and the performance drop when tilted — each sample-gated), a **tilt-rate line chart**
+  (rolling average included, same chart Trends uses for winrate) with an improving/worsening
+  read that states the actual move ("22% → 15%"), **tilt by game # in a sitting** (the "stop
+  after game N" read) plus **when-you-tilt triggers** — by time of day, right after a loss vs
+  a win, and by map — flag counts with leavers split by team, and a **break-reminder setting**
   (on/off + loss threshold) that fires a tray notification after N consecutive losses.
 - **Trends** — **rank over time**, above everything else: one line per tracked (account, role)
   you have a rank anchor for, plotted by real date so a stretch with no known rank (an open

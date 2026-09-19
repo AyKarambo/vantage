@@ -29,8 +29,17 @@ function xForDate(points: WrPoint[], xAt: (i: number) => number, ts: number): nu
  * `seasons` (C5) draws a thin vertical marker for each season whose start
  * falls inside the plotted range — otherwise nothing on the chart ever marks
  * a season or ladder-reset boundary, though the data is on the same payload.
+ * `tooltipText` (S9) overrides the default "`<date>` · `<pct>` · `<n>`g"
+ * wording — the fixed 0–100% axis and rolling-average line plot ANY 0..1
+ * rate over time, not just winrate (Mental's tilt-rate trend reuses this
+ * rather than forking a near-identical chart).
  */
-export function lineChart(points: WrPoint[], onSelect?: (label: string) => void, seasons: SeasonEntry[] = []): HTMLElement {
+export function lineChart(
+  points: WrPoint[],
+  onSelect?: (label: string) => void,
+  seasons: SeasonEntry[] = [],
+  tooltipText?: (p: WrPoint) => string,
+): HTMLElement {
   const wrap = h('div', { class: 'chart-wrap' });
   if (points.length < 2) {
     wrap.append(emptyChart());
@@ -102,7 +111,8 @@ export function lineChart(points: WrPoint[], onSelect?: (label: string) => void,
     // a chart point's value at all.
     const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.winrate), r: hitR, fill: 'transparent', tabindex: 0 });
     hit.style.cursor = 'pointer';
-    tips.attach(hit, `${p.label} · ${pct(p.winrate)} · ${p.games}g${onSelect ? ' · click to open' : ''}`);
+    const base = tooltipText ? tooltipText(p) : `${p.label} · ${pct(p.winrate)} · ${p.games}g`;
+    tips.attach(hit, `${base}${onSelect ? ' · click to open' : ''}`);
     if (onSelect) {
       // The hit circle already had cursor:pointer before there was anything
       // to click (C7) — this is the click that promise was missing.

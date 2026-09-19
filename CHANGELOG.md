@@ -745,6 +745,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   currently on to each row, and flags a player you generally lose against with a subtle
   border. The match-detail card gets the same team-first sort, a **They play** column, and
   the whole row (not just the name) now opens their history (S7).
+- **Mental's Trends card is now a real chart, and it tells you the actual move.** The tilt-rate
+  sparkline is now the same line chart Trends uses for winrate — rolling average included — and
+  the improving/worsening read states both numbers instead of just a direction: "↓ Improving —
+  22% → 15% (earlier vs recent half)." A new **"when do I tilt"** section under the existing
+  game-in-sitting read breaks tilt rate down by **time of day**, by **right after a loss vs
+  right after a win** ("You tilt 1.4× as often right after a loss — that's the break the
+  reminder is for"), and by **map** (top 3, 3+ games) — the triggers behind the tilt tax, not
+  just its size (S9).
 
 ## 0.34.0 — 31 July 2026
 

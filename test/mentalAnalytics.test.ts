@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { mentalCosts, tiltBySessionPosition, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE } from '../src/core/mentalAnalytics';
+import {
+  mentalCosts, tiltAfterResult, tiltByMap, tiltBySessionPosition, tiltByTimeOfDay, tiltTrend, tiltTrendDirection, COST_MIN_SAMPLE,
+} from '../src/core/mentalAnalytics';
 import { isTilted } from '../src/core/mental';
 import type { GameRecord, MatchMental } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
@@ -226,20 +228,20 @@ describe('tiltTrendDirection', () => {
     expect(tiltTrendDirection(tiltTrend(dayGames('2026-07-01', 20, 10)))).toBeNull();
   });
 
-  it('reads a clearly falling tilt rate as improving', () => {
+  it('reads a clearly falling tilt rate as improving, with both half-rates', () => {
     const points = tiltTrend([...dayGames('2026-07-01', 6, 4), ...dayGames('2026-07-02', 6, 0)]);
-    expect(tiltTrendDirection(points)).toBe('improving');
+    expect(tiltTrendDirection(points)).toEqual({ direction: 'improving', earlyRate: 4 / 6, lateRate: 0 });
   });
 
   it('reads a clearly rising tilt rate as worsening', () => {
     const points = tiltTrend([...dayGames('2026-07-01', 6, 0), ...dayGames('2026-07-02', 6, 4)]);
-    expect(tiltTrendDirection(points)).toBe('worsening');
+    expect(tiltTrendDirection(points)).toEqual({ direction: 'worsening', earlyRate: 0, lateRate: 4 / 6 });
   });
 
   it('reads a move inside the dead zone as flat', () => {
     // 1/6 vs 1/6 — identical halves, well inside the 3-point dead zone.
     const points = tiltTrend([...dayGames('2026-07-01', 6, 1), ...dayGames('2026-07-02', 6, 1)]);
-    expect(tiltTrendDirection(points)).toBe('flat');
+    expect(tiltTrendDirection(points)).toEqual({ direction: 'flat', earlyRate: 1 / 6, lateRate: 1 / 6 });
   });
 
   it('splits halves by game count, not by day count', () => {
@@ -250,7 +252,7 @@ describe('tiltTrendDirection', () => {
       ...dayGames('2026-07-02', 1, 0),
       ...dayGames('2026-07-03', 4, 0),
     ]);
-    expect(tiltTrendDirection(points)).toBe('improving');
+    expect(tiltTrendDirection(points)?.direction).toBe('improving');
   });
 
   it('still reads a direction when the LATER day dominates the game count', () => {
@@ -258,7 +260,7 @@ describe('tiltTrendDirection', () => {
     // late half rather than swallowing the split into `early` and returning
     // null. Early (day 1) rate 1, late (day 2) rate 0 → improving.
     const points = tiltTrend([...dayGames('2026-07-01', 6, 6), ...dayGames('2026-07-02', 7, 0)]);
-    expect(tiltTrendDirection(points)).toBe('improving');
+    expect(tiltTrendDirection(points)?.direction).toBe('improving');
   });
 });
 
@@ -326,5 +328,86 @@ describe('tiltBySessionPosition', () => {
 
   it('is empty for no games', () => {
     expect(tiltBySessionPosition([])).toEqual([]);
+  });
+});
+
+// ---- "when do I tilt" triggers (S9) --------------------------------------------
+
+/** A game at a given local hour, on a fixed UTC-noon-anchored day so getHours() is deterministic-ish across runs. */
+function atHour(hour: number, tilted = false, map = 'Ilios'): GameRecord {
+  const d = new Date(2026, 6, 1, hour, 0, 0);
+  return game({ result: 'Win', timestamp: d.getTime(), map, ...(tilted ? { mental: { tilt: true } } : {}) });
+}
+
+describe('tiltByTimeOfDay', () => {
+  it('buckets by local day-part in Morning → Night order, empty buckets omitted', () => {
+    const t = tiltByTimeOfDay([atHour(8), atHour(9, true), atHour(23, true)]);
+    expect(t).toEqual([
+      { key: 'Morning', games: 2, tilted: 1, rate: 0.5 },
+      { key: 'Night', games: 1, tilted: 1, rate: 1 },
+    ]);
+  });
+
+  it('is empty for no games', () => {
+    expect(tiltByTimeOfDay([])).toEqual([]);
+  });
+});
+
+describe('tiltAfterResult', () => {
+  it('buckets a game by the PREVIOUS game in the same sitting, skipping a sitting-opener', () => {
+    const games = [
+      game({ result: 'Win', matchId: 'a1', timestamp: T0 }), // opener — no prior game
+      game({ result: 'Win', matchId: 'a2', timestamp: T0 + 30 * MIN, mental: { tilt: true } }), // after a win
+      game({ result: 'Loss', matchId: 'a3', timestamp: T0 + 60 * MIN }), // after a win
+    ];
+    const r = tiltAfterResult(games);
+    expect(r.afterWin).toEqual({ key: 'afterWin', games: 2, tilted: 1, rate: 0.5 });
+    expect(r.afterLoss).toEqual({ key: 'afterLoss', games: 0, tilted: 0, rate: 0 });
+  });
+
+  it('buckets games after a loss separately, and skips a new sitting boundary', () => {
+    const games = [
+      game({ result: 'Loss', matchId: 'b1', timestamp: T0 }),
+      game({ result: 'Win', matchId: 'b2', timestamp: T0 + 30 * MIN, mental: { tilt: true } }), // after a loss
+      // > 90 min gap: new sitting, so this one has no prior game in ITS sitting
+      game({ result: 'Win', matchId: 'b3', timestamp: T0 + 200 * MIN }),
+    ];
+    const r = tiltAfterResult(games);
+    expect(r.afterLoss).toEqual({ key: 'afterLoss', games: 1, tilted: 1, rate: 1 });
+    expect(r.afterWin).toEqual({ key: 'afterWin', games: 0, tilted: 0, rate: 0 });
+  });
+
+  it('scopes bucketing via include without breaking sitting adjacency', () => {
+    const games = [
+      game({ result: 'Loss', matchId: 'c1', timestamp: T0 }),
+      game({ result: 'Win', matchId: 'c2', timestamp: T0 + 30 * MIN, mental: { tilt: true } }),
+    ];
+    const r = tiltAfterResult(games, { include: new Set(['c2']) });
+    expect(r.afterLoss).toEqual({ key: 'afterLoss', games: 1, tilted: 1, rate: 1 });
+  });
+
+  it('is zeroed for no games', () => {
+    const r = tiltAfterResult([]);
+    expect(r.afterWin).toEqual({ key: 'afterWin', games: 0, tilted: 0, rate: 0 });
+    expect(r.afterLoss).toEqual({ key: 'afterLoss', games: 0, tilted: 0, rate: 0 });
+  });
+});
+
+describe('tiltByMap', () => {
+  it('ranks maps by tilt rate, floored at the min-games threshold, top 3', () => {
+    const games = [
+      atHour(10, true, 'Ilios'), atHour(11, true, 'Ilios'), atHour(12, false, 'Ilios'), // 2/3
+      atHour(10, true, 'Oasis'), atHour(11, false, 'Oasis'), atHour(12, false, 'Oasis'), // 1/3
+      atHour(10, true, 'Busan'), atHour(11, false, 'Busan'), // 1/2, under default min of 3 — excluded
+    ];
+    const t = tiltByMap(games);
+    expect(t).toEqual([
+      { key: 'Ilios', games: 3, tilted: 2, rate: 2 / 3 },
+      { key: 'Oasis', games: 3, tilted: 1, rate: 1 / 3 },
+    ]);
+  });
+
+  it('is empty for no games', () => {
+    expect(tiltByMap([])).toEqual([]);
   });
 });
