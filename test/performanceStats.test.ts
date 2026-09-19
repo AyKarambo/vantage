@@ -32,6 +32,25 @@ describe('performanceStats', () => {
     expect(s.trend[1].games).toBe(2);
   });
 
+  it('rolls the trend as a trailing 7-day, rated-game-weighted mean (C6)', () => {
+    const games = [
+      ...rate(span(5, 5, { perDay: 1 }), 100),
+      ...rate(span(6, 6, { perDay: 11 }), 0),
+    ];
+    const s = performanceStats(games);
+    // An unweighted per-day mean would read (100 + 0) / 2 = 50.
+    expect(s.trend[1].rolling).toBeCloseTo(100 / 12, 1);
+  });
+
+  it('does not pull a day outside the trailing 7-day window into the roll', () => {
+    const games = [
+      ...rate(span(1, 1, { perDay: 1 }), 100),
+      ...rate(span(20, 20, { perDay: 1 }), 40),
+    ];
+    const s = performanceStats(games);
+    expect(s.trend[1].rolling).toBe(40);
+  });
+
   it('splits win vs loss averages, draws excluded from both', () => {
     const games = [
       ...rate(span(5, 5, { perDay: 2, result: 'Win' }), 70),

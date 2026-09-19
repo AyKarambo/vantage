@@ -417,6 +417,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   line every day regardless of what's actually going on. A **"Why →"** link jumps straight to
   the screen that explains it (Trends or Focus). With nothing strong enough to say, it falls
   back to "No strong signal yet — keep logging."
+- **The winrate chart's bold line is now the 7-day average it claims to be.** It used to smooth
+  the last 7 *buckets*, so a few-evenings-a-week schedule stretched "7-day" across two and a
+  half calendar weeks, and it averaged each day equally, so a single-game day swung it as much
+  as a 12-game one. It's now a real trailing calendar window, weighted by the games actually
+  behind it — same fix applied to the self-rating chart's line and its Table's new **7d avg**
+  column. Trends also states the momentum in numbers now, not just a line to eyeball: a strip
+  above the chart reads last-window winrate, the window before it, and the signed point
+  change — 7 days normally, 4 weeks once the chart itself switches to weekly buckets.
 
 ## 0.34.0 — 31 July 2026
 

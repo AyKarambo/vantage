@@ -179,6 +179,27 @@ export interface Group extends WinLoss {
   key: string;
 }
 
+/**
+ * A `trend` bucket (C6) with its trailing rolling winrate attached — see
+ * {@link rollingWinrate}. Its own type rather than a field on the shared
+ * {@link Group}: "rolling" only means something over a chronologically
+ * ordered series, not an arbitrary grouping like by-map or by-hero.
+ */
+export interface TrendGroup extends Group {
+  /** Game-weighted winrate over the trailing window ending at this bucket. */
+  rolling: number;
+}
+
+/** The winrate-chart momentum read (C6): a trailing window compared against the one before it. */
+export interface Momentum {
+  /** Window length in days behind each side (7 daily, 28 = 4 ISO weeks in weekly mode). */
+  days: number;
+  recent: WinLoss;
+  previous: WinLoss;
+  /** `recent.winrate − previous.winrate`, in whole percentage points (already ×100, rounded). */
+  deltaPts: number;
+}
+
 /** Net losses = losses − wins. Positive ⇒ a weakness worth focusing on. */
 export interface FocusItem extends WinLoss {
   key: string;

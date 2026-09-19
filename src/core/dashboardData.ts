@@ -6,7 +6,7 @@
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
-  trend, winLoss, groupBy,
+  trend, rollingWinrate, windowCompare, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
 import { isCompetitive } from './matchFilter';
@@ -185,7 +185,11 @@ export function computeDashboard(
     byMap: byMap(games, { suppressed }),
     byMapType: groupBy(games, (g) => mapModeOf(g.map), { suppressed }),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
-    trend: trend(games, weekly ? 'week' : 'day'),
+    trend: rollingWinrate(trend(games, weekly ? 'week' : 'day'), weekly ? 'week' : 'day'),
+    // Momentum (C6): the same trailing-window comparison in weeks once the
+    // chart itself switches to weekly buckets, so the strip and the chart
+    // it sits above agree on what "recent" means.
+    momentum: windowCompare(games, Date.now(), weekly ? 28 : 7),
     timeOfDay: byTimeOfDay(games),
     // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.

@@ -23,6 +23,8 @@ export interface PerformanceTrendPoint {
   date: string;
   avg: number;
   games: number;
+  /** Trailing 7-calendar-day, rated-game-weighted mean rating ending on this day (C6) — see `rollingWinrate` for the same idea over win/loss. */
+  rolling: number;
 }
 
 export interface PerformanceStats {
@@ -59,6 +61,26 @@ function buckets(rated: GameRecord[], keysOf: (g: GameRecord) => string[]): Perf
     .sort((a, b) => b.rated - a.rated);
 }
 
+/** Rated-game-weighted rolling mean over the trailing 7 calendar days (C6), same calendar-true idea as `rollingWinrate`. */
+function withRolling(trend: Array<{ date: string; avg: number; games: number }>, windowDays = 7): PerformanceTrendPoint[] {
+  const periodMs = 86_400_000;
+  const starts = trend.map((p) => Date.parse(p.date));
+  const out: PerformanceTrendPoint[] = [];
+  let lo = 0, sum = 0, count = 0;
+  for (let i = 0; i < trend.length; i++) {
+    sum += trend[i].avg * trend[i].games;
+    count += trend[i].games;
+    const windowStart = starts[i] - (windowDays - 1) * periodMs;
+    while (starts[lo] < windowStart) {
+      sum -= trend[lo].avg * trend[lo].games;
+      count -= trend[lo].games;
+      lo++;
+    }
+    out.push({ ...trend[i], rolling: round1(sum / count) });
+  }
+  return out;
+}
+
 /** Compute the performance-rating rollups over an (already filtered) game set. */
 export function performanceStats(games: GameRecord[]): PerformanceStats {
   const rated = games
@@ -76,9 +98,11 @@ export function performanceStats(games: GameRecord[]): PerformanceStats {
 
   return {
     ratedGames: rated.length,
-    trend: [...byDay.entries()]
-      .map(([date, { sum, games: n }]) => ({ date, avg: round1(sum / n), games: n }))
-      .sort((a, b) => (a.date < b.date ? -1 : 1)),
+    trend: withRolling(
+      [...byDay.entries()]
+        .map(([date, { sum, games: n }]) => ({ date, avg: round1(sum / n), games: n }))
+        .sort((a, b) => (a.date < b.date ? -1 : 1)),
+    ),
     winAvg: avgOf(rated.filter((g) => g.result === 'Win')),
     lossAvg: avgOf(rated.filter((g) => g.result === 'Loss')),
     byHero: buckets(rated, (g) => (g.heroes.length ? g.heroes : ['Unknown'])),
