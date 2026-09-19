@@ -1544,6 +1544,11 @@ table.data tbody tr:focus-visible {
   color: var(--dim);
   font-size: 11px;
 }
+/* A literal shortcut hint ('Ctrl L', 'Ctrl 4') renders as the same keycap
+   chip the cheatsheet uses (M5), right-aligned like .palette-hint. */
+.palette-item .kbd {
+  margin-left: auto;
+}
 
 /* Typeahead ------------------------------------------------------------------- */
 .typeahead {

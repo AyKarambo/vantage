@@ -5,7 +5,7 @@ import {
   PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerMatchHistory, playerRecords,
   selectPlayers, type PlayerDirectory,
 } from '../../core/playerIndex';
-import { computeDashboard, applyFilters, selectMatches, toMatchRow, matchesFilter, type MatchesTextFilter } from '../../core/dashboardData';
+import { computeDashboard, applyFilters, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../core/dashboardData';
 import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
@@ -158,6 +158,26 @@ export function matchesPageRead(
     ? matchesFilter(filteredCompetitiveGames(provider, input.filters), mapModeOf, input.text)
     : filteredCompetitiveGames(provider, input.filters);
   const { rows } = selectMatches(games, { before: input.before, limit: input.limit });
+  return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
+}
+
+/**
+ * Full-text match search (M5) — the command palette's reach past its own
+ * 30-row snapshot slice. Shares this same read composition with
+ * {@link matchesPageRead}: filter-scoped history, `matchSearchFilter` in place
+ * of the in-list text filter, capped through the same `selectMatches`.
+ */
+export function searchMatchesRead(
+  provider: DataProvider,
+  input: { filters?: DashboardFilters; q: string; limit: number },
+): MatchRow[] {
+  const masterData = provider.effectiveMasterData();
+  const mapModeOf = makeMapMode(masterData.maps);
+  const activeMeasured = activeMeasuredTargets(provider.manualTargets());
+  const margin = provider.getGrading().partialMargin;
+  const suppressed = suppressedMatchIds(competitiveOnly(provider.games()), provider.placementRuns());
+  const games = matchSearchFilter(filteredCompetitiveGames(provider, input.filters), input.q);
+  const { rows } = selectMatches(games, { limit: input.limit });
   return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }
 

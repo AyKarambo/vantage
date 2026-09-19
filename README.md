@@ -440,16 +440,23 @@ first, current season always listed), and `All time`; there's no account or game
 bar — the account switcher in the top-left already covers "which account", and mode no longer
 applies. **Role icons appear app-wide** (filter bar, scoreboard, hero picker) so
 tank/damage/support is always visually distinguishable at a glance. Quality-of-life
-throughout: **Ctrl+K command palette** (jump to any screen, run actions, find a
-map/hero/recent match), **Ctrl+L to log a match from anywhere** in one step (L1 — also a real
-`+ Log match` titlebar button beside the search pill, not just a palette action), keyboard
+throughout: **Ctrl+K command palette** (jump to any screen — each showing its `Ctrl+<digit>` right
+in the list — run actions, find a map/hero/target/player/recent match; a query it comes up thin on
+also reaches into your FULL match history for map/hero/account/player-name/date, and a "Find player
+on Players" fallback always offers the full Players search, M5), **Ctrl+L to log a match from
+anywhere** in one step (L1 — also a real `+ Log match` titlebar button beside the search pill, not
+just a palette action), keyboard
 shortcuts (`Ctrl+1–9` and `Ctrl+0` screens — each digit is
 pinned to its screen rather than to sidebar position, so adding one never renumbers the rest;
 `Esc`, `Alt+←` or the mouse back button to go **back** to the previous screen
-you were actually on, `?` cheatsheet, `←/→`
+you were actually on, `?` cheatsheet — ordered Global → Navigate → Review → Log match rather than
+whichever group's module happened to import first, with Navigate's own `Ctrl+0` sorted after
+`Ctrl+9` instead of wherever it was declared (M5) — `←/→`
 between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/PageDown` to page
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
-Review, `W/L/D`+`Enter` in the log dialog), toasts with
+Review, `W/L/D`+`Enter` in the log dialog), the palette can also flip the MCP endpoint, the live
+kill feed, the break reminder, demo data, log debug detail, or the winrate colour scheme without a
+trip to Settings (M5), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
 everywhere** (click a heatmap day, a Mental flag count, or any "open the map" surface app-wide —
 the Overview scatter and its Top-priority callouts, Live's priority card, a hero drawer's By-map

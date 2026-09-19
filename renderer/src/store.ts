@@ -71,6 +71,9 @@ export interface ViewParams {
   /** Settings: scroll to and flash a General-tab card — the section rail, and
    *  About/FAQ's cross-links that used to just open Settings at the top (W1). */
   section?: SettingsSection;
+  /** Players: seed the search box on open — the command palette's "Find
+   *  player on Players" fallback (M5), so the search isn't retyped by hand. */
+  search?: string;
 }
 
 export interface AppState {

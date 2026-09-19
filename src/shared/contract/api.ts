@@ -54,6 +54,13 @@ export interface OwStatsApi {
    * narrowed server-side instead of mostly discarded client-side.
    */
   matchesPage(input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter }): Promise<MatchRow[]>;
+  /**
+   * Full-text match search (M5) — map, hero, account, roster player name, or
+   * date — over the ENTIRE filter-scoped history, not just what's already
+   * loaded. Backs the command palette's reach past its own 30-row snapshot
+   * slice once a query comes up thin there.
+   */
+  searchMatches(input: { filters?: DashboardFilters; q: string; limit: number }): Promise<MatchRow[]>;
   /** Every stored match shared with a player (local index); null for an empty/unknown name. */
   playerHistory(name: string): Promise<PlayerMatchHistory | null>;
   /**
@@ -374,6 +381,7 @@ export const IPC_CHANNELS = {
   heroDetail: 'dashboard:hero-detail',
   matchDetail: 'dashboard:match-detail',
   matchesPage: 'dashboard:matches-page',
+  searchMatches: 'dashboard:search-matches',
   playerHistory: 'dashboard:player-history',
   playerList: 'dashboard:player-list',
   playerRecords: 'dashboard:player-records',

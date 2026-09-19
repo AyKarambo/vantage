@@ -39,6 +39,11 @@ const SEARCH_DEBOUNCE_MS = 200;
  * router makes impossible anyway.
  */
 let search = '';
+/** The last `ctx.params.search` value already applied to `search` above — so a
+ *  seed (M5, from the command palette's "Find player on Players") only ever
+ *  overwrites the box ONCE per distinct navigation, never fighting a later
+ *  edit or clear the player makes themselves on a background re-render. */
+let seededSearchParam: string | undefined;
 let payload: PlayerList | null = null;
 let payloadKey = '';
 /** Monotonic request id; only the newest response may paint. */
@@ -110,6 +115,11 @@ function columns(): Array<Column<PlayerListRow>> {
 }
 
 export function players(ctx: ViewContext): HTMLElement {
+  if (ctx.params.search != null && ctx.params.search !== seededSearchParam) {
+    seededSearchParam = ctx.params.search;
+    search = ctx.params.search;
+  }
+
   // A pending keystroke belongs to the view instance that scheduled it. Without
   // this, its `load()` still bumps the shared `seq` after the new instance has
   // started its own request, so the new response is discarded as superseded and

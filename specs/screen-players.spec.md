@@ -1,7 +1,9 @@
 # Screen spec: Players (`players`) and the player drill-down (`playerHistory`)
 
 **Source:** `renderer/src/views/players.ts`, `renderer/src/views/playerHistory.ts`,
-`src/core/playerIndex.ts`, `src/core/rank/entering.ts`, `src/main/dashboard/reads.ts`
+`src/core/playerIndex.ts` (`playerDirectory`, also behind `DashboardData.recentPlayers` —
+the command palette's small Player-item slice, M5, see `screen-shell.spec.md`),
+`src/core/rank/entering.ts`, `src/main/dashboard/reads.ts`
 (`playerListRead`, `playerHistoryRead`), `src/shared/contract/players.ts`.
 
 **Shared context:** Players is a normal top-level screen scoped by the global filter bar;
@@ -45,6 +47,11 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
 - **The search box owns its own state** and repaints only the table host (the `palette.ts`
   pattern): `render()` is `replaceChildren`, so routing a keystroke through `store.rerender()`
   would destroy the focused input and its caret.
+- **Seeded from elsewhere (`ViewParams.search`, M5):** the command palette's "Find player
+  `<q>` on Players" fallback (and anything else that wants to land here with a query already
+  typed) navigates with `{ search }`; the box seeds from it and triggers the normal load on
+  arrival. Applied at most once per distinct navigation — a background re-render never
+  re-overwrites a search the player has since edited or cleared themselves.
 - **Six empty states**, distinct because they have different causes and different fixes:
   nothing tracked at all · no games in scope · games but no rosters · rosters but no names ·
   the floor hid everyone · search found nothing. None may read as "you have met nobody", and

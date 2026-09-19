@@ -6,7 +6,8 @@
  */
 import { h, render } from '../dom';
 import type { AppState, ViewId } from '../store';
-import type { DashboardData, GameLoggedPayload, GepStatusPayload, Role } from '../../../src/shared/contract';
+import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role } from '../../../src/shared/contract';
+import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { demoTransition } from '../../../src/core/demoPreference';
 import { DETAIL_PARENT, statusText, store } from '../store';
@@ -24,6 +25,8 @@ import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
 import { pct, relTime, roleLabel, signed, streakText } from '../format';
+import { getWinrateScheme, setWinrateScheme } from '../theme';
+import { WINRATE_SCHEME_OPTIONS } from '../winrateScheme';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
@@ -1098,19 +1101,41 @@ export class App {
     });
   }
 
-  /** Ctrl+K — palette (guarded against double-open via the mounted panel). */
+  /**
+   * Ctrl+K — palette (guarded against double-open via the mounted panel).
+   * Settings/Logs current state is fetched once per open (M5) so their
+   * palette hints read "currently on/off" instead of a bare action name —
+   * cheap, since these are already-loaded main-process config, not a disk read.
+   */
   private openPalette(): void {
     if (!store.get().data || document.querySelector('.palette')) return;
     const ctx = this.context();
-    openPalette(ctx, {
-      nav: NAV.flatMap((g) => g.items.map((i) => ({ id: i.id, label: i.label }))),
-      actions: [
-        { label: 'Log match', hint: 'Ctrl L', run: () => openLogMatch(ctx) },
-        { label: 'Keyboard shortcuts', hint: '?', run: () => this.openCheatsheet() },
-        { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
-        { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
-      ],
-    });
+    void Promise.all([bridge.getAppSettings(), bridge.getLogLevel(), bridge.getBreakReminder()])
+      .then(([appSettings, logLevel, breakReminder]) => {
+        if (!store.get().data || document.querySelector('.palette')) return;
+        openPalette(ctx, {
+          nav: NAV.flatMap((g) => g.items.map((i) => ({
+            id: i.id, label: i.label,
+            kbd: i.key !== undefined ? comboLabel(`ctrl+${i.key}`) : undefined,
+          }))),
+          actions: [
+            { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
+            { label: 'Keyboard shortcuts', kbd: '?', run: () => this.openCheatsheet() },
+            { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding(store.get().data?.isSample ?? false) },
+            { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
+            ...settingsActions(appSettings, logLevel, breakReminder),
+            ...WINRATE_SCHEME_OPTIONS.map((opt) => ({
+              label: `Winrate colours: ${opt.label}`,
+              hint: getWinrateScheme() === opt.value ? 'currently on' : undefined,
+              run: () => {
+                setWinrateScheme(opt.value);
+                store.rerender();
+                toast(`Winrate colours: ${opt.label}`);
+              },
+            })),
+          ],
+        });
+      });
   }
 
   private openCheatsheet(): void {
@@ -1296,6 +1321,64 @@ function comboLabel(combo: string): string {
     part === 'ctrl' ? 'Ctrl'
       : KEY_LABELS[part] ?? (part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)),
   ).join(' ');
+}
+
+/**
+ * Palette actions for the frequently-flipped Settings/Logs toggles (M5) —
+ * "turn the MCP endpoint off" used to mean navigating to Settings and
+ * scrolling to the App behavior card. Each reuses the exact bridge setter its
+ * own Settings/Logs card calls (so the two can never drift), applies against
+ * the state `App`'s own `openPalette` already fetched (the hint below), and
+ * toasts the result the same way flipping the chip on its own card would.
+ */
+function settingsActions(
+  appSettings: AppUiSettings,
+  logLevel: LogLevel,
+  breakReminder: BreakReminderSettings,
+): Array<{ label: string; hint?: string; run: () => void }> {
+  const onOff = (on: boolean): string => (on ? 'currently on' : 'currently off');
+  return [
+    {
+      label: 'Settings: MCP endpoint', hint: onOff(appSettings.mcpEnabled),
+      run: () => {
+        void bridge.setAppSettings({ mcpEnabled: !appSettings.mcpEnabled })
+          .then((s) => toast(`MCP endpoint: ${s.mcpEnabled ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Live kill feed', hint: onOff(appSettings.liveKillFeed),
+      run: () => {
+        void bridge.setAppSettings({ liveKillFeed: !appSettings.liveKillFeed })
+          .then((s) => toast(`Live kill feed: ${s.liveKillFeed ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Break reminder', hint: onOff(breakReminder.enabled),
+      run: () => {
+        void bridge.setBreakReminder({ ...breakReminder, enabled: !breakReminder.enabled })
+          .then((s) => toast(`Break reminder: ${s.enabled ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Demo data', hint: onOff(appSettings.demoPreference === 'on'),
+      run: () => {
+        const next = appSettings.demoPreference === 'on' ? 'off' : 'on';
+        // demoPreference changes the dashboard payload itself (badge, targets,
+        // KPIs) — same refetch appBehavior.ts's own toggle triggers.
+        void bridge.setAppSettings({ demoPreference: next }).then((s) => {
+          toast(`Demo data: ${s.demoPreference === 'on' ? 'on' : 'off'}`);
+          void store.refresh();
+        });
+      },
+    },
+    {
+      label: 'Logs: Debug detail', hint: onOff(logLevel === 'debug'),
+      run: () => {
+        const next: LogLevel = logLevel === 'debug' ? 'info' : 'debug';
+        void bridge.setLogLevel(next).then((l) => toast(`Debug detail: ${l === 'debug' ? 'on' : 'off'}`));
+      },
+    },
+  ];
 }
 
 /** The short, never-lying label next to the status dot. */
