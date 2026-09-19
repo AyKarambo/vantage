@@ -859,6 +859,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   on. Every nav button's tooltip also names its `Ctrl+<digit>` shortcut, and the command
   palette's Screen rows show the same icon, so a screen reads at a glance there too (K6).
 
+### Fixed
+
+- **A background refresh no longer wipes text you'd selected to copy.** Selecting a name or a
+  number, then alt-tabbing away to paste it, used to lose the selection the moment you came
+  back — the window-focus refetch replaced the whole screen underneath it. The refresh now
+  waits until the selection itself is cleared before it applies (K2).
+
 ## 0.34.0 — 31 July 2026
 
 ### Added
