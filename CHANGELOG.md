@@ -737,6 +737,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   hero or role you're playing, the header states a real **mm:ss** elapsed clock instead of a
   coarse "started 12m ago", and the kill feed is relabelled **Kill feed** with its own
   **Hide** link and an honest off-state hint under the tally when it's switched off (S5).
+- **Known players now say what they usually play, and which side they're on.** Live's
+  "Players you've met" and the match-detail **Player history** card both gain a **"usually
+  Widowmaker (4 of 6) · last Ashe"** line — the most useful pre-match fact your history could
+  offer, and it was already being tracked for nothing. Live groups rows **your team first,
+  then the enemy** instead of interleaving them by encounter count, appends the hero they're
+  currently on to each row, and flags a player you generally lose against with a subtle
+  border. The match-detail card gets the same team-first sort, a **They play** column, and
+  the whole row (not just the name) now opens their history (S7).
 
 ## 0.34.0 — 31 July 2026
 

@@ -70,7 +70,14 @@ account's per-role lines beneath it.
   scoreboard the game is showing (heroes, K/A/D, damage, healing, mitigation, split into your
   team and theirs), and **players you've met** — everyone on this roster you've shared a game
   with before, with your record **`with`** them when they're on your team this match and
-  **`vs`** them when they're not. The header states a real **mm:ss elapsed** clock instead of
+  **`vs`** them when they're not, grouped **your team first, then the enemy** (S7) instead of
+  interleaved by encounter count, each with the current hero they're on appended ("now on
+  Genji") and a second line naming what they **usually** play — "usually Widowmaker (4 of 6)
+  · last Ashe" — the most actionable pre-match fact stored history had and never surfaced. A
+  player you generally lose against gets a subtle loss-toned flag. The match-detail page's
+  own **Player history** card gets the same treatment: a **They play** column, the with/vs
+  relation for THIS match, the same team-first sort, and the whole row (not just the name)
+  opens their history. The header states a real **mm:ss elapsed** clock instead of
   a coarse "started 12m ago". The kill feed is now labelled **Kill feed** (not the bare
   "Recent") with its own **Hide** link, and a dim hint appears under the tally when it's off
   with a **turn on** link back. Outside the screen: a green dot appears on the nav item while

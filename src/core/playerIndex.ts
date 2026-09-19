@@ -26,12 +26,22 @@ import type {
  * the feed reported a team for both rows. The two splits therefore need not add
  * up to `encounters` — `relationKnown` says how many games they cover, so a
  * caller can tell "never on their team" from "never knew".
+ *
+ * `withYou` (S7) is a SEPARATE question from `sameTeam`/`enemyTeam`: it's the
+ * team relation in `match` ITSELF (this match, not the shared history), read
+ * straight off `match.roster` — `undefined` when either row's team wasn't
+ * reported. `topHero`/`lastHero` are counted from `other.heroName` on every
+ * prior shared game (only the last-reported hero per game exists on the
+ * roster, per {@link RosterPlayer}, so this is a per-GAME tally, not a
+ * per-swap one).
  */
 export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncounter[] {
+  const localTeam = match.roster?.find((p) => p.isLocal)?.team;
   const targets = (match.roster ?? []).filter((p) => !p.isLocal && nameKey(p));
   if (!targets.length) return [];
 
   const found = new Map<string, PlayerEncounter>();
+  const heroCounts = new Map<string, Map<string, number>>();
   for (const game of all) {
     if (game.matchId === match.matchId || !game.roster?.length) continue;
     const local = game.roster.find((p) => p.isLocal);
@@ -51,8 +61,10 @@ export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncou
         sameTeam: { wins: 0, losses: 0 },
         enemyTeam: { wins: 0, losses: 0 },
         relationKnown: 0,
+        ...(localTeam != null && target.team != null ? { withYou: target.team === localTeam } : {}),
       };
       entry.encounters += 1;
+      const isNewest = game.timestamp >= entry.lastSeen;
       entry.lastSeen = Math.max(entry.lastSeen, game.timestamp);
       // Prefer the full battleTag over a bare name, wherever one shows up.
       if (!entry.name.includes('#')) entry.name = displayName(other, entry.name);
@@ -67,8 +79,21 @@ export function playerHistory(all: GameRecord[], match: GameRecord): PlayerEncou
         if (game.result === 'Win') side.wins += 1;
         else if (game.result === 'Loss') side.losses += 1;
       }
+      if (other.heroName) {
+        const counts = heroCounts.get(key) ?? new Map<string, number>();
+        counts.set(other.heroName, (counts.get(other.heroName) ?? 0) + 1);
+        heroCounts.set(key, counts);
+        if (isNewest) entry.lastHero = other.heroName;
+      }
       found.set(key, entry);
     }
+  }
+
+  for (const [key, entry] of found) {
+    const counts = heroCounts.get(key);
+    if (!counts?.size) continue;
+    const [hero, games] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    entry.topHero = { hero, games };
   }
 
   return [...found.values()].sort((a, b) => b.encounters - a.encounters || b.lastSeen - a.lastSeen);
@@ -203,6 +228,9 @@ export function playerRecords(all: GameRecord[], names: readonly string[]): Play
   }
   if (!wanted.size) return [];
 
+  // Hero counts (S7), keyed the same as `wanted` — kept separate from
+  // PlayerRecord itself since only the derived topHero survives past this walk.
+  const heroCounts = new Map<string, Map<string, number>>();
   for (const game of all) {
     if (!game.roster?.length) continue;
     const local = game.roster.find((p) => p.isLocal);
@@ -216,9 +244,16 @@ export function playerRecords(all: GameRecord[], names: readonly string[]): Play
       if (!rec || counted.has(key)) continue;
       counted.add(key);
       rec.encounters += 1;
+      const isNewest = game.timestamp >= rec.lastSeen;
       rec.lastSeen = Math.max(rec.lastSeen, game.timestamp);
       // Prefer a full battleTag over a bare name, wherever one turns up.
       if (!rec.name.includes('#') && other.battleTag?.includes('#')) rec.name = other.battleTag.trim();
+      if (other.heroName) {
+        const counts = heroCounts.get(key) ?? new Map<string, number>();
+        counts.set(other.heroName, (counts.get(other.heroName) ?? 0) + 1);
+        heroCounts.set(key, counts);
+        if (isNewest) rec.lastHero = other.heroName;
+      }
       // Team relation only when the feed reported a team for BOTH rows —
       // otherwise "with" and "vs" would be a guess, and this whole feature is
       // about telling those two apart.
@@ -227,6 +262,13 @@ export function playerRecords(all: GameRecord[], names: readonly string[]): Play
       if (game.result === 'Win') side.wins += 1;
       else if (game.result === 'Loss') side.losses += 1;
     }
+  }
+
+  for (const [key, rec] of wanted) {
+    const counts = heroCounts.get(key);
+    if (!counts?.size) continue;
+    const [hero, games] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    rec.topHero = { hero, games };
   }
 
   return [...wanted.values()]
