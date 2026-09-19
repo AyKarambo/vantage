@@ -149,11 +149,23 @@ export function windowMinutes(windows: ReadonlyArray<RoundSpan>): number {
   return windows.reduce((m, w) => m + Math.max(0, w.endedAt - w.startedAt), 0) / 60000;
 }
 
-/** "2–1" / "2-0" → 3 / 2 (rounds); undefined when the score doesn't read as a round tally. */
-function roundsFromScore(finalScore: string | undefined): number | undefined {
+/**
+ * Modes whose {@link GameRecord.finalScore} directly reports round wins
+ * ("2–1", "3–2") — a real round tally. Escort/Hybrid/Push report a payload
+ * distance instead, so a score there can't be read as rounds at all (H9).
+ */
+export const ROUND_TALLY_MODES: ReadonlySet<MapMode> = new Set(['Control', 'Clash', 'Flashpoint']);
+
+/** The two round counts behind a score string, in recorded order — "2–1" → [2, 1]. Undefined when it doesn't parse. */
+export function parseScore(finalScore: string | undefined): [number, number] | undefined {
   const m = /^\s*(\d+)\s*[–\-:]\s*(\d+)\s*$/.exec(finalScore ?? '');
-  if (!m) return undefined;
-  return Number(m[1]) + Number(m[2]);
+  return m ? [Number(m[1]), Number(m[2])] : undefined;
+}
+
+/** "2–1" / "2-0" → 3 / 2 (rounds); undefined when the score doesn't read as a round tally. */
+export function roundsFromScore(finalScore: string | undefined): number | undefined {
+  const parsed = parseScore(finalScore);
+  return parsed ? parsed[0] + parsed[1] : undefined;
 }
 
 /**

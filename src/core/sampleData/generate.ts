@@ -115,6 +115,15 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
         ? Math.round(clamp(55 + (result === 'Win' ? 8 : result === 'Loss' ? -6 : 0) + between(-18, 18), 5, 95))
         : undefined;
 
+    // Party size (H9): solo-weighted, with an "unknown" slice (older captures
+    // never reported it, same as the real gap this feature fills).
+    const groupSizeRoll = rnd();
+    const groupSize =
+      groupSizeRoll < 0.15 ? undefined
+      : groupSizeRoll < 0.72 ? 1
+      : groupSizeRoll < 0.9 ? 2
+      : Math.floor(between(3, 6));
+
     games.push({
       matchId: `sample-${i}`,
       timestamp,
@@ -131,6 +140,7 @@ export function generateSampleGames(count = 180, seed = 42, activeMaps?: readonl
       roster,
       mental,
       ...(performance !== undefined ? { performance } : {}),
+      ...(groupSize !== undefined ? { groupSize } : {}),
     });
   }
   return games.sort((a, b) => a.timestamp - b.timestamp);

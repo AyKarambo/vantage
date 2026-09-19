@@ -129,6 +129,8 @@ export interface GameRecord {
   perHero?: HeroStat[];
   /** Round score, e.g. "2–1", when the feed reported one. */
   finalScore?: string;
+  /** Party size the player queued with (1 = solo), when GEP reported one. Absent on older captures and manual logs. */
+  groupSize?: number;
   /** Latest roster snapshot per slot — whatever teams GEP reported (may be
    *  local team only). Absent on older records and manual logs. */
   roster?: RosterPlayer[];

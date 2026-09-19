@@ -38,7 +38,7 @@ describe('prefs.ts — matchColumns defaults and merge (issue #68)', () => {
       heroes: 'inline', account: 'inline', srDelta: 'inline',
       role: 'hidden', duration: 'hidden', finalScore: 'hidden',
       performance: 'hidden', measuredGrades: 'hidden', flags: 'hidden',
-      rankAtStart: 'hidden',
+      rankAtStart: 'hidden', party: 'hidden',
     });
   });
 
@@ -56,6 +56,7 @@ describe('prefs.ts — matchColumns defaults and merge (issue #68)', () => {
     expect(columns.performance).toBe('hidden');
     expect(columns.measuredGrades).toBe('hidden');
     expect(columns.flags).toBe('hidden');
+    expect(columns.party).toBe('hidden');
   });
 
   it('a stored mode for a new key round-trips through set/get', async () => {

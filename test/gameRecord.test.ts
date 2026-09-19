@@ -131,4 +131,14 @@ describe('matchToGame', () => {
     const game = matchToGame(base({ srDelta: -12 }), ACCOUNTS);
     expect(game?.srDelta).toBe(-12);
   });
+
+  it('carries the GEP party size through when reported (H9)', () => {
+    const game = matchToGame(base({ groupSize: 3 }), ACCOUNTS);
+    expect(game?.groupSize).toBe(3);
+  });
+
+  it('leaves groupSize absent on a capture that never reported one (H9)', () => {
+    const game = matchToGame(base(), ACCOUNTS);
+    expect(game).not.toHaveProperty('groupSize');
+  });
 });

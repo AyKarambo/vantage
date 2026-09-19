@@ -32,7 +32,7 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
 /** Canonical field order — both the "Customize view" popover and rendering follow this (spec F1). */
 const FIELD_ORDER: MatchColumnKey[] = [
   'role', 'heroes', 'account', 'srDelta', 'rankAtStart', 'duration', 'finalScore',
-  'performance', 'measuredGrades', 'flags',
+  'performance', 'measuredGrades', 'flags', 'party',
 ];
 
 const FIELD_LABELS: Record<MatchColumnKey, string> = {
@@ -46,6 +46,7 @@ const FIELD_LABELS: Record<MatchColumnKey, string> = {
   performance: 'Performance',
   measuredGrades: 'Target grades',
   flags: 'Flags',
+  party: 'Party',
 };
 
 /**
@@ -511,9 +512,18 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext, mode: Mat
       return gradePills(m, ctx);
     case 'flags':
       return flagPills(m);
+    case 'party':
+      return m.groupSize != null ? document.createTextNode(partyLabel(m.groupSize)) : null;
     default:
       return null;
   }
+}
+
+/** "Solo" / "Duo" / "5-stack" — the Matches-list Party field (H9). */
+function partyLabel(size: number): string {
+  if (size <= 1) return 'Solo';
+  if (size === 2) return 'Duo';
+  return `${size}-stack`;
 }
 
 /** Hit/Partial/Missed pill vocabulary — the Review card's grade tones (spec F1 extension, #68). */

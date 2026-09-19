@@ -49,6 +49,9 @@ export function matchToGame(
     perHero,
     finalScore: record.finalScore,
     roster: record.roster,
+    // Party size the player queued with, when GEP reported one (H9). Absent on
+    // older captures and manual logs — read as "unknown", never assumed solo.
+    ...(record.groupSize != null ? { groupSize: record.groupSize } : {}),
     // GEP reports no rank/SR, so a live-captured game carries no delta (stays
     // undefined) unless one was actually reported; the player sets it by hand on
     // Review or in the match editor. Never fabricated from the result.

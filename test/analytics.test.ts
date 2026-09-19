@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  winLoss, byMap, byRole, byHero, focusBy, trend, heroStats, heroDetail, weightedWinLoss, rollingWinrate, windowCompare, type GameRecord,
+  winLoss, byMap, byRole, byHero, byGroupSize, byDuration, scoreSplits, focusBy, trend, heroStats, heroDetail, weightedWinLoss, rollingWinrate, windowCompare, type GameRecord,
 } from '../src/core/analytics';
 import { generateSampleGames } from '../src/core/sampleData';
-import { PLAYED_TIME_ESTIMATE, setupMinutes } from '../src/core/playedTime';
+import { PLAYED_TIME_ESTIMATE, setupMinutes, type MapModeResolver } from '../src/core/playedTime';
 import type { HeroStat, Result, Role } from '../src/core/model';
 import { computeDashboard, previousDateRange } from '../src/core/dashboardData';
 import { buildTargets, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
@@ -140,6 +140,78 @@ describe('grouping', () => {
       expect(h.Genji.srNet).toBeCloseTo(5, 9); // 0.25 × 20
       expect(h.Tracer.srLogged).toBe(1);
     });
+  });
+});
+
+describe('byGroupSize (H9)', () => {
+  it('buckets Solo / Duo / Trio+, and Unknown for a game with no reported size', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', groupSize: 1 }),
+      game({ result: 'Loss', map: 'A', role: 'damage', groupSize: 1 }),
+      game({ result: 'Win', map: 'A', role: 'damage', groupSize: 2 }),
+      game({ result: 'Win', map: 'A', role: 'damage', groupSize: 5 }),
+      game({ result: 'Loss', map: 'A', role: 'damage' }), // no groupSize at all
+    ];
+    const g = Object.fromEntries(byGroupSize(games).map((x) => [x.key, x]));
+    expect(g.Solo).toMatchObject({ games: 2, wins: 1, losses: 1 });
+    expect(g.Duo).toMatchObject({ games: 1, wins: 1 });
+    expect(g['Trio+']).toMatchObject({ games: 1, wins: 1 });
+    expect(g.Unknown).toMatchObject({ games: 1, losses: 1 });
+  });
+});
+
+describe('byDuration (H9)', () => {
+  const flat: MapModeResolver = () => 'Control';
+  it('splits into Short / Typical / Long by tercile within the given games', () => {
+    // 9 games, one mode: terciles at index 3 and 6 of the sorted [10..18] list → lo=13, hi=16.
+    const durations = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+    const games = durations.map((durationMinutes) => game({ result: 'Win', map: 'A', role: 'damage', durationMinutes }));
+    const g = Object.fromEntries(byDuration(games, flat).map((x) => [x.key, x]));
+    expect(g.Short.games + (g.Typical?.games ?? 0) + g.Long.games).toBe(9);
+    expect(g.Short.games).toBeGreaterThan(0);
+    expect(g.Long.games).toBeGreaterThan(0);
+  });
+  it('is Unknown for a game with no recorded duration', () => {
+    const g = byDuration([game({ result: 'Win', map: 'A', role: 'damage' })], flat);
+    expect(g).toEqual([{ key: 'Unknown', games: 1, wins: 1, losses: 0, draws: 0, winrate: 1 }]);
+  });
+  it('computes tercile boundaries PER MODE, so a slow mode does not skew a fast one', () => {
+    const mapModeOf: MapModeResolver = (map) => (map === 'ControlMap' ? 'Control' : 'Escort');
+    const games = [
+      // Control: all long (20-24 min) — every one should read "Typical" relative to its own mode, never "Long" vs Escort.
+      ...[20, 21, 22, 23, 24].map((durationMinutes) => game({ result: 'Win', map: 'ControlMap', role: 'damage', durationMinutes })),
+      // Escort: all short (5-9 min).
+      ...[5, 6, 7, 8, 9].map((durationMinutes) => game({ result: 'Win', map: 'EscortMap', role: 'damage', durationMinutes })),
+    ];
+    const g = byDuration(games, mapModeOf);
+    // Nothing crosses into the other mode's range — nobody misreads a Control game as short.
+    const long = g.find((x) => x.key === 'Long');
+    expect(long?.games ?? 0).toBeLessThanOrEqual(2); // at most the top tercile of EACH mode, never all 5 Control games
+  });
+});
+
+describe('scoreSplits (H9)', () => {
+  const mapModeOf: MapModeResolver = (map) => (map === 'ControlMap' ? 'Control' : 'EscortMap' === map ? 'Escort' : 'Unknown');
+  it('classifies a one-round margin as close, two+ as decisive, on round-tally modes only', () => {
+    const games = [
+      game({ result: 'Win', map: 'ControlMap', role: 'damage', finalScore: '2–1' }), // close
+      game({ result: 'Loss', map: 'ControlMap', role: 'damage', finalScore: '1–2' }), // close
+      game({ result: 'Win', map: 'ControlMap', role: 'damage', finalScore: '3–0' }), // decisive
+      game({ result: 'Win', map: 'EscortMap', role: 'damage', finalScore: '2–1' }), // not a round-tally mode → excluded
+      game({ result: 'Win', map: 'ControlMap', role: 'damage' }), // no score → excluded
+    ];
+    const s = scoreSplits(games, mapModeOf);
+    expect(s.close).toMatchObject({ games: 2, wins: 1, losses: 1 });
+    expect(s.decisive).toMatchObject({ games: 1, wins: 1 });
+    expect(s.byMode.Control.close.games).toBe(2);
+    expect(s.byMode.Control.decisive.games).toBe(1);
+    expect(s.byMode.Escort).toBeUndefined();
+  });
+  it('is all-zero WinLoss buckets with no round-tally games', () => {
+    const s = scoreSplits([game({ result: 'Win', map: 'EscortMap', role: 'damage', finalScore: '2–1' })], mapModeOf);
+    expect(s.close.games).toBe(0);
+    expect(s.decisive.games).toBe(0);
+    expect(s.byMode).toEqual({});
   });
 });
 

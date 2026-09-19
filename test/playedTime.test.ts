@@ -3,14 +3,17 @@ import {
   DEFAULT_ROUNDS,
   PLAYED_TIME_ESTIMATE,
   ROUND_SETUP_SECONDS,
+  ROUND_TALLY_MODES,
   heroPlayedMinutes,
   heroCredits,
   heroTimeShares,
   overlapMinutes,
+  parseScore,
   playWindowsOf,
   playedMinutesOf,
   playedTimeOf,
   roundCountOf,
+  roundsFromScore,
   setupMinutes,
   windowMinutes,
 } from '../src/core/playedTime';
@@ -90,6 +93,33 @@ describe('roundCountOf', () => {
     expect(roundCountOf({ finalScore: '3–2' }, 'Escort')).toBe(DEFAULT_ROUNDS.Escort); // payload points, not rounds
     expect(roundCountOf({ finalScore: '5–4' }, 'Control')).toBe(DEFAULT_ROUNDS.Control); // not a plausible round tally
     expect(roundCountOf({}, 'Push')).toBe(1);
+  });
+});
+
+describe('parseScore / roundsFromScore (H9)', () => {
+  it('parses both round counts in recorded order', () => {
+    expect(parseScore('2–1')).toEqual([2, 1]);
+    expect(parseScore('0-3')).toEqual([0, 3]);
+    expect(parseScore('3 : 2')).toEqual([3, 2]);
+  });
+  it('is undefined for an unparsable score', () => {
+    expect(parseScore(undefined)).toBeUndefined();
+    expect(parseScore('')).toBeUndefined();
+    expect(parseScore('TBD')).toBeUndefined();
+  });
+  it('roundsFromScore sums the two counts', () => {
+    expect(roundsFromScore('2–1')).toBe(3);
+    expect(roundsFromScore('3-0')).toBe(3);
+    expect(roundsFromScore(undefined)).toBeUndefined();
+  });
+});
+
+describe('ROUND_TALLY_MODES (H9)', () => {
+  it('is exactly the modes whose finalScore reports a real round tally', () => {
+    expect([...ROUND_TALLY_MODES].sort()).toEqual(['Clash', 'Control', 'Flashpoint'].sort());
+    expect(ROUND_TALLY_MODES.has('Escort')).toBe(false);
+    expect(ROUND_TALLY_MODES.has('Hybrid')).toBe(false);
+    expect(ROUND_TALLY_MODES.has('Push')).toBe(false);
   });
 });
 
