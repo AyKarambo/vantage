@@ -25,6 +25,13 @@ export interface PlayerListRow {
   enemyTeam: { wins: number; losses: number };
   lastSeen: number;
   /**
+   * The team relation (M6) of the MOST RECENT shared game whose feed reported a
+   * team for both rows — not necessarily the same game `lastSeen` is from, if a
+   * later game's teams went unreported. Absent when no shared game ever carried
+   * a known relation. Drives the dim "with"/"vs" suffix on the Last seen cell.
+   */
+  lastSameTeam?: boolean;
+  /**
    * Two DIFFERENT `#`-tags were folded into this row. Identity is keyed on the
    * part before `#`, so `Nova#1111` and `Nova#2222` merge — this flag says the
    * merge is actually showing, i.e. the row may be more than one person.
@@ -32,11 +39,16 @@ export interface PlayerListRow {
   ambiguous: boolean;
 }
 
+/** Which team-relation games to include (M6) — mirrors the Players screen's own chip row. */
+export type PlayerRelation = 'any' | 'with' | 'vs';
+
 export interface PlayerListQuery {
   filters: DashboardFilters;
   search?: string;
   /** Minimum shared games in scope (the chip floor). */
   minGames?: number;
+  /** Team-relation filter (M6) — absent/'any' means no filtering. */
+  relation?: PlayerRelation;
   sort?: PlayerSortKey;
   /** 1 = ascending (↑), -1 = descending (↓) — matches the table's indicator. */
   dir?: 1 | -1;
@@ -63,5 +75,7 @@ export interface PlayerList {
   dir: 1 | -1;
   appliedSearch: string;
   appliedMinGames: number;
+  /** Echo of the applied relation filter (M6) — the chip row paints from this, never local state. */
+  appliedRelation: PlayerRelation;
   scope: Required<DashboardFilters>;
 }

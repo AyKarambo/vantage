@@ -6,7 +6,7 @@ import { resolveRole } from './resolvers/role';
 import type { EnteringRank } from './rank';
 import type {
   PlayerEncounter, PlayerListQuery, PlayerListRow, PlayerMatchHistory, PlayerRecord,
-  PlayerSharedMatch, PlayerSortKey, SharedMatchRank,
+  PlayerRelation, PlayerSharedMatch, PlayerSortKey, SharedMatchRank,
 } from '../shared/contract';
 
 /**
@@ -315,6 +315,8 @@ export function playerDirectory(games: readonly GameRecord[]): PlayerDirectory {
   const rows = new Map<string, PlayerListRow>();
   /** First full `#`-tag seen per key (lowercased) — drives `ambiguous`. */
   const firstTag = new Map<string, string>();
+  /** Timestamp `row.lastSameTeam` was last set from (M6) — `games` need not arrive newest-first. */
+  const relationSeenAt = new Map<string, number>();
   let gamesWithRoster = 0;
   for (const game of games) {
     if (!game.roster?.length) continue;
@@ -357,6 +359,14 @@ export function playerDirectory(games: readonly GameRecord[]): PlayerDirectory {
       // Team relation only when the feed reported a team for BOTH rows —
       // otherwise "with" and "vs" would be a guess (mirrors playerRecords).
       if (local?.team == null || other.team == null) continue;
+      // M6: the relation of the newest such game, independent of `row.lastSeen`
+      // (a later game with unreported teams would otherwise leave `lastSameTeam`
+      // stuck on a stale, non-newest relation).
+      const relTs = relationSeenAt.get(key) ?? -Infinity;
+      if (game.timestamp >= relTs) {
+        relationSeenAt.set(key, game.timestamp);
+        row.lastSameTeam = other.team === local.team;
+      }
       const side = other.team === local.team ? row.sameTeam : row.enemyTeam;
       if (game.result === 'Win') side.wins += 1;
       else if (game.result === 'Loss') side.losses += 1;
@@ -372,6 +382,8 @@ export function playerDirectory(games: readonly GameRecord[]): PlayerDirectory {
 export interface PlayerSelection {
   search: string;
   minGames: number;
+  /** Team-relation filter (M6) — 'any' means no filtering. */
+  relation: PlayerRelation;
   sort: PlayerSortKey;
   dir: 1 | -1;
   limit: number;
@@ -421,6 +433,8 @@ function comparePlayers(a: PlayerListRow, b: PlayerListRow, sort: PlayerSortKey,
   return ra === rb ? tieBreak(a, b) : ra < rb ? -dir : dir;
 }
 
+const RELATIONS: readonly PlayerRelation[] = ['any', 'with', 'vs'];
+
 /** Untrusted IPC args in → a selection that cannot misbehave. */
 export function normalizePlayerSelection(q: PlayerListQuery | undefined): PlayerSelection {
   const raw = typeof q?.search === 'string' ? q.search : '';
@@ -428,6 +442,7 @@ export function normalizePlayerSelection(q: PlayerListQuery | undefined): Player
   return {
     search: raw.trim().toLowerCase().slice(0, 64),
     minGames: Number.isFinite(min) ? Math.max(1, Math.trunc(min)) : 1,
+    relation: q?.relation != null && RELATIONS.includes(q.relation) ? q.relation : 'any',
     sort: q?.sort != null && q.sort in RANKERS ? q.sort : 'games',
     dir: q?.dir === 1 ? 1 : -1,
     limit: PLAYER_ROW_CAP,
@@ -455,7 +470,14 @@ export function selectPlayers(
   const qKey = q ? battleTagName(q) : '';
   const matches = players.filter((p) =>
     p.games >= sel.minGames
-    && (!q || (qKey !== '' && p.key.includes(qKey)) || p.name.toLowerCase().includes(q)));
+    && (!q || (qKey !== '' && p.key.includes(qKey)) || p.name.toLowerCase().includes(q))
+    // M6: 'with'/'vs' keep only rows with at least one DECIDED game on that
+    // side — a row with team relation known but 0 decided (all draws) has
+    // nothing to show on either split, so it wouldn't answer "who did I play
+    // with/against" any more honestly than one with no relation data at all.
+    && (sel.relation === 'any'
+      || (sel.relation === 'with' && p.sameTeam.wins + p.sameTeam.losses > 0)
+      || (sel.relation === 'vs' && p.enemyTeam.wins + p.enemyTeam.losses > 0)));
   matches.sort((a, b) => comparePlayers(a, b, sel.sort, sel.dir));
   return { rows: matches.slice(0, sel.limit), matched: matches.length };
 }

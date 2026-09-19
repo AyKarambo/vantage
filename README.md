@@ -198,6 +198,9 @@ account's per-role lines beneath it.
   disappears entirely when nothing applies.
 - **Players** — everyone you've met, searchable by name and sortable by shared games,
   your record with them, your record against them, or when you last saw them. A
+  **relation chip row** (Any / Played with / Played against, M6) narrows the list to
+  just teammates or just opponents, and the **Last seen** column carries a dim
+  "with"/"vs" note for which side they were on last time. A
   **min. games** chip row hides the one-offs. The counts here follow the filter bar
   (role · season · account) and say so; opening a player shows their **complete
   all-time** record, which the filters never touch — the screen explains the
