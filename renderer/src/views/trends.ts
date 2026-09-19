@@ -1,6 +1,6 @@
 /** Trends — winrate over time, splits by role/mode/account, and when you play. */
 import { h } from '../dom';
-import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, StreakStats, TrendGroup } from '../../../src/shared/contract';
+import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup } from '../../../src/shared/contract';
 import { sessionFade, bucketStart } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
@@ -49,10 +49,15 @@ export function trends(ctx: ViewContext): HTMLElement {
       card({ title: 'By game mode' }, breakdown(d.byMapType)),
       card({ title: 'By account' }, breakdown(d.byAccount)),
     ),
-    bySeasonCard(ctx),
     h('div', { class: 'grid-2' },
+      soloVsGroupedCard(d.byGroupSize),
+      closeGamesCard(d.scoreSplits),
+    ),
+    bySeasonCard(ctx),
+    h('div', { class: 'grid-3' },
       timeOfDayCard(d.timeOfDay),
       sessionPositionCard(d.sessionPosition),
+      gameLengthCard(d.byDuration),
     ),
     performanceCard(ctx, d.performance),
   );
@@ -312,4 +317,55 @@ function breakdown(groups: Group[], label: (key: string) => string = (k) => k): 
     .sort((a, b) => b.winrate - a.winrate)
     .map((g) => ({ label: label(g.key), winrate: g.winrate, games: g.games }));
   return horizontalBars(data, { compact: true });
+}
+
+/** Pull `keys` out of `groups` in that fixed order (not winrate-sorted) — a story order, not a ranking. */
+function inOrder(groups: Group[], keys: string[]): Group[] {
+  return keys.map((k) => groups.find((g) => g.key === k)).filter((g): g is Group => g != null);
+}
+
+/**
+ * "Do I win more solo or with a group?" (H9) — party size was captured by GEP
+ * and stored, but never surfaced anywhere. Solo → Duo → Trio+ → Unknown, the
+ * order a player reasons about it in, not a winrate ranking.
+ */
+function soloVsGroupedCard(groups: Group[]): HTMLElement | null {
+  const ordered = inOrder(groups, ['Solo', 'Duo', 'Trio+', 'Unknown']);
+  if (!ordered.length) return null;
+  return card({ title: 'Solo vs grouped' }, breakdownOrdered(ordered));
+}
+
+/**
+ * "Am I losing close games or getting rolled?" (H9) — a clutch/mental read
+ * distinct from fundamentals, from data (`finalScore`) that was already on
+ * disk. Scoped to round-tally modes only (Control, Clash, Flashpoint) —
+ * Escort/Hybrid/Push report a payload distance, not rounds, so a score there
+ * can't be classified and is left out rather than guessed at.
+ */
+function closeGamesCard(s: ScoreSplit): HTMLElement | null {
+  const total = s.close.games + s.decisive.games;
+  if (!total) return null;
+  return card({ title: 'Close games', sub: 'Control, Clash & Flashpoint only · round margin' },
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' } },
+      statBox(pct(s.close.winrate), `close (1 round) · ${s.close.games}g`),
+      statBox(pct(s.decisive.winrate), `decisive (2+ rounds) · ${s.decisive.games}g`),
+    ),
+    s.close.games >= 5 && s.close.winrate < s.decisive.winrate
+      ? h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
+          `You win decisive games more than close ones — that points at execution under pressure, `
+          + 'not fundamentals. See Mental for tilt and session patterns.')
+      : null,
+  );
+}
+
+/**
+ * "Am I better in short games or long ones?" (H9) — game length was stored
+ * (`durationMinutes`) but never grouped. Short → Typical → Long, tercile
+ * boundaries computed per mode so a Push-heavy sample doesn't skew the buckets.
+ */
+function gameLengthCard(groups: Group[]): HTMLElement | null {
+  const ordered = inOrder(groups, ['Short', 'Typical', 'Long']);
+  if (!ordered.length) return null;
+  return card({ title: 'Game length', sub: 'short / typical / long, relative to each mode' },
+    breakdownOrdered(ordered));
 }

@@ -4,7 +4,7 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
+  byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
@@ -237,6 +237,11 @@ export function computeDashboard(
     byMap: byMap(games, { suppressed }),
     byMapType: groupBy(games, (g) => mapModeOf(g.map), { suppressed }),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
+    // Party size, game length and score-margin splits (H9) — previously
+    // captured/stored but never surfaced.
+    byGroupSize: byGroupSize(games, { suppressed }),
+    byDuration: byDuration(games, mapModeOf, { suppressed }),
+    scoreSplits: scoreSplits(games, mapModeOf),
     trend: rollingWinrate(trend(games, weekly ? 'week' : 'day'), weekly ? 'week' : 'day'),
     // Momentum (C6): the same trailing-window comparison in weeks once the
     // chart itself switches to weekly buckets, so the strip and the chart
@@ -582,6 +587,7 @@ export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeas
     ...(g.rankAtStart !== undefined && !suppressed?.has(g.matchId) ? { rankAtStart: g.rankAtStart } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
+    ...(g.groupSize !== undefined ? { groupSize: g.groupSize } : {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
     ...(targetGrades ? { targetGrades } : {}),

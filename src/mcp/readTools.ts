@@ -34,7 +34,8 @@ export const registerReadTools: ToolRegistrar = (server: McpServer, client: Pipe
       title: 'Vantage dashboard',
       description:
         'The full coaching picture for a filter set: map and hero priority, win/loss trend, streak, '
-        + 'session recap, mental/tilt signals and active improvement targets. Start here.',
+        + 'session recap, mental/tilt signals and active improvement targets, plus solo-vs-grouped, '
+        + 'close-vs-decisive score margins (round-tally modes only) and game-length splits. Start here.',
       inputSchema: { filters },
       annotations: READ_ONLY,
     },

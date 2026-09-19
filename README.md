@@ -150,7 +150,8 @@ account's per-role lines beneath it.
   says you held at the time; matches with no ±% show nothing, since without one the rank did
   not move there.
   A **Customize view** popover lets you set role, heroes, account, SR delta, rank at start, duration,
-  final score, performance rating, target grades and leaver/mental flags each to hidden,
+  final score, performance rating, target grades, leaver/mental flags and **party size** (Solo /
+  Duo / *N*-stack, when GEP reported one, H9) each to hidden,
   inline (folded into the row's meta line), or its own aligned column — the choice
   persists across sessions. The grades-oriented fields start hidden and render compactly
   when enabled: the 0-100 self-rating as a small tinted stat, **target grades** as a
@@ -172,7 +173,9 @@ account's per-role lines beneath it.
   one — a 3-loss map that cost −60% is a more urgent fix than one that cost −45%, and the data
   was already there. **Each mode card is clickable** (H4) — filters the ranking below to that
   mode and scrolls to it, staying in sync with the ranking's own **mode chip row**
-  (`All`/`Control`/`Escort`/…), and states its own **best · worst map** in one line. The old fixed
+  (`All`/`Control`/`Escort`/…), and states its own **best · worst map** in one line, plus a
+  **close · decisive** round-margin split on Control/Clash/Flashpoint cards, whose score is an
+  actual round tally (H9). The old fixed
   3-game floor is now a **min. games** chip row (`1+ · 3+ · 5+`, same pattern as Heroes/Players),
   the subtitle says how many maps that floor is hiding, and the ranking's **Table** view gains a
   **Mode** column. Each bar can carry a small **▴/▾ trend** read, your **RTG** on that map, a
@@ -233,7 +236,12 @@ account's per-role lines beneath it.
   **your self-rating over time** (the 0–100 performance slider with the same real rolling
   average plus the avg-rating-on-wins vs -losses split — does your self-read track
   results, or your play? — also click-through to that day's matches). Per-hero and per-map
-  average self-ratings also appear as **RTG** columns on the Heroes and Maps tables.
+  average self-ratings also appear as **RTG** columns on the Heroes and Maps tables. Three more
+  splits answer questions the data already had but nothing showed (H9): **Solo vs grouped**
+  (party size GEP reported, when it did), **Close games** (win rate on a one-round margin vs a
+  two-or-more-round blowout, Control/Clash/Flashpoint only — a clutch/mental read distinct from
+  fundamentals), and **Game length** (Short/Typical/Long, tercile boundaries computed per mode
+  so a Push-heavy sample doesn't read every Escort game as "long" for no reason but the format).
 - **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea
   of *supercompensation*, detecting **over- and undertraining**. One **score-first composite**
   (0–100, the band derives from it — score and verdict can't disagree) built from three
@@ -695,6 +703,8 @@ npm run preview        # bundles the harness and serves it at http://localhost:5
 
 Vantage can expose your stats to an **MCP** client — Claude Desktop or Claude Code — so an
 AI coach can read your real match history and record matches, reviews and targets for you.
+The dashboard read includes solo-vs-grouped and game-length splits and close-vs-decisive
+score margins (round-tally modes only) alongside the map/hero/mental picture (H9).
 
 It is **off by default**. Turn on **MCP endpoint** in *Settings → App behavior*, then point
 your client at the bridge:

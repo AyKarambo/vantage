@@ -4,7 +4,7 @@
  * chart. Pure and I/O-free — consumed by both main and the browser preview.
  */
 import type { GameRecord, WinLoss, Group, FocusItem, TrendGroup, Momentum } from './types';
-import { heroTimeShares } from '../playedTime';
+import { heroTimeShares, parseScore, ROUND_TALLY_MODES, type MapModeResolver } from '../playedTime';
 
 // --- core aggregation -------------------------------------------------------
 
@@ -187,6 +187,80 @@ export function trend(games: GameRecord[], bucket: 'day' | 'week' = 'day'): Grou
 
 /** Winrate per game type (Competitive, Quick Play, …). */
 export const byMode = (g: GameRecord[]): Group[] => groupBy(g, (x) => x.gameType);
+
+/** "Solo" / "Duo" / "Trio+" bucket for a queued party size; "Unknown" when GEP never reported one. */
+function groupSizeLabel(size: number | undefined): string {
+  if (size == null) return 'Unknown';
+  if (size <= 1) return 'Solo';
+  if (size === 2) return 'Duo';
+  return 'Trio+';
+}
+
+/** Winrate split by the party size the player queued with (H9). */
+export const byGroupSize = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => groupSizeLabel(x.groupSize), opts);
+
+/** The `[lo, hi]` tercile boundaries of a sorted duration list; `[0, 0]` for an empty one. */
+function durationTerciles(sorted: number[]): [number, number] {
+  if (!sorted.length) return [0, 0];
+  const at = (frac: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * frac))];
+  return [at(1 / 3), at(2 / 3)];
+}
+
+/**
+ * Winrate split by game length — "Short" / "Typical" / "Long", tercile
+ * boundaries computed PER MODE (a Control game and a Push game don't run the
+ * same length) then applied to bucket every game, so a Push-heavy sample
+ * doesn't read as "Long" for no reason but the format (H9). "Unknown" for a
+ * game with no recorded duration.
+ */
+export function byDuration(games: GameRecord[], mapModeOf: MapModeResolver, opts?: GroupOpts): Group[] {
+  const durationsByMode = new Map<string, number[]>();
+  for (const g of games) {
+    if (g.durationMinutes == null) continue;
+    const mode = mapModeOf(g.map);
+    (durationsByMode.get(mode) ?? durationsByMode.set(mode, []).get(mode)!).push(g.durationMinutes);
+  }
+  const boundsByMode = new Map<string, [number, number]>();
+  for (const [mode, durations] of durationsByMode) boundsByMode.set(mode, durationTerciles([...durations].sort((a, b) => a - b)));
+  return groupBy(games, (g) => {
+    if (g.durationMinutes == null) return 'Unknown';
+    const [lo, hi] = boundsByMode.get(mapModeOf(g.map)) ?? [0, 0];
+    return g.durationMinutes < lo ? 'Short' : g.durationMinutes > hi ? 'Long' : 'Typical';
+  }, opts);
+}
+
+/** A win/loss tally for one margin bucket ("close" or "decisive"). */
+export interface ScoreSplit {
+  close: WinLoss;
+  decisive: WinLoss;
+}
+
+/**
+ * Win/loss split by how close the match was, over round-tally modes only
+ * (Control, Clash, Flashpoint — the only modes whose `finalScore` reports
+ * rounds; see {@link ../playedTime ROUND_TALLY_MODES}). "Close" is a
+ * one-round margin (2–1, 3–2); "decisive" is two or more (3–0, 3–1). A
+ * non-round-tally mode or an unparsable score is excluded rather than
+ * guessed at. `byMode` repeats the split per round-tally mode, for a
+ * per-map-mode line (H9).
+ */
+export function scoreSplits(games: GameRecord[], mapModeOf: MapModeResolver): ScoreSplit & { byMode: Record<string, ScoreSplit> } {
+  const overall = { close: [] as GameRecord[], decisive: [] as GameRecord[] };
+  const byModeGames = new Map<string, { close: GameRecord[]; decisive: GameRecord[] }>();
+  for (const g of games) {
+    const mode = mapModeOf(g.map);
+    if (!ROUND_TALLY_MODES.has(mode)) continue;
+    const parsed = parseScore(g.finalScore);
+    if (!parsed) continue;
+    const bucket = Math.abs(parsed[0] - parsed[1]) <= 1 ? 'close' : 'decisive';
+    overall[bucket].push(g);
+    const perMode = byModeGames.get(mode) ?? byModeGames.set(mode, { close: [], decisive: [] }).get(mode)!;
+    perMode[bucket].push(g);
+  }
+  const byMode: Record<string, ScoreSplit> = {};
+  for (const [mode, gs] of byModeGames) byMode[mode] = { close: winLoss(gs.close), decisive: winLoss(gs.decisive) };
+  return { close: winLoss(overall.close), decisive: winLoss(overall.decisive), byMode };
+}
 
 /** UTC calendar-day key (YYYY-MM-DD) — the shared day-bucketing convention. */
 export function dayKey(ts: number): string {

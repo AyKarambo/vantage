@@ -6,7 +6,7 @@
 import type { Role, Result } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
@@ -75,6 +75,8 @@ export interface MatchRow {
   rankAtStart?: RankPosition;
   /** Final score as recorded (e.g. '3–1'), when known. */
   finalScore?: string;
+  /** Party size the player queued with (1 = solo), when GEP reported one. */
+  groupSize?: number;
   /**
    * Self-rated performance for this match, 0-100, when the player (or an import)
    * set one. Carried so the Review card's "How you played" slider seeds from an
@@ -244,6 +246,12 @@ export interface DashboardData {
   byMap: Group[];
   byMapType: Group[];
   byHero: Group[];
+  /** Winrate split by queued party size — Solo / Duo / Trio+ / Unknown (H9). */
+  byGroupSize: Group[];
+  /** Winrate split by game length, mode-relative — Short / Typical / Long / Unknown (H9). */
+  byDuration: Group[];
+  /** Win/loss split by score margin, round-tally modes only (H9). */
+  scoreSplits: ScoreSplit & { byMode: Record<string, ScoreSplit> };
   /** Winrate over time, each bucket carrying its own trailing rolling winrate (C6). */
   trend: TrendGroup[];
   /** The winrate-chart momentum strip (C6): trailing window vs. the one before it, over the same filtered games as `trend`. Null below the sample floor. */

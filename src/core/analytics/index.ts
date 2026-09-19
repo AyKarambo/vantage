@@ -9,10 +9,10 @@ export type {
 
 // Grouping + win/loss aggregation
 export {
-  winLoss, groupBy, byMap, byRole, byAccount, byHero, byMode, focusBy, trend, dayKey,
+  winLoss, groupBy, byMap, byRole, byAccount, byHero, byMode, byGroupSize, byDuration, scoreSplits, focusBy, trend, dayKey,
   weightedWinLoss, weightedGroupBy, heroWeightedGames, rollingWinrate, windowCompare, bucketStart, srSum,
 } from './grouping';
-export type { WeightedGame } from './grouping';
+export type { WeightedGame, ScoreSplit } from './grouping';
 
 // Cross-dimension focus ranking (the Focus screen's "work on these" hub)
 export { focusEntries, focusTrend, focusGamesFor, heroForm, linkFocusTargets, MAP_MIN_GAMES } from './focus';

@@ -1,6 +1,6 @@
 /** Maps — by game mode, games-played share, and every map ranked best → worst. */
 import { h } from '../dom';
-import type { DashboardData, Group } from '../../../src/shared/contract';
+import type { DashboardData, Group, ScoreSplit } from '../../../src/shared/contract';
 import { MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { makeMapMode, makeMapActive, type MapModeResolver } from '../../../src/core/masterData';
 import { fmt, pct, signed } from '../format';
@@ -73,7 +73,7 @@ export function maps(ctx: ViewContext): HTMLElement {
   const view = h('div', { class: 'view' },
     viewHead('Maps', 'Where the games actually go — by mode, then map by map'),
     h('div', { class: 'grid-3' }, ...d.byMapType.map((g) =>
-      modeCard(g, modeFilter === g.key, modeBestWorst(d.byMap, g.key, mapModeOf, minMapGames), () => {
+      modeCard(g, modeFilter === g.key, modeBestWorst(d.byMap, g.key, mapModeOf, minMapGames), d.scoreSplits.byMode[g.key], () => {
         prefs.set('mapModeFilter', g.key);
         scrollToRanking = true;
         store.rerender();
@@ -190,10 +190,17 @@ function mapMeta(m: Group, d: DashboardData, mapModeOf: MapModeResolver, isMapAc
  * the mode-chip row's own active state (both read/write the same
  * `mapModeFilter` pref).
  */
-function modeCard(g: Group, active: boolean, bestWorst: { best?: string; worst?: string }, onSelect: () => void): HTMLElement {
+/** "close 6-4 · decisive 3-9" (H9) — absent for a mode with no classifiable score yet. */
+function scoreSplitLine(s: ScoreSplit | undefined): string | null {
+  if (!s || s.close.games + s.decisive.games === 0) return null;
+  return `close ${s.close.wins}-${s.close.losses} · decisive ${s.decisive.wins}-${s.decisive.losses}`;
+}
+
+function modeCard(g: Group, active: boolean, bestWorst: { best?: string; worst?: string }, scoreSplit: ScoreSplit | undefined, onSelect: () => void): HTMLElement {
   // Net SR (C2) beside net wins, when the mode logged any — "+3 net" alone
   // doesn't say whether those three losses cost 5% or 50%.
   const valueText = g.srNet !== undefined ? `${signed(g.wins - g.losses)} · ${signed(Math.round(g.srNet))}%` : signed(g.wins - g.losses);
+  const scoreLine = scoreSplitLine(scoreSplit);
   return h('div', {
     class: `card${active ? ' card--glow' : ''}`,
     style: { padding: '13px 15px', cursor: 'pointer' },
@@ -210,6 +217,9 @@ function modeCard(g: Group, active: boolean, bestWorst: { best?: string; worst?:
           bestWorst.best === bestWorst.worst
             ? `Only map so far: ${bestWorst.best}`
             : `Best ${bestWorst.best} · Worst ${bestWorst.worst}`)
+      : null,
+    scoreLine
+      ? h('div', { class: 'hint', style: { marginTop: '4px', fontSize: '10.5px' } }, scoreLine)
       : null,
   );
 }

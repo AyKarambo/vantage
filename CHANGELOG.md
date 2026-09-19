@@ -686,6 +686,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   so a big swing in eliminations isn't drowned out by an unremarkable few hundred extra damage.
   Needs 5 prior games on that hero before it'll compare anything; below that, the card shows your
   numbers with no baseline rather than guess from too little history.
+- **Three questions the data already had an answer for, and nothing showed you.** On **Trends**:
+  a **Solo vs grouped** card (party size, when the game reported one), a **Close games** card
+  (win rate on a one-round margin vs a two-or-more-round blowout, Control/Clash/Flashpoint only
+  — the only modes whose score is an actual round tally), and a **Game length** card (Short /
+  Typical / Long, boundaries computed per game mode so a Push-heavy stretch doesn't read every
+  Escort game as "long" for no reason but the format). Each **Maps** mode card now states its
+  own **close · decisive** round-margin split alongside best/worst map, for the same three
+  round-tally modes. And **Matches → Customize view** gains a **Party** field (Solo / Duo /
+  *N*-stack). All three cuts, plus the round-margin split, are now in the payload the **MCP**
+  dashboard tool returns too (H9).
 
 ## 0.34.0 — 31 July 2026
 
