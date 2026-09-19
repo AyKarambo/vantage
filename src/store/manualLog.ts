@@ -52,11 +52,11 @@ export class ManualStore {
 
   /** Edit name/mode/rule (and measured scope) in place — createdAt and lifecycle
    *  state are preserved so accrued grades keep counting across edits. An absent
-   *  `roleScope`/`heroScope` in the patch clears any previously-saved scope
-   *  (e.g. switching a measured target back to self-rated). */
+   *  `roleScope`/`heroScope`/`mapScope` in the patch clears any previously-saved
+   *  scope (e.g. switching a measured target back to self-rated). */
   updateTarget(
     id: string,
-    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[] },
+    patch: { name: string; mode: TargetMode; rule: string; roleScope?: Role; heroScope?: string[]; mapScope?: string[] },
   ): void {
     const t = this.state.targets.find((x) => x.id === id);
     if (!t) return;
@@ -69,6 +69,8 @@ export class ManualStore {
     // checks elsewhere can rely on a plain presence check, not a length check.
     if (patch.heroScope != null && patch.heroScope.length > 0) t.heroScope = patch.heroScope;
     else delete t.heroScope;
+    if (patch.mapScope != null && patch.mapScope.length > 0) t.mapScope = patch.mapScope;
+    else delete t.mapScope;
     this.save();
   }
 

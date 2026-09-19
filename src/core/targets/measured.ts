@@ -100,15 +100,19 @@ function statOver(rows: readonly HeroStat[], stat: string, minutes: number): num
  * With a `scope` (D), the value is computed over only the in-scope hero rows:
  * `roleScope` keeps rows of that role (and skips open-queue matches entirely),
  * `heroScope` keeps rows for any of one or more heroes (matched via
- * {@link ../heroes heroMatchKey}).
+ * {@link ../heroes heroMatchKey}). `mapScope` (R9) is checked first and applies
+ * to the WHOLE match, not individual hero rows — map isn't a per-hero-row
+ * property the way role/hero can be, so an out-of-scope map skips the match
+ * outright before any role/hero filtering runs.
  * When no row is in scope the match is skipped (`null`) — never a miss; this also
  * makes a contradictory role+hero combo permanently skip, and skips a role-scoped
- * target on rows whose role GEP never reported. Both scope fields absent keeps the
+ * target on rows whose role GEP never reported. All scope fields absent keeps the
  * original whole-match behavior exactly.
  */
 export function matchStatValue(game: GameRecord, stat: string, scope?: MeasuredScope): number | null {
   const rows = game.perHero;
   if (!rows || !rows.length) return null;
+  if (scope?.mapScope && scope.mapScope.length > 0 && !scope.mapScope.includes(game.map)) return null;
 
   const roleScope = scope?.roleScope;
   const heroScope = scope?.heroScope;

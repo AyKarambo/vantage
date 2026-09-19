@@ -44,11 +44,12 @@ export function targets(ctx: ViewContext): HTMLElement {
   const builder = builderCard(ctx, { startOpen });
   // Focus's per-map/hero/role "＋ target" quick-create lands here with a name
   // to prefill — self-rated by default, same as a fresh builder's grading
-  // mode — and, for a hero/role entry (H1), the matching scope pre-selected.
+  // mode — and, for a map/hero/role entry (H1, R9), the matching scope
+  // pre-selected.
   if (willPrefill) {
     builder.prefill({
       name: ctx.params.prefillName!, mode: 'self', rule: 'You grade it',
-      roleScope: ctx.params.prefillRole, heroScope: ctx.params.prefillHeroes,
+      roleScope: ctx.params.prefillRole, heroScope: ctx.params.prefillHeroes, mapScope: ctx.params.prefillMap,
     });
   }
   // A detail page's Edit lands here with the target to re-open in the builder.

@@ -552,6 +552,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   the same "not live and tracking yet" line under the Focus Trend panel — each now gets its own
   honest reason there's nothing there. The page's own head now says "Targets," matching the nav
   item and everything else on the screen.
+- **Targets can be scoped to a map, and Focus says what its quick-create button actually makes.**
+  Scope now takes one or more maps alongside role and hero — a target scoped to Ilios only grades
+  your Ilios games, and the scope badge shows it ("Support · Ana · Ilios"). Focus's quick-create
+  button is now **Track as target**, and clicking it opens a small popover naming what it's about
+  to create and what tracking commits to, instead of silently creating a target and jumping away
+  the moment you click. Focus also links a row to its target by that scope directly now, not by
+  guessing from the target's name — so renaming a target, or writing one whose name doesn't spell
+  out what it's for, no longer breaks the "since you flagged it" progress line.
 
 ## 0.34.0 — 31 July 2026
 

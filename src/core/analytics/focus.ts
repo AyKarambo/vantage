@@ -8,6 +8,7 @@
  */
 import { focusBy, srSum, winLoss } from './grouping';
 import { wilson } from '../targets/wilson';
+import { heroMatchKey } from '../heroes';
 import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm, WinLoss } from './types';
 import type { AuthoredTarget } from '../targets/types';
 // Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
@@ -180,8 +181,10 @@ export function heroForm(entryGames: GameRecord[]): HeroForm | undefined {
 
 /**
  * Attach since-flagged progress to every entry that has a linked improvement
- * target: an active, non-archived authored target whose name mentions the entry
- * key (case-insensitive; the Notion bookkeeping pseudo-target never links).
+ * target: an active, non-archived target scoped (R9) to the entry's own
+ * map/role/hero, or — for targets authored before scoped linking existed —
+ * one whose name mentions the entry key (case-insensitive; see
+ * {@link linkedTarget}). The Notion bookkeeping pseudo-target never links.
  * `allGames` should be the UNFILTERED competitive history — progress is about
  * the target's lifetime, not the current filter (same stance as staleness).
  */
@@ -277,8 +280,41 @@ function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntr
 }
 
 /**
- * Most recently flagged candidate whose name mentions the entry key as a whole
- * token run. Both sides tokenize to lowercase alphanumeric words (apostrophes
+ * Most recently flagged candidate linked to this entry. Prefers a target
+ * SCOPED (R9) to the entry's own map/role/hero — exact, and immune to a
+ * later rename breaking the link. Falls back to the legacy name-token match
+ * only among targets that carry NO scope for this dimension at all, so a
+ * target authored before scoped linking existed keeps working off its name
+ * while a target deliberately scoped AWAY from this entry (e.g. re-scoped
+ * from Busan to Ilios) never links back in just because its old name still
+ * says "Busan".
+ */
+function linkedTarget(entry: FocusEntry, candidates: AuthoredTarget[]): AuthoredTarget | undefined {
+  const scoped = candidates.filter((t) => scopeLinksEntry(t, entry));
+  const pool = scoped.length
+    ? scoped
+    : candidates.filter((t) => !hasDimensionScope(t, entry.dimension) && nameLinksEntry(t, entry));
+  return pool.sort((a, b) => (b.activatedAt ?? b.createdAt) - (a.activatedAt ?? a.createdAt))[0];
+}
+
+/** Does `target`'s own scope (R9) name this entry's dimension key directly? */
+function scopeLinksEntry(t: AuthoredTarget, entry: FocusEntry): boolean {
+  if (entry.dimension === 'map') return t.mapScope?.includes(entry.key) ?? false;
+  if (entry.dimension === 'role') return t.roleScope === entry.key;
+  const key = heroMatchKey(entry.key);
+  return t.heroScope?.some((h) => heroMatchKey(h) === key) ?? false;
+}
+
+/** Does `target` carry an explicit scope for this dimension at all (matching or not)? Gates the name-token fallback — a target that opted into scoping a dimension must link by scope or not at all. */
+function hasDimensionScope(t: AuthoredTarget, dimension: FocusDimension): boolean {
+  if (dimension === 'map') return !!t.mapScope && t.mapScope.length > 0;
+  if (dimension === 'role') return t.roleScope != null;
+  return !!t.heroScope && t.heroScope.length > 0;
+}
+
+/**
+ * Legacy fallback: does `target`'s NAME mention the entry key as a whole token
+ * run? Both sides tokenize to lowercase alphanumeric words (apostrophes
  * elided so "King’s"/"King's"/"Kings" match alike; every other separator splits
  * a token), and the key's tokens must appear *contiguously* in the name — so
  * casing, apostrophe style and spacing never break a real link, while a short
@@ -286,15 +322,11 @@ function withDimension(items: FocusItem[], dimension: FocusDimension): FocusEntr
  * "Plan a warmup routine"). A role prefill written with the display label
  * ("Open Q") still links the `openQ` role key via its camelCase-split variant.
  */
-function linkedTarget(entry: FocusEntry, candidates: AuthoredTarget[]): AuthoredTarget | undefined {
+function nameLinksEntry(t: AuthoredTarget, entry: FocusEntry): boolean {
   const needles = keyNeedles(entry.key, entry.dimension);
-  if (!needles.length) return undefined;
-  return candidates
-    .filter((t) => {
-      const name = tokenize(t.name);
-      return needles.some((needle) => includesTokenRun(name, needle));
-    })
-    .sort((a, b) => (b.activatedAt ?? b.createdAt) - (a.activatedAt ?? a.createdAt))[0];
+  if (!needles.length) return false;
+  const name = tokenize(t.name);
+  return needles.some((needle) => includesTokenRun(name, needle));
 }
 
 /**

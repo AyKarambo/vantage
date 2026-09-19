@@ -237,7 +237,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     updateTarget: (input) => {
       deps.manual.updateTarget(input.id, {
         name: input.name, mode: input.mode, rule: input.rule,
-        roleScope: input.roleScope, heroScope: input.heroScope,
+        roleScope: input.roleScope, heroScope: input.heroScope, mapScope: input.mapScope,
       });
     },
     setTargetActive: (id, active) => deps.manual.setActive(id, active),
