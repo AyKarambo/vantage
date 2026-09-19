@@ -22,7 +22,9 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
 
 ## Players — layout & behaviour
 
-- **Sortable table:** Player, Games together, With me, Against me, Last seen. Default sort is
+- **Sortable table:** Player, Games together, With you, Against you, Last seen (the with/against
+  wording is shared across Players, the match detail's player-history card, a player's own page
+  and Live via `RELATION_LABEL` in `renderer/src/format.ts` — K7). Default sort is
   shared games descending. Search and a **min. games** chip row (`1+ / 2+ / 5+ / 10+`, its own
   `minPlayerGames` pref) narrow the list; the sort choice persists as `playerSort`.
 - **Sorting, searching and capping happen on MAIN**, over the whole matched set, before the

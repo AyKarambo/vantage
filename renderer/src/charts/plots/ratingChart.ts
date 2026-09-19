@@ -53,7 +53,7 @@ export function ratingChart(points: RatingPoint[]): HTMLElement {
   const tips = tooltipLayer(wrap);
   points.forEach((p, i) => {
     s.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 3, fill: PALETTE.accentBright }));
-    const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 11, fill: 'transparent' });
+    const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 11, fill: 'transparent', tabindex: 0 }); // K8
     hit.style.cursor = 'pointer';
     tips.attach(hit, `${p.label} · rated ${Math.round(p.rating)} · ${p.games}g`);
     s.appendChild(hit);

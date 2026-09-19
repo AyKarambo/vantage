@@ -88,7 +88,10 @@
   color: var(--text);
 }
 .win-btn.win-btn--close:hover {
-  background: rgba(209, 104, 95, 0.9);
+  /* --danger, not a literal red (K4): this is destructive-action red
+     specifically, unrelated to winrate — and the old literal happened to
+     match neither --loss nor --danger in the default scheme anyway. */
+  background: color-mix(in srgb, var(--danger) 90%, transparent);
   color: #fff;
 }
 
@@ -954,8 +957,12 @@
   animation: gep-pulse 1.2s ease-in-out infinite;
 }
 @keyframes gep-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(209, 104, 95, 0.55); }
-  50% { box-shadow: 0 0 0 5px rgba(209, 104, 95, 0); }
+  /* var(--loss) via color-mix (K4), not a literal — this pulse is a
+     connection-health signal, not a winrate reading, but it should still
+     track the player's chosen scheme (orange under colour-blind) rather
+     than staying red regardless. */
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--loss) 55%, transparent); }
+  50% { box-shadow: 0 0 0 5px transparent; }
 }
 
 /* Refresh feedback (status bar) ---------------------------------------------- */
@@ -973,7 +980,7 @@
 .stale-link {
   background: none;
   border: none;
-  color: var(--mid);
+  color: var(--warn);
   font: inherit;
   font-size: 11px;
   cursor: pointer;

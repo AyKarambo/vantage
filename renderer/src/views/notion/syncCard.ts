@@ -172,7 +172,7 @@ function confirmDeleteImported(count: number): void {
         'This removes only matches pulled from Notion — your hand-logged and live-tracked matches stay. Use it to re-import cleanly after fixing your Notion data. Imported accounts are kept; a re-import repopulates everything.'),
       h('div', { style: { display: 'flex', gap: '10px' } },
         button('Delete imported', {
-          variant: 'primary',
+          variant: 'danger',
           onClick: async () => {
             close();
             try {

@@ -9,12 +9,27 @@ import { dataTable, type Column } from './table';
 export interface ChartTableColumn {
   key: string;
   label: string;
+  /**
+   * Formats the raw cell value for display (percent, signed, compact-number,
+   * …). Rows should carry the RAW sortable value (a 0..1 winrate, a signed
+   * number, a plain rating) — a caller that pre-formats into a display string
+   * instead (`pct(m.winrate)`, `signed(...)`) gets string-order sorting on a
+   * number column ('100%' < '25%'), which is the bug this option exists to
+   * let callers stop working around.
+   */
+  render?: (v: string | number | null | undefined) => Node | string;
 }
 
 export type ChartTableRow = Record<string, string | number | null | undefined>;
 
 export function chartCard(
-  opts: CardOpts & { title: string; columns: ChartTableColumn[]; rows: ChartTableRow[] },
+  opts: CardOpts & {
+    title: string;
+    columns: ChartTableColumn[];
+    rows: ChartTableRow[];
+    /** Defaults to dataTable's own default (first column, descending) when omitted. */
+    initialSort?: { key: string; dir: 1 | -1 };
+  },
   chart: Node,
 ): HTMLElement {
   let asTable = false;
@@ -25,11 +40,12 @@ export function chartCard(
     key: c.key,
     label: c.label,
     get: (r) => r[c.key],
+    ...(c.render ? { render: (r: ChartTableRow) => c.render!(r[c.key]) } : {}),
   }));
 
   const paint = (): void => {
     render(body, asTable
-      ? dataTable({ columns, rows: opts.rows, initialSort: { key: columns[0].key, dir: 1 } })
+      ? dataTable({ columns, rows: opts.rows, ...(opts.initialSort ? { initialSort: opts.initialSort } : {}) })
       : chart);
     render(toggleHost, button(asTable ? 'Chart' : 'Table', {
       variant: 'ghost',
@@ -42,6 +58,6 @@ export function chartCard(
   };
   paint();
 
-  const { columns: _c, rows: _r, ...cardOpts } = opts;
+  const { columns: _c, rows: _r, initialSort: _s, ...cardOpts } = opts;
   return card({ ...cardOpts, actions: toggleHost }, body);
 }

@@ -9,7 +9,7 @@
 
 // Card shell
 export { card, emptyState } from './card';
-export type { CardOpts } from './card';
+export type { CardOpts, EmptyStateOpts, EmptyStateAction } from './card';
 
 // Interactive controls
 export { button, confirmButton, segmented, select } from './controls';

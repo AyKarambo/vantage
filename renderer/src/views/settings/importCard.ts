@@ -67,7 +67,7 @@ export function importCard(): HTMLElement {
         `This deletes the ${count} match${count === 1 ? '' : 'es'} imported from a file. Live-tracked, hand-logged, ` +
         'and Notion-imported matches stay untouched — re-import the file any time to bring them back.'),
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
-        button('Remove them', { variant: 'primary', onClick: () => {
+        button('Remove them', { variant: 'danger', onClick: () => {
           void bridge.deleteFileImports().then((res) => {
             close();
             toast(`Removed ${res.deleted} imported match${res.deleted === 1 ? '' : 'es'}.`);

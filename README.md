@@ -68,7 +68,7 @@ account's per-role lines beneath it.
   against them, showing what they played, what you played, on which account and
   role, and the rank you went in at (recorded at the time where possible,
   otherwise reconstructed and marked as an estimate). The match's own player-history
-  card splits your record into *together* and *as opponents* — with/against is only
+  card splits your record into *With you* and *Against you* — with/against is only
   known when the game feed reported both teams, so those two columns don't have to
   add up to the games column, and the card says so. Local, GEP-only, never exported. Every
   match is **editable** from here — both hand-logged and auto-tracked matches, down to

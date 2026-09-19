@@ -118,3 +118,16 @@ export function wrHsl(winrate: number, sat = 56, light = 58, alpha = 1): string 
   const h = wrHue(winrate);
   return alpha >= 1 ? `hsl(${h} ${sat}% ${light}%)` : `hsl(${h} ${sat}% ${light}% / ${alpha})`;
 }
+
+/**
+ * `withAlpha('#ca777f', 0.4)` → `'rgba(202, 119, 127, 0.4)'`. For the rare SVG
+ * fill/stroke that needs a translucent scheme colour (the scatter's focus
+ * band): `PALETTE.loss` etc. are opaque hex, chosen live per winrate scheme,
+ * so they can't be literal rgba() at the call site (K4) — this derives the
+ * rgba() from whichever hex is active right now instead.
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const n = Number.parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

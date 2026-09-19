@@ -6,9 +6,10 @@ import { fmt, pct } from '../format';
 import { wrColor } from '../theme';
 import { prefs } from '../prefs';
 import { store } from '../store';
-import { card, chip, resultPill, statBox } from '../components/primitives';
+import { card, chip, emptyState, resultPill, statBox } from '../components/primitives';
 import { roleIcon } from '../components/roleIcon';
 import { dataTable, type Column } from '../components/table';
+import { infoTip } from '../components/infoTip';
 import { openDrawer } from '../components/overlay';
 import { viewHead, type ViewContext } from './view';
 
@@ -22,16 +23,33 @@ export function heroes(ctx: ViewContext): HTMLElement {
   const columns: Array<Column<HeroSummary>> = [
     { key: 'hero', label: 'Hero', get: (r) => r.hero },
     { key: 'role', label: 'Role', get: (r) => r.role ?? '', render: (r) => h('span', { class: 'tag tag--role' }, roleIcon(r.role)) },
-    { key: 'games', label: 'G', get: (r) => r.games },
+    // 'Games', matching the Maps table's header (K7) — 'G' alone was the odd
+    // one out among 'Games' / 'Games together' / a bare letter for the same
+    // quantity across the app.
+    { key: 'games', label: 'Games', get: (r) => r.games },
     { key: 'winrate', label: 'WR', get: (r) => r.winrate, render: (r) => h('span', { style: { color: wrColor(r.winrate) } }, pct(r.winrate)) },
     { key: 'kda', label: 'KDA', get: (r) => r.kda, render: (r) => r.kda.toFixed(1) },
-    { key: 'elims', label: 'E/10', get: (r) => r.per10?.eliminations ?? null },
-    { key: 'deaths', label: 'D/10', get: (r) => r.per10?.deaths ?? null },
-    { key: 'assists', label: 'A/10', get: (r) => r.per10?.assists ?? null },
+    // render: dataTable no longer rounds a raw numeric cell for you (K1) — a
+    // per-10 rate genuinely has decimals, so these need the same fmt() call
+    // damage/healing/mitigation already use, or they'd show full float noise.
+    { key: 'elims', label: 'E/10', get: (r) => r.per10?.eliminations ?? null, render: (r) => fmt(r.per10?.eliminations) },
+    { key: 'deaths', label: 'D/10', get: (r) => r.per10?.deaths ?? null, render: (r) => fmt(r.per10?.deaths) },
+    { key: 'assists', label: 'A/10', get: (r) => r.per10?.assists ?? null, render: (r) => fmt(r.per10?.assists) },
     { key: 'damage', label: 'DMG/10', get: (r) => r.per10?.damage ?? null, render: (r) => fmt(r.per10?.damage) },
     { key: 'healing', label: 'HEAL/10', get: (r) => r.per10?.healing ?? null, render: (r) => fmt(r.per10?.healing) },
     { key: 'mitigation', label: 'MIT/10', get: (r) => r.per10?.mitigation ?? null, render: (r) => fmt(r.per10?.mitigation) },
-    { key: 'rating', label: 'RTG', get: (r) => ratingByHero.get(r.hero) ?? null, render: (r) => fmt(ratingByHero.get(r.hero)) },
+    {
+      key: 'rating',
+      // K8: 'RTG' alone was a bare abbreviation nobody could hover to
+      // explain — a native `title` on a <th> is invisible to keyboard users
+      // and gets clipped by the frameless window edge anyway.
+      label: h('span', null, 'RTG', infoTip(
+        'Your average self-rating (the 0–100 slider on Log Match / Review) on games with this hero, in the current range.',
+        { label: 'What is RTG?' },
+      )),
+      get: (r) => ratingByHero.get(r.hero) ?? null,
+      render: (r) => fmt(ratingByHero.get(r.hero)),
+    },
   ];
 
   const minGames = prefs.get('minGames') ?? 1;
@@ -59,6 +77,25 @@ export function heroes(ctx: ViewContext): HTMLElement {
         initialSort: { key: 'games', dir: -1 },
         persistSortAs: 'heroSort',
         onRowClick: (row) => openHeroDrawer(ctx, row.hero),
+        // K9: a header over an empty tbody with no explanation used to be the
+        // whole story here — choosing 10+ on a short range, or a role filter
+        // that empties the list, now says why and offers a real way back.
+        empty: !rows.length
+          ? emptyState(ctx.data.heroStats.length
+              // Heroes exist in range; the min-games floor is hiding all of them.
+              ? {
+                  body: `No hero has ${minGames}+ games in this range.`,
+                  action: { label: 'Show 1+', run: () => { prefs.set('minGames', 1); store.rerender(); } },
+                }
+              // No games in range at all — offer the wider window when one exists,
+              // same recovery Overview/Matches/Players already give.
+              : {
+                  body: 'No games in this range yet.',
+                  ...(ctx.data.totalGamesAllTime > 0 && ctx.data.filters.days !== 'all'
+                    ? { action: { label: 'Show all time', run: () => ctx.setFilter({ days: 'all' }) } }
+                    : {}),
+                })
+          : undefined,
       }),
     ),
   );

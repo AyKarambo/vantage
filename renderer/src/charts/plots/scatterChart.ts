@@ -1,6 +1,6 @@
 /** The map-priority scatter — winrate × volume, the dashboard's flagship chart. */
 import { h } from '../../dom';
-import { PALETTE } from '../../theme';
+import { PALETTE, withAlpha } from '../../theme';
 import { pct } from '../../format';
 import { svgEl, svgRoot, svgText } from '../svg';
 import { emptyChart } from './shared';
@@ -49,11 +49,16 @@ export function scatterChart(points: ScatterPoint[], onPick?: (name: string) => 
   const yAt = (wr: number) => top + ((wrHi - clampN(wr, wrLo, wrHi)) / (wrHi - wrLo)) * plotH;
   const s = svgRoot(W, H);
 
-  // Focus band (< 50%).
+  // Focus band (< 50%) — PALETTE.loss (scheme-aware; K4) rather than a
+  // hard-coded literal, which used to stay red under the colour-blind scheme
+  // even once every dot and axis label had switched to orange. The label
+  // sits at the LEFT edge, not the right: the top-right corner is where the
+  // most-played, highest-winrate maps cluster, and a right-anchored label
+  // there used to sit directly under a dot.
   const y50 = yAt(0.5);
-  s.appendChild(svgEl('rect', { x: left, y: y50, width: plotW, height: bot - y50, fill: 'rgba(209,104,95,0.06)' }));
-  s.appendChild(svgEl('line', { x1: left, y1: y50, x2: right, y2: y50, stroke: 'rgba(209,104,95,0.4)', 'stroke-dasharray': '5 4' }));
-  s.appendChild(svgText(right - 4, y50 - 6, 'FOCUS BAND · < 50%', { anchor: 'end', fill: '#c98079', size: 9.5 }));
+  s.appendChild(svgEl('rect', { x: left, y: y50, width: plotW, height: bot - y50, fill: withAlpha(PALETTE.loss, 0.06) }));
+  s.appendChild(svgEl('line', { x1: left, y1: y50, x2: right, y2: y50, stroke: withAlpha(PALETTE.loss, 0.4), 'stroke-dasharray': '5 4' }));
+  s.appendChild(svgText(left + 4, y50 - 6, 'FOCUS BAND · < 50%', { anchor: 'start', fill: PALETTE.lossText, size: 9.5 }));
 
   // Y ticks — the domain extremes plus the 50% line.
   for (const wr of [wrHi, 0.5, wrLo]) {
@@ -75,17 +80,30 @@ export function scatterChart(points: ScatterPoint[], onPick?: (name: string) => 
     const cx = xAt(p.volume), cy = yAt(p.winrate);
     const color = p.color;
     s.appendChild(svgEl('circle', { cx, cy, r: r + 3, fill: color, 'fill-opacity': '0.16' }));
-    const dot = svgEl('circle', { cx, cy, r, fill: color, stroke: 'rgba(255,255,255,0.2)', 'stroke-width': 1 });
+    // tabindex so every dot is Tab-reachable, not just mouse-hoverable (K8) —
+    // focus shows the same styled tip, pinned to the dot's own position since
+    // there's no cursor to follow it with. No second native <title> tooltip
+    // any more either: Chromium rendered that AND the styled one together.
+    const dot = svgEl('circle', { cx, cy, r, fill: color, stroke: 'rgba(255,255,255,0.2)', 'stroke-width': 1, tabindex: 0 });
     dot.style.cursor = 'pointer';
     const label = `${p.name} · ${p.mode} · ${pct(p.winrate)} · ${p.volume}g`;
-    dot.addEventListener('mouseenter', (e) => { tip.textContent = label; tip.classList.add('is-visible'); moveTip(e); });
+    const showTip = (): void => { tip.textContent = label; tip.classList.add('is-visible'); };
+    dot.addEventListener('mouseenter', (e) => { showTip(); moveTip(e); });
     dot.addEventListener('mousemove', moveTip);
     dot.addEventListener('mouseleave', () => tip.classList.remove('is-visible'));
-    if (onPick) dot.addEventListener('click', () => onPick(p.name));
-    // Native title as a no-JS fallback.
-    const title = svgEl('title');
-    title.textContent = label;
-    dot.appendChild(title);
+    dot.addEventListener('focusin', () => {
+      showTip();
+      const r2 = dot.getBoundingClientRect(), wrapR = wrap.getBoundingClientRect();
+      tip.style.left = `${r2.left + r2.width / 2 - wrapR.left}px`;
+      tip.style.top = `${r2.top + r2.height / 2 - wrapR.top}px`;
+    });
+    dot.addEventListener('focusout', () => tip.classList.remove('is-visible'));
+    if (onPick) {
+      dot.addEventListener('click', () => onPick(p.name));
+      dot.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(p.name); }
+      });
+    }
     s.appendChild(dot);
   }
 

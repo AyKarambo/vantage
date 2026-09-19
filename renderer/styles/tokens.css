@@ -56,8 +56,17 @@
   --text-2: #c5c5d0;
   --muted: #9a9aa8;
   --muted-2: #8a8a98;
-  --dim: #7a7a86;
-  --dim-2: #6a6a78;
+  /* Raised from #7a7a86 (K4): the old value cleared 4.5:1 on --bg (4.64:1)
+     but not on --card (4.44:1) — the surface it's actually read against most
+     often (row-meta, tags, stat labels sit on cards). #8b8b98 measures
+     ≈5.60:1 on --card and ≈5.85:1 on --bg. */
+  --dim: #8b8b98;
+  /* Raised from #6a6a78 (K4): failed AA on both surfaces (3.69:1 / 3.54:1).
+     #7c7c8a measures ≈4.58:1 on --card and ≈4.79:1 on --bg — the numbers
+     this token most often carries (game counts, by-map counts) are exactly
+     the thing deciding whether a row is signal, so illegible was the wrong
+     way to save a shade of contrast. */
+  --dim-2: #7c7c8a;
 
   /* Accent — the aurora purple ------------------------------------------ */
   --accent: #7c6cf5;
@@ -81,6 +90,7 @@
   --loss: #ca777f;
   --loss-text: #dca3a8;
   --loss-soft: rgba(202, 119, 127, 0.16);
+  --loss-border: rgba(202, 119, 127, 0.5);
   --mid: #bca976;
   --mid-text: #dac99a;
   --track: rgba(255, 255, 255, 0.06);
@@ -93,6 +103,18 @@
   --danger-text: #e8949b;
   --danger-soft: rgba(212, 86, 95, 0.16);
   --danger-border: rgba(212, 86, 95, 0.55);
+
+  /* Warning / caution. Scheme-independent for the same reason --danger is: a
+     partial-credit grade, a stale link, banter-tone comms, dev/hybrid badges
+     and a log "warn" line are not winrate signals, so they must not silently
+     change (or start clashing with --loss) when the player picks a different
+     winrate scheme. Consolidates what used to be two different frozen-amber
+     rgba() literals scattered across seven call sites into one token family
+     (K4) — the value matches what most of those already looked like. */
+  --warn: #d6a24f;
+  --warn-text: #e0b878;
+  --warn-soft: rgba(214, 162, 79, 0.16);
+  --warn-border: rgba(214, 162, 79, 0.5);
 
   /* Radius --------------------------------------------------------------- */
   --r-sm: 6px;
@@ -133,6 +155,7 @@ html[data-wr='teal-coral'] {
   --loss: #d1887b;
   --loss-text: #e2b0a7;
   --loss-soft: rgba(209, 136, 123, 0.16);
+  --loss-border: rgba(209, 136, 123, 0.5);
   --mid: #b4a27e;
   --mid-text: #d6c5a4;
 }
@@ -146,6 +169,7 @@ html[data-wr='colorblind'] {
   --loss: #d68a3a;
   --loss-text: #e0ac72;
   --loss-soft: rgba(214, 138, 58, 0.14);
+  --loss-border: rgba(214, 138, 58, 0.5);
   --mid: #d6a24f;
   --mid-text: #e0b878;
 }

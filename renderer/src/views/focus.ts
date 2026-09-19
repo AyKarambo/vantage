@@ -9,6 +9,7 @@ import type { FocusEntry, FocusProgress, FocusTrend } from '../../../src/shared/
 import { pct, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
 import { button, card } from '../components/primitives';
+import { infoTip } from '../components/infoTip';
 import { viewHead, type ViewContext } from './view';
 
 const TREND_META: Record<FocusTrend, { arrow: string; color: string; label: string }> = {
@@ -63,11 +64,13 @@ function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement 
 function trendArrow(trend?: FocusTrend): HTMLElement | null {
   if (!trend) return null;
   const meta = TREND_META[trend];
-  return h('span', {
-    class: 'mono',
-    title: `Trend: ${meta.label} (recent games vs earlier ones in range)`,
-    style: { color: meta.color, fontSize: '12px', flex: '0 0 auto' },
-  }, meta.arrow);
+  // K8: a bare `title` on a 12px glyph was the only explanation of what the
+  // arrow means — invisible to keyboard users, and a ~1s hover away from
+  // everyone else.
+  return h('span', { style: { display: 'inline-flex', alignItems: 'baseline', flex: '0 0 auto' } },
+    h('span', { class: 'mono', style: { color: meta.color, fontSize: '12px' } }, meta.arrow),
+    infoTip(`Trend: ${meta.label} (recent games vs earlier ones in range).`, { label: `Trend: ${meta.label}` }),
+  );
 }
 
 /**

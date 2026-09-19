@@ -8,7 +8,7 @@
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, rankLabel, relTime, roleLabel, signed } from '../format';
+import { fmt, rankLabel, relTime, roleLabel, signed, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -817,8 +817,8 @@ function playerHistorySection(d: MatchDetail, ctx: ViewContext): HTMLElement {
         h('tr', null,
           h('th', null, 'Player'),
           h('th', null, 'Prior'),
-          h('th', null, 'Together'),
-          h('th', null, 'As opponents'),
+          h('th', null, RELATION_LABEL.with.long),
+          h('th', null, RELATION_LABEL.against.long),
           h('th', null, 'Last'),
         ),
       ),

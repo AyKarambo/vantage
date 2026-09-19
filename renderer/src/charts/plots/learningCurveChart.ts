@@ -195,7 +195,7 @@ export function learningCurveChart(curve: TargetLearningCurve): HTMLElement {
     if (p.roll == null) return;
     const cx = xAt(i), cy = yFrac(p.roll);
     s.appendChild(svgEl('circle', { cx, cy, r: 3, fill: PALETTE.accentBright, opacity: heroOpacity }));
-    const hit = svgEl('circle', { cx, cy, r: 11, fill: 'transparent' });
+    const hit = svgEl('circle', { cx, cy, r: 11, fill: 'transparent', tabindex: 0 }); // K8
     hit.style.cursor = 'pointer';
     tips.attach(hit, tooltipFor(p, curve.baseline));
     s.appendChild(hit);
