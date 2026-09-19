@@ -50,7 +50,7 @@ The Overwatch master-data editor — add / edit / remove heroes (name + role), m
 
 - Notion token / database management (own screen — `screen-notion.spec.md`).
 - App version / build facts / support contact (the About screen — `about-page.spec.md`).
-- Editing window bounds — size/position/maximized state persist automatically in the main process and never cross the bridge.
+- Editing window bounds — size/position/maximized state persist automatically in the main process and never cross the bridge. On open, saved bounds are re-fit against the *current* display's work area (`dashboardWindow.ts` + pure `windowBounds.ts`, W7): clamped down if they no longer fit (a smaller display, different OS scaling), shifted back on-screen if the saved position would land partly outside the work area or under the taskbar (not re-centered — a deliberate placement survives where it still fits), or maximized outright if even the app's minimum size doesn't fit the work area. No saved bounds (first launch) centers the default size instead.
 
 ## Constraints
 

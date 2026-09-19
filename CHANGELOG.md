@@ -791,6 +791,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   Discord actually works. The sidebar now auto-collapses to an icon rail once the window gets
   narrower than ~1180px, and expands again above it, so a snapped window's nav never turns into a
   keyhole; pin it open or closed any time with the collapse toggle or `Ctrl+B` (W7).
+- **The window no longer opens off-screen after a display change.** If you unplug a monitor,
+  switch Windows display scaling, or the window was last parked on a second screen that's now
+  gone, Vantage now re-fits its remembered size and position onto whatever screen it's actually
+  opening on — shrunk to fit if needed, nudged back on-screen if it would otherwise land partly
+  off it or under the taskbar, or maximized if even the smallest usable size doesn't fit (W7).
 
 ## 0.34.0 — 31 July 2026
 

@@ -546,7 +546,9 @@ choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe
 a **window that fits half a 1080p display** — `minWidth: 960` plus a sidebar that auto-collapses
 to an icon rail below ~1180px (pin it open/closed with the toggle or `Ctrl+B` to opt out) so
 Win+Left/Right snapping beside a windowed Overwatch or Discord never leaves the nav a keyhole (W7),
-window-position memory, and a **Settings** screen with a **section rail** (jump links to
+window-position memory that re-fits itself to whatever display it's actually opening on — clamped,
+shifted back on-screen, or maximized as needed after a display change or undock, rather than ever
+landing off-screen (W7), and a **Settings** screen with a **section rail** (jump links to
 Accounts, Quick Log, Coaching, App behavior, Appearance, Diagnostics, Data storage and Import —
 click one and it scrolls to and flashes that card, and About/FAQ's own links land pre-scrolled
 there too) above an
