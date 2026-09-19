@@ -22,6 +22,11 @@
 #      OW_REQUIRE_SIGNING=1 makes app-builder-lib's Overwolf signer throw instead of warn)
 #   7. verify Authenticode (Valid, Certum issuer, "Open Source Developer" subject, timestamped)
 #   8. create the tag at HEAD and publish the GitHub Release with the signed installer
+#   9. on success only: commit the bumped package.json/package-lock.json ("the version
+#      floor" - see docs/signing.md) and push to <remote>/main, so `npm start`'s banner
+#      and an unpackaged `app.getVersion()` stay current between releases instead of
+#      silently drifting stale. A dry run or a failure at any step above reverts those
+#      files instead (git checkout --).
 #
 # Usage:
 #   npm run publish:release                        # build, sign, verify, tag, publish
@@ -130,7 +135,9 @@ $ErrorActionPreference = 'Continue'
 $ErrorActionPreference = $prevEAP
 if ($LASTEXITCODE -eq 0) { throw "a GitHub Release $tag already exists." }
 
-# 6-8. build, sign, verify, publish (restore package.json no matter what) ------
+# 6-9. build, sign, verify, publish, then advance the version floor on success
+# (revert it on a dry run or a failure) ----------------------------------------
+$released = $false
 try {
     npm version $version --no-git-tag-version --allow-same-version | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "npm version failed." }
@@ -166,6 +173,8 @@ try {
     }
     & $gh release create @ghArgs
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed." }
+    $released = $true
+
     $suffix = if (-not $owSigned) { ' (GEP disabled - not yet Overwolf-approved)' } else { '' }
     Write-Host "`nPublished $tag with a signed installer.$suffix" -ForegroundColor Green
 }
@@ -174,5 +183,26 @@ finally {
     foreach ($v in 'OW_CLI_EMAIL', 'OW_CLI_API_KEY', 'OW_BUILD_KEY', 'OW_REQUIRE_SIGNING') {
         Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
     }
-    git checkout -- package.json package-lock.json 2>$null # keep main at its floor version
+    if ($released) {
+        # Advance main's version floor to the version just shipped, instead of reverting
+        # it - otherwise nothing ever updates it and it silently drifts stale (it did,
+        # twice: 0.31.0 sat six releases behind, then 0.37.2 sat two more behind that).
+        # `npm start`'s banner and `app.getVersion()` in an unpackaged run both read this.
+        if (git status --porcelain -- package.json package-lock.json) {
+            git add package.json package-lock.json
+            git commit -m "chore: bump the package.json version floor to $version" --quiet
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Release $tag published, but committing the version-floor bump failed. Commit it manually: git add package.json package-lock.json && git commit -m 'chore: bump the package.json version floor to $version'"
+            } else {
+                git push $Remote "HEAD:main"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warning "Release $tag published, but pushing the version-floor commit to $Remote/main failed (main may have moved - fetch/rebase and push it manually): git push $Remote HEAD:main"
+                } else {
+                    Write-Host "Bumped the version floor to $version on $Remote/main." -ForegroundColor Green
+                }
+            }
+        }
+    } else {
+        git checkout -- package.json package-lock.json 2>$null # dry run / failure: leave main's floor untouched
+    }
 }

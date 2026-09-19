@@ -214,7 +214,12 @@ anyway*).
   sets them plus `OW_REQUIRE_SIGNING=1` for the `npm run release` child process, and
   removes them again in a `finally` block. A real publish made with
   `-AllowUnsignedOverwolf` gets a banner prepended to its release notes stating GEP is
-  disabled in that build.
+  disabled in that build. `package.json`/`package-lock.json` carry a "version floor" —
+  `npm version` bumps it for the build, and on a **successful, non-dry-run** publish the
+  `finally` block commits that bump and pushes it to `origin/main` (instead of reverting
+  it via `git checkout --`, which still happens on a dry run or a build/sign failure), so
+  the floor tracks the last real release automatically. Without this the floor silently
+  drifts stale between releases — it did, twice, before this was automated.
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — quality gates only (typecheck
   + tests) on push to `main` and PRs. `permissions: contents: read`, no secrets, no
   signing, no publish path — it is structurally impossible for CI to publish a release.
