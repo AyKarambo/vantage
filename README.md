@@ -19,10 +19,16 @@ line names the account the rank belongs to, e.g. `Karambo · Dmg · GM4 · 16%` 
 short wherever the layout is tight, `B S G P E D M GM C` plus the division, with the full name in
 the tooltip),
 navigation, and a **Current session** card — a live recap
-(W–L, net, winrate) of your current sitting. A sitting ends once you've gone longer than a
-configurable gap since your last game (default 3h; adjustable in Settings → General →
-Coaching), so a late-night session spanning past midnight still reads as one, and the card
-never shows stale data as "current."
+(W–L, net, winrate, streak, top map) of your current sitting, click-through to its games. A
+sitting ends once you've gone longer than a configurable gap since your last game (default 3h;
+adjustable in Settings → General → Coaching, named right in the card's own empty state), so a
+late-night session spanning past midnight still reads as one, and the card never shows stale
+data as "current." Once a sitting closes, Overview picks up with a **last-session debrief**
+(S3) — the same real sitting, not a UTC-calendar-day recap that used to split a midnight
+session in two or file a west-of-UTC evening under the next day — with W-L/net/winrate plus
+whichever of SR change, best map, and targets-hit rate the sitting actually has, a "Review
+these N games →" link when any are still ungraded, and a "View games →" link; dismissing it
+collapses to a one-line reopen instead of hiding it until tomorrow.
 
 The sidebar **collapses to an icon-only rail** (the `« Collapse` bar directly under the account
 chip, or **Ctrl B**), which sticks between launches — useful on a small screen, or whenever you
@@ -323,7 +329,7 @@ everywhere** (click a heatmap day, a Mental flag count, or any "open the map" su
 the Overview scatter and its Top-priority callouts, Live's priority card, a hero drawer's By-map
 rows, Focus's map rows, the command palette's Map entries — to open exactly those matches on
 Matches), remembered role + account in the
-quick-log, hover tooltips + a "view as table" toggle on charts, a next-day session recap, a
+quick-log, hover tooltips + a "view as table" toggle on charts, a last-session debrief once your sitting closes (S3), a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
 window-position memory, and a **Settings** screen with an
 **accounts manager** (a tidy list of every account seen in your match history — name, game

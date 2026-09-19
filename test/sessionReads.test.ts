@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { currentSession, dayKey, groupByDay, sessionRecap } from '../src/core/analytics';
-import type { GameRecord } from '../src/core/analytics';
+import { currentSession, dayKey, groupByDay, sessionDebrief } from '../src/core/analytics';
+import type { GameRecord, HeroStat } from '../src/core/analytics';
 import type { Result, Role } from '../src/core/model';
-import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
+import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 
 const NOW = Date.UTC(2026, 6, 4, 15, 0, 0); // Jul 4, 15:00 UTC (dayKey buckets by UTC day)
 
@@ -19,6 +19,13 @@ function game(p: Partial<GameRecord> & { timestamp: number; result: Result }): G
 }
 
 const hoursAgo = (h: number): number => NOW - h * 3_600_000;
+
+function measuredTarget(rule: string, p: Partial<AuthoredTarget> = {}): AuthoredTarget {
+  return { id: 't', name: 't', mode: 'measured', rule, createdAt: 0, isActive: true, ...p };
+}
+function hero(p: Partial<HeroStat> = {}): HeroStat {
+  return { hero: 'Tracer', role: 'damage', eliminations: 0, deaths: 0, assists: 0, damage: 0, healing: 0, mitigation: 0, ...p };
+}
 
 describe('groupByDay', () => {
   it('groups under Today/Yesterday/date labels with per-day W–L tallies', () => {
@@ -112,46 +119,97 @@ describe('currentSession', () => {
   });
 });
 
-describe('sessionRecap', () => {
-  it('is null when yesterday had no games', () => {
-    expect(sessionRecap([game({ timestamp: hoursAgo(1), result: 'Win' })], NOW)).toBeNull();
+describe('sessionDebrief (S3)', () => {
+  it('is null with no games at all', () => {
+    expect(sessionDebrief([], [], NOW)).toBeNull();
   });
 
-  it('summarizes yesterday only: W–L, net, winrate, game count', () => {
+  it('summarizes the trailing gap-based sitting, not a calendar day — a game 2 days back in a DIFFERENT sitting is excluded', () => {
     const games = [
+      game({ timestamp: hoursAgo(28), result: 'Loss' }),
+      // gap > 180min threshold here — the sitting boundary, not midnight
       game({ timestamp: hoursAgo(24), result: 'Win' }),
-      game({ timestamp: hoursAgo(25), result: 'Win' }),
-      game({ timestamp: hoursAgo(26), result: 'Loss' }),
-      game({ timestamp: hoursAgo(1), result: 'Loss' }),   // today — excluded
-      game({ timestamp: hoursAgo(50), result: 'Loss' }),  // 2 days ago — excluded
+      game({ timestamp: hoursAgo(23), result: 'Win' }),
+      game({ timestamp: hoursAgo(50), result: 'Loss' }), // a much older, separate sitting — excluded
     ];
-    const r = sessionRecap(games, NOW)!;
-    expect(r).toMatchObject({ wins: 2, losses: 1, net: 1, games: 3 });
-    expect(r.date).toBe(dayKey(hoursAgo(24)));
+    const r = sessionDebrief(games, [], NOW, 180)!;
+    expect(r).toMatchObject({ wins: 2, losses: 0, net: 2, games: 2 });
+    expect(r.startedAt).toBe(hoursAgo(24));
+    expect(r.endedAt).toBe(hoursAgo(23));
+  });
+
+  it('reports closed only once the trailing sitting has aged past the gap', () => {
+    const stillOpen = [game({ timestamp: hoursAgo(2), result: 'Win' })];
+    expect(sessionDebrief(stillOpen, [], NOW, 180)!.closed).toBe(false);
+
+    const closed = [game({ timestamp: hoursAgo(4), result: 'Win' })];
+    expect(sessionDebrief(closed, [], NOW, 180)!.closed).toBe(true);
+  });
+
+  it('a sitting spanning midnight stays one block (the bug the UTC-day recap had)', () => {
+    const games = [
+      game({ timestamp: Date.UTC(2026, 6, 3, 23, 30, 0), result: 'Win' }),
+      game({ timestamp: Date.UTC(2026, 6, 4, 0, 45, 0), result: 'Loss' }), // 75 min later, crosses midnight
+    ];
+    const now = Date.UTC(2026, 6, 4, 4, 0, 0);
+    expect(sessionDebrief(games, [], now, 180)).toMatchObject({ games: 2, wins: 1, losses: 1 });
   });
 
   it('names best/worst map only with ≥2 distinct maps', () => {
-    const oneMap = [game({ timestamp: hoursAgo(24), result: 'Win', map: 'Ilios' })];
-    expect(sessionRecap(oneMap, NOW)!.bestMap).toBeUndefined();
+    const oneMap = [game({ timestamp: hoursAgo(1), result: 'Win', map: 'Ilios' })];
+    expect(sessionDebrief(oneMap, [], NOW)!.bestMap).toBeUndefined();
 
     const twoMaps = [
-      game({ timestamp: hoursAgo(24), result: 'Win', map: 'Ilios' }),
-      game({ timestamp: hoursAgo(25), result: 'Loss', map: 'Numbani' }),
+      game({ timestamp: hoursAgo(2), result: 'Win', map: 'Ilios' }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', map: 'Numbani' }),
     ];
-    const r = sessionRecap(twoMaps, NOW)!;
+    const r = sessionDebrief(twoMaps, [], NOW)!;
     expect(r.bestMap).toBe('Ilios');
     expect(r.worstMap).toBe('Numbani');
+  });
+
+  it('returns the top heroes played, most-played first', () => {
+    const games = [
+      game({ timestamp: hoursAgo(3), result: 'Win', heroes: ['Tracer'] }),
+      game({ timestamp: hoursAgo(2), result: 'Win', heroes: ['Tracer'] }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', heroes: ['Genji'] }),
+    ];
+    const r = sessionDebrief(games, [], NOW)!;
+    expect(r.heroes[0]).toMatchObject({ hero: 'Tracer', games: 2, winrate: 1 });
+    expect(r.heroes[1]).toMatchObject({ hero: 'Genji', games: 1, winrate: 0 });
+  });
+
+  it('sums SR deltas logged in the sitting; absent when none were', () => {
+    const logged = [
+      game({ timestamp: hoursAgo(2), result: 'Win', srDelta: 25 }),
+      game({ timestamp: hoursAgo(1), result: 'Loss', srDelta: -18 }),
+    ];
+    const r = sessionDebrief(logged, [], NOW)!;
+    expect(r.srDelta).toBe(7);
+    expect(r.srDeltaGames).toBe(2);
+
+    const none = [game({ timestamp: hoursAgo(1), result: 'Win' })];
+    expect(sessionDebrief(none, [], NOW)!.srDelta).toBeUndefined();
+  });
+
+  it('lists competitive matches in the sitting with no review at all as ungraded', () => {
+    const games = [
+      game({ timestamp: hoursAgo(2), result: 'Win' }), // no review — ungraded
+      game({ timestamp: hoursAgo(1), result: 'Loss', review: { at: NOW, grades: {}, flags: {} } }), // reviewed (even with no grades)
+    ];
+    const r = sessionDebrief(games, [], NOW)!;
+    expect(r.ungradedMatchIds).toEqual([games[0].matchId]);
   });
 
   it('merges quick-log and review flags without double-counting one game', () => {
     const games = [
       game({
-        timestamp: hoursAgo(24), result: 'Loss',
+        timestamp: hoursAgo(1), result: 'Loss',
         mental: { tilt: true },
         review: { at: NOW, grades: {}, flags: { tilt: true, leaver: true } },
       }),
     ];
-    const r = sessionRecap(games, NOW)!;
+    const r = sessionDebrief(games, [], NOW)!;
     expect(r.flags.tilt).toBe(1);
     expect(r.flags.leaver).toBe(1);
   });
@@ -159,18 +217,18 @@ describe('sessionRecap', () => {
   it('computes target hit-rate over graded reviews; absent with no grades', () => {
     const graded = [
       game({
-        timestamp: hoursAgo(24), result: 'Win',
+        timestamp: hoursAgo(2), result: 'Win',
         review: { at: NOW, grades: { a: 'hit', b: 'missed' }, flags: {} },
       }),
       game({
-        timestamp: hoursAgo(25), result: 'Loss',
+        timestamp: hoursAgo(1), result: 'Loss',
         review: { at: NOW, grades: { a: 'hit' }, flags: {} },
       }),
     ];
-    expect(sessionRecap(graded, NOW)!.targetHitRate).toBeCloseTo(2 / 3);
+    expect(sessionDebrief(graded, [], NOW)!.targetHitRate).toBeCloseTo(2 / 3);
 
-    const ungraded = [game({ timestamp: hoursAgo(24), result: 'Win' })];
-    expect(sessionRecap(ungraded, NOW)!.targetHitRate).toBeUndefined();
+    const ungraded = [game({ timestamp: hoursAgo(1), result: 'Win' })];
+    expect(sessionDebrief(ungraded, [], NOW)!.targetHitRate).toBeUndefined();
   });
 
   it('excludes the hidden Notion-import bookkeeping grade from target hit-rate (spec B2)', () => {
@@ -179,20 +237,51 @@ describe('sessionRecap', () => {
     // grade must not count as an attempt or a hit.
     const mixed = [
       game({
-        timestamp: hoursAgo(24), result: 'Win',
+        timestamp: hoursAgo(1), result: 'Win',
         review: { at: NOW, grades: { a: 'hit', [NOTION_IMPROVEMENT_TARGET_ID]: 'missed' }, flags: {} },
       }),
     ];
-    expect(sessionRecap(mixed, NOW)!.targetHitRate).toBe(1); // 1/1, not 1/2
+    expect(sessionDebrief(mixed, [], NOW)!.targetHitRate).toBe(1); // 1/1, not 1/2
 
     // A match with ONLY the bookkeeping grade (pure Notion import, no in-app
     // review) contributes no attempts at all — targetHitRate stays absent.
     const onlyBookkeeping = [
       game({
-        timestamp: hoursAgo(24), result: 'Win',
+        timestamp: hoursAgo(1), result: 'Win',
         review: { at: NOW, grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'hit' }, flags: {} },
       }),
     ];
-    expect(sessionRecap(onlyBookkeeping, NOW)!.targetHitRate).toBeUndefined();
+    expect(sessionDebrief(onlyBookkeeping, [], NOW)!.targetHitRate).toBeUndefined();
+  });
+
+  it('folds in an active measured target\'s auto-graded value alongside self-rated grades', () => {
+    const games = [
+      // Self-rated target 'a': hit. Measured target 'm' auto-grades from
+      // stats: Deaths ≤ 3, this match's per-10 deaths = 2*10/10 = 2 → hit.
+      game({
+        timestamp: hoursAgo(1), result: 'Win', durationMinutes: 10, playedMinutes: 10,
+        perHero: [hero({ deaths: 2 })],
+        review: { at: NOW, grades: { a: 'hit' }, flags: {} },
+      }),
+    ];
+    const measured = measuredTarget('Deaths ≤ 3', { id: 'm' });
+    const r = sessionDebrief(games, [measured], NOW)!;
+    expect(r.targetHitRate).toBe(1); // 2/2 — both the self-rated and the auto-graded hit
+
+    // A measured target the match can't evaluate (no perHero stats) contributes
+    // no attempt, same as evaluateMeasured's own 'no-stat' skip.
+    const noStat = [game({ timestamp: hoursAgo(1), result: 'Win', review: { at: NOW, grades: { a: 'hit' }, flags: {} } })];
+    expect(sessionDebrief(noStat, [measured], NOW)!.targetHitRate).toBe(1); // still just 1/1 from the self grade
+  });
+
+  it('ignores a measured target that has since gone inactive or archived', () => {
+    const games = [
+      game({
+        timestamp: hoursAgo(1), result: 'Win', durationMinutes: 10, playedMinutes: 10,
+        perHero: [hero({ deaths: 2 })],
+      }),
+    ];
+    const inactive = measuredTarget('Deaths ≤ 3', { id: 'm', isActive: false });
+    expect(sessionDebrief(games, [inactive], NOW)!.targetHitRate).toBeUndefined();
   });
 });

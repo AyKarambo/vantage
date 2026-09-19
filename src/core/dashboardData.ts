@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
-  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionRecap, streak,
+  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, streak,
   trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
@@ -240,14 +240,24 @@ export function computeDashboard(
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
-    ...(recapOf(all) ?? {}),
+    ...(recapOf(sessionGames, authoredTargets, sessionSettings.gapMinutes, margin) ?? {}),
   };
 }
 
-/** Yesterday's recap over the unfiltered history, as a spreadable fragment. */
-function recapOf(all: GameRecord[]): { recap: NonNullable<DashboardData['recap']> } | null {
-  const recap = sessionRecap(all);
-  return recap ? { recap } : null;
+/**
+ * The trailing sitting's debrief (S3), as a spreadable fragment — only once
+ * it has CLOSED (a still-open sitting is already the sidebar's live "Current
+ * session" card; showing both would double up the same numbers). Same
+ * account scope as `session` above — a real sitting doesn't span accounts.
+ */
+function recapOf(
+  sessionGames: GameRecord[],
+  authoredTargets: AuthoredTarget[],
+  gapMinutes: number,
+  margin?: number,
+): { recap: NonNullable<DashboardData['recap']> } | null {
+  const debrief = sessionDebrief(sessionGames, authoredTargets, Date.now(), gapMinutes, margin);
+  return debrief?.closed ? { recap: debrief } : null;
 }
 
 export function applyFilters(

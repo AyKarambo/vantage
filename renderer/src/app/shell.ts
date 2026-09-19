@@ -21,7 +21,8 @@ import { openModal } from '../components/overlay';
 import { mountToastHost } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
-import { pct, relTime, roleLabel, signed } from '../format';
+import { clickableRow } from '../components/clickableRow';
+import { pct, relTime, roleLabel, signed, streakText } from '../format';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
@@ -849,13 +850,34 @@ export class App {
   /** The "Current session" body, re-rendered into the persistent session card. */
   private sessionSummary(state: AppState): HTMLElement {
     const s = state.data?.session;
-    return s && s.games
-      ? h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '5px' } },
-          h('span', { class: 'mono', style: { fontSize: '17px', fontWeight: '600' } }, `${s.wins}–${s.losses}`),
-          h('span', { style: { fontSize: '11px', color: 'var(--win-text)' } }, `${signed(s.wins - s.losses)} net`),
-          h('span', { class: 'u-muted', style: { fontSize: '11px' } }, `· ${pct(s.winrate)}`),
-        )
-      : h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px' } }, 'No current session yet');
+    const gapMinutes = state.data?.sessionSettings.gapMinutes ?? 180;
+    const gapText = gapMinutes % 60 === 0 ? `${gapMinutes / 60}h` : `${gapMinutes}m`;
+    const tip = `A sitting is games with no gap longer than ${gapText} between them — follows the account switcher, not the role/date filter.`;
+    if (!s || !s.games) {
+      // S3: named the actual rule instead of a bare "no session yet" — the
+      // gap threshold is a real, user-configurable number nothing here used
+      // to surface.
+      return h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px', lineHeight: '1.4' }, title: tip },
+        `No games in the last ${gapText} — your next game starts a new sitting`);
+    }
+    const topMap = s.topMaps[0];
+    return h('div', {
+      style: { marginTop: '5px', cursor: 'pointer' },
+      title: tip,
+      ...clickableRow(() => store.setView('matches', { day: s.date })),
+    },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
+        h('span', { class: 'mono', style: { fontSize: '17px', fontWeight: '600' } }, `${s.wins}–${s.losses}`),
+        h('span', { style: { fontSize: '11px', color: 'var(--win-text)' } }, `${signed(s.wins - s.losses)} net`),
+        h('span', { class: 'u-muted', style: { fontSize: '11px' } }, `· ${pct(s.winrate)}`),
+      ),
+      // Streak + top map (S3) — the Session payload always carried these;
+      // nothing here used to read them.
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '3px' } },
+        h('span', { class: `mono ${s.streak.type === 'W' ? 'is-win' : s.streak.type === 'L' ? 'is-loss' : 'u-dim'}`, style: { fontSize: '11px' } }, streakText(s.streak)),
+        topMap ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${topMap.key} ×${topMap.games}`) : null,
+      ),
+    );
   }
 
   /** The status-bar connection indicator: dot color + short truthful label. */
