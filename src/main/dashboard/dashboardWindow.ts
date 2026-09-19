@@ -20,6 +20,8 @@ export interface WindowUiDeps {
   closeToTray(): boolean;
   savedBounds(): WindowBounds | undefined;
   saveBounds(b: WindowBounds): void;
+  /** Persisted text-size zoom factor (W7) — 1 = 100%; applied once the window has loaded. */
+  zoomFactor(): number;
 }
 
 /** Owns the dashboard BrowserWindow and answers its data + window requests. */
@@ -50,6 +52,11 @@ export class DashboardWindow {
   /** Push an event payload to the renderer; silently dropped when no window is open. */
   push(channel: string, payload: unknown): void {
     if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload);
+  }
+
+  /** Apply a text-size zoom factor to the live window now (W7); silently dropped when no window is open — the next `open()` reapplies the persisted value regardless. */
+  setZoomFactor(factor: number): void {
+    if (this.win && !this.win.isDestroyed()) this.win.webContents.setZoomFactor(factor);
   }
 
   open(): void {
@@ -83,6 +90,10 @@ export class DashboardWindow {
     // before loadFile — programmatic loads don't trip these guards.
     hardenWebContents(this.win.webContents);
     if (saved?.maximized) this.win.maximize();
+    // The persisted text-size zoom (W7) — set on the webContents before load
+    // so it's already in effect for the very first paint, not a visible jump
+    // once the page finishes loading.
+    this.win.webContents.setZoomFactor(this.ui.zoomFactor());
     void this.win.loadFile(path.join(app.getAppPath(), 'renderer', 'index.html'));
     const debouncedSave = (): void => {
       clearTimeout(this.boundsTimer);

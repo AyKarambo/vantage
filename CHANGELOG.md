@@ -783,6 +783,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **A Comfortable/Compact density setting.** Compact tightens card, table-row, KPI and progress-bar
   padding across the app so more fits on screen at once — a segmented control in Settings →
   Appearance, and a one-click `Ctrl+K` action, same as the winrate colour scheme (W7).
+- **A text-size zoom control.** `Ctrl+=`/`Ctrl+-` step the whole app's size up or down, `Ctrl+Shift+0`
+  resets to 100% — all three now on the `?` cheatsheet — and Settings → App behavior gets a matching
+  90/100/110/125% select. Persists and reapplies on every launch before the first paint (W7).
 
 ## 0.34.0 — 31 July 2026
 

@@ -91,6 +91,12 @@ export interface UiConfig {
    */
   lastSeenVersion?: string;
   windowBounds?: WindowBounds;
+  /**
+   * Renderer text-size zoom factor (W7) — 1 = 100%, clamped 0.9–1.3. Optional
+   * with no `DEFAULTS` entry, same convention as {@link lastSeenVersion}:
+   * absent means "never changed from 100%", not a fabricated `1`.
+   */
+  uiZoom?: number;
 }
 
 export interface AppConfig {

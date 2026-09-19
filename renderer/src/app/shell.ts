@@ -28,6 +28,7 @@ import { matchClock, pct, relTime, roleLabel, signed, streakText } from '../form
 import { getWinrateScheme, setWinrateScheme } from '../theme';
 import { WINRATE_SCHEME_OPTIONS } from '../winrateScheme';
 import { getDensity, setDensity, DENSITY_OPTIONS } from '../density';
+import { initZoom, zoomIn, zoomOut, zoomReset } from '../zoom';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
@@ -328,6 +329,7 @@ export class App {
     initDevModeAuthStatus();
     subscribeDevModeAuthStatus(() => this.renderDevBadge());
     this.renderDevBadge();
+    initZoom();
     // Live logging: a just-tracked match refetches the open dashboard (composes
     // with the focus-refresh below for pushes dropped while the window was closed).
     bridge.onGameLogged(() => void store.refresh());
@@ -1259,6 +1261,20 @@ export class App {
     registerShortcut({
       combo: 'ctrl+b', description: 'Collapse / expand the sidebar', group: 'Global',
       allowInInput: true, run: () => this.toggleCollapsed(),
+    });
+    // Text-size zoom (W7). `Ctrl+0` is already the Players nav shortcut, so
+    // reset uses `Ctrl+Shift+0` — comboOf() doesn't track Shift as its own
+    // modifier, so the binding is the literal character Shift+0 produces on a
+    // US layout ('ctrl+)'), same convention the '?' cheatsheet binding
+    // already relies on for its own shifted-symbol key.
+    registerShortcut({
+      combo: 'ctrl+=', description: 'Zoom in', group: 'Global', allowInInput: true, run: () => zoomIn(),
+    });
+    registerShortcut({
+      combo: 'ctrl+-', description: 'Zoom out', group: 'Global', allowInInput: true, run: () => zoomOut(),
+    });
+    registerShortcut({
+      combo: 'ctrl+)', description: 'Reset zoom (100%)', group: 'Global', allowInInput: true, run: () => zoomReset(),
     });
     // Explicit keys only — a screen without one simply has no digit shortcut
     // (the palette still reaches it). Duplicates would be a typo, so the first

@@ -1,9 +1,10 @@
 import { h, render } from '../../dom';
 import type { AppInfo, AppUiSettings } from '../../../../src/shared/contract';
 import { bridge } from '../../bridge';
-import { button, card, chip } from '../../components/primitives';
+import { button, card, chip, select } from '../../components/primitives';
 import { toast } from '../../components/toast';
 import { formatClaudeDesktopMcpConfig } from '../../../../src/core/mcpConfig';
+import { ZOOM_OPTIONS, ZOOM_DEFAULT, syncZoom } from '../../zoom';
 import { store } from '../../store';
 import type { ViewContext } from '../view';
 
@@ -124,6 +125,18 @@ function devModeSection(s: AppUiSettings): HTMLElement {
           () => apply({ closeToTray: !s.closeToTray })),
         h('div', { class: 'hint', style: { marginTop: '6px' } },
           'When on, closing the window keeps tracking games in the background.'),
+      ),
+      h('div', null,
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+          h('span', { class: 'field-label', style: { margin: '0' } }, 'Text size'),
+          select(
+            ZOOM_OPTIONS.map((o) => ({ value: String(o.value), label: o.label })),
+            String(s.uiZoom ?? ZOOM_DEFAULT),
+            (v) => { syncZoom(Number(v)); apply({ uiZoom: Number(v) }); },
+          ),
+        ),
+        h('div', { class: 'hint', style: { marginTop: '6px' } },
+          'Zooms the whole app. Also Ctrl+= / Ctrl+- to step, Ctrl+Shift+0 to reset — see the ? cheatsheet.'),
       ),
       h('div', null,
         chip(s.runAtLogin ? 'Run at login: on' : 'Run at login: off', s.runAtLogin,

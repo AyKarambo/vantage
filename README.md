@@ -531,7 +531,8 @@ whichever group's module happened to import first, with Navigate's own `Ctrl+0` 
 `Ctrl+9` instead of wherever it was declared (M5) — `←/→`
 between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/PageDown` to page
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
-Review, `W/L/D`+`Enter` in the log dialog), the palette can also flip the MCP endpoint, the live
+Review, `W/L/D`+`Enter` in the log dialog, `Ctrl+=`/`Ctrl+-`/`Ctrl+Shift+0` to step/reset the
+app's text-size zoom (90–130%, also a Settings → App behavior select, W7)), the palette can also flip the MCP endpoint, the live
 kill feed, the break reminder, demo data, log debug detail, the winrate colour scheme, or the list
 density without a trip to Settings (M5, density W7), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down

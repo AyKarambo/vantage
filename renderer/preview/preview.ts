@@ -22,6 +22,7 @@ import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreferenc
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
+import { clampZoom } from '../../src/core/zoom';
 import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
 import { roleOfHero } from '../../src/core/heroes';
@@ -1190,6 +1191,13 @@ const mock: OwStatsApi = {
   getAppSettings: async () => appSettings,
   setAppSettings: async (patch: Partial<AppUiSettings>) => {
     appSettings = { ...appSettings, ...patch };
+    if (patch.uiZoom !== undefined) {
+      appSettings.uiZoom = clampZoom(patch.uiZoom);
+      // No real webContents.setZoomFactor in the browser harness — the
+      // (non-standard but Chromium-supported) CSS `zoom` property is the
+      // closest visual stand-in, so W7's text-size setting is testable here.
+      (document.documentElement.style as any).zoom = String(appSettings.uiZoom);
+    }
     save(APP_SETTINGS_KEY, appSettings);
     return appSettings;
   },
