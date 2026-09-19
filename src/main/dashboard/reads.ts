@@ -10,6 +10,7 @@ import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
 import { enteringRanks, rankKey } from '../../core/rank';
+import { safeReadiness, type ReadinessSummary } from '../../core/readiness';
 import type {
   DashboardFilters, DashboardData, HeroDetail, MatchDetail, MatchRow, PlayerList, PlayerListQuery,
   PlayerMatchHistory, PlayerRecord,
@@ -64,13 +65,76 @@ export function filteredCompetitiveGames(
   return applyFilters(competitiveOnly(provider.games()), filters ?? {}, seasonStarts(provider));
 }
 
+/**
+ * The readiness verdict for ONE (history revision, day, manual-data snapshot).
+ * Single-entry and module-level, mirroring {@link memoizedDirectory} below.
+ *
+ * This memo is load-bearing, not an optimization: `computeReadiness` alone
+ * costs ~80ms of a ~90ms dashboard read (measured at ~2,500 competitive
+ * games) because it's the one aggregate that walks the WHOLE unfiltered
+ * history rather than the filtered set every other aggregate reads — and
+ * unlike those, its answer doesn't change with the filter bar at all. Without
+ * this, every role/date/account change and every Matches header click paid
+ * for an identical readiness recompute (W8).
+ */
+let readinessMemo: { key: string; summary: ReadinessSummary } | null = null;
+
+/** Drop the memo. For tests only — module state outlives a vitest case. */
+export function resetReadinessMemo(): void {
+  readinessMemo = null;
+}
+
+/**
+ * Everything that can actually move the verdict: the history itself, the
+ * calendar day (readiness only ever reads day-ordinal precision — see
+ * `computeReadiness`'s `dayOrdinal(now)` — so a day bucket is exactly
+ * correct, not an approximation), and the small manual-data inputs the
+ * dampener/undertraining reads consult. Those three have no revision counter
+ * of their own (unlike history), but are cheap enough to fingerprint
+ * directly — each is at most a few dozen entries, tiny next to the games
+ * array the memo exists to avoid re-walking.
+ */
+function readinessKey(provider: DataProvider): string {
+  return [
+    provider.historyRevision(),
+    Math.floor(Date.now() / 86_400_000),
+    JSON.stringify(provider.manualTargets()),
+    JSON.stringify(provider.rankAnchorMap()),
+    JSON.stringify(provider.placementRuns()),
+  ].join('|');
+}
+
+function memoizedReadiness(all: GameRecord[], provider: DataProvider): ReadinessSummary {
+  const compute = (): ReadinessSummary => safeReadiness(all, Date.now(), {
+    targets: provider.manualTargets(),
+    rankAnchors: provider.rankAnchorMap(),
+    suppressed: suppressedMatchIds(all, provider.placementRuns()),
+  });
+  // Demo data is a generated season (see memoizedDirectory's own comment) —
+  // walking it is free, and skipping the memo removes the "did the sample
+  // set change?" question.
+  if (provider.isSample()) return compute();
+  const key = readinessKey(provider);
+  if (readinessMemo?.key === key) return readinessMemo.summary;
+  const summary = compute();
+  readinessMemo = { key, summary };
+  return summary;
+}
+
 /** The full dashboard payload for these filters. */
 export function dashboardRead(
   provider: DataProvider,
   filters: DashboardFilters | undefined,
 ): DashboardData {
+  // Read once: `provider.games()` re-reads and JSON.parses the whole history
+  // table synchronously (see memoizedDirectory's comment) — computeDashboard
+  // re-derives its own competitive-only `all` from whatever it's handed, so
+  // passing the ALREADY-filtered set here is a cheap idempotent re-filter,
+  // not a second parse, and lets memoizedReadiness reuse the same array
+  // instead of re-reading the table itself (W8).
+  const all = competitiveOnly(provider.games());
   return computeDashboard(
-    provider.games(),
+    all,
     filters ?? {},
     provider.demoContext(),
     {
@@ -78,6 +142,7 @@ export function dashboardRead(
       breakReminder: provider.getBreakReminder(),
       staleness: provider.getStaleness(),
       readiness: provider.getReadiness(),
+      readinessSummary: memoizedReadiness(all, provider),
       sessionSettings: provider.getSessionSettings(),
       grading: provider.getGrading(),
       rankAnchors: provider.rankAnchorMap(),

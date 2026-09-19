@@ -46,6 +46,8 @@ function setup() {
     pendingMatches: () => pendingList,
     manualTargets: () => targets,
     demoContext: () => ({ active: false, preference: 'off', hasRealHistory: true }),
+    isSample: () => false,
+    historyRevision: () => 'rev-1',
     effectiveMasterData: () => DEFAULT_MASTER_DATA,
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,
     getStaleness: () => DEFAULT_STALENESS,

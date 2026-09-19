@@ -28,6 +28,8 @@ function provider(demo: boolean): { p: DataProvider; mutations: string[] } {
     pendingMatches: () => [],
     manualTargets: () => [],
     demoContext: () => ({ active: demo, preference: demo ? 'on' : 'off', hasRealHistory: !demo }),
+    isSample: () => demo,
+    historyRevision: () => 'rev-1',
     effectiveMasterData: () => DEFAULT_MASTER_DATA,
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,
     getStaleness: () => DEFAULT_STALENESS,
