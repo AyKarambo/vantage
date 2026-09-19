@@ -9,6 +9,7 @@ import { h } from '../../dom';
 import type { TargetSummary } from '../../../../src/shared/contract';
 import { isStale } from '../../../../src/core/staleness';
 import { button, card, select } from '../../components/primitives';
+import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
@@ -35,7 +36,26 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
       : null,
     h('span', { style: { flex: '1' } }),
     active.length
-      ? button('Start a fresh focus', { variant: 'ghost', onClick: () => refreshAfter(bridge.deactivateAllTargets()) })
+      ? button('Start a fresh focus', {
+          variant: 'ghost',
+          onClick: () => {
+            // Captured BEFORE the deactivate — Undo re-enables exactly this
+            // set, same reversible pattern Archive already gets (R5). Note
+            // Undo restamps `activatedAt` on each: re-activating isn't the
+            // same as never having deactivated, so their "how long has this
+            // been active" clock restarts, same as adding any other target.
+            const ids = active.map((t) => t.id);
+            void bridge.deactivateAllTargets().then(() => {
+              ctx.refresh();
+              toast(`Cleared ${ids.length} active target${ids.length === 1 ? '' : 's'}`, {
+                action: {
+                  label: 'Undo',
+                  run: () => void Promise.all(ids.map((id) => bridge.setTargetActive(id, true))).then(() => ctx.refresh()),
+                },
+              });
+            });
+          },
+        })
       : null,
   );
 

@@ -514,6 +514,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   already offered. A measured target with nothing to show on a given game now folds into one
   muted line instead of a dead row per target, and the active-targets strip labels a measured
   target **auto**, a self-rated one **manual**.
+- **Targets opens on your targets, not a blank form.** With a live set already in place, the
+  page now leads with **Active focus** and **Your targets** — the actual daily question — and
+  the builder collapses behind a **"＋ New target"** button; opening it starts on a genuinely
+  blank name field instead of a real-looking placeholder example one accidental Save away from
+  becoming a real target. The role/hero **scope** picker is collapsed behind a one-line
+  "Applies to: any role, any hero · Change" summary too, instead of always painting the full
+  hero grid. The **Target library** gains a filter chip row (**All / Tank / DPS / Support /
+  Measured only**), marks an entry you already have **"✓ in your targets"**, and adds a
+  one-click **Add** beside the existing "Customize" — save an entry exactly as written, with a
+  toast offering **Edit**. **"Start a fresh focus"** is undoable now too, same as Archive.
 
 ## 0.34.0 — 31 July 2026
 
