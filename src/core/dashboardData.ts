@@ -20,8 +20,8 @@ import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
-import { currentRank, rankKey, rankToPoints, type RankAnchorMap } from './rank';
-import { hasDrifted, isAwaitingRank, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
+import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
+import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role } from './model';
 import type { DemoContext } from './demoPreference';
@@ -100,6 +100,13 @@ export function computeDashboard(
   // computing it here (once, alongside accountRanks) keeps the renderer a thin
   // reader instead of re-deriving rank math from raw history.
   const accountRoleRanks = accountRoleRanksOf(all, manual?.rankAnchors, suppressed);
+  // Rank over time (C1) — one series per anchored (account, role) that has at
+  // least one competitive match in the FILTERED range, keyed like every other
+  // rank map here. The walk itself always runs over the full `all` history
+  // (a ladder position depends on everything before it); only the plotted
+  // points are narrowed to the active range, via the same filtered-games id
+  // set every other "in range" read uses.
+  const rankTrend = rankTrendOf(all, games, manual?.rankAnchors, suppressed, resetBoundaries(placementRuns));
   const placements = placementRuns.map((run) => {
     const { counted, target, latestPrediction, countedMatchIds } = runProgress(all, run);
     return {
@@ -163,6 +170,7 @@ export function computeDashboard(
     ...(primaryRank ? { primaryRank } : {}),
     accountRanks,
     accountRoleRanks,
+    rankTrend,
     placements,
     session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
     byRole: byRole(games),
@@ -494,3 +502,32 @@ function accountRoleRanksOf(
 }
 
 const distinct = <T>(arr: T[]): T[] => [...new Set(arr)];
+
+/**
+ * {@link DashboardData.rankTrend} (C1): one {@link rankSeries} per anchored
+ * (account, role) track that has at least one competitive match in `inRange`
+ * — tracks with an anchor but nothing played in the active window are simply
+ * absent, same convention as every other "in range" map here.
+ */
+function rankTrendOf(
+  all: GameRecord[],
+  inRange: GameRecord[],
+  anchors: RankAnchorMap | undefined,
+  suppressed: ReadonlySet<string>,
+  resetBefore: ReadonlyMap<string, number>,
+): DashboardData['rankTrend'] {
+  const out: DashboardData['rankTrend'] = {};
+  if (!anchors) return out;
+  const tracks = new Map<string, { account: string; role: Role }>();
+  for (const g of inRange) {
+    const key = rankKey(g.account, g.role);
+    if (!tracks.has(key) && anchors[key]) tracks.set(key, { account: g.account, role: g.role });
+  }
+  const inRangeIds = new Set(inRange.map((g) => g.matchId));
+  for (const [key, { account, role }] of tracks) {
+    const series = rankSeries(all, anchors, account, role, { suppressed, resetBefore })
+      .filter((p) => inRangeIds.has(p.matchId));
+    if (series.length) out[key] = series;
+  }
+  return out;
+}

@@ -5,6 +5,7 @@
  */
 import type { Role, Result } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
+import type { RankSeriesPoint } from '../../core/rank/series';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionRecap, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
@@ -180,6 +181,16 @@ export interface DashboardData {
    * mid-placement — see {@link placements} for that state instead).
    */
   accountRoleRanks: Record<string, Partial<Record<Role, { tier: string; division: number; progressPct: number; protected: boolean }>>>;
+  /**
+   * Rank over time (C1): one {@link RankSeriesPoint} series per anchored
+   * (account, role) that has a competitive match in the active FILTERED
+   * range, keyed like {@link accountRoleRanks} — `rankKey(account, role)`.
+   * A track with an anchor but nothing played in range is simply absent.
+   * Oldest first within a series; gaps (placements, pre-reset, no-anchor)
+   * are omitted rather than interpolated, exactly as the Matches "Rank at
+   * start" column blanks them.
+   */
+  rankTrend: Record<string, RankSeriesPoint[]>;
   /**
    * Open and completed placement runs across every track, so rank surfaces
    * can render `Placements N/10` instead of a rank the player does not have.

@@ -242,6 +242,50 @@ describe('computeDashboard', () => {
     expect(computeDashboard(games, { days: 'all', account: 'Smurf' }, demo, { rankAnchors: anchors }).primaryRank).toMatchObject({ account: 'Smurf', tier: 'Bronze' });
   });
 
+  describe('rankTrend (C1)', () => {
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const g = (matchId: string, account: string, role: string, timestamp: number, srDelta?: number): GameRecord =>
+      ({ matchId, timestamp, account, role, map: 'Ilios', result: 'Win', gameType: 'Competitive', heroes: [], srDelta } as GameRecord);
+
+    it('keys a series per anchored (account, role) track with games in range', () => {
+      const anchors = {
+        'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 50 },
+        'Main::tank': { tier: 'Silver', division: 2, progressPct: 10, setAt: 50 },
+      };
+      const games = [g('a', 'Main', 'damage', 100, 10), g('b', 'Main', 'tank', 200, 5)];
+      const d = computeDashboard(games, { days: 'all' }, demo, { rankAnchors: anchors });
+      expect(Object.keys(d.rankTrend).sort()).toEqual(['Main::damage', 'Main::tank']);
+      expect(d.rankTrend['Main::damage']).toHaveLength(1);
+      expect(d.rankTrend['Main::damage'][0].matchId).toBe('a');
+    });
+
+    it('omits an anchored track with no games in the active date range', () => {
+      const anchors = { 'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 50 } };
+      const oldGame = g('a', 'Main', 'damage', Date.now() - 400 * 86400000, 10);
+      const d = computeDashboard([oldGame], { days: 7 }, demo, { rankAnchors: anchors });
+      expect(d.rankTrend).toEqual({});
+    });
+
+    it('is empty when nothing is anchored', () => {
+      const d = computeDashboard([g('a', 'Main', 'damage', 100, 10)], { days: 'all' }, demo, {});
+      expect(d.rankTrend).toEqual({});
+    });
+
+    it('walks the FULL history for the series but only plots points inside the filtered range', () => {
+      const anchors = { 'Main::damage': { tier: 'Gold', division: 3, progressPct: 40, setAt: 50 } };
+      const now = Date.now();
+      const outOfRange = g('old', 'Main', 'damage', now - 400 * 86400000, 10);
+      const inRange = g('recent', 'Main', 'damage', now - 1000, 5);
+      const d = computeDashboard([outOfRange, inRange], { days: 7 }, demo, { rankAnchors: anchors });
+      // Only the in-range match is plotted...
+      expect(d.rankTrend['Main::damage'].map((p) => p.matchId)).toEqual(['recent']);
+      // ...but its rank reflects BOTH matches having happened (the walk saw the
+      // full history) — a fresh anchor-only walk would give it a different value.
+      const anchorOnly = computeDashboard([inRange], { days: 'all' }, demo, { rankAnchors: anchors });
+      expect(d.rankTrend['Main::damage'][0].points).not.toBe(anchorOnly.rankTrend['Main::damage'][0].points);
+    });
+  });
+
   it('re-points primaryRank to whichever account was played most recently, not the one with the most games', () => {
     // The behavior change itself: Main has more total games, but Smurf's last
     // game is the most recent thing played — the corner chip is "what am I

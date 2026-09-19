@@ -21,3 +21,5 @@ export { readinessChart, supercompensationSchematic } from './readinessChart';
 export { ratingChart } from './ratingChart';
 export type { RatingPoint } from './ratingChart';
 export { learningCurveChart, practiceJSchematic, learningCurveRows, LEARNING_CURVE_COLUMNS } from './learningCurveChart';
+export { rankChart } from './rankChart';
+export type { RankSeries } from './rankChart';

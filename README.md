@@ -128,7 +128,11 @@ account's per-role lines beneath it.
   with an improving/worsening read, **tilt by game # in a sitting** (the "stop after game N"
   read), flag counts with leavers split by team, and a **break-reminder setting**
   (on/off + loss threshold) that fires a tray notification after N consecutive losses.
-- **Trends** — winrate over time (with a rolling average alongside the daily/weekly line so the
+- **Trends** — **rank over time**, above everything else: one line per tracked (account, role)
+  you have a rank anchor for, plotted by real date so a stretch with no known rank (an open
+  placement run, a pre-reset match) shows as a real gap rather than a guessed interpolation; a
+  hollow point marks a reconstructed (rather than recorded or replayed) rank. Then winrate over
+  time (with a rolling average alongside the daily/weekly line so the
   general direction reads through the noise), splits by role/account, **when you win** (time-of-day
   winrate with a best-window callout) and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and

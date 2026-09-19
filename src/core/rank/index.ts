@@ -10,3 +10,5 @@ export { rankToPoints, pointsToRank } from './scalar';
 export { rankAfterMatch, rankEnteringMatch, srDeltaForSetRank } from './reconstruct';
 export { enteringRanks, enteringRankAt } from './entering';
 export type { EnteringRank, EnteringRankNote, EnteringRanksOptions } from './entering';
+export { rankSeries } from './series';
+export type { RankSeriesPoint } from './series';

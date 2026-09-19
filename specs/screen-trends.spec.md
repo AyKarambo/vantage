@@ -1,6 +1,6 @@
 # Screen spec: Trends (`trends`)
 
-**Source:** `renderer/src/views/trends.ts`, `renderer/src/components/chartCard.ts`, `renderer/src/charts/plots.ts`, `renderer/src/charts/tooltip.ts`, `src/core/analytics.ts`.
+**Source:** `renderer/src/views/trends.ts`, `renderer/src/components/chartCard.ts`, `renderer/src/charts/plots.ts` (`rankChart`, C1), `renderer/src/charts/tooltip.ts`, `src/core/analytics.ts`, `src/core/rank/series.ts` (`rankSeries`).
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes everything shown.
 
@@ -10,6 +10,7 @@ Momentum over time and where winrate concentrates — one screen to see whether 
 
 ## Layout & behaviour
 
+- **Rank (C1)**, above everything else — the flagship "am I climbing?" chart the screen used to entirely lack. One line per anchored (account, role) track that has a competitive match in the active range, built from `DashboardData.rankTrend` (already scoped by the same filtered game set every other card here reads, so no extra client-side narrowing). Plotted by REAL timestamp, not by index — a stretch with no plottable entering rank (an open placement run, a pre-reset match, no anchor) is simply absent, so the gap shows as real elapsed time rather than an interpolated guess. A point drawn hollow is `estimated: true` (backward-reconstructed rather than a stored snapshot or a forward replay from the anchor — the same 'calculated'/'reconstructed' → not-stored distinction `playerIndex.ts` already collapses to one badge). Y-axis ticks land on division boundaries in the short rank form (`shortRankLabelOf`, e.g. `G3`); with more than one track a colour-keyed legend appears and the per-row "net this range" stat box is withheld (a single number would silently pick a winner among tracks the chart shows side by side). The `chartCard`'s Table toggle lists Date · Rank · `±` (the change from the prior plotted point in the same track; blank on the first row). Omitted entirely when nothing is anchored, or the anchored track(s) have no games in the active range.
 - **Winrate over time** line chart from the trend buckets. The card is a `chartCard` with a Chart/Table toggle — the table shows the same buckets as text (columns Week-or-Day · WR · Games).
 - **Three breakdown cards** — **By role**, **By game mode** (map-type), **By account** — compact horizontal winrate bars, ranked best → worst, with game counts.
 - **Time of day** card: winrate by day-part, with a best-window callout when the sample is worth reading (≥10 decided games and the best bucket is actually a winning one).

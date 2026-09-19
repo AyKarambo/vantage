@@ -129,6 +129,11 @@ function rankKpi(ctx: ViewContext): HTMLElement {
     // window, where "Grandmaster 3" wraps to a second line and unbalances the row.
     const p = rankParts({ tier: r.tier, division: r.division, progressPct: r.progressPct, protected: r.protected, movement: r.movement, short: true });
     const arrow = p.movementDir === 'up' ? '▴ ' : p.movementDir === 'down' ? '▾ ' : '';
+    // The magnitude itself, not just its direction (C1) — `r.movement` was
+    // already computed and threaded through for exactly this, but the tile
+    // used to reduce it to a bare arrow and show the UNRELATED in-division
+    // buffer % next to it, so "how much" never actually appeared anywhere.
+    const moved = p.movementDir !== 'neutral' ? `${signed(Math.round(r.movement))}% since anchor · ` : '';
     const context = r.protected ? `${p.bufferPctText} · rank protected` : `${p.bufferPctText} in division`;
     return kpiCard({
       label: 'Rank',
@@ -136,7 +141,7 @@ function rankKpi(ctx: ViewContext): HTMLElement {
       // no room for "Grandmaster 3" on one line.
       value: `${p.rankLabel}${p.shield ? ' 🛡' : ''}`,
       delta: {
-        text: `${arrow}${context}`,
+        text: `${arrow}${moved}${context}`,
         // Colour the arrow only when it actually points — neutral stays unstyled.
         ...(p.movementDir === 'up' ? { dir: 'up' as const } : p.movementDir === 'down' ? { dir: 'down' as const } : {}),
       },
