@@ -48,6 +48,9 @@ describe('buildTargets — grade scoring', () => {
     expect(t.hitRate).toBe(0.5);
     expect(t.winWhenHit).toBe(1); // both hit games were wins
     expect(t.winWhenMissed).toBe(0); // partial + missed games were losses
+    // R6: the sample size actually behind each side of the split.
+    expect(t.hitDecided).toBe(2);
+    expect(t.missDecided).toBe(2);
   });
 
   it('falls back to the player baseline while a win-split side has no games', () => {
@@ -61,6 +64,24 @@ describe('buildTargets — grade scoring', () => {
     const [t] = buildTargets(games, false, [authored('t1')]);
     expect(t.winWhenHit).toBe(1);
     expect(t.winWhenMissed).toBe(base); // no partial/missed games yet
+    // R6: hitDecided/missDecided say WHICH side that baseline stands in for.
+    expect(t.hitDecided).toBe(1);
+    expect(t.missDecided).toBe(0);
+  });
+
+  it('a Draw is an attempt (if graded) but not a decided game either side (R6)', () => {
+    const games = [
+      game({ result: 'Win', review: review({ t1: 'hit' }) }),
+      game({ result: 'Draw', review: review({ t1: 'hit' }) }),
+      game({ result: 'Loss', review: review({ t1: 'missed' }) }),
+      game({ result: 'Draw', review: review({ t1: 'missed' }) }),
+    ];
+    const [t] = buildTargets(games, false, [authored('t1')]);
+    expect(t.hits).toBe(2);
+    expect(t.attempts).toBe(4);
+    // One Win + one Draw hit, but the Draw doesn't decide anything.
+    expect(t.hitDecided).toBe(1);
+    expect(t.missDecided).toBe(1);
   });
 
   it('shows a fresh target as New: 0/0 with both splits at baseline and a zero spark', () => {
@@ -71,6 +92,8 @@ describe('buildTargets — grade scoring', () => {
     expect(t.hitRate).toBe(0);
     expect(t.winWhenHit).toBe(0.5);
     expect(t.winWhenMissed).toBe(0.5);
+    expect(t.hitDecided).toBe(0);
+    expect(t.missDecided).toBe(0);
     expect(t.spark).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
   });
 

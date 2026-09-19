@@ -291,6 +291,10 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
     expect(s.hitRate).toBe(0.5);
     expect(s.winWhenHit).toBe(1);
     expect(s.winWhenMissed).toBe(0);
+    // R6: the same decided-game counts as the self-rated path — a measured
+    // target's lift claim needs to be just as honest about its sample.
+    expect(s.hitDecided).toBe(1);
+    expect(s.missDecided).toBe(1);
   });
 
   it('ignores any stored review grade on a measured target id', () => {

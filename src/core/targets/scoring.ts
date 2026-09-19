@@ -51,6 +51,8 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
   const hits = grades.filter((g) => g === 'hit').length;
   const hitGames = graded.filter((g) => g.review!.grades[t.id] === 'hit');
   const missGames = graded.filter((g) => g.review!.grades[t.id] !== 'hit');
+  const hitWL = winLoss(hitGames);
+  const missWL = winLoss(missGames);
 
   return {
     id: t.id,
@@ -62,8 +64,11 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     hitRate: grades.length ? hits / grades.length : 0,
     hits,
     attempts: grades.length,
-    winWhenHit: hitGames.length ? winLoss(hitGames).winrate : base,
-    winWhenMissed: missGames.length ? winLoss(missGames).winrate : base,
+    winWhenHit: hitGames.length ? hitWL.winrate : base,
+    winWhenMissed: missGames.length ? missWL.winrate : base,
+    // Decided (Win/Loss) games only — a Draw moves neither number (R6).
+    hitDecided: hitWL.wins + hitWL.losses,
+    missDecided: missWL.wins + missWL.losses,
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,
@@ -89,6 +94,8 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
   const hits = grades.filter((g) => g === 'hit').length;
   const hitGames = scored.filter((x) => x.res.grade === 'hit').map((x) => x.g);
   const missGames = scored.filter((x) => x.res.grade !== 'hit').map((x) => x.g);
+  const hitWL = winLoss(hitGames);
+  const missWL = winLoss(missGames);
 
   return {
     id: t.id,
@@ -100,8 +107,11 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     hitRate: grades.length ? hits / grades.length : 0,
     hits,
     attempts: grades.length,
-    winWhenHit: hitGames.length ? winLoss(hitGames).winrate : base,
-    winWhenMissed: missGames.length ? winLoss(missGames).winrate : base,
+    winWhenHit: hitGames.length ? hitWL.winrate : base,
+    winWhenMissed: missGames.length ? missWL.winrate : base,
+    // Decided (Win/Loss) games only — a Draw moves neither number (R6).
+    hitDecided: hitWL.wins + hitWL.losses,
+    missDecided: missWL.wins + missWL.losses,
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,

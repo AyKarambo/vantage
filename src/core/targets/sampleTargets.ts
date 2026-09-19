@@ -44,6 +44,11 @@ export function sampleTargets(games: GameRecord[]): TargetSummary[] {
       attempts,
       winWhenHit,
       winWhenMissed,
+      // The synthetic model has no draws, so every attempt "decides" (R6) —
+      // keeps the demo copy (lift chip, status sentence) honest against the
+      // same per-side counts a real target would carry.
+      hitDecided: hits,
+      missDecided: attempts - hits,
       spark: buildSpark(s.difficulty, s.id),
       isActive: true,
     };

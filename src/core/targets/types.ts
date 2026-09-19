@@ -50,6 +50,14 @@ export interface TargetSummary {
   attempts: number;
   winWhenHit: number; // 0..1
   winWhenMissed: number; // 0..1
+  /**
+   * How many DECIDED (Win/Loss, no Draws) games actually back `winWhenHit` /
+   * `winWhenMissed` (R6) — a side with zero here means that number is the
+   * player's overall baseline, not a measured read, and the renderer draws
+   * that distinction instead of showing a confident-looking bar for nothing.
+   */
+  hitDecided: number;
+  missDecided: number;
   spark: number[];
   isActive: boolean;
   archivedAt?: number;

@@ -524,6 +524,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   Measured only**), marks an entry you already have **"✓ in your targets"**, and adds a
   one-click **Add** beside the existing "Customize" — save an entry exactly as written, with a
   toast offering **Edit**. **"Start a fresh focus"** is undoable now too, same as Archive.
+- **Targets stops guessing at "does it move your winrate?" and just answers it.** Each row now
+  gets a signed **lift chip** next to its hit-rate — "+18 pts when hit" — coloured green when
+  it's real, red when it's negative, muted in between, and shown only once both the hit and
+  missed sides actually have games behind them. The detail page's win-when-hit/when-missed bars
+  now state their own sample size ("62% · 12 games") and read an honest "— · no games yet"
+  instead of quietly drawing a bar from your overall baseline when a side has none. The one-line
+  status sentence is driven by that same real lift now too, once there's enough evidence on both
+  sides — "Worth keeping — +18 pts when you hit it (21 games)" or an honest "No effect yet";
+  hitting something on near-total autopilot instead reads "Habit is set — rotate it out", ahead
+  of any lift read.
 
 ## 0.34.0 — 31 July 2026
 
