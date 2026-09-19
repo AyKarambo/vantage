@@ -797,6 +797,22 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   opening on — shrunk to fit if needed, nudged back on-screen if it would otherwise land partly
   off it or under the taskbar, or maximized if even the smallest usable size doesn't fit (W7).
 
+### Fixed
+
+- **Overview and Focus stopped congratulating a brand-new season.** With no map at 3 games yet,
+  both used to say the same thing a genuinely clean season gets — "No net-losing maps — clean
+  season 🎯" / "Nothing is net-losing right now — nice 🎯" — with nothing telling the two apart.
+  They now show how close your most-played map actually is to unlocking instead, and only
+  celebrate once at least one map has enough games to mean something. Overview's practice hint
+  ("These are dragging your season…") no longer shows next to an empty priority list, either.
+  With literally no games tracked yet, Overview's map chart is replaced by a plain "No games
+  tracked yet" card with **Log match** and **Turn on demo data**, and Focus says "No games in
+  this range yet" with a way back to All time (F4).
+- **Maps no longer makes your other maps vanish the moment one hits the games floor.** Below-floor
+  maps now stay in the ranking, dimmed, instead of dropping out entirely — and the subtitle says
+  plainly when no map has reached the floor yet, instead of silently showing everything with no
+  explanation (F4).
+
 ## 0.34.0 — 31 July 2026
 
 ### Added

@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, byWeekdayDayPart, calendar, currentSession, dayKey,
-  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
+  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
 } from './analytics';
@@ -268,6 +268,10 @@ export function computeDashboard(
     sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
     calendar: calendar(games, activityWindowDays(filters.days, Date.now(), seasonStartsList)),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
+    // How many maps have actually reached the floor (F4) — Focus's and
+    // Overview's empty states branch on this instead of conflating "no map
+    // qualifies yet" with "nothing qualifying is net-losing".
+    qualifiedMaps: qualifiedMapCount(games),
     // The Focus screen's cross-dimension hub (H1: maps, heroes AND roles):
     // ranked/trended over the FILTERED range (the list describes what you
     // see), while the since-flagged progress of a linked target runs over the

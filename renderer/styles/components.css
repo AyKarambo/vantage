@@ -730,6 +730,12 @@ table.data tbody tr:focus-visible {
   text-align: right;
   color: var(--muted);
 }
+/* Below-floor rows (F4) — coexist with qualified rows instead of vanishing
+   at the threshold, muted so they still read as "not enough sample yet". */
+.hbar-row--dim .hbar-label,
+.hbar-row--dim .hbar-value {
+  opacity: 0.6;
+}
 /* Extra per-row badges (H4 — Maps' trend/rating/target/pool-status reads):
    an implicit second grid row spanning the track + value columns, below the
    bar itself. Absent rows (no `.hbar-meta` element at all) add no height. */

@@ -18,6 +18,7 @@ import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
+import { bridge } from '../bridge';
 import { prefs } from '../prefs';
 import { store } from '../store';
 import { viewHead, shorten, type ViewContext } from './view';
@@ -52,8 +53,32 @@ export function overview(ctx: ViewContext): HTMLElement {
     recapCard(ctx),
     kpiRow(ctx),
     roleStrip(ctx),
-    scatterCard(ctx),
+    d.overall.games === 0 && d.totalGamesAllTime === 0 ? firstRunCard(ctx) : scatterCard(ctx),
     bottomRow(ctx),
+  );
+}
+
+/**
+ * The true first-run empty state (F4) — no games at all (fresh install, demo
+ * declined) used to fall through to the scatter card's "Not enough data yet."
+ * chart and its callout's "No net-losing maps — clean season. 🎯", both
+ * false: there's no season yet, clean or otherwise, and nothing told a new
+ * user that keeping Vantage open while Overwatch runs is how games arrive.
+ * "Turn on demo data" is the same `demoPreference` round-trip the first-run
+ * prompt and Settings → App behavior use, for anyone who declined it there
+ * and wants a look around after all.
+ */
+function firstRunCard(ctx: ViewContext): HTMLElement {
+  const turnOnDemo = (): void => {
+    void bridge.setAppSettings({ demoPreference: 'on' }).then(() => store.refresh());
+  };
+  return card({ title: 'No games tracked yet' },
+    h('div', { class: 'hint', style: { lineHeight: '1.55', marginBottom: '14px' } },
+      'Vantage records ranked games automatically while Overwatch is open, or log one by hand.'),
+    h('div', { style: { display: 'flex', gap: '10px' } },
+      button('Log match', { variant: 'primary', onClick: ctx.openLogMatch }),
+      button('Turn on demo data', { variant: 'soft', onClick: turnOnDemo }),
+    ),
   );
 }
 
@@ -459,13 +484,16 @@ function placementKpi(run: PlacementRunSummary, ctx: ViewContext): HTMLElement {
 
 /**
  * The Top-priority panel's empty state — same distinction Focus's own empty
- * state makes (F1): a genuinely clean season reads differently from a
- * first-week player whose maps just haven't reached the floor yet, which
- * the old "clean season" copy claimed either way.
+ * state makes (F1, F4): a genuinely clean season reads differently from a
+ * first-week player whose maps just haven't reached the floor yet, which the
+ * old "clean season" copy claimed either way. Gated on `qualifiedMaps` (F4)
+ * rather than the single best map's raw game count, which — including the
+ * 'Unknown' placeholder bucket — could clear `MAP_MIN_GAMES` on games no real
+ * map ever qualified from.
  */
 function scatterCalloutsEmpty(d: DashboardData): HTMLElement {
-  const bestMapGames = Math.max(0, ...d.byMap.map((m) => m.games));
-  if (bestMapGames < MAP_MIN_GAMES) {
+  if (d.qualifiedMaps === 0) {
+    const bestMapGames = Math.max(0, ...d.byMap.filter((m) => m.key !== 'Unknown').map((m) => m.games));
     return h('div', { style: { paddingTop: '10px' } },
       unlockHint(`Unlocks at ${MAP_MIN_GAMES} games on a map`, [
         { have: bestMapGames, need: MAP_MIN_GAMES, label: 'games on your most-played map' },
@@ -511,7 +539,12 @@ function scatterCard(ctx: ViewContext): HTMLElement {
         ))
       : [scatterCalloutsEmpty(d)]),
     h('div', { style: { marginTop: 'auto', paddingTop: '12px' } },
-      h('div', { class: 'hint', style: { lineHeight: '1.55' } }, 'These are dragging your season. Practice them before ranked and review one replay each.'),
+      // F4: nothing is actually dragging the season when the list above is
+      // empty (too early to tell, or a genuinely clean one) — the practice
+      // hint used to render either way.
+      focus.length
+        ? h('div', { class: 'hint', style: { lineHeight: '1.55' } }, 'These are dragging your season. Practice them before ranked and review one replay each.')
+        : null,
       h('div', { style: { marginTop: '10px' } },
         button('Open Focus →', { variant: 'soft', class: 'btn--block', onClick: () => ctx.navigate('focus') }),
       ),
