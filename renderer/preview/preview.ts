@@ -20,7 +20,7 @@ import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } 
 import type { Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
-import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow } from '../../src/core/dashboardData';
+import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
 import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
@@ -448,11 +448,13 @@ const mock: OwStatsApi = {
     const eff = effectiveMasterData();
     return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin);
   },
-  matchesPage: async (input: { filters?: DashboardFilters; before: number; limit: number }) => {
+  matchesPage: async (input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter }) => {
     const eff = effectiveMasterData();
-    const filtered = applyFilters(dataset(), input.filters ?? {}, eff.seasons.map((s) => s.start));
+    const mapModeOf = makeMapMode(eff.maps);
+    let filtered = applyFilters(dataset(), input.filters ?? {}, eff.seasons.map((s) => s.start));
+    if (input.text) filtered = matchesFilter(filtered, mapModeOf, input.text);
     const { rows } = selectMatches(filtered, { before: input.before, limit: input.limit });
-    return rows.map((g) => toMatchRow(g, makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin));
+    return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasuredTargets(targets), grading.partialMargin));
   },
   playerHistory: async (name: string) => {
     // Same composition as `reads.playerHistoryRead`, so the harness shows the

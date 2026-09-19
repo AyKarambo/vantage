@@ -610,6 +610,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   games"** button appears under the list, and clicking it loads the next 150 without losing your
   place. A match's detail page couldn't even be reached past game #150 before; its own "n / 150"
   stepper now reads "n / 150 loaded" so it's honest about what's actually loaded there too.
+- **Matches can be filtered right there, not just by the global controls.** A new filter row —
+  result chips (**W / L / D**), map-type chips, and a search box matching map, hero or account —
+  narrows the list instantly without touching the Role/Season filters above it, with a **"Clear
+  filter"** link and an honest count ("50 of 150 loaded games match your filter"). It resets the
+  moment you leave the screen, so it never lingers as an invisible reason a later visit looks
+  short. Searching while there's more history to load still reaches it — **"Show older games"**
+  carries your filter into the fetch, so paging in older games while searching returns a full page
+  of actual matches instead of mostly rows you'd immediately filter back out.
 
 ## 0.34.0 — 31 July 2026
 

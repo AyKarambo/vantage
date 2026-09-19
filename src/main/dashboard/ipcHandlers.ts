@@ -4,6 +4,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
+import type { MatchesTextFilter } from '../../core/dashboardData';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
 import type {
   AccountInput, AppUiSettings, AuthoredTargetInput, DashboardFilters, IgnorePendingReviewsInput, LogLevel, ManualMatchInput, PlayerListQuery,
@@ -72,7 +73,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.matchDetail, (_e, matchId: string, filters: DashboardFilters) =>
     matchDetailRead(provider, matchId, filters),
   );
-  handle(ch.matchesPage, (_e, input: { filters?: DashboardFilters; before: number; limit: number }) =>
+  handle(ch.matchesPage, (_e, input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter }) =>
     matchesPageRead(provider, input),
   );
   handle(ch.playerHistory, (_e, name: string) => playerHistoryRead(provider, name));

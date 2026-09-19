@@ -11,6 +11,7 @@ import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { ThresholdSuggestion } from '../../core/targets';
 import type { DashboardFilters, DashboardData, HeroDetail, MatchRow } from './dashboard';
+import type { MatchesTextFilter } from '../../core/dashboardData';
 import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
 import type { PlayerList, PlayerListQuery } from './players';
 import type { LiveMatchPayload } from './liveMatch';
@@ -48,9 +49,11 @@ export interface OwStatsApi {
    * "Show older games" (M1) — the next page of the same filtered match list
    * `getDashboard`'s own `matches` field caps at `matchesTotal`. `before` is
    * the oldest timestamp already shown, so the page never re-includes a row
-   * the caller already has.
+   * the caller already has. `text` (M2) carries Matches' in-list result/
+   * map-type/search filter, so a page fetched while one is active is already
+   * narrowed server-side instead of mostly discarded client-side.
    */
-  matchesPage(input: { filters?: DashboardFilters; before: number; limit: number }): Promise<MatchRow[]>;
+  matchesPage(input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter }): Promise<MatchRow[]>;
   /** Every stored match shared with a player (local index); null for an empty/unknown name. */
   playerHistory(name: string): Promise<PlayerMatchHistory | null>;
   /**

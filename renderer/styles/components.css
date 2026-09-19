@@ -2030,3 +2030,18 @@ table.data tbody tr:focus-visible {
 .search-input::placeholder {
   color: var(--muted-2);
 }
+
+/* Matches' in-list filter row (M2) — result + map-type chips and a search box,
+   all client-side and view-local like the Players search box above. */
+.matches-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+.matches-filter-row .search-input {
+  min-width: 160px;
+  flex: 1 1 160px;
+  max-width: 280px;
+}
