@@ -666,6 +666,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   **Enter** saves it (it never used to), **↑ / ↓ / H / P / M** grade your active targets from the
   keyboard the same way Review does, and its header now matches the log card's own — a close **✕**,
   and the same `⚡ auto` / `◎ manual` badge with the time right on it.
+- **The Maps mode cards actually do something now, and the ranking below finally uses the data it
+  already had.** The six mode cards used to just sit there — click one now and the "Winrate by map"
+  ranking filters to it (a new mode chip row does the same thing, and the two stay in sync), and
+  each card states its own best and worst map in one line. The old fixed "3+ games" floor is now a
+  **1+ · 3+ · 5+** chip row like Heroes and Players already have, and the subtitle says how many
+  maps that floor is currently hiding. Every ranking row can now show a trend arrow, your average
+  self-rating on that map, a flag for one with an active target tracking it, and a dimmed
+  "out of pool" tag — all things the dashboard was already computing, just never shown here. A map
+  you jump to from anywhere else in the app — the Overview scatter, a Focus row, a hero's By-map
+  list, the command palette — always lands now, even if it's below whatever floor or mode filter
+  you last left this screen on.
 
 ## 0.34.0 — 31 July 2026
 

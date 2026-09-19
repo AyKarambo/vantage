@@ -167,7 +167,17 @@ account's per-role lines beneath it.
 - **Maps** — winrate by game mode, then every map ranked best → worst; a **±SR** column/figure
   (a mode card's value line, and the ranking table) beside the net wins wherever you've logged
   one — a 3-loss map that cost −60% is a more urgent fix than one that cost −45%, and the data
-  was already there.
+  was already there. **Each mode card is clickable** (H4) — filters the ranking below to that
+  mode and scrolls to it, staying in sync with the ranking's own **mode chip row**
+  (`All`/`Control`/`Escort`/…), and states its own **best · worst map** in one line. The old fixed
+  3-game floor is now a **min. games** chip row (`1+ · 3+ · 5+`, same pattern as Heroes/Players),
+  the subtitle says how many maps that floor is hiding, and the ranking's **Table** view gains a
+  **Mode** column. Each bar can carry a small **▴/▾ trend** read, your **RTG** on that map, a
+  **⚑** when an active target is tracking it, and a dimmed **out of pool** tag — all joined onto
+  data the dashboard already had. A cross-link from anywhere else in the app (the Overview scatter,
+  a Focus row, a hero drawer's By-map rows, the palette) always lands on the map it points at now,
+  even if it's below the current floor or outside the current mode filter — that filter state is
+  never silently changed, just set aside for the one map you just asked to see.
 - **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
   credited to each hero by its share of the match time, the way the in-game career profile
   does it — see *Played time* below), with a **W-L** column, a sortable **Net** column

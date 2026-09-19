@@ -712,6 +712,18 @@ table.data tbody tr:focus-visible {
   text-align: right;
   color: var(--muted);
 }
+/* Extra per-row badges (H4 — Maps' trend/rating/target/pool-status reads):
+   an implicit second grid row spanning the track + value columns, below the
+   bar itself. Absent rows (no `.hbar-meta` element at all) add no height. */
+.hbar-meta {
+  grid-column: 2 / 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
 /* Compact variant for narrow cards with short labels (Trends breakdowns): a
    left-aligned label column instead of the wide right-aligned one for map names. */
 .hbars--compact {

@@ -12,6 +12,13 @@ export interface WrPoint {
   games: number;
   /** Trailing rolling winrate (C6), precomputed in core (`rollingWinrate`) — calendar-true, unlike a naive last-N-points mean. */
   rolling?: number;
+  /**
+   * Extra small badges {@link horizontalBars} renders on their own line under
+   * the bar (H4 — Maps' per-row trend/rating/target/pool-status reads). The
+   * caller builds whatever nodes it wants; this module stays data-shape-
+   * agnostic about what they mean.
+   */
+  meta?: Node[];
 }
 
 /** Small "not enough data" placeholder chart shown in place of an empty series. */

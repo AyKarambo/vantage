@@ -18,6 +18,7 @@ export function horizontalBars(data: WrPoint[], opts: { compact?: boolean } = {}
         h('div', { class: 'hbar-label', title: d.label }, d.label),
         h('div', { class: 'hbar-track' }, fill),
         h('div', { class: 'hbar-value' }, `${pct(d.winrate)}  ${d.games}g`),
+        d.meta?.length ? h('div', { class: 'hbar-meta' }, ...d.meta) : null,
       );
       tips.attach(row, `${d.label} · ${pct(d.winrate)} · ${d.games} games`);
       return row;
