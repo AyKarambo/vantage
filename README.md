@@ -63,11 +63,22 @@ account's per-role lines beneath it.
   hit-rate sparkline, a stale tag when one's overdue for rotation) and **Heroes** (top 5 by
   games, click-through to Heroes with that row highlighted) — both previously invisible from
   the landing screen even though the data rides on every payload (O3).
-- **Live** — the match you're in right now, updated as it plays: the scoreboard the game
-  is showing (heroes, K/A/D, damage, healing, mitigation, split into your team and theirs),
-  and **players you've met** — everyone on this roster you've shared a game with before,
-  with your record **`with`** them when they're on your team this match and **`vs`** them
-  when they're not. A green dot appears on the nav item while a match is running; the
+- **Live** — the match you're in right now, updated as it plays: a **Briefing** card first
+  (S5) — your own record on the map you're on, captioned with the active role/date scope
+  since it follows the hidden filter bar, plus the active targets scoped to the hero or role
+  you're currently on (falling back to every active target when none match) — then the
+  scoreboard the game is showing (heroes, K/A/D, damage, healing, mitigation, split into your
+  team and theirs), and **players you've met** — everyone on this roster you've shared a game
+  with before, with your record **`with`** them when they're on your team this match and
+  **`vs`** them when they're not. The header states a real **mm:ss elapsed** clock instead of
+  a coarse "started 12m ago". The kill feed is now labelled **Kill feed** (not the bare
+  "Recent") with its own **Hide** link, and a dim hint appears under the tally when it's off
+  with a **turn on** link back. Outside the screen: a green dot appears on the nav item while
+  a match is running, joined by a small **eliminations chip** ("62–32") once the feed has
+  reported which side an attacker was on; the Overview header shows a **"Live · `<map>` ·
+  `<hero>` →"** pill the moment a match starts; and the Windows tray's hover tooltip and menu
+  gain a **"Live: `<map>` · started `<N>`m ago"** line and a **"This sitting: `<W>`–`<L>`"**
+  line, so the match and the sitting are visible without opening the dashboard at all. The
   screen returns to an idle state the moment it ends, or if the game closes — but for the
   next 30 minutes that idle state is a **"Just finished"** card (S2) linking straight to
   where the match landed, instead of the plain "it's in Matches now" copy with nowhere to

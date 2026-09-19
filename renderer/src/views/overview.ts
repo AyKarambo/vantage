@@ -1,6 +1,6 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h, render } from '../dom';
-import type { DashboardData, Group, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
+import type { DashboardData, Group, LiveMatchPayload, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
 import { dayKey, dayPartAt, MAP_MIN_GAMES } from '../../../src/core/analytics';
 import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
 import { READINESS_TUNING } from '../../../src/core/readiness';
@@ -17,6 +17,7 @@ import { practiceTargetButton } from '../components/practiceTargetButton';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
+import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { prefs } from '../prefs';
 import { store } from '../store';
 import { viewHead, shorten, type ViewContext } from './view';
@@ -25,10 +26,22 @@ import { coachHeadline } from '../coachHeadline';
 export function overview(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
 
+  // "Live · Route 66 →" pill (S5) — the header a player alt-tabs to used to
+  // only offer "Log match", with no path to the one screen showing the match
+  // they're actually in. Mutated in place on its own live subscription
+  // (self-cleaning once it leaves the DOM, same idiom shell.ts's nav dot
+  // uses) rather than re-rendering the whole view on every ~1s live tick.
+  const livePillHost = h('span');
+  paintLivePill(livePillHost, getLiveMatch(), ctx);
+  const unsubscribeLive = subscribeLiveMatch((p) => {
+    if (!livePillHost.isConnected) { unsubscribeLive(); return; }
+    paintLivePill(livePillHost, p, ctx);
+  });
+
   const head = viewHead(
     `${greeting()}, ${d.greetingName}`,
     headlineSub(ctx),
-    button('Log match', { variant: 'primary', onClick: ctx.openLogMatch }),
+    [livePillHost, button('Log match', { variant: 'primary', onClick: ctx.openLogMatch })],
   );
 
   return h('div', { class: 'view' },
@@ -101,6 +114,20 @@ function nextUpStrip(ctx: ViewContext): HTMLElement | null {
 
 function nextUpItem(label: string, onClick: () => void): HTMLElement {
   return h('button', { class: 'next-up-item', on: { click: onClick } }, label, h('span', { class: 'next-up-arrow' }, '→'));
+}
+
+/** Renders (or clears) the header's live-match pill in place — see the live subscription in {@link overview}. */
+function paintLivePill(host: HTMLElement, p: LiveMatchPayload | null, ctx: ViewContext): void {
+  if (!p?.live) { render(host, null); return; }
+  const localHero = p.roster.find((r) => r.isLocal)?.hero;
+  render(host, h('button', {
+    class: 'btn btn--soft live-header-pill',
+    title: 'A match is in progress — open Live',
+    on: { click: () => ctx.navigate('live') },
+  },
+    h('span', { class: 'live-header-dot' }),
+    `Live · ${p.map ?? 'match in progress'}${localHero ? ` · ${localHero}` : ''} →`,
+  ));
 }
 
 /**

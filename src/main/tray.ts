@@ -10,6 +10,7 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import type { GepHealthState } from '../core/gepHealth';
+import { liveTrayLabel, sessionTrayLabel } from '../core/trayStatus';
 
 export interface TrayHandlers {
   onOpenDashboard(): void;
@@ -26,6 +27,10 @@ export interface TrayState {
   status: string;
   autoLaunch: boolean;
   tokenSet: boolean;
+  /** The in-progress match, when one is running (S5) — undefined the rest of the time. */
+  live?: { map?: string; startedAt: number };
+  /** The trailing gap-based sitting's W-L, when one is open (S5). */
+  session?: { wins: number; losses: number };
 }
 
 /**
@@ -46,7 +51,7 @@ export class TrayController {
   init(initial: Partial<TrayState>): void {
     this.state = { ...this.state, ...initial };
     this.tray = new Tray(this.icon());
-    this.tray.setToolTip(healthTooltip(this.health));
+    this.updateTooltip();
     this.tray.on('double-click', () => this.handlers.onOpenDashboard());
     this.rebuild();
   }
@@ -62,7 +67,24 @@ export class TrayController {
     this.health = state;
     const img = this.healthIcon(state);
     if (!img.isEmpty()) this.tray.setImage(img);
-    this.tray.setToolTip(healthTooltip(state));
+    this.updateTooltip();
+  }
+
+  /**
+   * The hover tooltip: the connection health, plus the live-match and
+   * current-sitting reads when either is present (S5) — folded in here so a
+   * hover answers "what's Vantage doing right now" without opening the menu.
+   * Called from both `rebuild()` (state changes) and `setHealth()`
+   * (connection changes), so the two can never show it out of sync.
+   */
+  private updateTooltip(): void {
+    if (!this.tray) return;
+    const parts = [
+      healthTooltip(this.health),
+      liveTrayLabel(this.state.live, Date.now()),
+      sessionTrayLabel(this.state.session),
+    ].filter((s): s is string => s != null);
+    this.tray.setToolTip(parts.join(' · '));
   }
 
   private healthIcon(state: GepHealthState): Electron.NativeImage {
@@ -107,10 +129,19 @@ export class TrayController {
   }
 
   private rebuild(): void {
+    this.updateTooltip();
+    const liveLabel = liveTrayLabel(this.state.live, Date.now());
+    const sessionLabel = sessionTrayLabel(this.state.session);
     const menu = Menu.buildFromTemplate([
       { label: 'Open Dashboard', click: () => this.handlers.onOpenDashboard() },
       { type: 'separator' },
       { label: this.state.status, enabled: false },
+      // Live/session reads (S5) — only present while there's something to say;
+      // clicking the live row opens the dashboard, same as the main item above
+      // (there is no deep-link-to-a-screen IPC yet, so this lands wherever the
+      // window already is rather than forcing a jump to Live specifically).
+      ...(liveLabel ? [{ label: liveLabel, click: () => this.handlers.onOpenDashboard() }] : []),
+      ...(sessionLabel ? [{ label: sessionLabel, enabled: false }] : []),
       { type: 'separator' },
       {
         label: this.state.tokenSet ? 'Notion token: set ✓' : 'Set Notion token (from clipboard)…',

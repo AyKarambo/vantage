@@ -106,6 +106,21 @@ export function relTime(ts: number, now = Date.now()): string {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/**
+ * matchClock(startedAt) → "12:34" — mm:ss elapsed since a live match started
+ * (S5). Deliberately a plain function of `now`, not a stateful ticker: the
+ * Live view already repaints about once a second while a match is running
+ * (each GEP tick), and the nav dot's own title is refreshed on the same
+ * cadence — reusing that existing repaint is simpler than a second timer,
+ * and stays exactly as live.
+ */
+export function matchClock(startedAt: number, now = Date.now()): string {
+  const totalSec = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 /** time(ts) → "2:45 PM" (local clock time, ms epoch in). */
 export function time(ts: number): string {
   return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
