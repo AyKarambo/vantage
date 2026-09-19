@@ -16,7 +16,7 @@ import type {
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
 import {
-  dashboardRead, heroDetailRead, matchDetailRead, matchesPageRead, searchMatchesRead, playerHistoryRead, playerListRead, playerRecordsRead, filteredCompetitiveGames,
+  dashboardRead, heroDetailRead, matchDetailRead, matchesPageRead, searchMatchesRead, playerHistoryRead, playerListRead, playerRecordsRead, filteredCompetitiveGames, competitiveOnly,
 } from './reads';
 
 /**
@@ -66,6 +66,14 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.exportNotion, async (_e, filters: DashboardFilters) => {
     if (!provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
     return provider.exportToNotion(filteredCompetitiveGames(provider, filters));
+  });
+  // W6 "Retry failed" — bypasses the filter bar entirely so a retry can't
+  // silently drop a game the active filters happen to exclude; still gated
+  // competitive-only, matching every other export path's invariant.
+  handle(ch.exportNotionMatches, async (_e, matchIds: string[]) => {
+    if (!provider.exportToNotion) return { ok: 0, failed: 0, unavailable: true };
+    const ids = new Set(matchIds);
+    return provider.exportToNotion(competitiveOnly(provider.games()).filter((g) => ids.has(g.matchId)));
   });
   handle(ch.heroDetail, (_e, hero: string, filters: DashboardFilters) =>
     heroDetailRead(provider, hero, filters),

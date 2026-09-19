@@ -12,7 +12,7 @@ import type { PlacementRun } from '../../core/placements';
 import type { MasterDataConfig } from '../config';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
-  DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
+  DataLocation, DataLocationResult, DevModeAuthStatusPayload, ExportResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
   IgnorePendingReviewsInput, ThresholdSuggestionInput,
   ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
   RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
@@ -38,9 +38,7 @@ export interface DataProvider {
   isSample(): boolean;
   /** Demo facts (effective display, raw choice, real-history presence) for the dashboard payload. */
   demoContext(): DemoContext;
-  exportToNotion?(
-    games: GameRecord[],
-  ): Promise<{ ok: number; failed: number; skipped?: number; unavailable?: boolean }>;
+  exportToNotion?(games: GameRecord[]): Promise<ExportResult>;
   /** Current Notion connection state (for the Notion sync screen). */
   notionStatus(): NotionStatus;
   /** Save an integration token, (re)build the client, return the new state. */

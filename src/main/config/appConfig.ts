@@ -15,12 +15,23 @@ import type { DemoPreference } from '../../core/demoPreference';
  * re-exported through ./index.
  */
 
+/** The outcome of the last real sync attempt (W6) — survives a view repaint or app restart, unlike the in-card transient readout. */
+export interface NotionSyncResult {
+  at: number;
+  ok: number;
+  updated: number;
+  failed: number;
+  firstError?: string;
+}
+
 export interface NotionConfig {
   gametrackerDatabaseId: string;
   mapsDatabaseId: string;
   gametrackerUrl: string;
   /** When the last successful sync finished (epoch ms). */
   lastSyncedAt?: number;
+  /** What that (or any) last sync attempt actually did (W6). */
+  lastSyncResult?: NotionSyncResult;
 }
 
 export type Sensor = 'counterwatch' | 'gep';

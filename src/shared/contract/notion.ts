@@ -24,6 +24,12 @@ export interface ExportResult {
    * either way — this only explains why, once.
    */
   error?: string;
+  /**
+   * Every per-game export failure (W6), not just the first's reason — lets
+   * the UI list what actually failed and offer a scoped retry instead of a
+   * single opaque count. Absent when nothing failed.
+   */
+  failures?: Array<{ matchId: string; map: string; reason: string }>;
 }
 
 /** Result of a Notion import (pull) attempt. */
@@ -173,6 +179,12 @@ export interface NotionStatus {
   transportError?: string;
   /** When the last successful sync finished (epoch ms). */
   lastSyncedAt?: number;
+  /**
+   * What the last real sync attempt actually did (W6) — persists across a
+   * view repaint or app restart, unlike the Sync now card's transient
+   * in-progress readout. Absent until a sync has been attempted at least once.
+   */
+  lastSyncResult?: { at: number; ok: number; updated: number; failed: number; firstError?: string };
   /** How many local matches came from a Notion import (deletable for a clean re-import). */
   importedMatches: number;
   /** Per-column schema diagnostics for the optional subjective columns, once validated. */

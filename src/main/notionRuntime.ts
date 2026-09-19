@@ -206,6 +206,7 @@ export class NotionRuntime {
       shapeIssues: this.shapeCheck?.issues,
       transportError: this.transportError,
       lastSyncedAt: notion.lastSyncedAt,
+      lastSyncResult: notion.lastSyncResult,
       importedMatches: this.deps.importedMatches(),
       subjectiveColumns: this.subjectiveDiagnostics,
       schemaProvision: this.schemaProvision,
@@ -247,10 +248,16 @@ export class NotionRuntime {
     // after twelve rows failed is exactly the kind of lie this timestamp exists
     // to avoid.
     const syncedSomething = result.ok > 0 || (result.updated ?? 0) > 0 || (result.skipped ?? 0) > 0;
-    if (syncedSomething) {
-      saveLocalNotionConfig({ lastSyncedAt: Date.now() });
-      this.deps.reloadConfig();
-    }
+    // lastSyncResult (W6) persists on every REAL attempt — including one that
+    // failed outright — unlike lastSyncedAt above, which only ever means "the
+    // last time something actually landed". Without this, revisiting the
+    // screen after a failed run said "Last synced 2h ago" with no way to tell
+    // that run had failed.
+    saveLocalNotionConfig({
+      ...(syncedSomething ? { lastSyncedAt: Date.now() } : {}),
+      lastSyncResult: { at: Date.now(), ok: result.ok, updated: result.updated ?? 0, failed: result.failed, firstError: result.error },
+    });
+    this.deps.reloadConfig();
     return result;
   }
 

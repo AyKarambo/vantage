@@ -6,6 +6,8 @@
 import { h } from '../../dom';
 import type { NotionStatus } from '../../../../src/shared/contract';
 import { card } from '../../components/primitives';
+import { inlineLink } from '../../components/inlineLink';
+import { bridge } from '../../bridge';
 import { subjectiveColumnsSection } from './subjectiveColumnsCard';
 import { schemaProvisionSection } from './schemaProvisionCard';
 
@@ -70,6 +72,12 @@ export function statusCard(s: NotionStatus | null): HTMLElement {
           h('div', { class: 'u-dim', style: { fontSize: '11.5px', marginTop: '2px' } },
             s.databaseTitle ? `${s.databaseTitle} — ${syncSummary(s)}` : syncSummary(s)),
         ),
+        // W6 — the only "open my database" link used to be buried in the tray
+        // menu; same target (bridge.openExternal(gametrackerUrl)), surfaced
+        // right where the connection is confirmed.
+        s.gametrackerUrl
+          ? inlineLink('Open in Notion ↗', { onClick: () => void bridge.openExternal(s.gametrackerUrl!) })
+          : null,
       ),
       subjectiveColumnsSection(s.subjectiveColumns),
       schemaProvisionSection(s.schemaProvision),

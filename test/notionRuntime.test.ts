@@ -7,6 +7,7 @@ import * as path from 'path';
 // which itself imports `electron` (safeStorage/app.getPath) — mock the whole
 // module so this test drives NotionRuntime without an Electron runtime.
 const tokenState = { token: undefined as string | undefined };
+const saveLocalNotionConfigMock = vi.fn();
 vi.mock('../src/main/config', () => ({
   getNotionToken: () => tokenState.token,
   setNotionToken: (t: string) => {
@@ -15,7 +16,7 @@ vi.mock('../src/main/config', () => ({
   clearNotionToken: () => {
     tokenState.token = undefined;
   },
-  saveLocalNotionConfig: vi.fn(),
+  saveLocalNotionConfig: (...args: unknown[]) => saveLocalNotionConfigMock(...args),
   notionDatabaseSource: () => 'selected',
 }));
 
@@ -48,11 +49,15 @@ vi.mock('../src/notion/mapsCache', () => ({
 // Spy on the exporter's construction — the most direct way to prove
 // NotionRuntime threads authored-target ids and the ledger (outbox +
 // legacyLookup) into it, without needing a real network-touching export.
+// `this.export` delegates to this mutable reference (same pattern as
+// `mapsLoadMock` below) so an individual test can make one export() call
+// resolve to a specific ExportResult, e.g. to prove lastSyncResult persistence.
 const exporterCtor = vi.fn();
+const exportResultMock = vi.fn().mockResolvedValue({ ok: 0, failed: 0, skipped: 0 });
 vi.mock('../src/notion/notionExporter', () => ({
   NotionExporter: vi.fn().mockImplementation(function (this: any, ...args: any[]) {
     exporterCtor(...args);
-    this.export = vi.fn().mockResolvedValue({ ok: 0, failed: 0, skipped: 0 });
+    this.export = (...args: unknown[]) => exportResultMock(...args);
   }),
 }));
 
@@ -155,6 +160,8 @@ beforeEach(() => {
   ensureColumnsMock.mockReset().mockResolvedValue([]);
   mapsLoadMock.mockReset().mockResolvedValue(undefined);
   exporterCtor.mockReset();
+  exportResultMock.mockReset().mockResolvedValue({ ok: 0, failed: 0, skipped: 0 });
+  saveLocalNotionConfigMock.mockReset();
   clientMocks.pagesUpdate.mockReset().mockResolvedValue(undefined);
   clientMocks.dataSourcesQuery.mockReset().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
   clientMocks.databasesRetrieve.mockReset().mockResolvedValue({ data_sources: [{ id: 'src-1' }] });
@@ -747,6 +754,41 @@ describe('NotionRuntime — offline maps.load() failure (AC-5: no toast-ambush o
     // toast for — see that module's own test for the direct assertion of the
     // rule itself; this proves NotionRuntime hands it the right kind to act on.
     expect(['offline', 'timeout', 'server']).toContain(kind);
+  });
+});
+
+describe('NotionRuntime.export — lastSyncResult persistence (W6)', () => {
+  it('persists lastSyncResult on a real attempt, and lastSyncedAt only when something actually synced', async () => {
+    exportResultMock.mockResolvedValue({ ok: 12, failed: 1, skipped: 3, updated: 2, error: 'Notion rate limit — try again shortly' });
+    const runtime = await connectedRuntime();
+
+    const result = await runtime.export([game('a')]);
+
+    expect(result.ok).toBe(12);
+    const patch = saveLocalNotionConfigMock.mock.calls.at(-1)![0];
+    expect(patch.lastSyncedAt).toEqual(expect.any(Number)); // ok > 0 → something synced
+    expect(patch.lastSyncResult).toEqual({
+      at: expect.any(Number), ok: 12, updated: 2, failed: 1, firstError: 'Notion rate limit — try again shortly',
+    });
+  });
+
+  it('still persists lastSyncResult when every game failed, but never moves lastSyncedAt', async () => {
+    exportResultMock.mockResolvedValue({ ok: 0, failed: 3, skipped: 0, error: 'offline' });
+    const runtime = await connectedRuntime();
+
+    await runtime.export([game('a')]);
+
+    const patch = saveLocalNotionConfigMock.mock.calls.at(-1)![0];
+    expect(patch.lastSyncedAt).toBeUndefined();
+    expect(patch.lastSyncResult).toEqual({ at: expect.any(Number), ok: 0, updated: 0, failed: 3, firstError: 'offline' });
+  });
+
+  it('never attempts (or persists) anything when there is no connected exporter', async () => {
+    const runtime = new NotionRuntime(baseDeps()); // no token → never rebuilt into a connected exporter
+    const result = await runtime.export([game('a')]);
+
+    expect(result).toEqual({ ok: 0, failed: 0, unavailable: true });
+    expect(saveLocalNotionConfigMock).not.toHaveBeenCalled();
   });
 });
 
