@@ -473,6 +473,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   ticks to dial in by hand), and the same nudge now also reaches the placement-completion
   dialog's % field, which previously had none at all. "Save & next" reads **Ctrl ⏎**, not the
   macOS **⌃⏎** glyph this Windows-only app never should have shown.
+- **The post-save toast actually says what happened, and you can undo it.** It used to read
+  "Match logged — Win · Oasis" — no account, no role, no ±%, no way back — so fixing a mis-logged
+  game meant Matches → the row → ⋯ → Delete → confirm. It now reads "Match logged — Win · Oasis ·
+  Climb Damage · +25%" with an **Undo** action (skipped only when the save also set a first rank
+  anchor or a placement prediction, since undo can't unwind those). When logging also switches
+  which account the dashboard is scoped to, a short "Now showing `<account>`" toast says so — that
+  used to happen with zero notice. A hand-logged match no longer also fires a Windows notification
+  for something you typed a second ago and are already looking at.
 
 ## 0.34.0 — 31 July 2026
 

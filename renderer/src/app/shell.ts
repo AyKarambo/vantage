@@ -18,7 +18,7 @@ import { initShortcuts, overlayCapturing, registerShortcut, shortcutGroups } fro
 import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
 import { openModal } from '../components/overlay';
-import { mountToastHost } from '../components/toast';
+import { mountToastHost, toast } from '../components/toast';
 import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
@@ -351,6 +351,12 @@ export class App {
   private onGameLogged(payload: GameLoggedPayload): void {
     if (shouldAutoSwitch(store.get().filters.account, payload)) {
       store.setFilters({ account: payload.account }); // persists + refreshes
+      // L3: this silently changes the WHOLE dashboard's account scope — worth
+      // a notice on its own, distinct from the log card's own save toast
+      // (which already names the account it stored). Live-tracked switches
+      // are excluded: they land while the player is still in Overwatch,
+      // looking at neither Vantage nor a toast either way.
+      if (payload.source === 'manual') toast(`Now showing ${payload.account}`);
     } else {
       void store.refresh();
     }
