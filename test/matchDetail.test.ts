@@ -307,6 +307,52 @@ describe('matchDetail degradation contract', () => {
   });
 });
 
+describe('usual — the per-hero baseline (H8)', () => {
+  const heroGame = (matchId: string, timestamp: number, elims: number, account = 'Main'): GameRecord =>
+    minimal({
+      matchId, timestamp, account, heroes: ['Ana'], durationMinutes: 10, playedMinutes: 10,
+      perHero: [{ hero: 'Ana', role: 'support', eliminations: elims, deaths: 2, assists: 5, damage: 1000, healing: 5000, mitigation: 0, minutes: 10 }],
+    });
+
+  it('is null under 5 prior games on the hero — a fresh or rarely-played hero gets no fabricated baseline', () => {
+    const priors = [1, 2, 3, 4].map((i) => heroGame(`p${i}`, 1000 + i, 8));
+    const target = heroGame('target', 2000, 8);
+    const d = matchDetail([...priors, target], 'target')!;
+    expect(d.perHero[0].usual).toBeNull();
+  });
+
+  it('reflects the trailing games on the hero once the floor (5) is met', () => {
+    const priors = [1, 2, 3, 4, 5].map((i) => heroGame(`p${i}`, 1000 + i, 8)); // 8 elims / 10 min → 8.0/10
+    const target = heroGame('target', 2000, 20); // this match's own numbers never feed its own baseline
+    const d = matchDetail([...priors, target], 'target')!;
+    expect(d.perHero[0].usual).toMatchObject({ eliminations: 8 });
+  });
+
+  it('never counts a game at or after this match — no leakage from itself or a later game', () => {
+    const priors = [1, 2, 3, 4, 5].map((i) => heroGame(`p${i}`, 1000 + i, 8));
+    const after = heroGame('after', 5000, 100); // would skew the average if it counted
+    const target = heroGame('target', 2000, 20);
+    const d = matchDetail([...priors, after, target], 'target')!;
+    expect(d.perHero[0].usual).toMatchObject({ eliminations: 8 });
+  });
+
+  it('windows to the trailing 30 games on the hero — older games age out', () => {
+    const old = Array.from({ length: 25 }, (_, i) => heroGame(`old${i}`, 100 + i, 2));
+    const recent = Array.from({ length: 30 }, (_, i) => heroGame(`recent${i}`, 1000 + i, 8));
+    const target = heroGame('target', 5000, 20);
+    const d = matchDetail([...old, ...recent, target], 'target')!;
+    expect(d.perHero[0].usual).toMatchObject({ eliminations: 8 }); // the 2-elim games are entirely outside the window
+  });
+
+  it('scopes the baseline to the SAME account — an alt/smurf never feeds the main\'s usual', () => {
+    const priorsMain = [1, 2, 3, 4, 5].map((i) => heroGame(`m${i}`, 1000 + i, 8, 'Main'));
+    const priorsAlt = [1, 2, 3, 4, 5].map((i) => heroGame(`a${i}`, 1000 + i, 100, 'Alt'));
+    const target = heroGame('target', 2000, 20, 'Main');
+    const d = matchDetail([...priorsMain, ...priorsAlt, target], 'target')!;
+    expect(d.perHero[0].usual).toMatchObject({ eliminations: 8 });
+  });
+});
+
 describe('sample dataset detail tiers', () => {
   const games = generateSampleGames(220, 42);
 

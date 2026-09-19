@@ -46,7 +46,7 @@ export type {
 } from './masterData';
 
 // Match drill-down payloads
-export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, SharedMatchRank, PlayerMatchHistory, PlayerRecord, MatchDetail } from './matchDetail';
+export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, SharedMatchRank, PlayerMatchHistory, PlayerRecord, MatchDetail, UsualPer10, MatchDetailHeroStat } from './matchDetail';
 // Players screen (the filter-scoped player directory).
 export type { PlayerSortKey, PlayerListRow, PlayerListQuery, PlayerList } from './players';
 export type { LiveMatchPayload, LiveKillEntry } from './liveMatch';

@@ -6,7 +6,7 @@
  * No share/publish affordance anywhere (spec: Share URL is out of scope).
  */
 import { applyStyle, h, render } from '../dom';
-import type { HeroStat, MatchDetail, MatchMental, MatchRow, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
+import type { MatchDetail, MatchDetailHeroStat, MatchMental, MatchRow, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary, UsualPer10 } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { dateLong, fmt, fmt1, isToday, prettyDay, rankLabel, relTime, roleLabel, signed, time, toDatetimeLocal, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
@@ -34,7 +34,7 @@ import { deleteMatch } from '../matchActions';
 import { leaverFlags } from '../../../src/core/leaver';
 import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
-import { heroLines, combinedHeroLine } from '../../../src/core/perHero';
+import { heroLines, combinedHeroLine, type PerTen } from '../../../src/core/perHero';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { groupByDay } from '../../../src/core/analytics';
 import { PALETTE, wrHsl } from '../theme';
@@ -302,8 +302,69 @@ function scoreboardSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null
 
 // --- per-hero tabs ------------------------------------------------------------
 
+/** One counting stat's presentation rules (H8): the "more/less" wording, the value format, and which delta direction reads as an improvement. */
+const STAT_META: Record<keyof UsualPer10, { label: string; more: string; less: string; compact: boolean; invert: boolean }> = {
+  eliminations: { label: 'Elims/10', more: 'more eliminations', less: 'fewer eliminations', compact: false, invert: false },
+  deaths: { label: 'Deaths/10', more: 'more deaths', less: 'fewer deaths', compact: false, invert: true },
+  assists: { label: 'Assists/10', more: 'more assists', less: 'fewer assists', compact: false, invert: false },
+  damage: { label: 'DMG/10', more: 'more damage', less: 'less damage', compact: true, invert: false },
+  healing: { label: 'HEAL/10', more: 'more healing', less: 'less healing', compact: true, invert: false },
+  mitigation: { label: 'MIT/10', more: 'more mitigation', less: 'less mitigation', compact: true, invert: false },
+};
+const STAT_KEYS = Object.keys(STAT_META) as Array<keyof UsualPer10>;
+
+/** `fmt`/`fmt1`-formatted, always signed with the app's U+2212 minus (`signed`'s own glyph) — the small `.stat-box-delta` line's own format, distinct from `signed()` itself (which doesn't round or compact-format). */
+function signedFmt(delta: number, compact: boolean): string {
+  const rounded = compact ? Math.round(delta) : Math.round(delta * 10) / 10;
+  const abs = compact ? fmt(Math.abs(rounded)) : fmt1(Math.abs(rounded));
+  return rounded > 0 ? `+${abs}` : rounded < 0 ? `−${abs}` : abs;
+}
+
+/** A statBox with an optional small "vs your usual" delta line under the label (H8) — a local variant of the shared `statBox`, since that component has no third slot. */
+function heroStatBox(value: string, key: keyof UsualPer10, actual: number | undefined, usual: UsualPer10 | null): HTMLElement {
+  const meta = STAT_META[key];
+  const delta = actual != null && usual != null ? actual - usual[key] : null;
+  const rounded = delta == null ? null : meta.compact ? Math.round(delta) : Math.round(delta * 10) / 10;
+  const state = rounded == null || rounded === 0 ? 'u-dim' : (meta.invert ? rounded < 0 : rounded > 0) ? 'is-win' : 'is-loss';
+  return h('div', { class: 'stat-box' },
+    h('div', { class: 'stat-box-value' }, value),
+    h('div', { class: 'stat-box-label' }, meta.label),
+    rounded == null
+      ? null
+      : h('div', { class: `mono stat-box-delta ${state}` }, `vs usual ${signedFmt(rounded, meta.compact)}`),
+  );
+}
+
+/**
+ * "vs your usual on `<hero>`: fewer deaths (5.6 vs 6.8), less healing (11k vs
+ * 12.4k)" — the up-to-two most notable deltas (H8), so the card leads with
+ * what actually stands out instead of making the player scan all six boxes.
+ * `null` when there's no baseline, or nothing moved enough to be worth saying.
+ */
+function usualSummaryLine(hero: string, per10: PerTen | null, usual: UsualPer10 | null): HTMLElement | null {
+  if (!per10 || !usual) return null;
+  const entries = STAT_KEYS.map((key) => {
+    const meta = STAT_META[key];
+    const actual = per10[key];
+    const base = usual[key];
+    const delta = actual - base;
+    const rounded = meta.compact ? Math.round(delta) : Math.round(delta * 10) / 10;
+    // Relative to the baseline, not the raw point delta — a raw sort would
+    // always crown DMG/HEAL/MIT (thousands) over Elims/Deaths/Assists
+    // (single digits) regardless of which one actually stands out for THIS hero.
+    const relative = base !== 0 ? Math.abs(delta) / Math.abs(base) : (delta !== 0 ? Infinity : 0);
+    return { key, meta, actual, base, delta: rounded, relative };
+  }).filter((e) => e.delta !== 0);
+  if (!entries.length) return null;
+  entries.sort((a, b) => b.relative - a.relative);
+  const fmtVal = (n: number, compact: boolean): string => (compact ? fmt(n) : fmt1(n));
+  const clauses = entries.slice(0, 2).map((e) =>
+    `${e.delta > 0 ? e.meta.more : e.meta.less} (${fmtVal(e.actual, e.meta.compact)} vs ${fmtVal(e.base, e.meta.compact)})`);
+  return h('div', { class: 'hint', style: { marginTop: '10px' } }, `vs your usual on ${hero}: ${clauses.join(', ')}`);
+}
+
 function perHeroSection(
-  perHero: HeroStat[],
+  perHero: MatchDetailHeroStat[],
   playedMinutes: number | undefined,
   playedSource: MatchDetail['playedSource'],
 ): HTMLElement | null {
@@ -318,24 +379,33 @@ function perHeroSection(
   // (per-10 over the whole played time); a single-hero match already IS its own total.
   const all = combinedHeroLine(perHero, playedMinutes);
   const tabLines = all && lines.length > 1 ? [all, ...lines] : lines;
+  // usual isn't carried through heroLines (it's not a HeroStat field, and
+  // combining it across heroes for the "All" tab wouldn't mean anything) —
+  // looked up directly against the original per-hero rows instead (H8).
+  const usualByHero = new Map(perHero.map((s) => [s.hero, s.usual]));
   const body = h('div', { class: 'stat-grid stat-grid--wide' });
+  const summaryHost = h('div');
   const draw = (hero: string): void => {
     const s = tabLines.find((x) => x.hero === hero) ?? tabLines[0];
     const p = s.per10;
+    const usual = usualByHero.get(s.hero) ?? null;
     render(body,
-      statBox(fmt1(p?.eliminations), 'Elims/10'),
-      statBox(fmt1(p?.assists), 'Assists/10'),
-      statBox(fmt1(p?.deaths), 'Deaths/10'),
+      heroStatBox(fmt1(p?.eliminations), 'eliminations', p?.eliminations, usual),
+      heroStatBox(fmt1(p?.assists), 'assists', p?.assists, usual),
+      heroStatBox(fmt1(p?.deaths), 'deaths', p?.deaths, usual),
       statBox(s.kda.toFixed(1), 'KDA'),
-      statBox(fmt(p?.damage), 'DMG/10'),
-      statBox(fmt(p?.healing), 'HEAL/10'),
-      statBox(fmt(p?.mitigation), 'MIT/10'),
+      heroStatBox(fmt(p?.damage), 'damage', p?.damage, usual),
+      heroStatBox(fmt(p?.healing), 'healing', p?.healing, usual),
+      heroStatBox(fmt(p?.mitigation), 'mitigation', p?.mitigation, usual),
     );
+    render(summaryHost, usualSummaryLine(s.hero, p, usual));
   };
   draw(tabLines[0].hero);
+  // Minutes on the hero, right on the tab (H8) — a 1.5-minute swap and a
+  // 12-minute main used to read identically ("Kiriko" either way).
   const tabs = tabLines.length > 1
     ? segmented({
-        options: tabLines.map((s) => ({ value: s.hero, label: s.hero })),
+        options: tabLines.map((s) => ({ value: s.hero, label: s.minutes != null ? `${s.hero} · ${s.minutes.toFixed(1)}m` : s.hero })),
         value: tabLines[0].hero,
         onChange: draw,
       })
@@ -343,7 +413,10 @@ function perHeroSection(
   // An older capture without round events had its played time estimated from
   // the wall clock — say so, quietly, next to the numbers it scales.
   const basis = playedSource === 'estimated' ? 'per 10 minutes played (est.)' : 'per 10 minutes played';
-  return card({ title: 'Per hero', sub: `${basis} · KDA is a ratio`, actions: tabs }, body);
+  return card(
+    { title: 'Per hero', sub: `${basis} · KDA is a ratio · vs your last 30 games on each hero (5+ needed)`, actions: tabs },
+    body, summaryHost,
+  );
 }
 
 

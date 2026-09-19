@@ -95,7 +95,10 @@ account's per-role lines beneath it.
   not most, wins the highlight on Deaths, on both the totals row and every individual row
   (M4) — per-hero tabs with stats **per 10 minutes played**, a **Played** time beside the
   wall-clock duration — the fight time those rates divide by, marked *est.* on older captures
-  (see *Played time* below) — competitive progress, a read-only **Grades card** with
+  (see *Played time* below), each stat box compared **vs your own usual on that hero** — the
+  trailing 30 games on it (5+ needed, else no comparison is shown), colour-coded win/loss same
+  as elsewhere, with a one-line summary calling out the two biggest swings by how large they are
+  *relative* to your usual rather than by raw size (H8) — competitive progress, a read-only **Grades card** with
   the match's target grades, performance rating and feel/leaver flags (also shown right in
   the header, M4), and player history — each section degrades gracefully to whatever the
   game feed actually reported for that match). **Click any player's name** — on the scoreboard, in the
