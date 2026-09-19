@@ -62,6 +62,22 @@ describe('performanceStats', () => {
     expect(s.lossAvg).toBe(40);
   });
 
+  it('carries the rated-game count behind each side (F6) — a Trends confidence gate reads this, not just non-null averages', () => {
+    const games = [
+      ...rate(span(5, 5, { perDay: 3, result: 'Win' }), 70),
+      ...rate(span(6, 6, { perDay: 1, result: 'Loss' }), 40),
+    ];
+    const s = performanceStats(games);
+    expect(s.winRated).toBe(3);
+    expect(s.lossRated).toBe(1);
+  });
+
+  it('zero rated games on a side reads 0, not undefined', () => {
+    const s = performanceStats(rate(span(5, 5, { perDay: 2, result: 'Win' }), 70));
+    expect(s.winRated).toBe(2);
+    expect(s.lossRated).toBe(0);
+  });
+
   it('a multi-hero match counts once per hero (whole-count, mirrors byHero)', () => {
     const g = { ...game({ timestamp: ts(5), heroes: ['Tracer', 'Sombra'] }), performance: 80 };
     const s = performanceStats([g]);

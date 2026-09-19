@@ -250,8 +250,11 @@ account's per-role lines beneath it.
   winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
   and the performance drop when tilted — each sample-gated), a **tilt-rate line chart**
   (rolling average included, same chart Trends uses for winrate) with an improving/worsening
-  read that states the actual move ("22% → 15%"), **tilt by game # in a sitting** (the "stop
-  after game N" read) plus **when-you-tilt triggers** — by time of day, right after a loss vs
+  read that states the actual move ("22% → 15%") — its "shorter sessions, earlier breaks"
+  advice needs 3 actual flagged games before it speaks, not just enough sample days, falling
+  back to an honest "Early read" line below that (F6) — **tilt by game # in a sitting** (the
+  "stop after game N" read, its bars dimmed under 5 games instead of drawing full-strength off
+  one game, F6) plus **when-you-tilt triggers** — by time of day, right after a loss vs
   a win, and by map — flag counts with leavers split by team, and a **break-reminder setting**
   (on/off + loss threshold) that fires a tray notification after N consecutive losses.
 - **Trends** — **rank over time**, above everything else: one line per tracked (account, role)
@@ -268,14 +271,18 @@ account's per-role lines beneath it.
   key with no year, thin markers label every season (and ladder reset) the chart crosses, and
   a dense chart's hit targets no longer overlap and steal the hover from the wrong point. A
   **By season** card answers "how did each season go" in one place — click a season to jump
-  straight to it. Then splits by role/account, **when you win** — a **weekday × time-of-day
+  straight to it. Then splits by role/account (a thin-sample row sorts after the well-sampled
+  ones and renders dimmed instead of ranking a 2-game 100% row above a 40-game 55% one, and
+  every bar carries a reference tick at your own overall winrate, F6), **when you win** — a **weekday × time-of-day
   grid** (O5, 7 rows × 4 columns, colour = winrate, opacity = games, same encoding the
   Overview Activity heatmap uses) with a best-window callout that can now name a specific
   "Friday evening" instead of just a day-part — and the **session fatigue curve** (winrate by game number
   within a sitting, with a "you fade from game N" read when the sample supports it), and
   **your self-rating over time** (the 0–100 performance slider with the same real rolling
   average plus the avg-rating-on-wins vs -losses split — does your self-read track
-  results, or your play? — also click-through to that day's matches). Per-hero and per-map
+  results, or your play? — gated on 8 rated games each side before it says so, a plain
+  "N-point gap, needs 8 per side" below that instead (F6) — also click-through to that day's
+  matches). Per-hero and per-map
   average self-ratings also appear as **RTG** columns on the Heroes and Maps tables. Three more
   splits answer questions the data already had but nothing showed (H9): **Solo vs grouped**
   (party size GEP reported, when it did), **Close games** (win rate on a one-round margin vs a

@@ -824,6 +824,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   recent releases with **Show all** to expand it. Three new topics — **Accounts & ranks** (rank
   anchors, placement runs, the `Unknown` bucket), **Demo data**, and **Coaching nudges** — cover
   the questions the app's own screens tend to raise (F5).
+- **Small samples stopped talking like big ones.** Trends' By role/mode/account breakdowns no
+  longer let a 2-game 100% row outrank a 40-game 55% one — thin rows (under 10 games) sort after
+  the well-sampled ones and render dimmed rather than vanishing, and every bar now carries a
+  reference tick at your own overall winrate so you can read it against "better or worse than
+  average" at a glance. The self-rating card's "are you grading the outcome instead of your
+  play?" read needs 8 rated games on each side before it says that — below it, a plain "N-point
+  gap over M rated games, needs 8 per side" instead. Mental's tilt trend needs 3 actual flagged
+  games (not just enough sample days) before "Worsening" carries its "shorter sessions, earlier
+  breaks" advice — below that, "Early read: tilt rate up on N flags." The Session card's own
+  per-position bars dim under 5 games instead of drawing a full-strength red bar off one game
+  (F6).
 
 ## 0.34.0 — 31 July 2026
 

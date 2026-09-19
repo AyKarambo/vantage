@@ -3,6 +3,7 @@ import { h } from '../dom';
 import type { Group, Momentum, PerformanceStats, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup, WeekdayDayPartCell } from '../../../src/shared/contract';
 import { sessionFade, bucketStart } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
+import { confidenceTier } from '../../../src/core/confidence';
 import { roleLabel, signed } from '../format';
 import { horizontalBars, lineChart, ratingChart, rankChart, type WrPoint, type RankSeries } from '../charts/plots';
 import { card, emptyState, statBox, unlockHint } from '../components/primitives';
@@ -45,9 +46,9 @@ export function trends(ctx: ViewContext): HTMLElement {
       extremesRow(ctx, d.extremes),
     )),
     h('div', { class: 'grid-3' },
-      card({ title: 'By role' }, breakdown(d.byRole, roleLabel)),
-      card({ title: 'By game mode' }, breakdown(d.byMapType)),
-      card({ title: 'By account' }, breakdown(d.byAccount)),
+      card({ title: 'By role' }, breakdown(d.byRole, d.overall.winrate, roleLabel)),
+      card({ title: 'By game mode' }, breakdown(d.byMapType, d.overall.winrate)),
+      card({ title: 'By account' }, breakdown(d.byAccount, d.overall.winrate)),
     ),
     h('div', { class: 'grid-2' },
       soloVsGroupedCard(d.byGroupSize),
@@ -56,7 +57,7 @@ export function trends(ctx: ViewContext): HTMLElement {
     bySeasonCard(ctx),
     h('div', { class: 'grid-3' },
       timeOfDayCard(d.weekGrid),
-      sessionPositionCard(d.sessionPosition),
+      sessionPositionCard(d.sessionPosition, d.overall.winrate),
       gameLengthCard(d.byDuration),
     ),
     performanceCard(ctx, d.performance),
@@ -189,7 +190,7 @@ function timeOfDayCard(grid: WeekdayDayPartCell[][]): HTMLElement {
 }
 
 /** The fatigue curve: winrate by game number within a sitting + the stop-point read. */
-function sessionPositionCard(groups: Group[]): HTMLElement {
+function sessionPositionCard(groups: Group[], overallWinrate: number): HTMLElement {
   const FADE_MIN_GAMES = 8;
   const fade = sessionFade(groups);
   // sessionFade returning null means either "not enough data" OR "genuinely
@@ -199,7 +200,7 @@ function sessionPositionCard(groups: Group[]): HTMLElement {
     .filter((g) => g.key === '1' || g.key === '2')
     .reduce((n, g) => n + g.wins + g.losses, 0);
   return card({ title: 'Game # in session', sub: 'the fatigue curve — winrate by position in a sitting' },
-    breakdownOrdered(groups.map((g) => ({ ...g, key: `Game ${g.key}` }))),
+    breakdownOrdered(groups.map((g) => ({ ...g, key: `Game ${g.key}` })), { minGames: BREAKDOWN_MIN_GAMES, marker: overallWinrate }),
     h('div', { style: { marginTop: '10px' } },
       fade
         ? h('div', { class: 'hint', style: { lineHeight: '1.5' } },
@@ -213,9 +214,9 @@ function sessionPositionCard(groups: Group[]): HTMLElement {
   );
 }
 
-/** Like {@link breakdown} but keeps the caller's order (1 → 6+, morning → night). */
-function breakdownOrdered(groups: Group[]): HTMLElement {
-  return horizontalBars(groups.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })), { compact: true });
+/** Like {@link breakdown} but keeps the caller's order (1 → 6+, morning → night) — never resorted, since a `minGames` floor here would otherwise reshuffle a story order into a ranking. */
+function breakdownOrdered(groups: Group[], opts: { minGames?: number; marker?: number } = {}): HTMLElement {
+  return horizontalBars(groups.map((g) => ({ label: g.key, winrate: g.winrate, games: g.games })), { compact: true, ...opts });
 }
 
 /**
@@ -272,6 +273,9 @@ function extremesRow(ctx: ViewContext, extremes: StreakStats): HTMLElement | nul
   );
 }
 
+/** Rated games needed on the THINNER win/loss side before the self-rating gap sentence speaks with confidence (F6). */
+const GAP_MIN_PER_SIDE = 8;
+
 /**
  * Self-rated performance over time (issue #44): the rating trend with a rolling
  * average, plus the "does your self-read track results?" win/loss split.
@@ -282,6 +286,13 @@ function performanceCard(ctx: ViewContext, p: PerformanceStats): HTMLElement {
       emptyState('No rated games in this range yet — the 0–100 performance slider lives on Log Match and Review.'));
   }
   const gap = p.winAvg !== null && p.lossAvg !== null ? Math.round((p.winAvg - p.lossAvg) * 10) / 10 : null;
+  // F6: the interpretive read (including the "are you grading the outcome?"
+  // accusation) needs both sides backed by a real sample — a non-null
+  // average alone allows as few as 1 rated game per side. Gated on the
+  // THINNER side, since a lopsided 40-vs-2 split is exactly as unreliable as
+  // a thin-both-sides one.
+  const thinnerSide = Math.min(p.winRated, p.lossRated);
+  const gapConfident = confidenceTier(thinnerSide, GAP_MIN_PER_SIDE) === 'ok';
   // C7: always daily today (unlike the winrate chart, this trend has no
   // weekly-bucket mode yet), so the day click-through is unconditional.
   const openDay = (label: string): void => ctx.navigate('matches', { day: label });
@@ -307,7 +318,7 @@ function performanceCard(ctx: ViewContext, p: PerformanceStats): HTMLElement {
       statBox(p.lossAvg !== null ? String(p.lossAvg) : '–', 'avg rating on losses'),
       statBox(gap !== null ? (gap > 0 ? `+${gap}` : String(gap)) : '–', 'win − loss gap'),
     ),
-    gap !== null
+    gap !== null && gapConfident
       ? h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } },
           gap >= 15
             ? 'Your self-read tracks results closely — you rate wins much higher than losses. Worth asking: are you grading the outcome instead of your play?'
@@ -315,15 +326,14 @@ function performanceCard(ctx: ViewContext, p: PerformanceStats): HTMLElement {
               ? 'You rate wins and losses about the same — a self-read that ignores the scoreboard is exactly what review is for.'
               : 'A modest win/loss gap — your self-rating mostly reflects your play, with a little scoreboard bleed.')
       : null,
+    gap !== null && !gapConfident
+      ? h('div', { class: 'hint', style: { marginTop: '8px', lineHeight: '1.5' } },
+          `${signed(gap)} win − loss gap over ${thinnerSide} rated game${thinnerSide === 1 ? '' : 's'} on your thinner ` +
+          `side — a read needs ${GAP_MIN_PER_SIDE} per side.`)
+      : null,
   ));
 }
 
-/**
- * A compact winrate-bar list for a categorical split — one row per group, ranked
- * best → worst. Uses the same responsive horizontal bars as the Maps view so the
- * breakdowns read cleanly whether there's one row or many (vertical SVG bars
- * ballooned when a card had only a single category).
- */
 /**
  * "How did each season go" (C5), answered as one card instead of ten filter
  * changes and ten memorised numbers — `DashboardData.bySeason` already
@@ -351,11 +361,25 @@ function bySeasonCard(ctx: ViewContext): HTMLElement | null {
   );
 }
 
-function breakdown(groups: Group[], label: (key: string) => string = (k) => k): HTMLElement {
-  const data = [...groups]
-    .sort((a, b) => b.winrate - a.winrate)
-    .map((g) => ({ label: label(g.key), winrate: g.winrate, games: g.games }));
-  return horizontalBars(data, { compact: true });
+/** Games a breakdown row needs before it's ranked as trustworthy (F6) — below it, the row still shows (dimmed, `horizontalBars`' `minGames`) rather than vanishing, just sorted after the qualified ones so a small-sample fluke can't rank #1. */
+const BREAKDOWN_MIN_GAMES = 10;
+
+/**
+ * A compact winrate-bar list for a categorical split — one row per group,
+ * ranked best → worst within two tiers: rows with `≥ BREAKDOWN_MIN_GAMES`
+ * first (sorted by winrate, as before), then thinner rows after (also
+ * winrate-sorted among themselves) — a 2-game 100% row used to be able to
+ * rank #1 ahead of a 40-game 55% one (F6). Uses the same responsive
+ * horizontal bars as the Maps view so the breakdowns read cleanly whether
+ * there's one row or many, with a reference tick at the player's own overall
+ * winrate for this range.
+ */
+function breakdown(groups: Group[], overallWinrate: number, label: (key: string) => string = (k) => k): HTMLElement {
+  const byWinrate = (a: Group, b: Group): number => b.winrate - a.winrate;
+  const qualified = groups.filter((g) => g.games >= BREAKDOWN_MIN_GAMES).sort(byWinrate);
+  const thin = groups.filter((g) => g.games < BREAKDOWN_MIN_GAMES).sort(byWinrate);
+  const data = [...qualified, ...thin].map((g) => ({ label: label(g.key), winrate: g.winrate, games: g.games }));
+  return horizontalBars(data, { compact: true, minGames: BREAKDOWN_MIN_GAMES, marker: overallWinrate });
 }
 
 /** Pull `keys` out of `groups` in that fixed order (not winrate-sorted) — a story order, not a ranking. */

@@ -2,6 +2,7 @@
 import { h } from '../dom';
 import type { MatchFlagKey, RatedSide, TiltBucket, WinrateSide } from '../../../src/shared/contract';
 import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '../../../src/core/mentalAnalytics';
+import { confidenceTier } from '../../../src/core/confidence';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
 import { lineChart, type WrPoint } from '../charts/plots';
@@ -186,6 +187,16 @@ const TREND_META: Record<TiltTrendDirection, { cls: string; arrow: string; verb:
 };
 
 /**
+ * Flagged (tilted) games needed across both halves before the tilt-trend
+ * verdict's imperative advice speaks (F6) — the 5-games-PER-HALF gate above
+ * only guards the RATE being meaningful; a 5-and-5 split can still turn on
+ * as few as 1-2 actual flags, not enough to hang "shorter sessions, earlier
+ * breaks" on. `flat` has no imperative clause to gate — its neutral advice
+ * always shows.
+ */
+const TILT_TREND_FLAGGED_MIN = 3;
+
+/**
  * Per-day tilt-rate chart + the improving/worsening read (S9). A readable,
  * hoverable `lineChart` (fixed 0–100% axis) replaces the old `sparkline()`,
  * which auto-scaled to the data's own min…max — a 0→10% wobble filled the
@@ -219,26 +230,38 @@ function trendsCard(ctx: ViewContext): HTMLElement {
     }),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
       read
-        ? h('span', { class: TREND_META[read.direction].cls },
-            `${TREND_META[read.direction].arrow} ${TREND_META[read.direction].verb} — ${pct(read.earlyRate)} → ${pct(read.lateRate)} `
-            + `(earlier vs recent half). ${TREND_META[read.direction].advice}`)
+        ? read.direction === 'flat' || confidenceTier(read.flaggedGames, TILT_TREND_FLAGGED_MIN) === 'ok'
+          ? h('span', { class: TREND_META[read.direction].cls },
+              `${TREND_META[read.direction].arrow} ${TREND_META[read.direction].verb} — ${pct(read.earlyRate)} → ${pct(read.lateRate)} `
+              + `(earlier vs recent half). ${TREND_META[read.direction].advice}`)
+          : h('span', { class: TREND_META[read.direction].cls },
+              `Early read: tilt rate ${read.direction === 'worsening' ? 'up' : 'down'} on ${read.flaggedGames} flag${read.flaggedGames === 1 ? '' : 's'}.`)
         : h('span', { class: 'u-dim' }, `Not enough games in each half of the range to read a direction yet (${COST_MIN_SAMPLE} each needed).`)),
   ));
 }
 
-/** One tilt-rate bar: label, bar, "rate · games" — shared by every "when do I tilt" trigger block (S9). */
+/**
+ * One tilt-rate bar: label, bar, "rate · games" — shared by every "when do I
+ * tilt" trigger block (S9), including Session's "Game # in sitting" list.
+ * Below {@link COST_MIN_SAMPLE} games, the bar itself dims (F6) — every
+ * caller already gates its OWN interpretive verdict on this same floor per
+ * bucket, but used to still draw a full-strength red bar for a 1-game
+ * position regardless, reading as equally trustworthy as a well-sampled one.
+ */
 function tiltRow(label: string, b: TiltBucket): HTMLElement {
+  const thin = b.games < COST_MIN_SAMPLE;
   return statBar({
     label,
     frac: b.rate,
-    color: PALETTE.loss,
-    valueText: h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '5px' } },
+    color: thin ? PALETTE.muted : PALETTE.loss,
+    valueText: h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '5px', ...(thin ? { opacity: '0.6' } : {}) } },
       h('span', { style: { minWidth: '30px', textAlign: 'right' } }, pct(b.rate)),
       h('span', null, '·'),
       h('span', { style: { minWidth: '20px', textAlign: 'right' } }, `${b.games}g`),
     ),
     slim: true,
     valueWidth: 66,
+    title: thin ? `Under ${COST_MIN_SAMPLE} games — not read` : undefined,
   });
 }
 
@@ -318,7 +341,13 @@ function sessionCard(ctx: ViewContext): HTMLElement {
   const peak = buckets
     .filter((b) => b.games >= COST_MIN_SAMPLE && b.tilted > 0)
     .sort((a, b) => b.rate - a.rate)[0];
-  return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting, time of day, after a loss, and by map' },
+  return card({
+    title: 'Session & triggers',
+    // F6: the floor stated once here, instead of every dimmed bar needing
+    // its own explanation — same "state the unit once" stance "What it
+    // costs you"'s sub already takes.
+    sub: `tilt rate by game # in a sitting, time of day, after a loss, and by map · ≥${COST_MIN_SAMPLE} games per position`,
+  },
     h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, 'Game # in sitting'),
     h('div', { class: 'stack', style: { gap: '9px', marginTop: '4px' } },
       ...buckets.map((b) => tiltRow(`Game ${b.key}`, b)),
