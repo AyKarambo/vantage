@@ -21,6 +21,7 @@ Momentum over time and where winrate concentrates — one screen to see whether 
 ## Out-of-Scope
 
 - Forecasting/projection; map-level breakdowns (owned by `screen-maps.spec.md`); a weekly-bucket drill-down (the winrate chart's day drill-down, C7, is daily-mode only — clicking a weekly point does nothing yet); the readiness trend's own day drill-down (left out until its 04:00-local day keys are unified with Matches' UTC `dayKey`).
+- The By role / By game mode / By account breakdown bars don't yet mark the previous window's winrate as a tick against the current bar (C3's period-over-period comparison stops at the KPI row, the winrate chart's momentum strip, and the Heroes table's Δ WR column — a per-bar tick is a real follow-up, not a hard blocker).
 
 ## Constraints & edge cases
 

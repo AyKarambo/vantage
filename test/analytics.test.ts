@@ -5,7 +5,7 @@ import {
 import { generateSampleGames } from '../src/core/sampleData';
 import { PLAYED_TIME_ESTIMATE, setupMinutes } from '../src/core/playedTime';
 import type { HeroStat, Result, Role } from '../src/core/model';
-import { computeDashboard } from '../src/core/dashboardData';
+import { computeDashboard, previousDateRange } from '../src/core/dashboardData';
 import { buildTargets, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 
 function game(p: Partial<GameRecord> & { result: Result; map: string; role: Role }): GameRecord {
@@ -469,6 +469,74 @@ describe('competitive-only scoping (spec D1)', () => {
     expect(d.totalGamesAllTime).toBe(comp.length);
     expect(d.options.accounts).toEqual(['Karambo']);
     expect(d.byAccount.reduce((n, g) => n + g.games, 0)).toBe(comp.length);
+  });
+});
+
+describe('previousDateRange (C3)', () => {
+  const day = 86_400_000;
+  const now = Date.parse('2026-06-30T12:00:00Z');
+
+  it('returns undefined for "all" — there is nothing before everything', () => {
+    expect(previousDateRange([], { days: 'all' }, undefined, now)).toBeUndefined();
+  });
+
+  it('computes [now-2N, now-N) for an N-day filter', () => {
+    const r = previousDateRange([], { days: 30 }, undefined, now);
+    expect(r).toEqual({ start: now - 60 * day, end: now - 30 * day, label: 'the previous 30 days' });
+  });
+
+  it('resolves the previous entry in seasonsForData for a season filter', () => {
+    const starts = [Date.parse('2026-05-01T00:00:00Z'), Date.parse('2026-06-01T00:00:00Z')];
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-06-15T00:00:00Z') }),
+      game({ result: 'Loss', map: 'A', role: 'damage', timestamp: Date.parse('2026-05-15T00:00:00Z') }),
+    ];
+    const r = previousDateRange(games, { days: { season: 'S:2026-06-01' } }, starts, now);
+    expect(r?.start).toBe(starts[0]);
+    expect(r?.end).toBe(starts[1]);
+  });
+
+  it('is undefined when the active season has no earlier entry with data', () => {
+    const starts = [Date.parse('2026-06-01T00:00:00Z')];
+    const games = [game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-06-15T00:00:00Z') })];
+    expect(previousDateRange(games, { days: { season: 'S:2026-06-01' } }, starts, now)).toBeUndefined();
+  });
+});
+
+describe('DashboardData.previous / HeroSummary deltas (C3)', () => {
+  const day = 86_400_000;
+  const now = Date.now();
+  const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+
+  it('computes the previous N-day window and joins Δ WR / Δ games onto heroStats', () => {
+    const recent = [
+      game({ result: 'Win', map: 'A', role: 'damage', heroes: ['Tracer'], timestamp: now - 1 * day }),
+      game({ result: 'Win', map: 'A', role: 'damage', heroes: ['Tracer'], timestamp: now - 2 * day }),
+    ];
+    const previous = [
+      game({ result: 'Loss', map: 'A', role: 'damage', heroes: ['Tracer'], timestamp: now - 40 * day }),
+    ];
+    const d = computeDashboard([...recent, ...previous], { days: 30 }, demo);
+    expect(d.previous?.label).toBe('the previous 30 days');
+    expect(d.previous?.overall).toMatchObject({ games: 1, wins: 0, losses: 1 });
+    const tracer = d.heroStats.find((h) => h.hero === 'Tracer')!;
+    expect(tracer.deltaGames).toBe(1); // 2 recent − 1 previous
+    expect(tracer.deltaWinrate).toBeCloseTo(100, 5); // 100% now vs. 0% before
+  });
+
+  it('omits `previous` entirely for "All time" — there is nothing before everything', () => {
+    const d = computeDashboard([game({ result: 'Win', map: 'A', role: 'damage' })], { days: 'all' }, demo);
+    expect(d.previous).toBeUndefined();
+  });
+
+  it('leaves deltaWinrate absent for a hero with no decided games in one of the two windows', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', heroes: ['Genji'], timestamp: now - 1 * day }),
+    ];
+    const d = computeDashboard(games, { days: 30 }, demo);
+    const genji = d.heroStats.find((h) => h.hero === 'Genji')!;
+    expect(genji.deltaWinrate).toBeUndefined();
+    expect(genji.deltaGames).toBe(1); // new this window, nothing before
   });
 });
 

@@ -100,6 +100,11 @@
 .kpi-delta.is-down {
   color: var(--loss-text);
 }
+.kpi-sub {
+  font-size: 11px;
+  margin-top: 2px;
+  color: var(--dim);
+}
 /* The KPI's optional CTA (e.g. "Confirm rank") — smaller than a normal button
    so it reads as a card affordance, not a competing primary action.
    Qualified with `.btn` on purpose: `.btn` is declared further down this file, so

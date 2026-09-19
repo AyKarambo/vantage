@@ -312,6 +312,15 @@ export interface HeroSummary extends WinLoss {
   kda: number; // (elims + assists) / max(deaths, 1)
   /** Total played minutes on this hero (H5) — the sample-size signal a rounded game count can't carry: a 3-game hero with 9 minutes reads very differently from one with 40. */
   minutes: number;
+  /**
+   * Winrate change vs. the same hero's line in the previous comparison
+   * window (C3, `DashboardData.previous`), in whole percentage points
+   * (already ×100, e.g. `+3.2`). Absent when either window has zero decided
+   * games for this hero — a delta against nothing isn't a real number.
+   */
+  deltaWinrate?: number;
+  /** Games played this window minus games played in the previous one (C3); 0 when the hero wasn't touched by the delta, absent only when there's no previous window at all. */
+  deltaGames?: number;
 }
 
 /** Streak of the most recent decided games. */

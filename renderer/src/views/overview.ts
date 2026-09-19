@@ -179,6 +179,17 @@ function kpiRow(ctx: ViewContext): HTMLElement {
   // old "recent" label never said whether that meant days or weeks, or how many.
   const byWeek = d.filters.days === 'all' || (typeof d.filters.days === 'number' && d.filters.days > 90);
   const bucketWord = byWeek ? 'weeks' : 'days';
+  // C3: a period-over-period read beside the existing smoothed delta — "is
+  // this range up or down from the one before it", not just "is the last
+  // few days up or down from this range's own average". Winrate needs
+  // decided games on both sides to mean anything; the games count doesn't.
+  const prev = d.previous;
+  const prevDecided = prev ? prev.overall.wins + prev.overall.losses : 0;
+  const curDecided = d.overall.wins + d.overall.losses;
+  const winrateSub = prev && prevDecided && curDecided
+    ? `vs ${prev.label}: ${signed(Math.round((d.overall.winrate - prev.overall.winrate) * 1000) / 10)} pts`
+    : undefined;
+  const gamesSub = prev ? `vs ${prev.label}: ${signed(d.overall.games - prev.overall.games)} games` : undefined;
   return h('div', { class: 'kpi-row' },
     kpiCard({
       label: 'Winrate',
@@ -187,8 +198,13 @@ function kpiRow(ctx: ViewContext): HTMLElement {
         ? { text: `${trendDelta >= 0 ? '▴' : '▾'} ${Math.round(Math.abs(trendDelta))} pts · last 5 ${bucketWord}`, dir: trendDelta >= 0 ? 'up' : 'down' }
         : undefined,
       title: trendDelta != null ? `Mean winrate of your last 5 ${bucketWord} vs the range average` : undefined,
+      sub: winrateSub,
     }),
-    kpiCard({ label: 'Games', value: int(d.overall.games), delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` } }),
+    kpiCard({
+      label: 'Games', value: int(d.overall.games),
+      delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` },
+      sub: gamesSub,
+    }),
     rankKpi(ctx),
     kpiCard({
       label: 'Streak',

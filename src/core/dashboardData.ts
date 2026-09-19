@@ -148,6 +148,50 @@ export function computeDashboard(
     : all;
   const sessionSettings = manual?.sessionSettings ?? DEFAULT_SESSION_SETTINGS;
 
+  // The comparison window immediately before the active one (C3) — same
+  // account/role scope as `games`, a shifted date range. `undefined` on
+  // "All time" (there's nothing before everything) or when the active
+  // season has no addressable predecessor for this data.
+  const previousRange = previousDateRange(all, filters, seasonStartsList, Date.now());
+  const previous: DashboardData['previous'] = previousRange
+    ? (() => {
+      let prevGames = all.filter((g) => g.timestamp >= previousRange.start && g.timestamp < previousRange.end);
+      if (filters.account && filters.account !== 'all') prevGames = prevGames.filter((g) => g.account === filters.account);
+      if (filters.role && filters.role !== 'all') prevGames = prevGames.filter((g) => g.role === filters.role);
+      return {
+        label: previousRange.label,
+        overall: winLoss(prevGames),
+        byRole: byRole(prevGames),
+        byMapType: groupBy(prevGames, (g) => mapModeOf(g.map), { suppressed }),
+        heroStats: heroStats(prevGames, { mapModeOf, suppressed }),
+      };
+    })()
+    : undefined;
+  const heroStatsWithForm = heroStats(games, { mapModeOf, suppressed }).map((r) => {
+    // Trend/form (H6) reuse Focus's dimension-agnostic reads, joined onto
+    // each hero row here rather than inside heroStats() — that stays a pure
+    // per-game fold with no notion of "this hero's own games" to re-filter for.
+    const heroGames = focusGamesFor(games, 'hero', r.hero);
+    const trend = focusTrend(heroGames);
+    return { ...r, ...(trend ? { trend } : {}), form: heroForm(heroGames) };
+  });
+  // Δ WR / Δ games vs. the previous window (C3), joined by hero name — a
+  // hero absent from the previous window gets its full game count as the
+  // delta (it's new this window) but no winrate delta (nothing to compare
+  // against).
+  const heroStatsWithDelta = previous
+    ? heroStatsWithForm.map((r) => {
+      const prev = previous.heroStats.find((p) => p.hero === r.hero);
+      return {
+        ...r,
+        deltaGames: r.games - (prev?.games ?? 0),
+        ...(prev && prev.wins + prev.losses > 0 && r.wins + r.losses > 0
+          ? { deltaWinrate: Math.round((r.winrate - prev.winrate) * 1000) / 10 }
+          : {}),
+      };
+    })
+    : heroStatsWithForm;
+
   return {
     isSample: demo.active,
     demoPreference: demo.preference,
@@ -190,6 +234,7 @@ export function computeDashboard(
     // chart itself switches to weekly buckets, so the strip and the chart
     // it sits above agree on what "recent" means.
     momentum: windowCompare(games, Date.now(), weekly ? 28 : 7),
+    ...(previous ? { previous } : {}),
     timeOfDay: byTimeOfDay(games),
     // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.
@@ -209,14 +254,7 @@ export function computeDashboard(
     // 1+) are the real filter, and its table wrap already scrolls; a hard-coded
     // 2-game floor + 24-row slice here used to quietly drop 1-game heroes from
     // both the table and the palette's Hero entries before the renderer ever saw them.
-    heroStats: heroStats(games, { mapModeOf, suppressed }).map((r) => {
-      // Trend/form (H6) reuse Focus's dimension-agnostic reads, joined onto
-      // each hero row here rather than inside heroStats() — that stays a pure
-      // per-game fold with no notion of "this hero's own games" to re-filter for.
-      const heroGames = focusGamesFor(games, 'hero', r.hero);
-      const trend = focusTrend(heroGames);
-      return { ...r, ...(trend ? { trend } : {}), form: heroForm(heroGames) };
-    }),
+    heroStats: heroStatsWithDelta,
     matches: recentMatches(games, mapModeOf, activeMeasured, margin, suppressed),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),
@@ -297,6 +335,35 @@ export function applyFilters(
     }
   }
   return out;
+}
+
+/**
+ * The `[start, end)` date range immediately before the active filter's own
+ * window (C3) — the counterpart every KPI/Heroes/Trends comparison reads
+ * against. A season filter compares against the previous entry in
+ * {@link seasonsForData}'s own addressable list for THIS data (so a season
+ * with zero games in it is a legitimate, present "previous" — silence,
+ * not absence); an N-day filter compares `[now−2N, now−N)` against `[now−N,
+ * now]`. `undefined` on "All time" (there's nothing before everything) or
+ * when the active season isn't addressable or has no earlier entry.
+ */
+export function previousDateRange(
+  all: GameRecord[],
+  filters: DashboardFilters,
+  seasonStartsList: readonly number[] | undefined,
+  now: number,
+): { start: number; end: number; label: string } | undefined {
+  if (!filters.days || filters.days === 'all') return undefined;
+  if (typeof filters.days === 'object') {
+    const seasonId = filters.days.season;
+    const list = seasonsForData(all.map((g) => g.timestamp), now, seasonStartsList);
+    const i = list.findIndex((w) => w.id === seasonId);
+    const prev = i !== -1 ? list[i + 1] : undefined;
+    return prev ? { start: prev.start, end: prev.end, label: prev.label } : undefined;
+  }
+  const n = filters.days;
+  const dayMs = 86_400_000;
+  return { start: now - 2 * n * dayMs, end: now - n * dayMs, label: `the previous ${n} days` };
 }
 
 /**
