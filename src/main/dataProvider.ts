@@ -218,7 +218,10 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         roleScope: input.roleScope, heroScope: input.heroScope,
       }),
     saveReview: (input) => {
-      deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
+      // A demo match (F3) is never in real history — `setReview` reports that
+      // honestly instead of the write silently vanishing on the next refetch.
+      const saved = deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
+      if (!saved) return { saved };
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
       // GEP can't report SR, so the player may set it here (competitive only);
       // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
@@ -228,6 +231,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         // ±% it hangs off has actually landed.
         syncRankAtStart(deps, input.matchId);
       }
+      return { saved };
     },
     importReviews: (inputs) =>
       deps.history.setReviews(inputs.map((i) => ({
@@ -278,7 +282,9 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     editMatch: (input: MatchEditInput) => {
       const game = deps.history.all().find((g) => g.matchId === input.matchId);
-      if (!game) return;
+      // A demo match (F3) is never in real history — say so honestly instead of
+      // silently no-opping and letting the renderer believe the edit landed.
+      if (!game) return { saved: false };
       const isManual = sourceOf(game) === 'manual';
       const patch: Parameters<HistoryStore['editManual']>[1] = {};
       // Game facts are editable on EVERY match now — a result the feed got wrong
@@ -333,6 +339,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // and which neighbour the snapshot comes from. Re-syncing here covers all
       // of those; it is a no-op when a snapshot already stands.
       if (patch.srDelta !== undefined || input.role !== undefined) syncRankAtStart(deps, input.matchId);
+      return { saved: true };
     },
     deleteMatch: (matchId) => {
       // Gated behind a renderer confirm: drop the history row outright — the

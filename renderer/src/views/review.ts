@@ -34,7 +34,7 @@ import { inlineLink } from '../components/inlineLink';
 import { store } from '../store';
 import { bridge } from '../bridge';
 import { registerShortcut } from '../shortcuts';
-import { gradedThisSession } from '../reviews';
+import { gradedThisSession, reviewSaveToast } from '../reviews';
 import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { maybeOfferPlacements } from '../app/placementOffer';
@@ -89,13 +89,18 @@ export function review(ctx: ViewContext): HTMLElement {
   // so a just-resolved row disappears immediately, before the refetch lands.
   const needsResult = (d.pendingMatches ?? []).filter((m) => !resolvedThisSession.has(m.matchId));
 
-  const head = viewHead('Review', subtitle(totalPending, needsResult.length),
+  const head = viewHead('Review', subtitle(totalPending, needsResult.length, d.isSample),
     pending.length ? noReadAction(ctx) : undefined);
   const needsResultSection = needsResult.length ? needsResultCard(needsResult) : null;
+  // Grading a demo game is practice only — nothing is actually saved (F3) — so
+  // say so up front instead of letting the "Review saved" toast be the first
+  // place a returning player learns that.
+  const demoNotice = d.isSample ? demoNoticeCard() : null;
 
   if (!pending.length) {
     return h('div', { class: 'view view--narrow' },
       head,
+      demoNotice,
       activeStrip(active),
       needsResultSection,
       card({ variant: 'raised' }, emptyState('All caught up — every tracked game has your read. 🎯', true)),
@@ -134,6 +139,7 @@ export function review(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'view view--narrow' },
     head,
+    demoNotice,
     activeStrip(active),
     needsResultSection,
     h('div', { class: 'stack', style: { gap: '10px' } },
@@ -142,7 +148,7 @@ export function review(ctx: ViewContext): HTMLElement {
 }
 
 /** The Review head subtitle — a live session counter once grading has started, else the plain backlog count. */
-function subtitle(gradeCount: number, needsResultCount: number): string {
+function subtitle(gradeCount: number, needsResultCount: number, isSample: boolean): string {
   const parts: string[] = [];
   if (needsResultCount) parts.push(`${needsResultCount} match${needsResultCount === 1 ? '' : 'es'} to confirm or dismiss`);
   // Session progress (R3): once something's been graded this session, "3 of
@@ -152,11 +158,26 @@ function subtitle(gradeCount: number, needsResultCount: number): string {
   if (gradedThisSessionCount) {
     parts.push(`${gradedThisSessionCount} of ${gradeCount + gradedThisSessionCount} graded this session`);
   } else if (gradeCount) {
-    parts.push(`${gradeCount} tracked game${gradeCount === 1 ? '' : 's'} need your read`);
+    // "demo games" (F3), not "tracked games" — grading them here never
+    // actually saves, so the count shouldn't read like a real backlog either.
+    parts.push(`${gradeCount} ${isSample ? 'demo' : 'tracked'} game${gradeCount === 1 ? '' : 's'} need your read`);
   }
   return parts.length
     ? `${parts.join(' · ')} — grade your targets and flag how it felt`
     : 'Grade your targets and flag how it felt on the games you play';
+}
+
+/** The demo-mode notice (F3) atop the Review inbox — grading here is a sandbox: nothing is saved, so nothing should look like a real backlog closing. */
+function demoNoticeCard(): HTMLElement {
+  return card({ variant: 'raised', class: 'review-demo-notice' },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+      h('span', { class: 'u-muted', style: { fontSize: '18px' } }, '◌'),
+      h('div', null,
+        h('div', { style: { fontWeight: '600' } }, "These are demo games — grading here is practice only"),
+        h('div', { class: 'hint' }, "Nothing you grade or edit here is saved. Log or track a real game to start your own inbox."),
+      ),
+    ),
+  );
 }
 
 /**
@@ -455,19 +476,14 @@ function selfTargetsFor(m: MatchRow, active: TargetSummary[]): TargetSummary[] {
  * rank data, so there is nothing new for either of those to react to.
  */
 function quickSave(m: MatchRow, grades: Record<string, TargetGrade>, flags: MatchMental, onDone: () => void): void {
-  void bridge.saveReview({ matchId: m.matchId, grades, flags }).then(() => {
-    gradedThisSession.add(m.matchId);
+  void bridge.saveReview({ matchId: m.matchId, grades, flags }).then(({ saved }) => {
+    if (saved) gradedThisSession.add(m.matchId);
     onDone();
-    toast(`Review saved — ${m.map}`, {
-      action: {
-        label: 'Undo',
-        run: () => void bridge.clearReview(m.matchId).then(() => {
-          gradedThisSession.delete(m.matchId);
-          store.rerender();
-          void store.refresh();
-        }),
-      },
-    });
+    reviewSaveToast(saved, m.map, () => void bridge.clearReview(m.matchId).then(() => {
+      gradedThisSession.delete(m.matchId);
+      store.rerender();
+      void store.refresh();
+    }));
   });
 }
 
@@ -738,27 +754,29 @@ function expanded(
       ...(performance != null ? { performance } : {}),
       ...(srDelta !== undefined ? { srDelta } : {}),
     });
-    void Promise.all([anchored, mode === 'placement'
-      ? reviewed.then(() => bridge.setPlacementPrediction({
-          account: m.account, role: m.role, matchId: m.matchId,
-          prediction: { tier: predTier, division: predDivision },
-        }))
-      : reviewed,
-    ]).then(() => {
-      gradedThisSession.add(m.matchId);
+    // Only a REAL save (F3) is worth recording a placement prediction against —
+    // a demo game is never on an actual track.
+    const placed = mode === 'placement'
+      ? reviewed.then(({ saved }) => saved
+          ? bridge.setPlacementPrediction({
+              account: m.account, role: m.role, matchId: m.matchId,
+              prediction: { tier: predTier, division: predDivision },
+            })
+          : undefined)
+      : Promise.resolve();
+    void Promise.all([anchored, reviewed, placed]).then(([, { saved }]) => {
+      if (saved) gradedThisSession.add(m.matchId);
       kbHook = null;
       onSaved();
       // Saving is reversible — Undo removes the review and re-opens the inbox slot.
-      toast(`Review saved — ${m.map}`, {
-        action: {
-          label: 'Undo',
-          run: () => void bridge.clearReview(m.matchId).then(() => {
-            gradedThisSession.delete(m.matchId);
-            store.rerender();
-            void store.refresh();
-          }),
-        },
-      });
+      reviewSaveToast(saved, m.map, () => void bridge.clearReview(m.matchId).then(() => {
+        gradedThisSession.delete(m.matchId);
+        store.rerender();
+        void store.refresh();
+      }));
+      // Nothing below applies to a demo game — there is no real track, rank
+      // chain or placement run behind it to react to.
+      if (!saved) return;
       // Auto-tracked matches land here, never through the log form — this is
       // the path that made the reveal-rank prompt reportable in the first
       // place (#184). Only a match on a track with an open run can possibly

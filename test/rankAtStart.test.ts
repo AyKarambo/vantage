@@ -45,7 +45,7 @@ function harness(games: GameRecord[], initialAnchor?: ReturnType<typeof anchor>)
     history: {
       all: () => history,
       count: () => history.length,
-      setReview: () => {},
+      setReview: () => true,
       editManual: (matchId: string, patch: Record<string, unknown>) => {
         const game = history.find((x) => x.matchId === matchId);
         if (!game) return false;

@@ -15,6 +15,7 @@
  */
 import type { MatchMental, ReviewInput, TargetGrade } from '../../src/shared/contract';
 import { bridge } from './bridge';
+import { toast } from './components/toast';
 
 const LEGACY_KEY = 'vantageReviews';
 
@@ -26,6 +27,21 @@ const LEGACY_KEY = 'vantageReviews';
  * `ViewContext` — don't re-litigate this without that payoff.
  */
 export const gradedThisSession = new Set<string>();
+
+/**
+ * The toast after a review save (F3): `saved` reflects whether the match id
+ * was actually real — `bridge.saveReview` now says so honestly instead of
+ * quietly no-opping on a demo game. A demo save gets a plain "practice only"
+ * notice and no Undo (there is nothing to undo); a real save keeps the
+ * existing Undo action, unchanged.
+ */
+export function reviewSaveToast(saved: boolean, map: string, undo: () => void): void {
+  if (!saved) {
+    toast(`Not saved — "${map}" is a demo game. Log or track a real game to start your own inbox.`);
+    return;
+  }
+  toast(`Review saved — ${map}`, { action: { label: 'Undo', run: undo } });
+}
 
 /** The pre-pipeline localStorage shapes (renderer-local flag names). */
 interface LegacyFlags {

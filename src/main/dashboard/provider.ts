@@ -54,8 +54,9 @@ export interface DataProvider {
   suggestThreshold(input: ThresholdSuggestionInput): ThresholdSuggestion | null;
   /** Persist a manually-logged match; returns its new id. */
   logMatch(input: ManualMatchInput): { matchId: string };
-  /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches). */
-  editMatch(input: MatchEditInput): void;
+  /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches).
+   *  `saved: false` when the id is unknown to real history — a demo game (F3). */
+  editMatch(input: MatchEditInput): { saved: boolean };
   /** Delete one recorded match; `deleted: false` if the id is unknown. Undoable via {@link undoDeleteMatch}. */
   deleteMatch(matchId: string): { deleted: boolean };
   /** Restore a just-deleted match from the in-memory undo buffer; `restored: false` once it's gone. */
@@ -112,8 +113,9 @@ export interface DataProvider {
   fileImportedCount(): number;
   /** Explicit action: archive redundant duplicate rows (Notion trash) in the configured Gametracker database. */
   cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
-  /** Attach a Review-screen read (grades + flags) to a tracked match. */
-  saveReview(input: ReviewInput): void;
+  /** Attach a Review-screen read (grades + flags) to a tracked match.
+   *  `saved: false` when the id is unknown to real history — a demo game (F3). */
+  saveReview(input: ReviewInput): { saved: boolean };
   /** Bulk legacy-review import; skips unknown ids and already-reviewed games. */
   importReviews(inputs: ReviewInput[]): { imported: number; skipped: number };
   /** Edit a target's name/mode/rule, preserving lifecycle state + accrued grades. */

@@ -672,7 +672,7 @@ export class App {
     // parenting is expressed exactly once (it also drives relaunch restore).
     const activeNav: ViewId = DETAIL_PARENT[state.view as keyof typeof DETAIL_PARENT] ?? state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
-    this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0);
+    this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0, d?.isSample ?? false);
 
     render(this.sessionBody, this.sessionSummary(state));
   }
@@ -794,7 +794,7 @@ export class App {
   /** `pending` is the recency-scoped count the badge shows (R1); `total` is the
    *  full lifetime backlog, named only in the title — the badge itself only
    *  ever shows "this week", never a number that only ever grows. */
-  private updateReviewBadge(pending: number, total: number): void {
+  private updateReviewBadge(pending: number, total: number, isSample: boolean): void {
     const btn = this.navButtons.get('review');
     if (!btn) return;
     const existing = btn.querySelector<HTMLElement>('.nav-badge');
@@ -802,11 +802,16 @@ export class App {
     // this to a bare dot with no visible number — the title is the only place
     // "how many" survives there, so it's set even though the expanded rail's
     // own visible digits make it redundant there.
-    const title = `${pending} from this week · ${total} in total`;
+    // Demo mode (F3): grading these never saves, so the badge shouldn't read
+    // like a real backlog either — muted styling, and the title says so.
+    const title = isSample
+      ? `${pending} demo games — grading them is practice only, nothing is saved`
+      : `${pending} from this week · ${total} in total`;
     const shown = pending > 99 ? '99+' : String(pending);
+    const cls = `nav-badge${isSample ? ' nav-badge--muted' : ''}`;
     if (pending > 0) {
-      if (existing) { existing.textContent = shown; existing.title = title; }
-      else btn.append(h('span', { class: 'nav-badge', title }, shown));
+      if (existing) { existing.textContent = shown; existing.title = title; existing.className = cls; }
+      else btn.append(h('span', { class: cls, title }, shown));
     } else {
       existing?.remove();
     }

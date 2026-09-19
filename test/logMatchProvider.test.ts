@@ -344,6 +344,7 @@ describe('saveReview — performance', () => {
       history: {
         setReview: (matchId: string, review: { grades: unknown; flags: unknown }) => {
           reviews.push({ matchId, ...review });
+          return true; // a known match id, in these cases — the real store's own success case
         },
         editManual: (matchId: string, patch: Partial<GameRecord>) => { patches.push({ matchId, patch }); },
         // Empty history: saving a ±% also snapshots `rankAtStart`, which reads
@@ -376,7 +377,7 @@ describe('saveReview — SR %', () => {
   function reviewHarness(game: GameRecord) {
     const deps = {
       history: {
-        setReview: () => {},
+        setReview: () => true,
         editManual: (_id: string, patch: Partial<GameRecord>) => {
           const target = game as unknown as Record<string, unknown>;
           for (const [k, v] of Object.entries(patch)) {
@@ -417,6 +418,69 @@ describe('saveReview — SR %', () => {
     const { provider, game } = reviewHarness(compGame({ srDelta: 30 }));
     provider.saveReview({ matchId: 'm1', grades: {}, flags: {} });
     expect(game.srDelta).toBe(30);
+  });
+});
+
+describe('editMatch / saveReview — an unknown (demo) match id never silently succeeds (F3)', () => {
+  it('editMatch reports saved: false and never patches when the match id is not in real history', () => {
+    const patches: Array<Partial<GameRecord>> = [];
+    const deps = {
+      history: {
+        all: () => [], // a demo game is never in real history
+        editManual: (_id: string, patch: Partial<GameRecord>) => { patches.push(patch); },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    const provider = createDataProvider(deps);
+    expect(provider.editMatch({ matchId: 'demo-1', result: 'Win' })).toEqual({ saved: false });
+    expect(patches).toEqual([]);
+  });
+
+  it('editMatch reports saved: true and patches when the match id IS real', () => {
+    const manualGame: GameRecord = {
+      matchId: 'manual-1', timestamp: 1, account: 'Main', role: 'damage', map: 'Ilios',
+      result: 'Win', gameType: 'Competitive', source: 'manual', heroes: [],
+    };
+    const patches: Array<Partial<GameRecord>> = [];
+    const deps = {
+      history: {
+        all: () => [manualGame],
+        editManual: (_id: string, patch: Partial<GameRecord>) => { patches.push(patch); },
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    const provider = createDataProvider(deps);
+    expect(provider.editMatch({ matchId: 'manual-1', result: 'Loss' })).toEqual({ saved: true });
+    expect(patches).toEqual([{ result: 'Loss' }]);
+  });
+
+  it('saveReview reports saved: false and never touches the manual layer when the id is unknown to real history', () => {
+    const patches: Array<{ matchId: string; patch: Partial<GameRecord> }> = [];
+    const deps = {
+      history: {
+        setReview: () => false, // the real store's own "unknown id" case
+        editManual: (matchId: string, patch: Partial<GameRecord>) => { patches.push({ matchId, patch }); },
+        all: () => [],
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    const provider = createDataProvider(deps);
+    expect(provider.saveReview({ matchId: 'demo-1', grades: {}, flags: {}, performance: 80, srDelta: 22 }))
+      .toEqual({ saved: false });
+    expect(patches).toEqual([]);
+  });
+
+  it('saveReview reports saved: true when the id is known', () => {
+    const deps = {
+      history: {
+        setReview: () => true,
+        editManual: () => {},
+        all: () => [],
+      },
+      getConfig: () => ({ accounts: { main: 'Main' } }),
+    } as unknown as DataProviderDeps;
+    const provider = createDataProvider(deps);
+    expect(provider.saveReview({ matchId: 'm1', grades: {}, flags: {} })).toEqual({ saved: true });
   });
 });
 

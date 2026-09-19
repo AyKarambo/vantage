@@ -534,7 +534,10 @@ a network port, and Vantage sends nothing outward through it; see
   launch the app **asks whether to load a realistic demo dataset or start fresh** (changeable
   later in Settings). Demo data is badged "Demo data" and yields to real games automatically
   once tracking starts — the pipeline is identical. With no demo and no authored targets, the
-  Targets screen stays honestly empty rather than showing sample targets.
+  Targets screen stays honestly empty rather than showing sample targets. Grading, editing or
+  deleting a demo game on Review or its match page is a sandbox to try the flow in — nothing is
+  actually saved, and every save says so honestly ("Not saved — … is a demo game") instead of
+  claiming success and quietly losing it on restart.
 - Competitive **rank** follows the current Overwatch model: nine tiers Bronze→**Champion**
   (**Emerald** sits between Platinum and Diamond since 2026 Season 4),
   five divisions each (5 = lowest, 1 = highest), with within-division progress shown as a
