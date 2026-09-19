@@ -2181,3 +2181,25 @@ table.data tbody tr:focus-visible {
   flex: 1 1 160px;
   max-width: 280px;
 }
+
+/* Density (W7) — Compact tightens the app's most-repeated spacing (card
+   padding, table-row padding, KPI tiles, horizontal-bar tracks) so more fits
+   on screen; Comfortable (the default) is today's untouched spacing. Applied
+   via `data-density` on <html> (renderer/src/density.ts), the same idiom as
+   the winrate colour scheme's `data-wr` in theme.ts. */
+:root[data-density='compact'] .card {
+  padding: 10px 12px;
+}
+:root[data-density='compact'] .kpi {
+  padding: 9px 11px;
+}
+:root[data-density='compact'] table.data th,
+:root[data-density='compact'] table.data td {
+  padding: 5px 9px;
+}
+:root[data-density='compact'] .hbar-track {
+  height: 17px;
+}
+:root[data-density='compact'] .table-wrap {
+  max-height: calc(100vh - 210px);
+}

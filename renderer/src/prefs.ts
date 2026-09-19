@@ -97,6 +97,12 @@ interface PrefsShape {
    * from one earlier dismissal.
    */
   firstRealGameBannerDismissed: boolean;
+  /**
+   * List density (W7) — `comfortable` (default) or `compact`, tightening
+   * table-row and card padding for more on screen at once. Applied via the
+   * `data-density` attribute at bundle load, same idiom as `winrateScheme`.
+   */
+  density: 'comfortable' | 'compact';
 }
 
 const PREFIX = 'vantagePref.';

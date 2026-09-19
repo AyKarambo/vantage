@@ -1216,3 +1216,14 @@
 .filter-preset-save:hover {
   color: var(--text-2);
 }
+
+/* Density (W7) — see components.css's block for the rest of the compact
+   overrides (card/KPI/table/hbar padding); these two live here because
+   .view/.match-row are defined in this file. */
+:root[data-density='compact'] .view {
+  gap: 10px;
+}
+:root[data-density='compact'] .match-row {
+  padding: 6px 10px;
+  gap: 10px;
+}
