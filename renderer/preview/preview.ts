@@ -1187,6 +1187,7 @@ const mock: OwStatsApi = {
     // Settings "Dev Mode" section's reveal-on-attempt can be previewed too.
     devModeAttempted: devModeAuthState !== 'off',
     gepPackageVersion: 'preview',
+    mcpBridgePath: '/dev/dist/mcp/stdio.js',
   }),
   applyGepUpdate: async () => { /* preview: restart is a no-op */ },
   openExternal: async (url: string) => {

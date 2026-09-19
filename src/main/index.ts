@@ -521,6 +521,12 @@ function main(): void {
       // The loaded GEP package version (from the live status snapshot); '' until
       // the package reports ready. Changes when Overwolf ships a fix.
       gepPackageVersion: statusMonitor.current().gepPackageVersion ?? '',
+      // W4 — packaged builds ship stdio.js under resourcesPath via the
+      // `extraResources` mapping in package.json; the dev build runs it
+      // straight out of dist/.
+      mcpBridgePath: app.isPackaged
+        ? path.join(process.resourcesPath, 'mcp', 'stdio.js')
+        : path.join(app.getAppPath(), 'dist', 'mcp', 'stdio.js'),
     }),
     // Store the Overwolf dev key where the launcher reads it (~/.ow-cli/dev-key),
     // never in app config. Takes effect next launch (Dev Mode auth is start-time).

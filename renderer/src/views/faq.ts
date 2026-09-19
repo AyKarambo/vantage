@@ -76,6 +76,19 @@ const FAQ: FaqTopic[] = [
     ],
   },
   {
+    topic: 'AI coach (MCP)',
+    entries: [
+      {
+        q: 'How do I connect an AI coach (MCP)?',
+        a: 'Turn on “MCP endpoint” in Settings → App behavior — it lets Claude Desktop or Claude Code read your ' +
+          'stats and log matches for you, over a local-only connection; nothing is sent anywhere by Vantage ' +
+          'itself. Once it’s on, the card shows the exact path to the bridge script and a “Copy Claude Desktop ' +
+          'config” button, so you don’t have to hand-type the JSON block or hunt for the path yourself.',
+        link: { label: 'Open Settings →', go: (ctx) => ctx.navigate('settings', { section: 'appBehavior' }) },
+      },
+    ],
+  },
+  {
     topic: 'Getting help',
     entries: [
       {

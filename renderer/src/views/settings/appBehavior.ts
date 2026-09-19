@@ -1,7 +1,9 @@
 import { h, render } from '../../dom';
 import type { AppInfo, AppUiSettings } from '../../../../src/shared/contract';
 import { bridge } from '../../bridge';
-import { card, chip } from '../../components/primitives';
+import { button, card, chip } from '../../components/primitives';
+import { toast } from '../../components/toast';
+import { formatClaudeDesktopMcpConfig } from '../../../../src/core/mcpConfig';
 import { store } from '../../store';
 import type { ViewContext } from '../view';
 
@@ -71,7 +73,24 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
     });
   }
 
-  function devModeSection(s: AppUiSettings): HTMLElement {
+  /** The resolved bridge path + a one-click Claude Desktop config copy, shown while MCP is on (W4). */
+function mcpBridgeBlock(bridgePath: string): HTMLElement {
+  return h('div', { style: { marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
+    h('code', { class: 'mono u-dim', style: { fontSize: '11px', wordBreak: 'break-all' } }, bridgePath),
+    button('Copy Claude Desktop config', {
+      variant: 'ghost',
+      title: 'Copies the mcpServers JSON block Claude Desktop’s config file expects.',
+      onClick: () => {
+        void navigator.clipboard.writeText(formatClaudeDesktopMcpConfig(bridgePath)).then(
+          () => toast('Config copied to clipboard'),
+          () => toast('Couldn’t copy — clipboard unavailable'),
+        );
+      },
+    }),
+  );
+}
+
+function devModeSection(s: AppUiSettings): HTMLElement {
     const packaged = info?.packaged ?? false;
     // Reveal on any attempt this run, not just a confirmed one — a *failed*
     // dev-mode auth (the exact case this section's toggle is most useful for)
@@ -144,6 +163,11 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
           s.mcpEnabled
             ? 'On — an AI coach connected to Vantage can read your match history and record matches, reviews and targets. Any program running as you can reach it while it is on. Turn it off when you are not using it.'
             : 'Off. Lets an AI assistant (Claude Desktop or Claude Code) read your stats and log matches for you, over a local-only connection. Nothing is sent anywhere by Vantage itself. Takes effect immediately.'),
+        // W4 — turning the toggle on used to leave you to find the absolute
+        // bridge path by hand from the README; the main process already
+        // resolves it (packaged vs dev), so show it and offer the exact
+        // Claude Desktop config block instead of making anyone type it.
+        s.mcpEnabled && info?.mcpBridgePath ? mcpBridgeBlock(info.mcpBridgePath) : null,
       ),
       devModeSection(s),
     );
