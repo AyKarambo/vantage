@@ -532,15 +532,16 @@ whichever group's module happened to import first, with Navigate's own `Ctrl+0` 
 between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/PageDown` to page
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
 Review, `W/L/D`+`Enter` in the log dialog), the palette can also flip the MCP endpoint, the live
-kill feed, the break reminder, demo data, log debug detail, or the winrate colour scheme without a
-trip to Settings (M5), toasts with
+kill feed, the break reminder, demo data, log debug detail, the winrate colour scheme, or the list
+density without a trip to Settings (M5, density W7), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
 everywhere** (click a heatmap day, a Mental flag count, or any "open the map" surface app-wide —
 the Overview scatter and its Top-priority callouts, Live's priority card, a hero drawer's By-map
 rows, Focus's map rows, the command palette's Map entries — to open exactly those matches on
 Matches), remembered role + account in the
 quick-log, hover tooltips + a "view as table" toggle on charts, a last-session debrief once your sitting closes (S3), a
-choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
+choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange), a
+**Comfortable/Compact density** toggle that tightens card, table-row and KPI padding app-wide (W7),
 window-position memory, and a **Settings** screen with a **section rail** (jump links to
 Accounts, Quick Log, Coaching, App behavior, Appearance, Diagnostics, Data storage and Import —
 click one and it scrolls to and flashes that card, and About/FAQ's own links land pre-scrolled

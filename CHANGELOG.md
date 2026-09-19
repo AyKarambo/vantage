@@ -780,6 +780,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   history to a JSON file (every game with its review/mental notes, every account, every rank
   anchor, every target) for moving to another machine, and a persistent "Last import" line replaces
   the one-time toast as the only record that an import happened (W3).
+- **A Comfortable/Compact density setting.** Compact tightens card, table-row, KPI and progress-bar
+  padding across the app so more fits on screen at once — a segmented control in Settings →
+  Appearance, and a one-click `Ctrl+K` action, same as the winrate colour scheme (W7).
 
 ## 0.34.0 — 31 July 2026
 

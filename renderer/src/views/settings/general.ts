@@ -8,6 +8,7 @@ import { sessionSettingsEditor } from '../../components/sessionSettingsEditor';
 import { gradingSettingsEditor } from '../../components/gradingSettingsEditor';
 import { getWinrateScheme, setWinrateScheme } from '../../theme';
 import { WINRATE_SCHEME_OPTIONS, type WinrateScheme } from '../../winrateScheme';
+import { getDensity, setDensity, DENSITY_OPTIONS, type Density } from '../../density';
 import { prefs, DEFAULT_SUGGESTED_HEROES, clampSuggestedHeroCount } from '../../prefs';
 import { store, type ViewId } from '../../store';
 import type { ViewContext } from '../view';
@@ -125,6 +126,16 @@ export function generalTab(ctx: ViewContext): HTMLElement {
           h('div', { class: 'hint', style: { marginTop: '8px' } },
             'Colours the win / loss / draw stats across every chart and screen. ' +
             'Colorblind uses a blue–orange palette instead of teal–rose.'),
+        ),
+        h('div', { style: { marginTop: '14px' } },
+          h('div', { class: 'field-label' }, 'Density'),
+          segmented<Density>({
+            options: [...DENSITY_OPTIONS],
+            value: getDensity(),
+            onChange: (density) => setDensity(density),
+          }),
+          h('div', { class: 'hint', style: { marginTop: '8px' } },
+            'Compact tightens row and card padding across tables and lists, for more on screen at once.'),
         ),
       ), 'appearance'),
       section(diagnosticsCard(), 'diagnostics'),

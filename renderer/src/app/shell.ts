@@ -27,6 +27,7 @@ import { clickableRow } from '../components/clickableRow';
 import { matchClock, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { getWinrateScheme, setWinrateScheme } from '../theme';
 import { WINRATE_SCHEME_OPTIONS } from '../winrateScheme';
+import { getDensity, setDensity, DENSITY_OPTIONS } from '../density';
 import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
@@ -1177,6 +1178,17 @@ export class App {
                 setWinrateScheme(opt.value);
                 store.rerender();
                 toast(`Winrate colours: ${opt.label}`);
+              },
+            })),
+            // Density (W7) — same "flip it without a trip to Settings" idiom
+            // as the winrate colours above; purely a CSS attribute, so no
+            // store.rerender() is needed for the effect to show.
+            ...DENSITY_OPTIONS.map((opt) => ({
+              label: `Density: ${opt.label}`,
+              hint: getDensity() === opt.value ? 'currently on' : undefined,
+              run: () => {
+                setDensity(opt.value);
+                toast(`Density: ${opt.label}`);
               },
             })),
           ],
