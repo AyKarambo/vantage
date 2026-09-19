@@ -3,13 +3,14 @@ import { h, render } from '../dom';
 import type { DashboardData, Group, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
 import { dayKey, dayPartAt } from '../../../src/core/analytics';
 import { makeMapMode } from '../../../src/core/masterData/resolver';
-import { dateLong, greeting, int, pct, signed, streakText } from '../format';
+import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
+import { openManageRanks } from './settings/accounts';
 import { prefs } from '../prefs';
 import { viewHead, shorten, type ViewContext } from './view';
 
@@ -117,16 +118,46 @@ function recapLine(r: SessionDebrief): string {
   return bits.join(' · ');
 }
 
+/**
+ * The Streak KPI's secondary line (C7). "Reset it" used to fire on ANY loss
+ * streak — even one loss read as an urgent nudge. Now it only fires once the
+ * streak reaches the real break-reminder threshold (or 3, when the reminder
+ * itself is off — still a real "maybe pause" number, just not user-tuned).
+ * Below that, or with no streak at all, the line falls back to something
+ * actually informative: the current sitting's tally, or how long ago the
+ * last game was.
+ */
+function streakDelta(d: DashboardData): { text: string; dir?: 'up' | 'down' } {
+  const s = d.streak;
+  if (s.type === 'W') return { text: 'ride it', dir: 'up' };
+  if (s.type === 'L') {
+    const threshold = d.breakReminder.enabled ? d.breakReminder.afterLosses : 3;
+    if (s.count >= threshold) return { text: 'reset it', dir: 'down' };
+  }
+  // Defensive against an empty-string role (seen from the filter bar in some
+  // states) as well as the normal 'all' — either way, no suffix is the honest
+  // "no role scope" read, not a dangling " · " with nothing after it.
+  const roleSuffix = d.filters.role && d.filters.role !== 'all' ? ` · ${roleLabel(d.filters.role)}` : '';
+  if (d.session) return { text: `${d.session.wins}–${d.session.losses} this session${roleSuffix}` };
+  const last = d.matches[0]?.timestamp;
+  return { text: last ? `last game ${relTime(last)}${roleSuffix}` : '—' };
+}
+
 function kpiRow(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const trendDelta = wrTrendDelta(d.trend, d.overall.winrate);
+  // C4: `d.trend`'s own bucketing (matches dashboardData's `weekly` flag) — the
+  // old "recent" label never said whether that meant days or weeks, or how many.
+  const byWeek = d.filters.days === 'all' || (typeof d.filters.days === 'number' && d.filters.days > 90);
+  const bucketWord = byWeek ? 'weeks' : 'days';
   return h('div', { class: 'kpi-row' },
     kpiCard({
       label: 'Winrate',
       value: d.overall.games ? pct(d.overall.winrate) : '–',
       delta: trendDelta != null
-        ? { text: `${trendDelta >= 0 ? '▴' : '▾'} ${Math.abs(trendDelta).toFixed(1)} recent`, dir: trendDelta >= 0 ? 'up' : 'down' }
+        ? { text: `${trendDelta >= 0 ? '▴' : '▾'} ${Math.round(Math.abs(trendDelta))} pts · last 5 ${bucketWord}`, dir: trendDelta >= 0 ? 'up' : 'down' }
         : undefined,
+      title: trendDelta != null ? `Mean winrate of your last 5 ${bucketWord} vs the range average` : undefined,
     }),
     kpiCard({ label: 'Games', value: int(d.overall.games), delta: { text: `${d.overall.wins}W · ${d.overall.losses}L` } }),
     rankKpi(ctx),
@@ -134,7 +165,10 @@ function kpiRow(ctx: ViewContext): HTMLElement {
       label: 'Streak',
       value: streakText(d.streak),
       accent: true,
-      delta: { text: d.streak.type === 'W' ? 'ride it' : d.streak.type === 'L' ? 'reset it' : '—' },
+      delta: streakDelta(d),
+      // C7: the "ride it"/"reset it" cue is the actionable read; best/worst
+      // in range is real context that doesn't need to fight it for space.
+      title: `Best W${d.extremes.longestWin} · worst L${d.extremes.longestLoss} in range`,
     }),
   );
 }
@@ -205,13 +239,18 @@ function rankKpi(ctx: ViewContext): HTMLElement {
     tier: d.progression.tier, division: d.progression.division,
     progressPct: d.progression.progressPct, protected: false, short: true,
   });
+  // C4: this used to glue a fake movement arrow (from `progression.delta`,
+  // an unrelated recent-trend read) onto the in-division buffer %, with
+  // nothing marking the whole tile as a winrate guess rather than ground
+  // truth — the movement arrow stays anchored-branch-only now.
+  const targetAccount = d.filters.account !== 'all' ? d.filters.account : d.options.accounts[0];
   return kpiCard({
     label: 'Rank',
-    value: est.rankLabel,
-    delta: {
-      text: `${d.progression.delta >= 0 ? '▴' : '▾'} ${Math.round(d.progression.progressPct)}% in division`,
-      dir: d.progression.delta >= 0 ? 'up' : 'down',
-    },
+    value: `${est.rankLabel} est.`,
+    delta: { text: 'from winrate — no rank set' },
+    ...(targetAccount
+      ? { action: { label: 'Set rank', run: () => openManageRanks(targetAccount, () => ctx.refresh()) } }
+      : {}),
   });
 }
 

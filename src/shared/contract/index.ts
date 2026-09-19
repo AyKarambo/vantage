@@ -13,7 +13,7 @@
 export type { Role, Result, HeroStat } from '../../core/model';
 export type {
   WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry,
-  HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak,
+  HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak, StreakStats,
   DayGroup, SessionDebrief, SessionSummary, PerformanceStats, PerformanceBucket, PerformanceTrendPoint,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';

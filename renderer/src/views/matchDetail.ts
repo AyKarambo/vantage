@@ -13,6 +13,7 @@ import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
+import { openManageRanks } from './settings/accounts';
 import { srEntryMode } from '../../../src/core/placements';
 import { GRADES, targetGradeRow, mentalFlagChips, commsToneSwitch } from '../components/reviewControls';
 import { resultChooser, bindResultKeys } from '../components/resultChooser';
@@ -112,7 +113,7 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
     header(d, ctx),
     scoreboardSection(d, ctx),
     perHeroSection(d.perHero, d.playedMinutes, d.playedSource),
-    competitiveSection(d.competitive, d.srDelta, d.rankAtStart),
+    competitiveSection(d.competitive, d.account, ctx, d.srDelta, d.rankAtStart),
     gradesSection(d, ctx),
     playerHistorySection(d, ctx),
   ].filter((n): n is HTMLElement => n != null);
@@ -251,22 +252,29 @@ function perHeroSection(
 // --- competitive progress (calculated from your rank anchor + logged SR) ------
 
 const NOTE_LABEL: Record<string, string> = {
-  calculated: 'Calculated', reconstructed: 'Reconstructed', estimate: 'Estimate', reported: 'Reported',
+  calculated: 'Calculated', reconstructed: 'Reconstructed', estimate: 'Estimated from winrate', reported: 'Reported',
+  // 'pre-reset' (C4) used to fall through to the raw code as its own pill
+  // text — reuses playerHistory's own wording for the same case.
+  'pre-reset': 'Before reset',
 };
 const NOTE_SUB: Record<string, string> = {
-  calculated: 'from your rank anchor + logged SR — the game feed does not report rank',
-  reconstructed: 'reconstructed backward from your rank anchor — best-effort, may drift on missing SR',
-  estimate: 'estimated from recent results — set a rank anchor to track the real number',
+  calculated: 'from the rank you set + logged SR — the game feed does not report rank',
+  reconstructed: 'reconstructed backward from the rank you set — best-effort, may drift on missing SR',
+  estimate: 'a winrate-based guess, not a measured number',
   reported: 'reported by the game feed',
+  'pre-reset': 'Before your last placement reset — the ladder is discontinuous there.',
 };
 
 function competitiveSection(
   c: MatchDetail['competitive'],
+  account: string,
+  ctx: ViewContext,
   srDelta?: number,
   rankAtStart?: MatchDetail['rankAtStart'],
 ): HTMLElement | null {
   if (!c) return null;
-  const withinDivision = c.progressPct != null ? c.progressPct / 100 : null;
+  const isEstimate = c.note === 'estimate';
+  const withinDivision = !isEstimate && c.progressPct != null ? c.progressPct / 100 : null;
   // Shared rank parts (no movement arrow on match detail). A reconstructed
   // (backward) match flattens protection, so never draw the 🛡 there even if a
   // stray flag leaked through — it would imply a live buffer it doesn't have (G5).
@@ -279,24 +287,37 @@ function competitiveSection(
   return card(
     {
       title: 'Competitive progress',
-      sub: NOTE_SUB[c.note],
+      sub: NOTE_SUB[c.note] ?? c.note,
       actions: pill(NOTE_LABEL[c.note] ?? c.note, 'accent'),
     },
     h('div', { class: 'detail-progress' },
       parts
         ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-            h('span', { class: 'detail-rank' }, parts.rankLabel),
+            // C4: a winrate heuristic drawn in the exact same typography as a
+            // real calculated rank read as a measured number — muted text and
+            // no shield says plainly this is a guess, not ground truth.
+            h('span', { class: isEstimate ? 'detail-rank u-muted' : 'detail-rank' }, parts.rankLabel),
             parts.shield ? pill('🛡 Rank protected', 'draw') : null,
           )
         : null,
-      parts?.shield
-        // Protected = a negative carry; a clamped division bar labelled "-19%"
-        // reads as broken, so show the buffer state as a hint instead.
-        ? h('div', { class: 'hint' },
-            `Holding the division — ${parts.bufferPctText} into the rank-protection buffer.`)
-        : withinDivision != null
-          ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
-          : null,
+      isEstimate
+        // C4: a full division bar at a precise-looking "45%" implied a
+        // measured number too — dropped along with the "over the range"
+        // delta below (not a quantity the game ever shows), replaced with a
+        // direct path to the real thing.
+        ? button('Set your rank…', {
+            variant: 'soft',
+            title: 'Open Manage ranks for this account',
+            onClick: () => { ctx.navigate('settings'); openManageRanks(account, () => ctx.refresh()); },
+          })
+        : parts?.shield
+          // Protected = a negative carry; a clamped division bar labelled "-19%"
+          // reads as broken, so show the buffer state as a hint instead.
+          ? h('div', { class: 'hint' },
+              `Holding the division — ${parts.bufferPctText} into the rank-protection buffer.`)
+          : withinDivision != null
+            ? statBar({ label: 'Division', frac: withinDivision, valueText: `${Math.round(c.progressPct!)}%`, color: PALETTE.accent })
+            : null,
       // The SR change logged for this specific match — always shown when set
       // (typed or back-computed), regardless of whether a rank anchor exists.
       srDelta != null
@@ -304,7 +325,7 @@ function competitiveSection(
             class: 'mono',
             style: { fontSize: '12px', color: srDelta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },
           }, `${signed(Math.round(srDelta))}% this match`)
-        : c.delta != null
+        : (!isEstimate && c.delta != null)
           ? h('span', {
               class: 'mono',
               style: { fontSize: '12px', color: c.delta >= 0 ? 'var(--win-text)' : 'var(--loss-text)' },

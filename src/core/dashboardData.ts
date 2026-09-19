@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
-  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak,
+  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionDebrief, sessionHistory, streak, streakStats,
   trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
@@ -167,6 +167,7 @@ export function computeDashboard(
     greetingName: topAccount(all),
     overall,
     streak: streak(games),
+    extremes: streakStats(games),
     progression: progression(games),
     ...(primaryRank ? { primaryRank } : {}),
     accountRanks,

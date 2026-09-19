@@ -19,9 +19,10 @@ const ROLLING_WINDOW = 7;
 /**
  * Two-series chart: per-day average dots/line plus a smoother rolling-average
  * polyline — the "is my self-read drifting?" view. 0–100 y-scale (same as the
- * readiness trend), dependency-free SVG.
+ * readiness trend), dependency-free SVG. `onSelect` (C7) makes each point
+ * open that day's matches.
  */
-export function ratingChart(points: RatingPoint[]): HTMLElement {
+export function ratingChart(points: RatingPoint[], onSelect?: (label: string) => void): HTMLElement {
   const wrap = h('div', { class: 'chart-wrap' });
   if (points.length < 2) {
     wrap.append(emptyChart());
@@ -55,7 +56,13 @@ export function ratingChart(points: RatingPoint[]): HTMLElement {
     s.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 3, fill: PALETTE.accentBright }));
     const hit = svgEl('circle', { cx: xAt(i), cy: yAt(p.rating), r: 11, fill: 'transparent', tabindex: 0 }); // K8
     hit.style.cursor = 'pointer';
-    tips.attach(hit, `${p.label} · rated ${Math.round(p.rating)} · ${p.games}g`);
+    tips.attach(hit, `${p.label} · rated ${Math.round(p.rating)} · ${p.games}g${onSelect ? ' · click to open' : ''}`);
+    if (onSelect) {
+      hit.addEventListener('click', () => onSelect(p.label));
+      hit.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.label); }
+      });
+    }
     s.appendChild(hit);
   });
 
