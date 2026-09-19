@@ -17,6 +17,10 @@ describe('targetTimeline', () => {
     const tl = targetTimeline([g(3, 'Win', 'hit'), g(1, 'Loss'), g(2, 'Win', 'missed')], t);
     expect(tl.map((a) => a.timestamp)).toEqual([1, 2, 3]); // sorted ascending
     expect(tl.map((a) => a.grade)).toEqual([undefined, 'missed', 'hit']);
+    // R8: matchId/map ride along so a consumer (the detail page's "Recent
+    // attempts" card) can link an attempt straight back to its match.
+    expect(tl.every((a) => typeof a.matchId === 'string' && a.matchId.length > 0)).toBe(true);
+    expect(tl.every((a) => a.map === 'Ilios')).toBe(true);
   });
 
   it('self-rated: a heroScope excludes an off-hero game entirely, keeping an in-scope ungraded one', () => {

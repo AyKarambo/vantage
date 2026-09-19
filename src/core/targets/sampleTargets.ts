@@ -1,5 +1,6 @@
 import { winLoss, type GameRecord } from '../analytics';
 import { clamp01, type TargetMode, type TargetSummary } from './types';
+import type { OrderedAttempt } from './timeline';
 
 /**
  * The demo path for Improvement Targets: a representative sample library,
@@ -50,7 +51,27 @@ export function sampleTargets(games: GameRecord[]): TargetSummary[] {
       hitDecided: hits,
       missDecided: attempts - hits,
       spark: buildSpark(s.difficulty, s.id),
+      // Real matches, synthetic grades (R8) — a demo "Recent attempts" row
+      // links to a match that actually exists, rather than a fabricated id.
+      recentAttempts: buildRecentAttempts(games, s.difficulty, s.id),
       isActive: true,
+    };
+  });
+}
+
+/** The last 10 real games, newest first, with a synthetic hit/missed grade
+ *  around the target's difficulty (R8) — same deterministic seeded hash as
+ *  {@link buildSpark}, so a reload shows the same demo attempts. Real
+ *  matchId/map, so a "Recent attempts" row actually links somewhere. */
+function buildRecentAttempts(games: GameRecord[], difficulty: number, seed: string): OrderedAttempt[] {
+  const recent = [...games].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+  let h = 0;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return recent.map((g) => {
+    h = (h * 1103515245 + 12345) & 0x7fffffff;
+    return {
+      matchId: g.matchId, map: g.map, timestamp: g.timestamp, result: g.result,
+      grade: (h % 100) / 100 < difficulty ? 'hit' : 'missed',
     };
   });
 }

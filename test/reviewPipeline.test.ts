@@ -53,6 +53,24 @@ describe('buildTargets — grade scoring', () => {
     expect(t.missDecided).toBe(2);
   });
 
+  it('recentAttempts: newest first, capped at 10, matchId/map carried for click-through (R8)', () => {
+    const games = Array.from({ length: 12 }, (_, i) =>
+      game({ result: i % 2 === 0 ? 'Win' : 'Loss', map: `Map${i}`, review: review({ t1: i % 3 === 0 ? 'hit' : 'missed' }) }));
+    const [t] = buildTargets(games, false, [authored('t1')]);
+    expect(t.attempts).toBe(12);
+    expect(t.recentAttempts).toHaveLength(10); // capped, not all 12
+    // Newest first, by actual timestamp — not assuming array order.
+    const timestamps = t.recentAttempts.map((a) => a.timestamp);
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => b - a));
+    const newestGame = [...games].sort((a, b) => b.timestamp - a.timestamp)[0];
+    expect(t.recentAttempts[0].map).toBe(newestGame.map);
+    expect(t.recentAttempts[0].matchId).toBe(newestGame.matchId);
+    // An ungraded game never enters recentAttempts, same as it never counts as an attempt.
+    const ungraded = game({ result: 'Win' });
+    const [t2] = buildTargets([...games, ungraded], false, [authored('t1')]);
+    expect(t2.recentAttempts.some((a) => a.matchId === ungraded.matchId)).toBe(false);
+  });
+
   it('falls back to the player baseline while a win-split side has no games', () => {
     const games = [
       game({ result: 'Win', review: review({ t1: 'hit' }) }),

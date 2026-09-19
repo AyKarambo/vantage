@@ -295,6 +295,13 @@ describe('buildTargets — measured targets auto-grade from stats', () => {
     // target's lift claim needs to be just as honest about its sample.
     expect(s.hitDecided).toBe(1);
     expect(s.missDecided).toBe(1);
+    // R8: newest first, carrying the per-10 value behind the grade — the
+    // detail page's "Recent attempts" card shows it next to the result pill.
+    // The 500-timestamp game predates createdAt so it's absent entirely, and
+    // the perHero-less game at 2002 was never measurable.
+    expect(s.recentAttempts.map((a) => a.timestamp)).toEqual([2001, 2000]);
+    expect(s.recentAttempts[0]).toMatchObject({ grade: 'missed', value: 7000 });
+    expect(s.recentAttempts[1]).toMatchObject({ grade: 'hit', value: 11240 });
   });
 
   it('ignores any stored review grade on a measured target id', () => {

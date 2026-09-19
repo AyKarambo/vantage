@@ -19,7 +19,7 @@ export type {
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
 export type { Progression } from '../../core/progression';
-export type { TargetSummary, TargetMode } from '../../core/targets';
+export type { TargetSummary, TargetMode, OrderedAttempt } from '../../core/targets';
 export type { TargetLearningCurve, LearningCurvePoint, LearningPhase } from '../../core/targets';
 export type { StalenessSettings } from '../../core/staleness';
 export type { BreakReminderSettings } from '../../core/breakReminder';

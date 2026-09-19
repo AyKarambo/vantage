@@ -291,23 +291,31 @@ account's per-role lines beneath it.
   summary until you hit **Change**, since the full picker otherwise pushes Save off-screen), so
   it only applies to games it's actually relevant to: a scoped-out match skips a measured
   target's auto-grade and hides a self-rated target from Review entirely, for both auto-tracked
-  and hand-logged games alike. Each target carries a small **goal-flag** icon for at-a-glance
-  identification. Measured thresholds take **scroll-to-adjust** (per-stat steps, hold Shift for
-  bigger jumps). The **Targets list** shows each target in plain language — name, grading mode,
-  hit-rate, one status sentence, and a signed **lift chip** (e.g. "+18 pts when hit", green/red/
-  muted, once both sides of the split have real games) — with an **Active** toggle; click any
-  row to open its **detail page** (back button, Escape), which carries the full breakdown: the
-  rule, win-when-hit/when-missed **with each side's own sample size** — "62% · 12 games", or an
-  honest "— · no games yet" instead of a bar drawn from nothing — the **Focus Trend** panel
-  (before/after winrate, rolling chart with table toggle), and actions (**Edit** pre-fills the
-  builder, **Archive**, **Delete**). The status sentence itself is driven by the actual lift once
-  there's enough evidence on both sides (≥8 decided games each) — "Worth keeping — +18 pts when
-  you hit it (21 games)" or an honest "No effect yet"; hitting something on autopilot (a high
-  hit-rate over 20+ games) instead reads "Habit is set — rotate it out". Rotate your focus with
-  the **Active focus** panel (quick add/remove + an undoable **"start a fresh focus"**, toast
-  with **Undo**); active targets that go stale (past a configurable days/matches threshold) get
-  a rotate nudge. The **Focus** screen can create a practice target for a losing map, hero or
-  role in one click (**＋ target**) — the builder opens with the matching hero/role scope
+  and hand-logged games alike — a scoped target now carries a compact **scope badge** (role
+  icon + "Tank" / "Zarya, D.Va" / "Support · Ana") on its Targets row, its detail page, and its
+  grade row on Review, and an out-of-scope self target on a Review card leaves behind a muted
+  "1 target skipped — scoped to …" line instead of just silently not showing up. Each target
+  carries a small **goal-flag** icon for at-a-glance identification. Measured thresholds take
+  **scroll-to-adjust** (per-stat steps, hold Shift for bigger jumps). The **Targets list** shows
+  each target in plain language — name, grading mode, hit-rate, one status sentence, and a
+  signed **lift chip** (e.g. "+18 pts when hit", green/red/muted, once both sides of the split
+  have real games) — with an **Active** toggle; click any row to open its **detail page** (back
+  button, Escape), which carries the full breakdown: the rule, win-when-hit/when-missed **with
+  each side's own sample size** — "62% · 12 games", or an honest "— · no games yet" instead of a
+  bar drawn from nothing — a **"Recent attempts"** list of the last 10 games this target actually
+  attempted (date · map · result · grade · the measured value when it has one), each one opening
+  that match, the **Focus Trend** panel (before/after winrate, rolling chart with table toggle —
+  a demo target and an archived one now each get their own honest "why there's nothing here"
+  line instead of sharing one that was only ever true for a fresh live target), and actions
+  (**Edit** pre-fills the builder, **Archive**, **Delete**). The status sentence itself is driven
+  by the actual lift once there's enough evidence on both sides (≥8 decided games each) — "Worth
+  keeping — +18 pts when you hit it (21 games)" or an honest "No effect yet"; hitting something
+  on autopilot (a high hit-rate over 20+ games) instead reads "Habit is set — rotate it out".
+  Rotate your focus with the **Active focus** panel (quick add/remove + an undoable **"start a
+  fresh focus"**, toast with **Undo**); active targets that go stale (past a configurable
+  days/matches threshold) get a rotate nudge. The **Focus** screen can create a practice target
+  for a losing map, hero or role in one click (**＋ target**) — the builder opens with the
+  matching hero/role scope
   already selected, not just a prefilled name.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
   `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks

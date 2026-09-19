@@ -75,7 +75,10 @@ export function targets(ctx: ViewContext): HTMLElement {
     emptyState('No targets yet — build your first one above and grade it after each game to see if it moves your winrate. 🎯', true));
 
   return h('div', { class: 'view view--narrow' },
-    viewHead('Improvement Target', 'Self-rated by default, measurable if you want — pick per target', newTargetAction),
+    // "Targets" (R8) — the nav item, the back-stack label and the list card
+    // itself all already said this; the head alone still said "Improvement
+    // Target" (singular), which nothing else on the screen agreed with.
+    viewHead('Targets', 'Self-rated by default, measurable if you want — pick per target', newTargetAction),
     noTargets
       ? [builder.el, activeSetCard(ctx), emptyStateCard]
       : [activeSetCard(ctx), libraryCard(ctx), builder.el],

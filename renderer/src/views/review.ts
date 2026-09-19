@@ -39,6 +39,7 @@ import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { maybeOfferPlacements } from '../app/placementOffer';
 import { srEntryMode } from '../../../src/core/placements';
+import { scopeBadge, scopeLabel } from './targets/shared';
 import { viewHead, type ViewContext } from './view';
 
 /**
@@ -622,7 +623,11 @@ function expanded(
   // targets stay visible with their read-only "no stat this match" row.
   const selfTargets = active.filter((t) => t.mode !== 'measured' && matchInTargetScope(m, t));
   const measuredTargets = active.filter((t) => t.mode === 'measured');
-  const rows = selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }));
+  const rows = selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }, scopeBadge(t)));
+  // Self targets hidden by scope (R8) — without this, a target with a role
+  // or hero restriction just silently never showed up on an out-of-scope
+  // match, with nothing on the card explaining why.
+  const skippedByScope = active.filter((t) => t.mode !== 'measured' && !matchInTargetScope(m, t));
   // A measured target with nothing to show ("no stat this match") used to get
   // its own row regardless — on a card with several measured targets, most of
   // it was repeats of the same dead sentence. Fold them into one muted line
@@ -637,6 +642,7 @@ function expanded(
     ...rows.map((r) => r.el),
     ...measuredWithStat.map((t) => measuredResultRow(t, m.measuredGrades?.[t.id])),
     ...(measuredNoStat.length ? [measuredNoStatHint(measuredNoStat)] : []),
+    ...(skippedByScope.length ? [scopeSkipHint(skippedByScope)] : []),
   ];
   let focusIdx = 0;
   const markFocus = (): void => {
@@ -890,6 +896,13 @@ function measuredResultRow(
 function measuredNoStatHint(targets: TargetSummary[]): HTMLElement {
   return h('div', { class: 'hint', title: targets.map((t) => t.name).join(', ') },
     `⚡ ${targets.length} measured target${targets.length === 1 ? '' : 's'} can't be graded here — this match has no stats`);
+}
+
+/** Self-rated targets a scope hid from this card entirely (R8) — without this a role/hero-restricted target just never showed up here, with nothing on the card saying why. */
+function scopeSkipHint(targets: TargetSummary[]): HTMLElement {
+  const scopes = [...new Set(targets.map((t) => scopeLabel(t)).filter((s): s is string => s != null))];
+  return h('div', { class: 'hint', title: targets.map((t) => t.name).join(', ') },
+    `${targets.length} target${targets.length === 1 ? '' : 's'} skipped — scoped to ${scopes.join(', ')}`);
 }
 
 function gradeLabel(g: TargetGrade): string {
