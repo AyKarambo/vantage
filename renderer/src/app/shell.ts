@@ -304,9 +304,6 @@ export class App {
     subscribeDevModeAuthStatus(() => this.renderDevBadge());
     this.renderDevBadge();
     initZoom();
-    // Live logging: a just-tracked match refetches the open dashboard (composes
-    // with the focus-refresh below for pushes dropped while the window was closed).
-    bridge.onGameLogged(() => void store.refresh());
     // A no-outcome match held (or resolved) refetches so the Review "Needs
     // result" section stays in step with the pending store.
     bridge.onPendingChanged(() => void store.refresh());
@@ -322,7 +319,13 @@ export class App {
       if (s.data && !s.stale && !s.error) this.statusLabel.textContent = statusText(s.data);
     }, 60_000);
     void store.refresh();
-    // Follow onto the account a newly logged competitive match landed on (F4).
+    // Live logging: a just-tracked or hand-logged match refetches the open
+    // dashboard (composes with the focus-refresh below for pushes dropped
+    // while the window was closed) — also following onto the account it
+    // landed on when that differs from the one currently scoped (F4). ONE
+    // subscription: a second, plain `() => store.refresh()` listener used to
+    // sit beside this one, so every match paid for two full dashboard reads
+    // instead of the one `logMatch`'s own push already promises (W8).
     bridge.onGameLogged((payload) => this.onGameLogged(payload));
     // The first-run demo prompt + tour are driven from onState once real data
     // has loaded (so the persisted demo choice is known before we decide).

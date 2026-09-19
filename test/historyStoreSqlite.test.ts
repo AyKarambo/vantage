@@ -479,6 +479,65 @@ describe('HistoryStore (SQLite) — mergeImported', () => {
   });
 });
 
+describe('HistoryStore (SQLite) — all() caching (W8)', () => {
+  it('returns the identical array reference across reads while the revision is unchanged', () => {
+    const h = open(tmp());
+    h.addMany([g({ matchId: 'a' }), g({ matchId: 'b' })]);
+    const first = h.all();
+    const second = h.all();
+    expect(second).toBe(first); // same reference → the SELECT + parse ran once, not twice
+    expect(h.count()).toBe(2); // a read in between still doesn't invalidate it
+    expect(h.all()).toBe(first);
+  });
+
+  it('invalidates on a write and reflects it immediately', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'a' }));
+    const before = h.all();
+    h.add(g({ matchId: 'b' }));
+    const after = h.all();
+    expect(after).not.toBe(before);
+    expect(after.map((x) => x.matchId)).toEqual(['a', 'b']);
+    // The stale array handed out before the write is untouched (callers that
+    // held onto it keep the snapshot they read).
+    expect(before.map((x) => x.matchId)).toEqual(['a']);
+  });
+
+  it('invalidates on an edit, a review write, and a delete — not just add', () => {
+    const h = open(tmp());
+    h.add(g({ matchId: 'a' }));
+    const afterAdd = h.all();
+
+    h.editManual('a', { srDelta: 12 });
+    const afterEdit = h.all();
+    expect(afterEdit).not.toBe(afterAdd);
+    expect(afterEdit[0].srDelta).toBe(12);
+
+    h.setReview('a', { grades: {}, flags: {} });
+    const afterReview = h.all();
+    expect(afterReview).not.toBe(afterEdit);
+    expect(afterReview[0].review).toBeDefined();
+
+    h.deleteMatch('a');
+    const afterDelete = h.all();
+    expect(afterDelete).not.toBe(afterReview);
+    expect(afterDelete).toHaveLength(0);
+  });
+
+  it('serves the cached snapshot right up to reopen, then reflects the fresh file (relocate)', () => {
+    const a = tmp();
+    const b = tmp();
+    const s = open(a);
+    s.add(g({ matchId: 'x' }));
+    const beforeRelocate = s.all();
+    s.relocate(b);
+    // relocate reopens against the new path — a fresh revision, so the old
+    // cached array must not leak across the reopen.
+    expect(s.all()).not.toBe(beforeRelocate);
+    expect(s.all().map((r) => r.matchId)).toEqual(['x']);
+  });
+});
+
 describe('HistoryStore (SQLite) — revision()', () => {
   it('changes on every write and stays stable across pure reads', () => {
     const h = open(tmp());
