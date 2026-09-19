@@ -449,6 +449,15 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   columns and a hollow dot for a day you didn't play, its reference lines sit at the actual
   fresh/loaded cuts instead of a plain 0/50/100 grid, and every card now deep-links its own wiki
   article via a **"?"** (previously only Verdict did).
+- **A long history reads clearly on Trends.** The winrate chart's weekly ticks used to read
+  "W13 · W23 · …" with no year anywhere — they're now the week's real Monday date, and the
+  Table's Week column matches. The year prints once at each boundary instead of never. Thin
+  markers now label every season (and ladder reset) the chart crosses, so "All time" is more
+  than an unlabelled wall of points. Hovering a dense chart no longer steals the tooltip from
+  whichever point was drawn last — each point's hit target now shrinks to fit its neighbours
+  instead of overlapping them. A new **By season** card answers "how did each season go" in one
+  place — click a season to jump straight to it — instead of ten filter changes and ten
+  memorised numbers.
 
 ## 0.34.0 — 31 July 2026
 

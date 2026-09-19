@@ -7,6 +7,7 @@ import { PLAYED_TIME_ESTIMATE, setupMinutes } from '../src/core/playedTime';
 import type { HeroStat, Result, Role } from '../src/core/model';
 import { computeDashboard, previousDateRange } from '../src/core/dashboardData';
 import { buildTargets, NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
+import type { MasterData } from '../src/core/masterData';
 
 function game(p: Partial<GameRecord> & { result: Result; map: string; role: Role }): GameRecord {
   return {
@@ -537,6 +538,57 @@ describe('DashboardData.previous / HeroSummary deltas (C3)', () => {
     const genji = d.heroStats.find((h) => h.hero === 'Genji')!;
     expect(genji.deltaWinrate).toBeUndefined();
     expect(genji.deltaGames).toBe(1); // new this window, nothing before
+  });
+});
+
+describe('DashboardData.bySeason (C5)', () => {
+  const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+  const masterData: MasterData = {
+    heroes: [], maps: [],
+    seasons: [
+      { start: Date.parse('2026-01-01T00:00:00Z'), label: 'Season A' },
+      { start: Date.parse('2026-03-01T00:00:00Z'), label: 'Season B' },
+    ],
+  };
+
+  it('covers every season with data regardless of the active date filter', () => {
+    const seasonA = [
+      game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-01-15T00:00:00Z') }),
+      game({ result: 'Loss', map: 'A', role: 'damage', timestamp: Date.parse('2026-01-20T00:00:00Z') }),
+    ];
+    const seasonB = [
+      game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-03-15T00:00:00Z') }),
+    ];
+    // A narrow recent-days filter that (relative to the real "now") excludes
+    // both fixture seasons from `games` — bySeason must not care.
+    const d = computeDashboard([...seasonA, ...seasonB], { days: 7 }, demo, undefined, masterData);
+    const a = d.bySeason.find((s) => s.id === 'S:2026-01-01');
+    const b = d.bySeason.find((s) => s.id === 'S:2026-03-01');
+    expect(a).toMatchObject({ games: 2, wins: 1, losses: 1 });
+    expect(b).toMatchObject({ games: 1, wins: 1, losses: 0 });
+    expect(a!.winrate).toBeCloseTo(0.5);
+  });
+
+  it('scopes by the active role filter, like every other breakdown', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-01-15T00:00:00Z') }),
+      game({ result: 'Loss', map: 'A', role: 'tank', timestamp: Date.parse('2026-01-16T00:00:00Z') }),
+    ];
+    const d = computeDashboard(games, { days: 'all', role: 'damage' }, demo, undefined, masterData);
+    const a = d.bySeason.find((s) => s.id === 'S:2026-01-01');
+    expect(a).toMatchObject({ games: 1, wins: 1, losses: 0 });
+  });
+
+  it('sums net SR (C2) per season, excluding games that never logged one', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-01-15T00:00:00Z'), srDelta: 20 }),
+      game({ result: 'Loss', map: 'A', role: 'damage', timestamp: Date.parse('2026-01-16T00:00:00Z'), srDelta: -8 }),
+      game({ result: 'Win', map: 'A', role: 'damage', timestamp: Date.parse('2026-01-17T00:00:00Z') }),
+    ];
+    const d = computeDashboard(games, { days: 'all' }, demo, undefined, masterData);
+    const a = d.bySeason.find((s) => s.id === 'S:2026-01-01');
+    expect(a?.srNet).toBe(12);
+    expect(a?.srLogged).toBe(2);
   });
 });
 

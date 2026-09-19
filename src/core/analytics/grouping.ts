@@ -247,8 +247,14 @@ export function windowCompare(games: GameRecord[], now: number, days = 7): Momen
 
 // --- helpers ----------------------------------------------------------------
 
-/** The UTC start-of-period timestamp a `trend`/{@link rollingWinrate} bucket key names — the inverse of `bucketLabel`. */
-function bucketStart(key: string, bucket: 'day' | 'week'): number {
+/**
+ * The UTC start-of-period timestamp a `trend`/{@link rollingWinrate} bucket
+ * key names — the inverse of `bucketLabel` (C5: exported so the renderer can
+ * turn a possibly-weekly trend key into a real calendar date for chart tick
+ * labels and season-boundary placement, instead of showing the raw ISO week
+ * key — "W23" carries no year and means nothing out of context).
+ */
+export function bucketStart(key: string, bucket: 'day' | 'week'): number {
   if (bucket === 'day') return Date.parse(key);
   const [year, week] = key.split('-W').map(Number);
   const jan4 = Date.UTC(year, 0, 4);
