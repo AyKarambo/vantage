@@ -273,6 +273,27 @@ describe('playerMatchHistory', () => {
     expect(h.form).toEqual(h.matches.slice(0, 10).map((m) => m.result));
   });
 
+  it('tags (M6) lists every distinct #-tag seen under this identity, sorted', () => {
+    const all = [
+      game({ result: 'Win', timestamp: 1000, roster: [meT(0), them('Nova#2222', 0)] }),
+      game({ result: 'Win', timestamp: 2000, roster: [meT(0), them('Nova#1111', 0)] }),
+      game({ result: 'Win', timestamp: 3000, roster: [meT(0), them('Nova#1111', 0)] }), // repeat — no duplicate entry
+    ];
+    const h = playerMatchHistory(all, 'nova')!;
+    expect(h.tags).toEqual(['Nova#1111', 'Nova#2222']);
+  });
+
+  it('tags has at most one entry when only one real BattleTag was ever seen', () => {
+    const h = playerMatchHistory([game({ result: 'Win', roster: [meT(0), them('Solo#1', 0)] })], 'Solo#1')!;
+    expect(h.tags).toEqual(['Solo#1']);
+  });
+
+  it('tags is empty when the feed never reported a #-tagged name at all', () => {
+    const themBare: RosterPlayer = { battleTag: 'nova', team: 0 };
+    const h = playerMatchHistory([game({ result: 'Win', roster: [meT(0), themBare] })], 'nova')!;
+    expect(h.tags).toEqual([]);
+  });
+
   it('returns a single match when met once', () => {
     const h = playerMatchHistory([game({ result: 'Win', roster: [meT(0), them('Solo#1', 0)] })], 'Solo#1')!;
     expect(h.encounters).toBe(1);

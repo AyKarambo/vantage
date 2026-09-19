@@ -187,6 +187,13 @@ export interface PlayerMatchHistory {
   theirHeroes: Array<{ hero: string; games: number }>;
   /** Their last 10 shared-match results (decided or not), newest first (M6). */
   form: Result[];
+  /**
+   * Every DISTINCT full `#`-tagged BattleTag seen under this identity (M6) —
+   * length > 1 means the name-before-`#` merge folded more than one real
+   * person into this page (`Nova#1111` and `Nova#2222` both display as
+   * "Nova"). Length 0 or 1 is the common case and carries no warning.
+   */
+  tags: string[];
   /** The shared matches, newest first. */
   matches: PlayerSharedMatch[];
 }

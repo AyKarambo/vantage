@@ -847,6 +847,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   play?" or "how are they running lately?". Filter chips (All / With you / Against you / Side
   unknown) narrow the record itself, updating the W/L line to match; the shared-match table is
   now sortable on Map, Mode, Side, Account and When (M6).
+- **Players and a player's page stopped showing columns with nothing to say.** A player's own
+  page drops the Account column when every shared game was on one account (stated in the
+  subtitle instead) and drops Your rank entirely when none of them have one — with a plain
+  sentence saying why, and a link to set a rank anchor when that's the actual fix. The With
+  you/Against you columns on Players now show the exact winrate they sort by, and a
+  name-collision (`⚠`) is explained by name on both screens instead of hover-only (M6).
 
 ## 0.34.0 — 31 July 2026
 

@@ -1,10 +1,11 @@
 # Screen spec: Players (`players`) and the player drill-down (`playerHistory`)
 
 **Source:** `renderer/src/views/players.ts`, `renderer/src/views/playerHistory.ts`,
-`src/core/playerIndex.ts` (`playerDirectory`, `playerMatchHistory`'s `theirHeroes`/`form`, M6;
-also behind `DashboardData.recentPlayers` — the command palette's small Player-item slice, M5,
+`src/core/playerIndex.ts` (`playerDirectory`, `playerMatchHistory`'s `theirHeroes`/`form`/`tags`,
+M6; also behind `DashboardData.recentPlayers` — the command palette's small Player-item slice, M5,
 see `screen-shell.spec.md`), `src/core/heroes.ts` (`roleOfHero`, M6), `src/core/rank/entering.ts`,
 `renderer/src/components/table.ts` (`dataTable`, M6), `renderer/src/components/roleIcon.ts`,
+`renderer/src/components/inlineLink.ts` (the "Set a rank anchor →" link, M6),
 `src/main/dashboard/reads.ts` (`playerListRead`, `playerHistoryRead`),
 `src/shared/contract/players.ts`, `src/shared/contract/matchDetail.ts`.
 
@@ -29,13 +30,18 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
 - **Sortable table:** Player, Games together, With you, Against you, Last seen (the with/against
   wording is shared across Players, the match detail's player-history card, a player's own page
   and Live via `RELATION_LABEL` in `renderer/src/format.ts` — K7). Default sort is
-  shared games descending. Search, a **relation** chip row (M6: `Any / Played with / Played
-  against`, its own `playerRelation` pref) and a **min. games** chip row (`1+ / 2+ / 5+ / 10+`,
-  its own `minPlayerGames` pref) narrow the list; the sort choice persists as `playerSort`.
-  Relation filters SERVER-side (`selectPlayers`, over the whole matched set before the cap, same
-  as the floor) — `with`/`vs` keep only rows with at least one DECIDED game on that side (a
-  relation known but all-draw side has nothing to show, same treatment as no relation data at
-  all). The **Last seen** cell carries a dim `with`/`vs` suffix (M6, `PlayerListRow.lastSameTeam`)
+  shared games descending. The **With you**/**Against you** header carries a tooltip (M6) —
+  "Sorted by winrate; players with no decided games sink to the bottom" — since the column visibly
+  shows a W/L count but actually ranks by rate; each cell's W/L text (already tinted by that rate)
+  now also appends a dim mono `· NN%` showing the exact number sorted on, so two visually similar
+  rows that sort apart (e.g. 9W 7L vs 8W 6L) are no longer indistinguishable. Search, a **relation**
+  chip row (M6: `Any / Played with / Played against`, its own `playerRelation` pref) and a **min.
+  games** chip row (`1+ / 2+ / 5+ / 10+`, its own `minPlayerGames` pref) narrow the list; the sort
+  choice persists as `playerSort`. Relation filters SERVER-side (`selectPlayers`, over the whole
+  matched set before the cap, same as the floor) — `with`/`vs` keep only rows with at least one
+  DECIDED game on that side (a relation known but all-draw side has nothing to show, same
+  treatment as no relation data at all). The **Last seen** cell carries a dim `with`/`vs` suffix
+  (M6, `PlayerListRow.lastSameTeam`)
   — the team relation of that player's most recent shared game whose feed reported a team for
   BOTH rows, which is not necessarily the same game `lastSeen` itself is from if a later game's
   teams went unreported; absent (no suffix) when no shared game ever reported one.
@@ -70,7 +76,10 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
   — the payload's own echo, same discipline as `appliedMinGames`) and offer **Show any relation**
   alongside **Show 1+**/**Clear search**.
 - **Identity merging is surfaced, not hidden.** Players are keyed on the lowercased name before
-  `#`, so `Nova#1111` and `Nova#2222` fold into one row; such a row carries a `⚠` marker.
+  `#`, so `Nova#1111` and `Nova#2222` fold into one row; such a row carries a `⚠` marker (a hover
+  tooltip explains the merge rule). Whenever at least one VISIBLE row carries it, the screen's own
+  hint line also states once (M6) "⚠ = more than one BattleTag shares this name" — the marker
+  used to explain itself only on hover, with nothing naming it in prose anywhere on the screen.
 
 ## The player drill-down — layout & behaviour
 
@@ -79,7 +88,14 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
   stays the lifetime total even while the W/L/WR clause reflects the active filter chip below
   (M6): the two can legitimately disagree (e.g. "51 shared games, all time · 6W 6L · 50% WR"
   once narrowed to "With you") — the record is what the chip claims to be narrowing, the count
-  above it is not.
+  above it is not. Carries `· on <account>` (M6) when every shared match was on the same one
+  account (`sections`' `singleAccount`, computed over the lifetime match list, same source that
+  gates the Account column below).
+- **Name-collision note** (M6, `collisionNote`): when `PlayerMatchHistory.tags` (every distinct
+  `#`-tagged BattleTag seen under this identity) has more than one entry, a line under the head
+  names them — "⚠ Matched by name — these games include Pixel#1234 and Pixel#5678." — instead of
+  the Players list's bare hover-only ⚠, which never said WHICH tags collided or that this specific
+  page might be more than one person.
 - **"Who they are" band** (M6, `whoTheyAreBand`): their top 3 heroes by game count (ties broken
   by recency), each a chip with a role icon — "Tracer ×7 · Juno ×4 · Zenyatta ×3" — then a
   last-10 shared-result dot strip (`resultPill`, the same W/L/D colouring every other result pill
@@ -96,6 +112,16 @@ same vocabulary ("in this filter scope" vs "all time") before the user crosses b
   `sortable: false` — compound, rendered cells with no single scalar a header click could
   honestly order by. The sort is view-local and unpersisted, same as the filter chips above.
   Every row opens that match.
+- **Account and Your rank are each OMITTED entirely** (M6) when they'd carry no information
+  across the whole lifetime record — computed once over `d.matches`, never re-toggled by the
+  filter chips: **Account** when every shared match happened on the same one account (the head's
+  subtitle states it instead, `· on <account>`); **Your rank** when no row anywhere has an actual
+  tier/division (every cell would otherwise just repeat the same blank). Dropping "Your rank"
+  replaces the usual per-cell-estimate footnote with `noRankColumnNote` — one sentence naming
+  the DOMINANT reason across every match (open placements, before a reset, no rank anchor, no
+  reading since a reset, or "none of these matches were competitive"), plus a **Set a rank
+  anchor →** link to Settings → Accounts specifically when that dominant reason is "no anchor" —
+  the one case actually recoverable from here.
 - **Their hero is singular; yours is a list.** The aggregator banks per-hero segments only for
   the tracked player and overwrites the roster slot for everyone else on each tick, so their
   swaps were never captured and cannot be backfilled.

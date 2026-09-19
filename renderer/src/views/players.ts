@@ -91,10 +91,19 @@ function scopeLabel(p: PlayerList, ctx: ViewContext): string {
   ].join(' · ');
 }
 
+/** The header tooltip on both With you/Against you columns (M6) — states the exact sort/sink rule `RANKERS`'s `winrateOf` actually applies, since the column looks like it sorts by win COUNT. */
+const WL_SORT_TITLE = 'Sorted by winrate; players with no decided games sink to the bottom';
+
 const wl = (w: { wins: number; losses: number }): HTMLElement => {
   const n = w.wins + w.losses;
   if (!n) return h('span', { class: 'u-muted', title: 'No decided games on that side.' }, '–');
-  return h('span', { style: { color: wrColor(w.wins / n) } }, `${w.wins}W ${w.losses}L`);
+  return h('span', { style: { color: wrColor(w.wins / n) } },
+    `${w.wins}W ${w.losses}L `,
+    // M6: the raw W/L above is tinted, but the exact rate the column actually
+    // SORTS by ("52%") stayed invisible — a 9W 7L row and an 8W 6L row read
+    // as roughly the same colour despite sorting apart.
+    h('span', { class: 'u-dim mono' }, `· ${Math.round((w.wins / n) * 100)}%`),
+  );
 };
 
 function columns(): Array<Column<PlayerListRow>> {
@@ -119,8 +128,8 @@ function columns(): Array<Column<PlayerListRow>> {
       ),
     },
     { key: 'games', label: 'Games together', get: (r) => r.games },
-    { key: 'with', label: RELATION_LABEL.with.long, get: (r) => rate(r.sameTeam), render: (r) => wl(r.sameTeam) },
-    { key: 'vs', label: RELATION_LABEL.against.long, get: (r) => rate(r.enemyTeam), render: (r) => wl(r.enemyTeam) },
+    { key: 'with', label: h('span', { title: WL_SORT_TITLE }, RELATION_LABEL.with.long), get: (r) => rate(r.sameTeam), render: (r) => wl(r.sameTeam) },
+    { key: 'vs', label: h('span', { title: WL_SORT_TITLE }, RELATION_LABEL.against.long), get: (r) => rate(r.enemyTeam), render: (r) => wl(r.enemyTeam) },
     {
       key: 'lastSeen', label: 'Last seen', get: (r) => r.lastSeen,
       render: (r) => h('span', null,
@@ -260,7 +269,14 @@ export function players(ctx: ViewContext): HTMLElement {
     // above ('N players met in this filter scope · {scope}') — restating it
     // here too was the exact repetition K7 flagged; this note now says only
     // the one thing the subtitle doesn't.
-    scopeNote.textContent = 'Opening a player shows their complete all-time record, which the filters never touch.';
+    render(scopeNote,
+      'Opening a player shows their complete all-time record, which the filters never touch.',
+      // M6: the per-row ⚠ only ever explained itself on hover — named here
+      // too, once, whenever at least one visible row actually carries it.
+      p.rows.some((r) => r.ambiguous)
+        ? h('span', null, '  ', h('span', { class: 'u-dim' }, '⚠'), ' = more than one BattleTag shares this name.')
+        : null,
+    );
 
     const empty = emptyBranch(p);
     if (empty) {
