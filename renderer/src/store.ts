@@ -36,6 +36,10 @@ export type ViewId =
   | 'about'
   | 'faq';
 
+/** A Settings → General card the section rail can jump to and flash (W1). */
+export type SettingsSection =
+  | 'accounts' | 'quickLog' | 'coaching' | 'appBehavior' | 'appearance' | 'diagnostics' | 'dataStorage' | 'import';
+
 /** Parameters for parameterized views (the match detail drill-down). */
 export interface ViewParams {
   matchId?: string;
@@ -64,6 +68,9 @@ export interface ViewParams {
   targetId?: string;
   /** Targets: open the builder pre-filled to edit this target (a detail page's Edit). */
   editTargetId?: string;
+  /** Settings: scroll to and flash a General-tab card — the section rail, and
+   *  About/FAQ's cross-links that used to just open Settings at the top (W1). */
+  section?: SettingsSection;
 }
 
 export interface AppState {

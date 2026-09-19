@@ -42,6 +42,9 @@ export const PARAM_KINDS: Required<{ [K in keyof ViewParams]: ParamKind }> = {
   prefillRole: 'effect',
   prefillHeroes: 'effect',
   prefillMap: 'effect',
+  // "scroll to and flash this card" — same "re-runs its scroll-and-flash on
+  // every render while set" note as `highlight` above.
+  section: 'effect',
   // "open the builder in edit mode" — targets/index.ts guards it with a WeakSet
   // keyed on params object identity, which only works while the object is fresh.
   editTargetId: 'effect',

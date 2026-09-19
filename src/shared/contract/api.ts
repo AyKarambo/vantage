@@ -36,7 +36,7 @@ import type { LogEntry, LogLevel, LogExportResult, RendererErrorInput } from './
 import type { GepStatusPayload } from './gepStatus';
 import type { DevModeAuthStatusPayload } from './devModeAuth';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
-import type { MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate } from './masterData';
+import type { MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate, MasterDataCheckInfo } from './masterData';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
 export interface OwStatsApi {
@@ -299,6 +299,8 @@ export interface OwStatsApi {
   masterDataFetchUpdate(): Promise<UpdatePreview>;
   /** Persist the accepted subset of an Update preview; returns the new effective master data. */
   masterDataApplyUpdate(accepted: AcceptedUpdate): Promise<MasterData>;
+  /** When "Update from online source" last successfully checked (W1). */
+  getMasterDataCheck(): Promise<MasterDataCheckInfo>;
   /** Subscribe to new log entries; returns an unsubscribe function. */
   onLogEntry(cb: (e: LogEntry) => void): () => void;
   /** Subscribe to connection/data-flow state changes; returns an unsubscribe function. */
@@ -450,6 +452,7 @@ export const IPC_CHANNELS = {
   masterDataRemoveSeason: 'master:remove-season',
   masterDataFetchUpdate: 'master:fetch-update',
   masterDataApplyUpdate: 'master:apply-update',
+  getMasterDataCheck: 'master:get-check',
 } as const satisfies Record<Exclude<keyof OwStatsApi, 'window' | keyof typeof EVENT_CHANNELS>, string>;
 
 /** The fire-and-forget channels behind the frameless window controls. */

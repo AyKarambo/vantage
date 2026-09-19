@@ -9,6 +9,7 @@
 import { h } from '../dom';
 import { bridge } from '../bridge';
 import { button, card, emptyState } from '../components/primitives';
+import { inlineLink } from '../components/inlineLink';
 import { openOnboarding } from '../app/onboarding';
 import { changelogHistory, type ChangelogEntry } from '../../../src/core/whatsNew';
 import { CHANGELOG } from '../generated/changelog';
@@ -19,8 +20,7 @@ const SUPPORT_EMAIL = 'timo.seikel@gmail.com';
 interface FaqEntry {
   q: string;
   a: string;
-  /** Optional in-app jump rendered under the answer — see the About screen's
-   *  `aboutLink` for the same "button styled as a link" idiom. */
+  /** Optional in-app jump rendered under the answer, via the shared `inlineLink`. */
   link?: { label: string; go: (ctx: ViewContext) => void };
 }
 
@@ -58,7 +58,7 @@ const FAQ: FaqTopic[] = [
         a: 'Locally on this PC only, inside your Windows user-data folder — files such as history.db, ' +
           'outbox.json, and config.local.json. Nothing is uploaded anywhere. Deleting that folder, or ' +
           'uninstalling Vantage, removes the data.',
-        link: { label: 'See the exact folder in Settings →', go: (ctx) => ctx.navigate('settings') },
+        link: { label: 'See the exact folder in Settings →', go: (ctx) => ctx.navigate('settings', { section: 'dataStorage' }) },
       },
     ],
   },
@@ -124,7 +124,7 @@ function faqItem(entry: FaqEntry, ctx: ViewContext): HTMLElement {
   return h('div', null,
     h('div', { style: { fontSize: '13px', fontWeight: '600' } }, entry.q),
     h('div', { class: 'u-muted', style: { fontSize: '12.5px', marginTop: '3px', lineHeight: '1.5' } }, entry.a),
-    entry.link ? h('div', { style: { marginTop: '5px' } }, jumpLink(entry.link.label, () => entry.link!.go(ctx))) : null,
+    entry.link ? h('div', { style: { marginTop: '5px' } }, inlineLink(entry.link.label, { onClick: () => entry.link!.go(ctx) })) : null,
   );
 }
 
@@ -153,15 +153,4 @@ function changelogEntryItem(entry: ChangelogEntry): HTMLElement {
       ...entry.notes.map((note) => h('li', { class: 'u-muted', style: { fontSize: '12.5px', lineHeight: '1.5' } }, note)),
     ),
   );
-}
-
-/** A button styled as a link, for in-app jumps — the same idiom as About's `aboutLink`. */
-function jumpLink(label: string, onClick: () => void): HTMLElement {
-  return h('button', {
-    style: {
-      background: 'none', border: 'none', padding: '0', cursor: 'pointer',
-      font: 'inherit', fontSize: '12.5px', color: 'var(--accent)',
-    },
-    on: { click: onClick },
-  }, label);
 }

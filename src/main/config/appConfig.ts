@@ -29,6 +29,8 @@ export type Sensor = 'counterwatch' | 'gep';
 export interface MasterDataConfig {
   /** Base URL of the OverFast-compatible API used by the "Update" action. */
   overfastBaseUrl: string;
+  /** When "Update from online source" last successfully fetched (epoch ms) — regardless of whether it found anything new (W1). Absent until the first check. */
+  lastCheckedAt?: number;
 }
 
 /** The dashboard window's last-seen placement, restored on launch. */

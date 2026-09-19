@@ -2,7 +2,7 @@ import type { DataProvider } from './dashboard';
 import type { HistoryStore } from '../store/history';
 import type { ManualStore } from '../store/manualLog';
 import type { NotionRuntime } from './notionRuntime';
-import type { AppConfig } from './config';
+import type { AppConfig, MasterDataConfig } from './config';
 import type { Logger } from './logger';
 import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
 import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
@@ -113,6 +113,8 @@ export interface DataProviderDeps {
   persistSessionSettings(s: SessionSettings): void;
   /** Persist the measured-grade settings (partial-credit margin) into the user's local config file. */
   persistGrading(s: GradingSettings): void;
+  /** Persist the master-data check settings (incl. `lastCheckedAt`) into the user's local config file (W1). */
+  persistMasterDataCheck(s: MasterDataConfig): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
   recordGame(g: GameRecord): boolean;
   /** Match-pipeline entry to complete a held pending match (takes it out of the pending store into history). */
@@ -858,12 +860,19 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     masterDataFetchUpdate: async () => {
       const fetched = await deps.fetchMasterDataUpdate();
+      // Persisted on a successful fetch regardless of whether it found anything
+      // new (W1) — "Last checked" answers "is this source still being read",
+      // not "did it find changes".
+      const config = deps.getConfig();
+      config.masterData = { ...config.masterData, lastCheckedAt: Date.now() };
+      deps.persistMasterDataCheck(config.masterData);
       return diffMasterData(effectiveMasterData(), fetched);
     },
     masterDataApplyUpdate: (accepted) => {
       deps.masterDataStore.replace(applyAccepted(deps.masterDataStore.all(), DEFAULT_MASTER_DATA, accepted));
       return effectiveMasterData();
     },
+    getMasterDataConfig: () => deps.getConfig().masterData,
   };
   return deps.announceChange ? announcing(provider, deps.announceChange) : provider;
 }

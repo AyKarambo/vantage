@@ -9,6 +9,7 @@ import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type { PlacementRun } from '../../core/placements';
+import type { MasterDataConfig } from '../config';
 import type {
   AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
   DataLocation, DataLocationResult, DevModeAuthStatusPayload, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
@@ -226,4 +227,6 @@ export interface DataProvider {
   masterDataFetchUpdate(): Promise<UpdatePreview>;
   /** Persist the accepted subset of an Update preview; returns the new effective master data. */
   masterDataApplyUpdate(accepted: AcceptedUpdate): MasterData;
+  /** The Master Data source's own settings — when it was last successfully checked (W1). */
+  getMasterDataConfig(): MasterDataConfig;
 }

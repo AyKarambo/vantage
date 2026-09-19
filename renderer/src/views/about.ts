@@ -13,6 +13,7 @@ import { h, render } from '../dom';
 import type { AppInfo } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { button, card } from '../components/primitives';
+import { inlineLink } from '../components/inlineLink';
 import { toast } from '../components/toast';
 import { store } from '../store';
 import { buildAboutRows, formatDiagnostics, type AboutRow } from '../../../src/core/about';
@@ -159,22 +160,12 @@ function supportCard(emailSupport: () => void, reportBtn: HTMLElement, saveLog: 
         'not a guarantee. Look it over before attaching it to a public issue.'),
       h('div', { class: 'hint' }, 'Free to use · MIT licensed · © Timo Seikel'),
       h('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '2px' } },
-        aboutLink('Data storage location →', () => store.setView('settings')),
-        aboutLink('Open the debug log →', () => store.setView('logs')),
-        aboutLink('FAQ →', () => store.setView('faq')),
+        inlineLink('Data storage location →', { onClick: () => store.setView('settings', { section: 'dataStorage' }) }),
+        inlineLink('Open the debug log →', { onClick: () => store.setView('logs') }),
+        inlineLink('FAQ →', { onClick: () => store.setView('faq') }),
       ),
     ),
   );
-}
-
-function aboutLink(label: string, onClick: () => void): HTMLElement {
-  return h('button', {
-    style: {
-      background: 'none', border: 'none', padding: '0', cursor: 'pointer',
-      font: 'inherit', fontSize: '12.5px', color: 'var(--accent)',
-    },
-    on: { click: onClick },
-  }, label);
 }
 
 function infoRow(r: AboutRow): HTMLElement {

@@ -8,6 +8,7 @@ import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
 import { scatterChart, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, kpiCard, statBar, statBox } from '../components/primitives';
+import { inlineLink } from '../components/inlineLink';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { openPlacementComplete } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
@@ -48,19 +49,8 @@ function headlineSub(ctx: ViewContext): Node {
   const params = headline.params;
   return h('span', {},
     `${text} `,
-    jumpLink('Why →', () => ctx.navigate(source, params)),
+    inlineLink('Why →', { onClick: () => ctx.navigate(source, params) }),
   );
-}
-
-/** A button styled as a link, for in-app jumps — the same idiom as About's `aboutLink`. */
-function jumpLink(label: string, onClick: () => void): HTMLElement {
-  return h('button', {
-    style: {
-      background: 'none', border: 'none', padding: '0', cursor: 'pointer',
-      font: 'inherit', fontSize: 'inherit', color: 'var(--accent)',
-    },
-    on: { click: onClick },
-  }, label);
 }
 
 /**

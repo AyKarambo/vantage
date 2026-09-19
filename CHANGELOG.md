@@ -568,6 +568,19 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   muted badge instead of the usual accent pill, and every save now says so honestly — "Not saved —
   "Ilios" is a demo game" — instead of claiming success. Grading and editing demo cards still work
   as a sandbox to try the flow in; they just never pretend to keep it.
+- **Settings gets a section rail, and the Coaching card explains itself.** A row of jump links —
+  Accounts, Quick Log, Coaching, App behavior, Appearance, Diagnostics, Data storage, Import — sits
+  right under the page head; click one and it scrolls to and flashes that card, and About's "Data
+  storage location →" and the FAQ's "See the exact folder in Settings →" now land you straight on
+  it instead of the top of a long page. Inside Coaching, each of the six editors — Quick Log (now
+  folded in here instead of its own separate card), Break reminder, Readiness coach, Target
+  rotation, Current session, Grading margin — gets its own heading, a one-line hint naming what it
+  actually affects, and a "See it on X →" link to the screen it governs, instead of five unlabelled
+  controls stacked in a row.
+- **Master Data says when it last checked.** The "Update from online source" card now states "Last
+  checked 3 weeks ago · OverFast API (community mirror of Blizzard data) · nothing about you is
+  sent" — naming the source and what leaves your machine, which it never did before — and nudges
+  you to check again once that's over 60 days old or has never happened.
 
 ## 0.34.0 — 31 July 2026
 

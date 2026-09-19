@@ -437,15 +437,20 @@ rows, Focus's map rows, the command palette's Map entries — to open exactly th
 Matches), remembered role + account in the
 quick-log, hover tooltips + a "view as table" toggle on charts, a last-session debrief once your sitting closes (S3), a
 choice of **winrate colour schemes** (Aurora, Teal & coral, or a colorblind-safe blue–orange),
-window-position memory, and a **Settings** screen with an
+window-position memory, and a **Settings** screen with a **section rail** (jump links to
+Accounts, Quick Log, Coaching, App behavior, Appearance, Diagnostics, Data storage and Import —
+click one and it scrolls to and flashes that card, and About/FAQ's own links land pre-scrolled
+there too) above an
 **accounts manager** (a tidy list of every account seen in your match history — name, game
 count and a compact per-role rank summary per row, with create/edit/delete; everything
 role-specific — the **Set rank…** anchor and the placement-run controls — lives behind each
 row's **Manage ranks…** button; the active account filter **auto-switches** when GEP reports a
 different logged-in account), a **Master data**
-editor (see below), a **Quick Log** card (how many most-played heroes the log-match hero picker
-suggests) alongside the break
-reminder, close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
+editor (see below), and a **Coaching** card whose six editors — Quick Log (how many most-played
+heroes the log-match hero picker suggests, folded in as the first row), break reminder, readiness
+coach, target rotation, current session, and grading margin — each get their own heading, a
+one-line hint naming what they actually affect, and a "See it on X →" link to the screen they
+govern, plus close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, and rank anchors — to any folder,
 moved together with a copy-verify-then-delete guarantee. Point it at a OneDrive/Dropbox-synced
 folder for off-machine backup (use it from one machine at a time — editing the same synced files
@@ -503,6 +508,8 @@ preview you **accept or discard per item** — nothing is written until you acce
 are never silently overwritten, and everything stays editable afterward. This is the only new
 outbound path besides Notion: it is **user-initiated**, sends **no personal, account, or match
 data**, treats the response as untrusted, and falls back to the bundled snapshot when offline. The
+card states **when it last checked** and names the source and what it sends ("nothing about you"),
+with a soft nudge to check again once that's over 60 days old or has never happened. The
 endpoint is configurable in `appsettings.json` (`masterData.overfastBaseUrl`). Seasons are edited
 by hand only — no public API exposes their dates. Your edits live in `masterData.json` alongside
 the rest of your data and travel with it when you relocate the data folder.

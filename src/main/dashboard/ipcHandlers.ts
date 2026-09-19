@@ -238,6 +238,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.masterDataRemoveSeason, (_e, id: string) => provider.masterDataRemoveSeason(id));
   handle(ch.masterDataFetchUpdate, () => provider.masterDataFetchUpdate());
   handle(ch.masterDataApplyUpdate, (_e, accepted: AcceptedUpdate) => provider.masterDataApplyUpdate(accepted));
+  handle(ch.getMasterDataCheck, () => ({ lastCheckedAt: provider.getMasterDataConfig().lastCheckedAt }));
 }
 
 /** Window actions the title-bar channels drive, provided as closures over the owning window. */

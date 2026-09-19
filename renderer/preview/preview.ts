@@ -63,6 +63,7 @@ const ANCHORS_KEY = 'vantagePreviewAnchors';
 const EDITS_KEY = 'vantagePreviewEdits';
 const DELETED_KEY = 'vantagePreviewDeleted';
 const MASTER_DATA_KEY = 'vantagePreviewMasterData';
+const MASTER_DATA_CHECK_KEY = 'vantagePreviewMasterDataCheck';
 const PLACEMENTS_KEY = 'vantagePreviewPlacements';
 const DECLINED_KEY = 'vantagePreviewPlacementsDeclined';
 
@@ -172,6 +173,14 @@ const savedGrading = loadMap<unknown>(GRADING_KEY) as Partial<GradingSettings>;
 let grading: GradingSettings = Object.keys(savedGrading).length
   ? normalizeGradingSettings(savedGrading)
   : { ...DEFAULT_GRADING_SETTINGS };
+let masterDataLastCheckedAt: number | undefined = (() => {
+  try {
+    const raw = localStorage.getItem(MASTER_DATA_CHECK_KEY);
+    return raw ? Number(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+})();
 
 // In-memory placement run tracker. Keyed by `${account}::${role}`.
 const loadPlacementRuns = (): Map<string, PlacementRun> => {
@@ -577,6 +586,10 @@ const mock: OwStatsApi = {
         { name: 'Preview Arena', mode: 'Control', isActive: true },
       ],
     };
+    // Persisted on a successful fetch regardless of outcome (W1) — mirrors the
+    // real dataProvider's masterDataFetchUpdate handler.
+    masterDataLastCheckedAt = Date.now();
+    save(MASTER_DATA_CHECK_KEY, masterDataLastCheckedAt);
     return diffMasterData(eff, fetched);
   },
   masterDataApplyUpdate: async (accepted) => {
@@ -584,6 +597,7 @@ const mock: OwStatsApi = {
     saveOverrides();
     return effectiveMasterData();
   },
+  getMasterDataCheck: async () => ({ lastCheckedAt: masterDataLastCheckedAt }),
   logMatch: async (input: ManualMatchInput) => {
     const matchId = `manual-${Date.now()}`;
     const account = input.account || Object.values(previewAccounts)[0] || 'You';
