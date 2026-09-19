@@ -331,6 +331,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   after games (the common one-game-per-map case used to read as random order) and shows `W`-`L`
   instead of a bare game count. **Recent** games are clickable straight into that match's detail
   page instead of being inert text.
+- **The Heroes table says more with the numbers it already has.** A **W-L** column, a played
+  **Time** column (a low game count on a lot of minutes is a steadier sample than the same count
+  on quick swaps), and a **Trend** column (▴/→/▾ — recent games vs earlier ones, same read Focus
+  already gives its maps) so "is my Genji getting better this season?" no longer needs a drawer
+  open per hero — and the drawer itself now opens on a **Last 10** form strip (one W/L pill per
+  decided game plus the trend arrow and the delta vs the full range) for the full read when you
+  do open it. Eliminations/Deaths/Assists per 10 now show their real decimal (`5.6` and `6.4`
+  used to both round to `6`) — same fix applied to the hero drawer's stat grid and the match
+  detail per-hero card. There's no hidden games-floor or row cap left upstream of the **min.
+  games** chips either, so a 1-game hero now shows at the default 1+ and appears in the command
+  palette's Hero entries, matching how Map entries already include every map. An **ⓘ** beside the
+  chips spells out how the per-10/time-share/Time numbers are computed, in one place.
 
 ## 0.34.0 — 31 July 2026
 

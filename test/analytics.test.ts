@@ -155,6 +155,17 @@ describe('heroStats', () => {
     expect(ana.per10?.healing).toBe(10500); // 21000 × 10 / 20 played minutes
   });
 
+  it('carries total played minutes on the hero (H5) — the sample-size signal a rounded game count can\'t show', () => {
+    const games: GameRecord[] = [
+      game({ result: 'Win', map: 'A', role: 'support', heroes: ['Ana'], durationMinutes: 10, playedMinutes: 10,
+        perHero: [line('Ana', { role: 'support' })] }),
+      game({ result: 'Loss', map: 'B', role: 'support', heroes: ['Ana'], durationMinutes: 8, playedMinutes: 8,
+        perHero: [line('Ana', { role: 'support' })] }),
+    ];
+    const [ana] = heroStats(games);
+    expect(ana.minutes).toBeCloseTo(18, 9);
+  });
+
   it('per-10 divides by the measured PLAYED time, not the wall-clock duration', () => {
     const games: GameRecord[] = [
       game({ result: 'Win', map: 'Ilios', role: 'support', heroes: ['Ana'], durationMinutes: 12, playedMinutes: 10,
@@ -280,6 +291,16 @@ describe('heroDetail', () => {
     // Same order asserted above (newest first: timestamps 3, 2) — this pins
     // each row's matchId to the SAME source game, not just its shape.
     expect(d.recent.map((r) => r.matchId)).toEqual([gs[0].matchId, gs[1].matchId]);
+  });
+
+  it('attaches trend and form to stats, over the SAME hero-filtered games as overall/byMap (H6)', () => {
+    const losses = [0, 1, 2, 3].map((i) =>
+      game({ result: 'Loss', map: 'Ilios', role: 'damage', heroes: ['Tracer'], timestamp: i }));
+    const wins = [4, 5, 6].map((i) =>
+      game({ result: 'Win', map: 'Ilios', role: 'damage', heroes: ['Tracer'], timestamp: i }));
+    const d = heroDetail([...losses, ...wins], 'Tracer');
+    expect(d.stats?.trend).toBe('improving');
+    expect(d.stats?.form?.results).toEqual(['Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win', 'Win']);
   });
 
   it('a short swap earns only its fraction of the game', () => {

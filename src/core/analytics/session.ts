@@ -7,6 +7,7 @@
 import type { GameRecord, Streak } from './types';
 import { byMap, dayKey, heroWeightedGames, weightedGroupBy, weightedWinLoss, winLoss } from './grouping';
 import { heroStats, type HeroStatsOptions } from './heroStats';
+import { focusTrend, heroForm } from './focus';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets';
 import { isPositiveComms } from '../comms';
 
@@ -175,11 +176,15 @@ export function sessionRecap(games: GameRecord[], now: number = Date.now()): Ses
 export function heroDetail(games: GameRecord[], hero: string, opts: HeroStatsOptions = {}) {
   const gs = games.filter((g) => g.heroes.includes(hero)).sort((a, b) => b.timestamp - a.timestamp);
   const weighted = heroWeightedGames(gs, hero);
+  const stats = heroStats(gs, opts).find((h) => h.hero === hero) ?? null;
+  // Trend/form (H6) reuse the same hero-filtered `gs` dashboardData's Heroes
+  // table join computes over — `gs` here already IS `focusGamesFor(games, 'hero', hero)`.
+  const trend = focusTrend(gs);
   return {
     hero,
     overall: weightedWinLoss(weighted),
     byMap: weightedGroupBy(weighted, (e) => e.game.map).slice(0, 12),
     recent: gs.slice(0, 10).map((g) => ({ matchId: g.matchId, map: g.map, role: g.role, result: g.result, account: g.account, timestamp: g.timestamp })),
-    stats: heroStats(gs, opts).find((h) => h.hero === hero) ?? null,
+    stats: stats ? { ...stats, ...(trend ? { trend } : {}), form: heroForm(gs) } : null,
   };
 }

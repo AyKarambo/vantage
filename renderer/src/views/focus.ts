@@ -5,19 +5,13 @@
  * the reference table → Targets is the commitment.
  */
 import { h, applyStyle } from '../dom';
-import type { FocusEntry, FocusProgress, FocusTrend } from '../../../src/shared/contract';
+import type { FocusEntry, FocusProgress } from '../../../src/shared/contract';
 import { pct, signed } from '../format';
 import { PALETTE, wrColor } from '../theme';
 import { button, card } from '../components/primitives';
-import { infoTip } from '../components/infoTip';
+import { trendArrow } from '../components/trendArrow';
 import { inlineLink } from '../components/inlineLink';
 import { viewHead, type ViewContext } from './view';
-
-const TREND_META: Record<FocusTrend, { arrow: string; color: string; label: string }> = {
-  improving: { arrow: '▴', color: PALETTE.win, label: 'improving lately' },
-  flat: { arrow: '→', color: PALETTE.muted, label: 'holding steady' },
-  declining: { arrow: '▾', color: PALETTE.loss, label: 'getting worse' },
-};
 
 export function focus(ctx: ViewContext): HTMLElement {
   const items = ctx.data.focusItems;
@@ -74,19 +68,6 @@ function focusRow(ctx: ViewContext, e: FocusEntry, maxNet: number): HTMLElement 
     ),
     h('div', { class: 'track track--slim' }, fill),
     e.progress ? progressLine(e.progress) : null,
-  );
-}
-
-/** ▴/→/▾ verdict for entries with enough games in range; tooltip explains it. */
-function trendArrow(trend?: FocusTrend): HTMLElement | null {
-  if (!trend) return null;
-  const meta = TREND_META[trend];
-  // K8: a bare `title` on a 12px glyph was the only explanation of what the
-  // arrow means — invisible to keyboard users, and a ~1s hover away from
-  // everyone else.
-  return h('span', { style: { display: 'inline-flex', alignItems: 'baseline', flex: '0 0 auto' } },
-    h('span', { class: 'mono', style: { color: meta.color, fontSize: '12px' } }, meta.arrow),
-    infoTip(`Trend: ${meta.label} (recent games vs earlier ones in range).`, { label: `Trend: ${meta.label}` }),
   );
 }
 

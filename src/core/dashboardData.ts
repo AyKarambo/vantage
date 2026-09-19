@@ -5,7 +5,7 @@
  */
 import {
   byAccount, byHero, byMap, byRole, bySessionPosition, byTimeOfDay, calendar, currentSession,
-  focusBy, focusEntries, heroStats, linkFocusTargets, performanceStats, sessionRecap, streak,
+  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, sessionRecap, streak,
   trend, winLoss, groupBy,
   type GameRecord,
 } from './analytics';
@@ -190,7 +190,18 @@ export function computeDashboard(
     // of a linked target runs over the unfiltered history (like staleness —
     // it is about the target's lifetime, not the current filter).
     focusItems: linkFocusTargets(focusEntries(games), authoredTargets, all),
-    heroStats: heroStats(games, { mapModeOf }).filter((h) => h.games >= 2).slice(0, 24),
+    // No games/row floor (H5) — the Heroes screen's own min-games chips (default
+    // 1+) are the real filter, and its table wrap already scrolls; a hard-coded
+    // 2-game floor + 24-row slice here used to quietly drop 1-game heroes from
+    // both the table and the palette's Hero entries before the renderer ever saw them.
+    heroStats: heroStats(games, { mapModeOf }).map((r) => {
+      // Trend/form (H6) reuse Focus's dimension-agnostic reads, joined onto
+      // each hero row here rather than inside heroStats() — that stays a pure
+      // per-game fold with no notion of "this hero's own games" to re-filter for.
+      const heroGames = focusGamesFor(games, 'hero', r.hero);
+      const trend = focusTrend(heroGames);
+      return { ...r, ...(trend ? { trend } : {}), form: heroForm(heroGames) };
+    }),
     matches: recentMatches(games, mapModeOf, activeMeasured, margin, suppressed),
     mental: mentalSummary(games),
     mentalCosts: mentalCosts(games),

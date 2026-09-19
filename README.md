@@ -117,9 +117,13 @@ account's per-role lines beneath it.
 - **Maps** — winrate by game mode, then every map ranked best → worst.
 - **Heroes** — the exact per-hero table (stats **per 10 minutes played**, with games and wins
   credited to each hero by its share of the match time, the way the in-game career profile
-  does it — see *Played time* below), with a click-through drill-down drawer: a role icon and a
-  scope line stating which filters the numbers follow, per-map winrate (each map opening that
-  map's own games on Matches), and recent games that open straight into that match's detail page.
+  does it — see *Played time* below), with a **W-L** column, a played-**Time** column (the real
+  sample-size tell a rounded game count can't carry), a **Trend** column (▴/→/▾ — is this hero
+  getting better or worse lately?), and no hidden games-floor or row cap — the min-games chips
+  are the only filter, so a 1-game hero still shows and is reachable from the command palette.
+  A click-through drill-down drawer adds a role icon and a scope line stating which filters the
+  numbers follow, per-map winrate (each map opening that map's own games on Matches), and recent
+  games that open straight into that match's detail page.
 - **Focus** — the "what to work on" hub: your net-losing **maps** in one
   deficit-ranked list, each with a trend arrow (improving/declining) and — once you
   track it as a target — the winrate movement since you flagged it.

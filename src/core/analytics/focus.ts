@@ -9,7 +9,7 @@
  * focus) is deferred; {@link FocusEntry.dimension} always holds `'map'` here.
  */
 import { focusBy, winLoss } from './grouping';
-import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, WinLoss } from './types';
+import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm, WinLoss } from './types';
 import type { AuthoredTarget } from '../targets/types';
 // Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
 // analytics back, and this keeps the module graph cycle-free at runtime.
@@ -29,6 +29,9 @@ const TREND_DEADBAND = 0.05;
 
 /** Decided games needed on each side of the flag instant before a delta is shown. */
 const PROGRESS_MIN_DECIDED = 3;
+
+/** Last-N-games window for {@link heroForm} (H6). */
+const FORM_WINDOW = 10;
 
 /** The games that count toward one focus entry (a game counts toward every hero played in it). */
 export function focusGamesFor(games: GameRecord[], dimension: FocusDimension, key: string): GameRecord[] {
@@ -73,6 +76,31 @@ export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
   const pts = Math.round((recent.winrate - earlier.winrate) * 1000) / 10;
   if (Math.abs(pts) <= TREND_DEADBAND * 100) return 'flat';
   return pts > 0 ? 'improving' : 'declining';
+}
+
+/**
+ * Recent-form window for one dimension entry's games (H6): the last
+ * {@link FORM_WINDOW} DECIDED whole games, oldest → newest, plus how that
+ * window's winrate compares to the full (filtered) range behind it. Draws are
+ * excluded from both the strip and the winrate math — same "decided" meaning
+ * {@link focusTrend} and the Focus progress line already use.
+ */
+export function heroForm(entryGames: GameRecord[]): HeroForm | undefined {
+  const decidedGames = entryGames
+    .filter((g) => g.result === 'Win' || g.result === 'Loss')
+    .sort((a, b) => a.timestamp - b.timestamp);
+  if (!decidedGames.length) return undefined;
+  const window = decidedGames.slice(-FORM_WINDOW);
+  const rangeWinrate = winLoss(decidedGames).winrate;
+  const windowWinrate = winLoss(window).winrate;
+  return {
+    results: window.map((g) => g.result),
+    // The window covering the WHOLE range has no distinct "earlier" games to
+    // read a delta against.
+    ...(window.length < decidedGames.length
+      ? { deltaPp: Math.round((windowWinrate - rangeWinrate) * 1000) / 10 }
+      : {}),
+  };
 }
 
 /**

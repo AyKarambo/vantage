@@ -8,7 +8,7 @@
 import { applyStyle, h, render } from '../dom';
 import type { HeroStat, MatchDetail, MatchMental, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { fmt, rankLabel, relTime, roleLabel, signed, RELATION_LABEL } from '../format';
+import { fmt, fmt1, rankLabel, relTime, roleLabel, signed, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { button, card, pill, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -224,9 +224,9 @@ function perHeroSection(
     const s = tabLines.find((x) => x.hero === hero) ?? tabLines[0];
     const p = s.per10;
     render(body,
-      statBox(per10Fixed(p?.eliminations), 'Elims/10'),
-      statBox(per10Fixed(p?.assists), 'Assists/10'),
-      statBox(per10Fixed(p?.deaths), 'Deaths/10'),
+      statBox(fmt1(p?.eliminations), 'Elims/10'),
+      statBox(fmt1(p?.assists), 'Assists/10'),
+      statBox(fmt1(p?.deaths), 'Deaths/10'),
       statBox(s.kda.toFixed(1), 'KDA'),
       statBox(fmt(p?.damage), 'DMG/10'),
       statBox(fmt(p?.healing), 'HEAL/10'),
@@ -247,10 +247,6 @@ function perHeroSection(
   return card({ title: 'Per hero', sub: `${basis} · KDA is a ratio`, actions: tabs }, body);
 }
 
-/** Per-10 for the E/D/A stats: one decimal, or a dash when minutes are unknown. */
-function per10Fixed(v: number | undefined): string {
-  return v == null ? '–' : v.toFixed(1);
-}
 
 // --- competitive progress (calculated from your rank anchor + logged SR) ------
 

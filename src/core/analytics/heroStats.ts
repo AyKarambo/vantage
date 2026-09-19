@@ -79,6 +79,7 @@ export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): Her
         },
         per10,
         kda: (t.eliminations + t.assists) / Math.max(t.deaths, 1),
+        minutes: t.minutes,
       } as HeroSummary;
     })
     // Most-played first by the unrounded credit, so two heroes that round to
