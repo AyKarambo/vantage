@@ -36,7 +36,7 @@ export type { GradingSettings } from '../../core/gradingSettings';
 // Dashboard payloads
 export type {
   DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
-  PendingMatch, MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide, PreviousWindow, SeasonBreakdown,
+  PendingMatch, MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide, PreviousWindow, SeasonBreakdown,
 } from './dashboard';
 
 // Editable master data (heroes/maps/seasons)

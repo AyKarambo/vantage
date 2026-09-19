@@ -14,7 +14,7 @@ import { heroCredits } from './playedTime';
 import { playerDirectory } from './playerIndex';
 import { DEFAULT_MASTER_DATA, makeMapActive, makeMapMode, type MapModeResolver } from './masterData';
 import { mentalSummary, rowFlags } from './mental';
-import { mentalCosts, tiltBySessionPosition, tiltTrend } from './mentalAnalytics';
+import { mentalCosts, tiltAfterResult, tiltByMap, tiltBySessionPosition, tiltByTimeOfDay, tiltTrend } from './mentalAnalytics';
 import { progression } from './progression';
 import { buildTargets, activeMeasuredTargets, measuredGradesForMatch, type AuthoredTarget, type TargetSummary } from './targets';
 import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from './gradingSettings';
@@ -290,6 +290,12 @@ export function computeDashboard(
     // Same convention as sessionPosition above: number over the whole history,
     // aggregate only the filtered games.
     tiltBySession: tiltBySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
+    // "When do I tilt" triggers (S9). Time-of-day and by-map are plain FILTERED
+    // reads, same convention as tiltTrend; after-result needs the sitting
+    // boundary, so it takes the same all/include split as tiltBySession above.
+    tiltByTimeOfDay: tiltByTimeOfDay(games),
+    tiltAfterResult: tiltAfterResult(all, { include: new Set(games.map((g) => g.matchId)) }),
+    tiltByMap: tiltByMap(games),
     performance: performanceStats(games),
     targets: withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all),
     reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)),

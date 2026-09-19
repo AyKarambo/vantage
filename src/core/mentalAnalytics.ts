@@ -1,4 +1,4 @@
-import { dayKey, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts } from './analytics';
+import { dayKey, dayPartAt, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts } from './analytics';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isTilted } from './mental';
@@ -124,6 +124,19 @@ export function tiltTrend(games: GameRecord[]): TiltTrendPoint[] {
 /** The coach's read of the tilt-rate trend; null = not enough data to claim one. */
 export type TiltTrendDirection = 'improving' | 'worsening' | 'flat';
 
+/**
+ * The tilt-trend verdict (S9) — the direction PLUS the two half-rates it was
+ * computed from, so the read can state the actual move ("18% → 29%") instead
+ * of just its sign.
+ */
+export interface TiltTrendRead {
+  direction: TiltTrendDirection;
+  /** Tilt rate over the earlier half of the range, 0..1. */
+  earlyRate: number;
+  /** Tilt rate over the recent half of the range, 0..1. */
+  lateRate: number;
+}
+
 /** Tilt-rate move (0..1) the halves must differ by before the trend leaves 'flat'. */
 const TREND_DEAD_ZONE = 0.03;
 
@@ -136,7 +149,7 @@ const TREND_DEAD_ZONE = 0.03;
 export function tiltTrendDirection(
   points: TiltTrendPoint[],
   minGames: number = COST_MIN_SAMPLE,
-): TiltTrendDirection | null {
+): TiltTrendRead | null {
   if (points.length < 2) return null;
   const total = points.reduce((n, p) => n + p.games, 0);
   const early: TiltTrendPoint[] = [];
@@ -154,8 +167,8 @@ export function tiltTrendDirection(
   const b = halfRate(late);
   if (a.games < minGames || b.games < minGames) return null;
   const delta = b.rate - a.rate;
-  if (Math.abs(delta) <= TREND_DEAD_ZONE) return 'flat';
-  return delta < 0 ? 'improving' : 'worsening';
+  const direction: TiltTrendDirection = Math.abs(delta) <= TREND_DEAD_ZONE ? 'flat' : delta < 0 ? 'improving' : 'worsening';
+  return { direction, earlyRate: a.rate, lateRate: b.rate };
 }
 
 function halfRate(points: TiltTrendPoint[]): { games: number; rate: number } {
@@ -190,6 +203,71 @@ export function tiltBySessionPosition(
     const tilted = gs.reduce((n, g) => n + (isTilted(g) ? 1 : 0), 0);
     return { key, games: gs.length, tilted, rate: tilted / gs.length };
   });
+}
+
+/** Tilt rate at one time-of-day bucket, or one map, or one after-a-loss/win split — the "when do I tilt" triggers (S9). */
+export interface TiltBucket {
+  key: string;
+  games: number;
+  tilted: number;
+  rate: number;
+}
+
+const toBucket = (key: string, gs: GameRecord[]): TiltBucket => {
+  const tilted = gs.reduce((n, g) => n + (isTilted(g) ? 1 : 0), 0);
+  return { key, games: gs.length, tilted, rate: gs.length ? tilted / gs.length : 0 };
+};
+
+/** Same local day-part boundaries {@link ../analytics byTimeOfDay} uses, so "it's evening" never means a different window here. */
+const DAY_PART_ORDER = ['Morning', 'Afternoon', 'Evening', 'Night'];
+
+/** Tilt rate by local day-part (S9) — "do I tilt more at night?" Empty buckets omitted; order Morning → Night. */
+export function tiltByTimeOfDay(games: GameRecord[]): TiltBucket[] {
+  const buckets = new Map<string, GameRecord[]>();
+  for (const g of games) {
+    const part = dayPartAt(new Date(g.timestamp).getHours());
+    (buckets.get(part) ?? buckets.set(part, []).get(part)!).push(g);
+  }
+  return DAY_PART_ORDER.filter((k) => buckets.has(k)).map((k) => toBucket(k, buckets.get(k)!));
+}
+
+/**
+ * Tilt rate in games whose PREVIOUS game in the same sitting was a win vs a
+ * loss (S9) — "do I tilt more right after a loss?" Reuses the same gap-based
+ * sitting boundary {@link sessionPositionGroups} walks (a strictly larger gap
+ * starts a new sitting), so a sitting's first game never counts — it has no
+ * prior game in the sitting to react to — and a previous DRAW is skipped
+ * (neither a win nor a loss to react to). `opts.include` scopes which games
+ * are BUCKETED without renumbering anyone's sittings, same convention as
+ * {@link tiltBySessionPosition}.
+ */
+export function tiltAfterResult(games: GameRecord[], opts: SessionPositionOpts = {}): { afterWin: TiltBucket; afterLoss: TiltBucket } {
+  const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
+  const gapMs = (opts.gapMinutes ?? 90) * 60_000;
+  const afterWin: GameRecord[] = [];
+  const afterLoss: GameRecord[] = [];
+  let prev: GameRecord | null = null;
+  for (const g of sorted) {
+    const sameSitting = prev !== null && g.timestamp - prev.timestamp <= gapMs;
+    const included = !opts.include || opts.include.has(g.matchId);
+    if (sameSitting && included) {
+      if (prev!.result === 'Win') afterWin.push(g);
+      else if (prev!.result === 'Loss') afterLoss.push(g);
+    }
+    prev = g;
+  }
+  return { afterWin: toBucket('afterWin', afterWin), afterLoss: toBucket('afterLoss', afterLoss) };
+}
+
+/** Tilt rate by map, top `min`-game-floor by top-3-by-rate (S9) — "which maps tilt me?" */
+export function tiltByMap(games: GameRecord[], min = 3): TiltBucket[] {
+  const buckets = new Map<string, GameRecord[]>();
+  for (const g of games) (buckets.get(g.map) ?? buckets.set(g.map, []).get(g.map)!).push(g);
+  return [...buckets.entries()]
+    .map(([key, gs]) => toBucket(key, gs))
+    .filter((b) => b.games >= min)
+    .sort((a, b) => b.rate - a.rate)
+    .slice(0, 3);
 }
 
 function winrateSide(games: GameRecord[]): WinrateSide {

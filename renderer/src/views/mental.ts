@@ -1,11 +1,12 @@
 /** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
 import { h } from '../dom';
-import type { MatchFlagKey, RatedSide, WinrateSide } from '../../../src/shared/contract';
+import type { MatchFlagKey, RatedSide, TiltBucket, WinrateSide } from '../../../src/shared/contract';
 import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '../../../src/core/mentalAnalytics';
 import { pct } from '../format';
 import { PALETTE } from '../theme';
-import { sparkline } from '../charts/plots';
+import { lineChart, type WrPoint } from '../charts/plots';
 import { badge, card, statBar, statBox, unlockHint } from '../components/primitives';
+import { chartCard } from '../components/chartCard';
 import { inlineLink } from '../components/inlineLink';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { breakReminderEditor } from '../components/breakReminderEditor';
@@ -177,14 +178,19 @@ function perfRow(p: { calm: RatedSide; tilted: RatedSide }): HTMLElement {
 
 // ---- Trends & session triggers ------------------------------------------------
 
-/** The coach copy for each tilt-trend read (lower tilt rate = improving). */
-const TREND_READ: Record<TiltTrendDirection, { cls: string; text: string }> = {
-  improving: { cls: 'is-win', text: '↓ Improving — you are tilting less lately. Keep doing what you changed.' },
-  worsening: { cls: 'is-loss', text: '↑ Worsening — the tilt rate is climbing. Shorter sessions, earlier breaks.' },
-  flat: { cls: 'u-dim', text: '→ Flat — no clear move either way yet.' },
+/** The coach copy for each tilt-trend direction (lower tilt rate = improving), S9. */
+const TREND_META: Record<TiltTrendDirection, { cls: string; arrow: string; verb: string; advice: string }> = {
+  improving: { cls: 'is-win', arrow: '↓', verb: 'Improving', advice: 'Keep doing what you changed.' },
+  worsening: { cls: 'is-loss', arrow: '↑', verb: 'Worsening', advice: 'Shorter sessions, earlier breaks.' },
+  flat: { cls: 'u-dim', arrow: '→', verb: 'Flat', advice: 'No clear move either way yet.' },
 };
 
-/** Per-day tilt-rate sparkline + the improving/worsening read (issue #70 B). */
+/**
+ * Per-day tilt-rate chart + the improving/worsening read (S9). A readable,
+ * hoverable `lineChart` (fixed 0–100% axis) replaces the old `sparkline()`,
+ * which auto-scaled to the data's own min…max — a 0→10% wobble filled the
+ * full height and read as a violent swing.
+ */
 function trendsCard(ctx: ViewContext): HTMLElement {
   const points = ctx.data.tiltTrend;
   if (points.length < 2) {
@@ -192,29 +198,119 @@ function trendsCard(ctx: ViewContext): HTMLElement {
       h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
         'Not enough days with games in this range to draw a tilt-rate trend yet — keep flagging games.'));
   }
-  const dir = tiltTrendDirection(points);
-  return card({ title: 'Trends', sub: 'share of games flagged tilted, per day' },
-    h('div', { style: { marginTop: '4px' } },
-      sparkline(points.map((p) => p.rate * 100), { width: 260, height: 46, color: PALETTE.loss }),
-      h('div', { class: 'hint mono', style: { marginTop: '4px', display: 'flex', justifyContent: 'space-between', maxWidth: '260px' } },
-        h('span', null, points[0].date),
-        h('span', null, points[points.length - 1].date),
-      ),
-    ),
+  const read = tiltTrendDirection(points);
+  const wrPoints: WrPoint[] = points.map((p) => ({ label: p.date, winrate: p.rate, games: p.games }));
+  const byDate = new Map(points.map((p) => [p.date, p]));
+  return chartCard({
+    title: 'Trends',
+    sub: 'share of games flagged tilted, per day',
+    columns: [
+      { key: 'label', label: 'Day' },
+      { key: 'rate', label: 'Tilted', render: (v) => pct(v as number) },
+      { key: 'games', label: 'Games' },
+    ],
+    rows: points.map((p) => ({ label: p.date, rate: p.rate, games: p.games })),
+    initialSort: { key: 'label', dir: 1 },
+  },
+  h('div', null,
+    lineChart(wrPoints, undefined, [], (p) => {
+      const src = byDate.get(p.label);
+      return src ? `${src.date} · ${src.tilted} of ${src.games} games tilted` : `${p.label} · ${pct(p.winrate)}`;
+    }),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
-      dir
-        ? h('span', { class: TREND_READ[dir].cls }, TREND_READ[dir].text)
+      read
+        ? h('span', { class: TREND_META[read.direction].cls },
+            `${TREND_META[read.direction].arrow} ${TREND_META[read.direction].verb} — ${pct(read.earlyRate)} → ${pct(read.lateRate)} `
+            + `(earlier vs recent half). ${TREND_META[read.direction].advice}`)
         : h('span', { class: 'u-dim' }, `Not enough games in each half of the range to read a direction yet (${COST_MIN_SAMPLE} each needed).`)),
+  ));
+}
+
+/** One tilt-rate bar: label, bar, "rate · games" — shared by every "when do I tilt" trigger block (S9). */
+function tiltRow(label: string, b: TiltBucket): HTMLElement {
+  return statBar({
+    label,
+    frac: b.rate,
+    color: PALETTE.loss,
+    valueText: h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '5px' } },
+      h('span', { style: { minWidth: '30px', textAlign: 'right' } }, pct(b.rate)),
+      h('span', null, '·'),
+      h('span', { style: { minWidth: '20px', textAlign: 'right' } }, `${b.games}g`),
+    ),
+    slim: true,
+    valueWidth: 66,
+  });
+}
+
+/** "Time of day" trigger block — do I tilt more in a particular day-part? */
+function timeOfDayTrigger(buckets: TiltBucket[]): HTMLElement | null {
+  if (!buckets.length) return null;
+  const sampled = buckets.filter((b) => b.games >= COST_MIN_SAMPLE);
+  const worst = [...sampled].sort((a, b) => b.rate - a.rate)[0];
+  const best = [...sampled].sort((a, b) => a.rate - b.rate)[0];
+  return h('div', null,
+    h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, 'Time of day'),
+    h('div', { class: 'stack', style: { gap: '5px' } }, ...buckets.map((b) => tiltRow(b.key, b))),
+    worst && best && worst.key !== best.key
+      ? h('div', { class: 'hint', style: { marginTop: '6px', lineHeight: '1.5' } },
+          `You tilt most in the ${worst.key.toLowerCase()} (${pct(worst.rate)}) — least in the ${best.key.toLowerCase()} (${pct(best.rate)}).`)
+      : null,
   );
 }
 
-/** Tilt rate by game # within a sitting — the "stop after game N" card (issue #70 C). */
+/** "After your last game" trigger block — do I tilt more right after a loss? */
+function afterResultTrigger(split: { afterWin: TiltBucket; afterLoss: TiltBucket }): HTMLElement | null {
+  const { afterWin, afterLoss } = split;
+  if (!afterWin.games && !afterLoss.games) return null;
+  const sampled = afterWin.games >= COST_MIN_SAMPLE && afterLoss.games >= COST_MIN_SAMPLE;
+  const coach = !sampled
+    ? h('span', { class: 'u-dim' }, `Needs ${COST_MIN_SAMPLE} games after each result to compare.`)
+    : afterLoss.rate <= afterWin.rate
+      ? 'No clear tilt bump right after a loss.'
+      : afterWin.rate === 0
+        ? "You tilt after a loss but never after a win — that's the break the reminder is for."
+        : `You tilt ${Math.round((afterLoss.rate / afterWin.rate) * 10) / 10}× as often right after a loss — `
+          + "that's the break the reminder is for.";
+  return h('div', null,
+    h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, 'After your last game'),
+    h('div', { class: 'stack', style: { gap: '5px' } },
+      tiltRow('After a win', afterWin),
+      tiltRow('After a loss', afterLoss),
+    ),
+    h('div', { class: 'hint', style: { marginTop: '6px', lineHeight: '1.5' } }, coach),
+  );
+}
+
+/** "By map" trigger block — the top 3 maps by tilt rate, 3+ games. */
+function byMapTrigger(buckets: TiltBucket[]): HTMLElement | null {
+  if (!buckets.length) return null;
+  return h('div', null,
+    h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, 'By map'),
+    h('div', { class: 'stack', style: { gap: '5px' } }, ...buckets.map((b) => tiltRow(b.key, b))),
+    h('div', { class: 'hint', style: { marginTop: '6px', lineHeight: '1.5' } }, 'Top 3 by tilt rate, 3+ games.'),
+  );
+}
+
+/**
+ * Tilt rate by game # within a sitting — the "stop after game N" read (issue
+ * #70 C) — plus the "when do I tilt" triggers (S9): time of day, right after
+ * a loss, and by map. `byTimeOfDay`/`bySessionPosition`/`byMap` all already
+ * existed as analytics; only the crossing with tilt was ever missing.
+ */
 function sessionCard(ctx: ViewContext): HTMLElement {
-  const buckets = ctx.data.tiltBySession;
+  const d = ctx.data;
+  const buckets = d.tiltBySession;
+  const triggers = [
+    timeOfDayTrigger(d.tiltByTimeOfDay),
+    afterResultTrigger(d.tiltAfterResult),
+    byMapTrigger(d.tiltByMap),
+  ].filter((n): n is HTMLElement => n != null);
   if (!buckets.length) {
-    return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting' },
+    return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting, time of day, after a loss, and by map' },
       h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
-        'No games in this range yet — the per-position tilt read appears once you have sittings to compare.'));
+        'No games in this range yet — the per-position tilt read appears once you have sittings to compare.'),
+      triggers.length ? h('div', { class: 'stack', style: { gap: '14px', marginTop: '12px' } }, ...triggers) : null,
+    );
   }
   // The stop-point claim needs a bucket that can carry it: enough games AND
   // actual tilt at that position. Thin or tilt-free peaks stay unclaimed.
@@ -222,23 +318,10 @@ function sessionCard(ctx: ViewContext): HTMLElement {
   const peak = buckets
     .filter((b) => b.games >= COST_MIN_SAMPLE && b.tilted > 0)
     .sort((a, b) => b.rate - a.rate)[0];
-  return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting' },
+  return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting, time of day, after a loss, and by map' },
+    h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, 'Game # in sitting'),
     h('div', { class: 'stack', style: { gap: '9px', marginTop: '4px' } },
-      ...buckets.map((b) => statBar({
-        label: `Game ${b.key}`,
-        frac: b.rate,
-        color: PALETTE.loss,
-        // Two fixed, right-aligned sub-columns (rate · games) so the numbers
-        // line up in vertical columns down the card instead of drifting with
-        // the width of "22g" vs "4g".
-        valueText: h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '5px' } },
-          h('span', { style: { minWidth: '30px', textAlign: 'right' } }, pct(b.rate)),
-          h('span', null, '·'),
-          h('span', { style: { minWidth: '24px', textAlign: 'right' } }, `${b.games}g`),
-        ),
-        slim: true,
-        valueWidth: 72,
-      })),
+      ...buckets.map((b) => tiltRow(`Game ${b.key}`, b)),
     ),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
       peak
@@ -253,6 +336,9 @@ function sessionCard(ctx: ViewContext): HTMLElement {
         : sampled
           ? 'No tilt flagged at any position in this range — nothing to call a stop point from.'
           : `Not enough games per position yet (${COST_MIN_SAMPLE} needed) to call a stop point.`),
+    triggers.length
+      ? h('div', { class: 'stack', style: { gap: '14px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border)' } }, ...triggers)
+      : null,
     stopRuleLine(ctx),
   );
 }
