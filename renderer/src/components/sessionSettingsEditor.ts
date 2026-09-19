@@ -37,5 +37,9 @@ export function sessionSettingsEditor(ctx: ViewContext): HTMLElement {
         onChange: (v) => set({ gapMinutes: Number(v) }),
       }),
     ),
+    // S4: this threshold now governs more than the sidebar card, and none of
+    // those surfaces said so.
+    h('div', { class: 'hint', style: { fontSize: '11px', lineHeight: '1.5' } },
+      'Governs the sidebar’s Current session card, the Overview last-session debrief, and Matches’ “By sitting” grouping. Readiness’s own fatigue-curve tuning is separate.'),
   );
 }

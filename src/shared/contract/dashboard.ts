@@ -6,7 +6,7 @@
 import type { Role, Result } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, Streak, TargetGrade } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, TargetGrade } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { Progression } from '../../core/progression';
@@ -197,6 +197,8 @@ export interface DashboardData {
    */
   placements: PlacementRunSummary[];
   session: Session | null;
+  /** Every past sitting, newest first (S4) — same account scope + gap as `session`, capped like every other list. */
+  sessions: SessionSummary[];
   byRole: Group[];
   byAccount: Group[];
   byMap: Group[];

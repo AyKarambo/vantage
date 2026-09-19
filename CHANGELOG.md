@@ -368,6 +368,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   Current-session card now names its actual rule when empty ("No games in the last 3h — your next
   game starts a new sitting") instead of a bare "no session yet", shows your streak and top map
   when a sitting is running, and is a real click-through into that sitting's games.
+- **Matches can group by sitting, not just by day.** A "By day / By sitting" toggle in the view
+  head (hidden while a single day is already drilled into) — sitting grouping uses the same
+  gap-based boundary as the sidebar's Current session card, so a sitting spanning midnight stays
+  one block instead of splitting under two day headers, each with its own W-L tally; a sitting
+  header also states its net SR swing when the sitting logged one. The current-session gap
+  setting (Settings → Coaching) now spells out which surfaces it governs.
 
 ## 0.34.0 — 31 July 2026
 
