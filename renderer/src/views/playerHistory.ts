@@ -17,6 +17,7 @@ import { bridge } from '../bridge';
 import { rankLabel, relTime, RELATION_LABEL } from '../format';
 import { card, chip, emptyState, pill, resultPill, RESULT_LETTER, RESULT_STATE } from '../components/primitives';
 import { roleIcon } from '../components/roleIcon';
+import { inlineLink } from '../components/inlineLink';
 import { dataTable, type Column } from '../components/table';
 import { roleOfHero } from '../../../src/core/heroes';
 import { backControl, viewHead, type ViewContext } from './view';
@@ -71,6 +72,15 @@ function sections(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement {
   const chipRow = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', margin: '0 0 12px' } });
   const tableHost = h('div');
 
+  // M6: computed once over the LIFETIME match list (never the active filter's
+  // subset) — toggling a column's presence every time a chip is clicked would
+  // be jarring, and "does this account/rank ever appear" is a fact about the
+  // player, not about whatever's currently narrowed into view.
+  const showRank = d.matches.some((m) => m.rank?.tier != null && m.rank?.division != null);
+  const accounts = [...new Set(d.matches.map((m) => m.account))];
+  const singleAccount = accounts.length === 1 ? accounts[0] : null;
+  const cols = matchColumns({ showAccount: !singleAccount, showRank });
+
   const paintChips = (): void => {
     render(chipRow, ...FILTER_STEPS.map((s) => chip(s.label, filter === s.value, () => {
       filter = s.value;
@@ -91,7 +101,7 @@ function sections(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement {
     render(wlHost, `${wins}W ${matches.filter((m) => m.result === 'Loss').length}L${wr != null ? ` · ${wr}% WR` : ''}`);
     render(tableHost, matches.length
       ? dataTable({
-          columns: matchColumns(),
+          columns: cols,
           rows: matches,
           initialSort: { key: 'when', dir: -1 },
           onRowClick: (m) => ctx.navigate('matchDetail', { matchId: m.matchId }),
@@ -103,18 +113,36 @@ function sections(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement {
   paintTable();
 
   const sub = h('span', null,
-    `${d.encounters} shared ${d.encounters === 1 ? 'game' : 'games'}, all time · last ${relTime(d.lastSeen)} · `,
+    `${d.encounters} shared ${d.encounters === 1 ? 'game' : 'games'}, all time`,
+    singleAccount ? ` · on ${singleAccount}` : '',
+    ` · last ${relTime(d.lastSeen)} · `,
     wlHost,
   );
 
   return h('div', null,
     viewHead(d.name, sub),
+    collisionNote(d),
     whoTheyAreBand(d),
     teamSplit(d),
     chipRow,
     card({ class: 'card--flush', style: { padding: '4px 10px 10px' } }, tableHost),
-    rankFootnote(d),
+    showRank ? rankFootnote(d) : noRankColumnNote(d, ctx),
   );
+}
+
+/**
+ * "Matched by name" (M6) — the per-row ⚠ elsewhere in the app only ever named
+ * the LIMIT ("more than one BattleTag folded together"), never which tags. A
+ * player's own page is where that finally matters: these are their games, and
+ * some of them may not actually be the same person.
+ */
+function collisionNote(d: PlayerMatchHistory): HTMLElement | null {
+  if (d.tags.length < 2) return null;
+  const joined = d.tags.length === 2
+    ? `${d.tags[0]} and ${d.tags[1]}`
+    : `${d.tags.slice(0, -1).join(', ')}, and ${d.tags[d.tags.length - 1]}`;
+  return h('div', { class: 'hint', style: { margin: '0 0 12px' } },
+    h('span', { class: 'u-dim' }, '⚠ '), `Matched by name — these games include ${joined}.`);
 }
 
 /**
@@ -192,6 +220,42 @@ function rankFootnote(d: PlayerMatchHistory): HTMLElement | null {
     + 'rank or correct an old ±%. Unmarked ranks were recorded at the time and stay put.');
 }
 
+/** Every reason a rank cell can be blank, plus "no competitive match at all" — the dominant one across every shared match names why the whole column was dropped (M6). */
+type BlankCategory = SharedMatchRank['note'] | 'not-competitive';
+const NO_RANK_REASON_TEXT: Record<BlankCategory, string> = {
+  stored: 'no rank was recorded for these matches',
+  derived: 'no rank could be reconstructed for these matches',
+  placements: 'most were during an open placement run',
+  'pre-reset': 'most predate your last placement reset',
+  'no-anchor': 'no rank is set for this account and role',
+  'stale-anchor': 'there has been no rank reading since your last ladder reset',
+  'not-competitive': 'none of these matches were competitive',
+};
+
+function dominantBlankCategory(matches: readonly PlayerSharedMatch[]): BlankCategory | null {
+  const counts = new Map<BlankCategory, number>();
+  for (const m of matches) counts.set(m.rank ? m.rank.note : 'not-competitive', (counts.get(m.rank ? m.rank.note : 'not-competitive') ?? 0) + 1);
+  if (!counts.size) return null;
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/**
+ * Replaces the "Your rank" column entirely (M6, `hide it when no row has a
+ * tier`) with one sentence naming the dominant reason none of them do —
+ * "no rank is set for this account and role" is recoverable, unlike the
+ * others, so it's the one case that also offers a way out.
+ */
+function noRankColumnNote(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement | null {
+  const cat = dominantBlankCategory(d.matches);
+  if (!cat) return null;
+  return h('div', { class: 'hint', style: { marginTop: '8px' } },
+    `No rank column shown — ${NO_RANK_REASON_TEXT[cat]}.`,
+    cat === 'no-anchor'
+      ? h('span', null, ' ', inlineLink('Set a rank anchor →', { onClick: () => ctx.navigate('settings', { section: 'accounts' }) }))
+      : null,
+  );
+}
+
 /** A role badge plus hero name(s), or a blank when the feed reported neither. */
 function playedCell(heroes: string[], role: Role | undefined, title?: string): Node {
   if (!heroes.length && !role) {
@@ -219,10 +283,14 @@ function sideCell(m: PlayerSharedMatch): Node {
  * (`dataTable`, no `onSort`: the whole uncapped list is already in the
  * renderer, unlike Players' capped page); They played / You played / Your
  * rank stay `sortable: false` — compound, rendered cells with no single
- * scalar a header click could honestly order by.
+ * scalar a header click could honestly order by. Account and Your rank are
+ * each OMITTED entirely when they'd carry no information across the whole
+ * lifetime record (M6, `sections`' `showAccount`/`showRank`) — a single
+ * account, or no row with an actual rank tier, isn't worth a column that
+ * says the same blank thing every row down.
  */
-function matchColumns(): Array<Column<PlayerSharedMatch>> {
-  return [
+function matchColumns(opts: { showAccount: boolean; showRank: boolean }): Array<Column<PlayerSharedMatch>> {
+  const cols: Array<Column<PlayerSharedMatch>> = [
     {
       key: 'map', label: 'Map', get: (m) => m.map,
       render: (m) => h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
@@ -240,8 +308,9 @@ function matchColumns(): Array<Column<PlayerSharedMatch>> {
       key: 'yours', label: 'You played', get: () => null, sortable: false,
       render: (m) => playedCell(m.heroes, m.role),
     },
-    { key: 'account', label: 'Account', get: (m) => m.account, render: (m) => h('span', { class: 'u-muted' }, m.account) },
-    { key: 'rank', label: 'Your rank', get: () => null, sortable: false, render: (m) => rankCell(m.rank) },
-    { key: 'when', label: 'When', get: (m) => m.timestamp, render: (m) => h('span', { class: 'u-dim mono' }, relTime(m.timestamp)) },
   ];
+  if (opts.showAccount) cols.push({ key: 'account', label: 'Account', get: (m) => m.account, render: (m) => h('span', { class: 'u-muted' }, m.account) });
+  if (opts.showRank) cols.push({ key: 'rank', label: 'Your rank', get: () => null, sortable: false, render: (m) => rankCell(m.rank) });
+  cols.push({ key: 'when', label: 'When', get: (m) => m.timestamp, render: (m) => h('span', { class: 'u-dim mono' }, relTime(m.timestamp)) });
+  return cols;
 }

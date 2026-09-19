@@ -122,6 +122,8 @@ export function playerMatchHistory(
   const matches: PlayerSharedMatch[] = [];
   /** Games per hero + the most recent one seen, for `theirHeroes`' top-3-by-count-then-recency (M6). */
   const heroCounts = new Map<string, { games: number; lastSeen: number }>();
+  /** Every distinct full `#`-tagged BattleTag seen under this identity (M6) — >1 means a name-before-`#` merge folded two real people together. */
+  const tags = new Set<string>();
 
   for (const game of all) {
     if (!game.roster?.length) continue;
@@ -154,6 +156,7 @@ export function playerMatchHistory(
     lastSeen = Math.max(lastSeen, game.timestamp);
     // Prefer a full battleTag over a bare name, wherever one shows up.
     if (them.battleTag?.includes('#') && !display.includes('#')) display = them.battleTag.trim();
+    if (them.battleTag?.includes('#')) tags.add(them.battleTag.trim());
     if (them.heroName) {
       const h = heroCounts.get(them.heroName) ?? { games: 0, lastSeen: 0 };
       h.games += 1;
@@ -178,7 +181,10 @@ export function playerMatchHistory(
     .slice(0, 3)
     .map(([hero, c]) => ({ hero, games: c.games }));
   const form = matches.slice(0, 10).map((m) => m.result);
-  return { name: display || 'Unknown', encounters: matches.length, lastSeen, results, sameTeam, enemyTeam, theirHeroes, form, matches };
+  return {
+    name: display || 'Unknown', encounters: matches.length, lastSeen, results, sameTeam, enemyTeam,
+    theirHeroes, form, tags: [...tags].sort(), matches,
+  };
 }
 
 /**
