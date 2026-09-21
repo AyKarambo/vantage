@@ -19,9 +19,9 @@
   - The table view (columns Map · **Mode** (H4) · WR · Net · **±SR** (C2, `Group.srNet` — a signed, rounded percentage, or "—" when the map logged no SR change) · Games · RTG, sortable) reflects the same mode/floor scoping as the chart.
 - **Per-row meta (H4, `horizontalBars`' `meta` slot — renderer-side joins on map key, no core/contract change):** each bar (and, once the Table toggle is on, would read the same underlying scoped rows) can carry, on its own line under the bar:
   - a **▴/→/▾ trend glyph** (`trendArrow`, the same component Focus's own map rows and the Heroes table's Trend column use) — present only when `DashboardData.focusItems` (net-losing dimensions only, already the case before H4) carries a `dimension: 'map'` entry for this map with a `trend`; a winning/breakeven map simply has none, the same way Focus itself never discusses one.
-  - a small mono **RTG** value (`performance.byMap`) next to where the games count already sits, when the map has any self-rated games.
   - a **⚑** when an active target is linked to the map (`focusItems`' `progress`), its tooltip naming the target and, once both windows have enough decided games, the winrate change since it was flagged.
   - a dimmed **"out of pool"** tag when master data marks the map inactive (`makeMapActive`) — an out-of-pool map used to rank among current ones with no cue that it can't be suggested for a new match.
+  - The chart view deliberately does NOT also show the RTG self-rating average here (it did briefly, as a bare unlabeled number next to the winrate/games line, with nothing on screen saying what it meant beyond a hover-only tooltip) — a map with no other meta content (no trend, no linked target, in the pool) now correctly renders no meta row at all rather than a mystery digit. RTG stays a properly labeled, sortable column in the Table view only.
 - **Chart tooltips:** the winrate bars use the shared cursor-following tooltip layer (with a native `<title>` fallback), the same pattern the scatter and donut use.
 - **Highlight entry, guaranteed to land (H4):** navigated to with `{ highlight: <map> }`, the view scrolls that map's bar (or, in Table view, its first cell) into view (centered) and flashes it (`is-highlighted`, ~2.4s). The mode filter and the min-games floor are overridden for this render ONLY when the highlighted map would otherwise be hidden by them — never touching the persisted `mapModeFilter`/`minMapGames`, so the chip row still shows what's actually saved and a later visit isn't left on a filter the player never chose. Before H4, a 1-2 game map linked from anywhere else in the app could land on a floor-filtered Maps screen with no bar to flash at all, and the element search itself (`querySelectorAll('*')` as a catch-all fallback) could match the donut's own legend entry for the same map name instead of a ranking row; the fallback is now scoped to `.hbar-label`, a compact-bar label, or a table cell.
 
@@ -29,7 +29,7 @@
 
 - Per-map drill-down or navigation (clicking a bar/row does not open anything — H4 only makes the MODE cards act as a filter, not the map rows themselves).
 - Mode-level trends over time (owned by `screen-trends.spec.md`).
-- A full-history reach or a second read for the trend/rating/target/pool badges — they only ever show what's already on the loaded `DashboardData` snapshot for the active filter range.
+- A full-history reach or a second read for the trend/target/pool badges — they only ever show what's already on the loaded `DashboardData` snapshot for the active filter range.
 
 ## Constraints & edge cases
 

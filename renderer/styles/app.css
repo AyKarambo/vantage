@@ -506,9 +506,17 @@
 }
 .view-head {
   display: flex;
+  /* Lets .view-actions drop to its own full-width row below the titles
+     instead of squeezing beside them — a wide actions row (a search box,
+     several chip groups) used to force-share the row with the titles no
+     matter what, leaving the subtitle stuck in a narrow column and
+     wrapping a long sentence into an ugly stack of near-empty lines, with
+     genuine free space visibly sitting to its right once actions itself
+     wrapped internally (Players' relation/min-games/search row). */
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 6px 16px;
 }
 /* Back + titles are ONE child of .view-head, so space-between keeps seeing two. */
 .view-head-main {
@@ -516,9 +524,12 @@
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
+  /* Fills the row on its own once .view-head wraps actions below it. */
+  flex: 1 1 auto;
 }
 .view-head-titles {
   min-width: 0;
+  flex: 1 1 auto;
 }
 .view-back {
   flex: 0 0 auto;
@@ -540,7 +551,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 0 0 auto;
+  /* Was 0 0 auto (never shrinks) — a wide actions row (Players' relation +
+     min-games + search) always claimed its full natural width regardless of
+     how little that left the titles column, and never shrinking meant its
+     OWN `flexWrap: wrap` (set by callers like Players) could never actually
+     engage either, since nothing ever squeezed it below its content's
+     natural width. */
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* Shared building blocks ---------------------------------------------------- */

@@ -179,10 +179,6 @@ function mapMeta(m: Group, d: DashboardData, mapModeOf: MapModeResolver, isMapAc
   const entry = d.focusItems.find((e) => e.dimension === 'map' && e.key === m.key);
   const arrow = entry?.trend ? trendArrow(entry.trend) : null;
   if (arrow) nodes.push(arrow);
-  const rating = d.performance.byMap.find((b) => b.key === m.key)?.avg;
-  if (rating != null) {
-    nodes.push(h('span', { class: 'mono u-dim', style: { fontSize: '10px' }, title: 'Average self-rating (RTG)' }, `${Math.round(rating)}`));
-  }
   if (entry?.progress) {
     const p = entry.progress;
     const title = p.deltaPts !== undefined
