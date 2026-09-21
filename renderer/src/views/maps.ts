@@ -223,7 +223,13 @@ function modeCard(g: Group, active: boolean, bestWorst: { best?: string; worst?:
       h('div', { style: { fontWeight: '600', fontSize: '13.5px' } }, g.key),
       h('div', { class: 'mono', style: { fontSize: '15px', color: wrColor(g.winrate) } }, pct(g.winrate)),
     ),
-    statBar({ label: `${g.games}g`, frac: g.winrate, color: wrColor(g.winrate), valueText }),
+    // The plain "net wins" value fits the default 34px column; the "wins ·
+    // SR%" pair (once srNet exists) doesn't — statbar-value is a fixed-width,
+    // non-wrapping mono column with no overflow clipping, so a summed SR%
+    // over a season/all-time range (easily 3 digits) bled out past the
+    // card's own edge instead of just looking cramped. 84px comfortably
+    // covers a 3-digit-both-sides "-999 · -999%" worst case.
+    statBar({ label: `${g.games}g`, frac: g.winrate, color: wrColor(g.winrate), valueText, ...(g.srNet !== undefined ? { valueWidth: 84 } : {}) }),
     bestWorst.best
       ? h('div', { class: 'hint', style: { marginTop: '8px', fontSize: '10.5px' } },
           bestWorst.best === bestWorst.worst

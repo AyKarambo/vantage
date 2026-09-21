@@ -692,7 +692,11 @@ function overviewHeroesCard(ctx: ViewContext): HTMLElement {
         style: { cursor: 'pointer' },
         ...clickableRow(() => ctx.navigate('heroes', { highlight: hs.key })),
       },
-        statBar({ label: hs.key, frac: hs.winrate, color: wrColor(hs.winrate), valueText: `${pct(hs.winrate)} · ${hs.games}g` }),
+        // A "rate · count" pair overflows statBar's default 34px value
+        // column (fixed-width, non-wrapping, no clip) once winrate hits
+        // 100% or games climbs past single digits — same bug as Maps' mode
+        // cards; 78px comfortably covers "100% · 999g".
+        statBar({ label: hs.key, frac: hs.winrate, color: wrColor(hs.winrate), valueText: `${pct(hs.winrate)} · ${hs.games}g`, valueWidth: 78 }),
       )),
     ),
   );
