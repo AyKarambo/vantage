@@ -179,10 +179,6 @@ function mapMeta(m: Group, d: DashboardData, mapModeOf: MapModeResolver, isMapAc
   const entry = d.focusItems.find((e) => e.dimension === 'map' && e.key === m.key);
   const arrow = entry?.trend ? trendArrow(entry.trend) : null;
   if (arrow) nodes.push(arrow);
-  const rating = d.performance.byMap.find((b) => b.key === m.key)?.avg;
-  if (rating != null) {
-    nodes.push(h('span', { class: 'mono u-dim', style: { fontSize: '10px' }, title: 'Average self-rating (RTG)' }, `${Math.round(rating)}`));
-  }
   if (entry?.progress) {
     const p = entry.progress;
     const title = p.deltaPts !== undefined
@@ -223,7 +219,13 @@ function modeCard(g: Group, active: boolean, bestWorst: { best?: string; worst?:
       h('div', { style: { fontWeight: '600', fontSize: '13.5px' } }, g.key),
       h('div', { class: 'mono', style: { fontSize: '15px', color: wrColor(g.winrate) } }, pct(g.winrate)),
     ),
-    statBar({ label: `${g.games}g`, frac: g.winrate, color: wrColor(g.winrate), valueText }),
+    // The plain "net wins" value fits the default 34px column; the "wins ·
+    // SR%" pair (once srNet exists) doesn't — statbar-value is a fixed-width,
+    // non-wrapping mono column with no overflow clipping, so a summed SR%
+    // over a season/all-time range (easily 3 digits) bled out past the
+    // card's own edge instead of just looking cramped. 84px comfortably
+    // covers a 3-digit-both-sides "-999 · -999%" worst case.
+    statBar({ label: `${g.games}g`, frac: g.winrate, color: wrColor(g.winrate), valueText, ...(g.srNet !== undefined ? { valueWidth: 84 } : {}) }),
     bestWorst.best
       ? h('div', { class: 'hint', style: { marginTop: '8px', fontSize: '10.5px' } },
           bestWorst.best === bestWorst.worst

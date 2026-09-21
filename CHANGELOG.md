@@ -879,6 +879,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   the connection-status details, …) — it's now trapped the same way a centered dialog already
   was (K3). The command palette's search box is also now properly announced as a combobox to
   screen readers, with the highlighted result read out as you arrow through it (K3).
+- **A mode card's net SR could run right up to the card's own edge.** On Maps, once a mode
+  logged an SR swing, the number beside the bar ("net wins · net SR%") could overflow past the
+  card boundary on a season or all-time range — the box behind it was sized for a short number,
+  not a longer pair. Overview's Heroes card had the same issue once a hero's winrate hit 100%
+  or its game count climbed past one digit. Both now size correctly.
+- **A bare, unlabeled number used to sit under some maps on the Winrate-by-map chart** — your
+  average self-rating for that map, with nothing on screen saying what it was. Removed from the
+  chart entirely; it's still there, properly labeled, in the Table view.
+- **A screen's subtitle could wrap into a stack of oddly short lines** even with clear room to
+  its right, whenever the header also carried a wide row of filter controls (Players' relation
+  and min-games chips plus its search box). The subtitle now gets the full row to itself when
+  the filter row doesn't fit beside it, instead of both squeezing into whatever's left.
 
 ## 0.34.0 — 31 July 2026
 
