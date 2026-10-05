@@ -23,8 +23,8 @@ Two independent reasons:
    (Local dev has a Dev Mode carve-out; the requirement is for *distributed* builds.)
 
    **All three packages are pinned at or above the mandated GA versions** (currently
-   `@overwolf/ow-electron@42.7.1`, `@overwolf/ow-electron-builder@26.9.2`,
-   `@overwolf/ow-electron-packages-types@1.1.10`; the GA floor was `@overwolf/ow-electron@39.8.12`,
+   `@overwolf/ow-electron@42.11.4`, `@overwolf/ow-electron-builder@26.9.3`,
+   `@overwolf/ow-electron-packages-types@1.1.12`; the GA floor was `@overwolf/ow-electron@39.8.12`,
    first reached 2026-08-03). Overwolf shipped Dev Mode + App Signing to GA on **2026-07-16** and
    ended the grace period on **2026-08-06**: past that date the gaming packages stop
    loading for anyone not on the new runtime *and* signed. This is not an optional bump.
@@ -55,7 +55,7 @@ hook runs once per file), not as a post-hoc pass over the outer installer.
 **Overwolf's half: the package-integrity signature.** Ours (Certum) only covers the
 exe/uninstaller/installer above — it says nothing about the gaming-package integrity
 signature the App Signing guide also requires. That second signature is stamped by
-`ow-electron-builder`'s own signer (`@overwolf/app-builder-lib@26.9.2`'s
+`ow-electron-builder`'s own signer (`@overwolf/app-builder-lib@26.9.3`'s
 `out/codeSign/owBuildCertificateSigner.js`), which reads exactly three env vars —
 `OW_CLI_EMAIL`, `OW_CLI_API_KEY`, `OW_BUILD_KEY` — and POSTs to Overwolf's backend
 (`https://console-be.overwolf.com`, overridable via `OW_CLI_API_URL`) with an
@@ -65,7 +65,7 @@ failure throws or warns.
 
 **That question changed default in 26.9.2 — read this before touching the flag.**
 
-| | 26.9.0 | 26.9.2 (now) |
+| | 26.9.0 | 26.9.2+ (now) |
 |---|---|---|
 | `isOwSigningRequired(cfg)` | `cfg === true \|\| envOn` | `cfg !== false \|\| envOn` |
 | Missing credentials | warn, ship **unsigned** | **throw**, no artifact |
