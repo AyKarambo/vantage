@@ -72,6 +72,15 @@ to `@overwolf/ow-electron@42.11.4`, `@overwolf/ow-electron-builder@26.9.3` and
 `@overwolf/ow-electron-packages-types@1.1.12`. Older betas no longer work; keep these
 three in step when you bump them.
 
+`package.json` also carries two `overrides` so that `npm audit` stays clean. They force
+patched versions of `builder-util-runtime` (`^9.7.0`: cross-origin redirects leaked
+credentials) and the upstream `app-builder-lib` (`~26.15.7`: an AppImage search-path issue)
+into `@overwolf/ow-electron-builder`'s tree, which pins the vulnerable versions exactly and
+has no release with the fixes yet. Both are dev-tooling only — neither ships in the app, and
+the Windows/NSIS build doesn't use the second one's code path. Drop each override once a
+`@overwolf/ow-electron-builder` release depends on a fixed version itself (`npm audit` stays
+clean without it), and run a real `npm run release` after changing them.
+
 One-time setup:
 
 1. Sign in to the [Overwolf Developer Console](https://console.overwolf.com/) and confirm

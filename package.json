@@ -107,6 +107,10 @@
     "vitest": "^4.1.10",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "builder-util-runtime": "^9.7.0",
+    "app-builder-lib": "~26.15.7"
+  },
   "allowScripts": {
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true,
