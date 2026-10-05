@@ -2,17 +2,21 @@
  * Live — the match you are in right now.
  *
  * Three parts: the live scoreboard (the same component the stored match detail
- * uses, fed from the GEP roster as it ticks), an elimination tally from the kill
- * feed, and the players on this roster you have met before, split into your
- * record WITH them and AGAINST them.
+ * uses, fed from the GEP roster as it ticks), per-team deaths, damage and healing
+ * summed off that roster plus a kill-feed strip, and the players on this roster
+ * you have met before, split into your record WITH them and AGAINST them.
  *
  * ## No score, and why
  *
  * Overwatch's event feed reports no objective score of any kind — the documented
  * `match_info` updates are map, match id, outcome and a Stadium-only round
- * outcome. So this shows an ELIMINATION count derived from the kill feed and
- * labels it as one. Inventing a scoreline from what the feed does give would be
- * exactly the sort of fabrication guardrail #1 exists to prevent.
+ * outcome. So this shows DEATHS per team and labels them as such. Inventing a
+ * scoreline from what the feed does give would be exactly the sort of
+ * fabrication guardrail #1 exists to prevent.
+ *
+ * Deaths rather than eliminations: one death credits up to five eliminations, so
+ * team elimination totals can't be compared (a solo death against five credited
+ * eliminations would read 5–1 with one player down on each side).
  */
 import { h, render } from '../dom';
 import type { DashboardData, LiveMatchPayload, PlayerRecord, TargetSummary } from '../../../src/shared/contract';
@@ -85,7 +89,7 @@ export function live(ctx: ViewContext): HTMLElement {
   // Cached from Settings (S5) so the "Hide" link's effect and the off-state
   // hint under the tally don't need `appSettings` threaded through the whole
   // live payload for one flag. Optimistic-true until the real value loads —
-  // the tally/feed cards themselves already degrade honestly from `p.kills.known`.
+  // the tally/feed cards themselves already degrade honestly from `p.totals`.
   let killFeedEnabled = true;
   void bridge.getAppSettings().then((s) => { killFeedEnabled = s.liveKillFeed; paint(); });
   const setKillFeed = (enabled: boolean): void => {
@@ -413,18 +417,22 @@ function priorityCard(items: DashboardData['focusMaps'], ctx: ViewContext): HTML
 }
 
 /**
- * The elimination tally. Deliberately NOT called a score anywhere: Overwatch's
- * feed reports no objective score, and this is a kill count. When the feed never
- * said which side an attacker was on, nothing is shown at all — a 0–0 would read
- * as "nobody has died yet", which is a different (and wrong) claim.
+ * The per-team tally. Deliberately NOT called a score anywhere: Overwatch's feed
+ * reports no objective score, and this is a death count. Everything here is read
+ * off the roster — the game's own TAB numbers — so the deaths line is the sum of
+ * the D column above it and cannot be inflated by a destroyed turret or a revive
+ * (only players have a death count). When a side never reported deaths nothing is
+ * shown for them: a 0–0 would read as "nobody has died yet", which is a different
+ * (and wrong) claim.
  */
 function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (enabled: boolean) => void): HTMLElement | null {
-  // Eliminations come from the kill feed; damage and healing from the roster —
-  // so the two halves appear independently. With the kill feed switched off the
-  // damage and healing rows stay, because they are TAB-screen numbers the game
-  // is showing, not anything derived from kill events.
-  const rows: Array<{ label: string; yours: number; theirs: number; compact: boolean }> = [];
-  if (p.kills.known) rows.push({ label: 'eliminations', yours: p.kills.yours, theirs: p.kills.theirs, compact: false });
+  // None of these rows depend on the kill feed, so with it switched off they all
+  // stay: they are TAB-screen numbers the game is showing, not anything derived
+  // from kill events.
+  const rows: Array<{ label: string; yours: number; theirs: number; compact: boolean; fewerIsBetter?: boolean }> = [];
+  if (p.totals.deathsKnown) {
+    rows.push({ label: 'deaths', yours: p.totals.yours.deaths, theirs: p.totals.theirs.deaths, compact: false, fewerIsBetter: true });
+  }
   if (p.totals.known) {
     rows.push({ label: 'damage', yours: p.totals.yours.damage, theirs: p.totals.theirs.damage, compact: true });
     rows.push({ label: 'healing', yours: p.totals.yours.healing, theirs: p.totals.theirs.healing, compact: true });
@@ -434,7 +442,7 @@ function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (
   // whole card silently vanishing with no explanation.
   const offHint = !killFeedEnabled
     ? h('div', { class: 'hint', style: { marginTop: rows.length ? '10px' : '0', lineHeight: '1.5' } },
-        'Kill feed and elimination count are off — ',
+        'Kill feed is off — ',
         inlineLink('turn on', { onClick: () => setKillFeed(true) }),
         '.')
     : null;
@@ -458,20 +466,24 @@ function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (
 
 /**
  * One `yours · label · theirs` row. Both sides keep their team colour; the side
- * that is AHEAD keeps full weight and the other is dimmed, so "who has more"
- * reads without adding a second colour language on top of the team one.
+ * that is AHEAD keeps full weight and the other is dimmed, so "who is ahead"
+ * reads without adding a second colour language on top of the team one. Ahead
+ * means MORE for damage and healing, FEWER for deaths (`fewerIsBetter`) — the
+ * same direction the scoreboard's own D column uses.
  */
-function tallyRow(r: { label: string; yours: number; theirs: number; compact: boolean }): Node[] {
+function tallyRow(r: { label: string; yours: number; theirs: number; compact: boolean; fewerIsBetter?: boolean }): Node[] {
   const text = (n: number): string => (r.compact ? fmt(n) : String(n));
   const value = (n: number, tone: string, leads: boolean): HTMLElement =>
     h('div', {
       class: 'mono live-tally-value',
       style: { color: tone, opacity: leads ? '1' : '0.5', fontWeight: leads ? '600' : '500' },
     }, text(n));
+  const yoursLeads = r.fewerIsBetter ? r.yours <= r.theirs : r.yours >= r.theirs;
+  const theirsLeads = r.fewerIsBetter ? r.theirs <= r.yours : r.theirs >= r.yours;
   return [
-    value(r.yours, 'var(--win-text)', r.yours >= r.theirs),
+    value(r.yours, 'var(--win-text)', yoursLeads),
     h('div', { class: 'u-dim live-tally-label' }, r.label),
-    value(r.theirs, 'var(--loss-text)', r.theirs >= r.yours),
+    value(r.theirs, 'var(--loss-text)', theirsLeads),
   ];
 }
 

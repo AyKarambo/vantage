@@ -171,9 +171,9 @@
   top: 5px;
   right: 8px;
 }
-/* No room for the eliminations chip in the icon-only rail — the dot alone
+/* No room for the deaths chip in the icon-only rail — the dot alone
    (with the same info in its title) still gets through. */
-.sidebar.is-collapsed .nav-live-kills {
+.sidebar.is-collapsed .nav-live-deaths {
   display: none;
 }
 
@@ -378,9 +378,9 @@
 .nav-live-indicator .nav-live-dot {
   margin-left: 0;
 }
-/* The eliminations chip (S5) — deliberately tiny so it reads as a live stat,
+/* The deaths chip (S5) — deliberately tiny so it reads as a live stat,
    not a second nav label competing with the item's own text. */
-.nav-live-kills {
+.nav-live-deaths {
   font-size: 10px;
   color: var(--muted-2);
 }

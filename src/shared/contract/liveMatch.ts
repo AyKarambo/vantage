@@ -10,9 +10,9 @@
  * Overwatch's GEP feed exposes no objective score: the documented `match_info`
  * info-updates are exactly `map`, `pseudo_match_id`, `match_outcome`,
  * `round_outcome` and `match_id`, and `round_outcome` is documented "Only works
- * for Stadium mode". So this payload carries an ELIMINATION tally derived from
- * the `kill_feed` event stream, named for what it is. The UI must never present
- * it as the match score.
+ * for Stadium mode". So this payload carries DEATHS per team, summed off the
+ * roster, named for what they are. The UI must never present them as the match
+ * score.
  */
 import type { ScoreboardEntry } from './matchDetail';
 
@@ -26,13 +26,12 @@ export interface LiveKillEntry {
   victimHero?: string;
   /** True when the attacker was on your team; absent when the feed didn't say. */
   attackerFriendly?: boolean;
-  /** A revive rather than a kill — never counted as an elimination. */
+  /** A revive rather than a kill — nobody died. */
   revive?: boolean;
   /**
    * The victim was a hero's DEPLOYABLE (turret, pylon, trap), not a player.
-   * Overwatch reports destroying one as an ordinary kill event, so without this
-   * the elimination tally is inflated in every match. Shown in the feed — it did
-   * happen — but never counted.
+   * Overwatch reports destroying one as an ordinary kill event. Shown in the
+   * feed — it did happen — but marked so it reads as a destroy, not a kill.
    */
   deployable?: { hero: string; label: string };
 }
@@ -51,22 +50,26 @@ export interface LiveMatchPayload {
   /** Scoreboard rows — the same shape the stored match detail renders. */
   roster: ScoreboardEntry[];
   /**
-   * Eliminations tallied from the kill feed, by side. NOT the objective score —
-   * Overwatch's feed reports none. `known` is false when the feed never said
-   * which side an attacker was on, in which case the counts are meaningless and
-   * the UI shows nothing rather than a zero.
-   */
-  kills: { yours: number; theirs: number; known: boolean };
-  /**
-   * Damage and healing summed per side — "who is out-damaging whom" at a glance.
+   * Damage, healing and deaths summed per side — "who is out-damaging whom" and
+   * "who is losing more players" at a glance. NOT the objective score — Overwatch's
+   * feed reports none.
    *
-   * From the ROSTER, not the kill feed, so unlike {@link kills} these survive the
-   * kill feed being switched off: they are TAB-screen numbers the game itself is
-   * showing. `known` is false when the feed didn't report enough teams to have a
-   * "your side" at all, in which case the UI shows nothing rather than a pair of
-   * totals with nothing to compare them to.
+   * From the ROSTER, not the kill feed, so these survive the kill feed being
+   * switched off: they are TAB-screen numbers the game itself is showing, and
+   * `deaths` is by construction the sum of the D column. Only players have a
+   * death count, so a destroyed deployable or a revive can never inflate it.
+   * `known` is false when the feed didn't report enough teams to have a "your
+   * side" at all, in which case the UI shows nothing rather than a pair of totals
+   * with nothing to compare them to. `deathsKnown` additionally requires each side
+   * to have reported at least one `deaths` value, so an unreported side is never
+   * shown as a confident 0.
    */
-  totals: { yours: { damage: number; healing: number }; theirs: { damage: number; healing: number }; known: boolean };
+  totals: {
+    yours: { damage: number; healing: number; deaths: number };
+    theirs: { damage: number; healing: number; deaths: number };
+    known: boolean;
+    deathsKnown: boolean;
+  };
   /** Recent kill-feed entries, newest first. Empty when the user turned it off. */
   feed: LiveKillEntry[];
   /**

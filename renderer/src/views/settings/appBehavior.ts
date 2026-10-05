@@ -162,9 +162,9 @@ function devModeSection(s: AppUiSettings): HTMLElement {
         label: 'Live kill feed',
         on: s.liveKillFeed,
         onChange: () => apply({ liveKillFeed: !s.liveKillFeed }),
-        hint: 'Show the kill feed and its elimination count on the Live screen. Turning it off leaves the live '
-          + 'scoreboard and the players-you’ve-met section exactly as they are — and stops the feed being sent '
-          + 'to the window at all, rather than just hiding it.',
+        hint: 'Show the kill feed on the Live screen. Turning it off leaves the live scoreboard, the per-team '
+          + 'deaths, damage and healing, and the players-you’ve-met section exactly as they are — and stops the '
+          + 'feed being sent to the window at all, rather than just hiding it.',
       }),
       h('div', null,
         toggleRow({
