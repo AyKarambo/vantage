@@ -25,11 +25,19 @@ import { resolveMapId } from './resolvers/mapId';
  * exactly `map`, `pseudo_match_id`, `match_outcome`, `round_outcome`, `match_id`
  * — no score of any kind — and `round_outcome` is documented "Only works for
  * Stadium mode", so the round tally is dead in normal competitive. Rather than
- * invent one, the live board reports an ELIMINATION count derived from the
- * `kill_feed` event stream, and says that is what it is.
+ * invent one, the live board reports DEATHS per team, summed off the roster.
+ *
+ * Deaths, not eliminations, on purpose: one death credits up to five
+ * eliminations (everyone who contributed), so a team's elimination total says
+ * nothing about how many players actually died — one solo death against five
+ * credited eliminations on the other side would read 5–1 although each side lost
+ * exactly one player. And it is read off the roster rather than counted from the
+ * kill feed so it can never disagree with the D column on the same screen, and
+ * so a destroyed turret/pylon or a revive (Mercy, Anran's self-revive) cannot be
+ * mistaken for a death — the game's own death counter only knows players.
  */
 
-/** One entry from the `kill_feed` event stream. */
+/** One entry from the `kill_feed` event stream — shown as a strip, never summed. */
 export interface LiveKill {
   /** ms epoch this was observed. */
   at: number;
@@ -39,13 +47,12 @@ export interface LiveKill {
   victimHero?: string;
   /** True when the ATTACKER was on the tracked player's team. */
   attackerFriendly?: boolean;
-  /** A revive rather than a kill — counted separately, never as an elimination. */
+  /** A revive rather than a kill — nobody died. */
   revive?: boolean;
   /**
    * The victim was a hero's DEPLOYABLE (a turret, a pylon, a trap), not a
-   * player. Overwatch reports destroying one as an ordinary kill event, so
-   * without this every match's elimination tally is inflated by them. Kept in
-   * the feed — it did happen — but never counted as an elimination.
+   * player. Overwatch reports destroying one as an ordinary kill event. Kept in
+   * the feed — it did happen — but marked so it reads as a destroy, not a kill.
    */
   deployable?: { hero: string; label: string };
 }
@@ -66,8 +73,6 @@ export interface LiveMatchState {
   localBattleTag?: string;
   /** Latest snapshot per roster SLOT (`roster_0`…), so a partial update merges. */
   roster: Record<string, RosterPlayer>;
-  /** Eliminations tallied from the kill feed, by team relation. */
-  kills: { yours: number; theirs: number };
   /** Most recent kill-feed entries, newest first, capped at {@link LIVE_FEED_CAP}. */
   feed: LiveKill[];
 }
@@ -75,7 +80,6 @@ export interface LiveMatchState {
 export const INITIAL_LIVE_MATCH: LiveMatchState = {
   phase: 'idle',
   roster: {},
-  kills: { yours: 0, theirs: 0 },
   feed: [],
 };
 
@@ -98,7 +102,7 @@ export const INITIAL_LIVE_MATCH: LiveMatchState = {
  */
 export function reduceLiveMatch(state: LiveMatchState, msg: GepMessage, now: number): LiveMatchState {
   if (isMatchStartMessage(msg)) {
-    return { ...INITIAL_LIVE_MATCH, phase: 'live', startedAt: now, roster: {}, feed: [], kills: { yours: 0, theirs: 0 } };
+    return { ...INITIAL_LIVE_MATCH, phase: 'live', startedAt: now, roster: {}, feed: [] };
   }
   if (state.phase !== 'live') return state;
 
@@ -185,14 +189,13 @@ function hasContent(p: RosterPlayer): boolean {
 }
 
 /**
- * Tally one kill-feed entry.
+ * Record one kill-feed entry for the "Kill feed" strip. Nothing is counted
+ * here — team deaths come off the roster (see {@link liveTeamTotals}).
  *
- * This is the only score-shaped signal Overwatch's feed offers — there is no
- * objective score in the GEP data at all — so it is counted and LABELLED as
- * eliminations, never dressed up as the match score.
- *
- * Revives carry the same event and must not count: `revived` being present is
- * the documented discriminator.
+ * Revives carry the same event and read differently (supporter + revived rather
+ * than attacker + victim): `revived` being non-empty is the documented
+ * discriminator. A destroyed deployable is tagged for the same reason — both are
+ * real feed lines, neither is a player dying.
  */
 function applyKillFeed(state: LiveMatchState, value: unknown, now: number): LiveMatchState {
   const obj = killFeedPayload(value);
@@ -224,14 +227,7 @@ function applyKillFeed(state: LiveMatchState, value: unknown, now: number): Live
     ...(revive ? { revive: true } : {}),
     ...(deployable ? { deployable } : {}),
   };
-  // Neither a revive nor a destroyed deployable is an elimination: in both
-  // cases no player died.
-  const kills = revive || deployable || attackerFriendly === undefined
-    ? state.kills
-    : attackerFriendly
-      ? { ...state.kills, yours: state.kills.yours + 1 }
-      : { ...state.kills, theirs: state.kills.theirs + 1 };
-  return { ...state, kills, feed: [entry, ...state.feed].slice(0, LIVE_FEED_CAP) };
+  return { ...state, feed: [entry, ...state.feed].slice(0, LIVE_FEED_CAP) };
 }
 
 /**
@@ -247,8 +243,11 @@ function applyKillFeed(state: LiveMatchState, value: unknown, now: number): Live
 function killFeedPayload(value: unknown): Record<string, unknown> | undefined {
   const outer = asObject(value);
   if (!outer) return undefined;
-  // Already the kill object (it names an attacker or a victim).
-  if ('attacker' in outer || 'victim' in outer) return outer;
+  // Already the kill object. A kill names an attacker or a victim; a revive (a
+  // Mercy resurrect, Anran's self-revive) names a supporter and the revived, and
+  // may carry no attacker/victim keys at all — without these two it would be
+  // dropped as unreadable instead of showing up in the feed.
+  if ('attacker' in outer || 'victim' in outer || 'supporter' in outer || 'revived' in outer) return outer;
   // The documented wrapper: the payload lives in `name` as a JSON string.
   for (const key of ['name', 'data', 'events']) {
     const inner = asObject(outer[key]);
@@ -316,39 +315,60 @@ function shallowEqual(a: RosterPlayer, b: RosterPlayer): boolean {
 export interface LiveTeamTotals {
   damage: number;
   healing: number;
+  /** Players of this side who died, summed — one per death, however many credited it. */
+  deaths: number;
 }
 
 /**
- * Damage and healing summed per side, so the board can answer "who is out-
- * damaging whom" at a glance.
+ * Damage, healing and deaths summed per side, so the board can answer "who is
+ * out-damaging whom" and "who is losing more players" at a glance.
  *
  * Read off the ROSTER, not the kill feed — which matters twice over. It means
  * these survive the kill feed being switched off (they are TAB-screen numbers
  * the game itself is showing, not derived from kill events), and it means they
  * are available on any feed that reports teams, even one that never emits a
- * single `kill_feed`.
+ * single `kill_feed`. For deaths it also means the total is, by construction,
+ * the sum of the D column printed right above it, and that a destroyed
+ * deployable or a revive can never be counted: the game's death counter only
+ * knows players.
  *
  * `known` is false unless the feed named the local player's team AND at least
  * one other player's. Without both there is no "your side" to sum against, and
  * a pair of totals with nothing to compare them to would invite exactly the
  * misreading this exists to prevent.
+ *
+ * `deathsKnown` is stricter: at least one player on EACH side must have
+ * reported a `deaths` value. A side where nobody did would sum to a confident 0,
+ * which reads as "nobody has died" — a different (and wrong) claim — so the
+ * deaths line is withheld instead, the way the match-detail scoreboard leaves
+ * an unreported column blank rather than zero-filled.
  */
 export function liveTeamTotals(roster: RosterPlayer[]): {
   yours: LiveTeamTotals;
   theirs: LiveTeamTotals;
   known: boolean;
+  deathsKnown: boolean;
 } {
   const mine = localTeam(roster);
-  const yours: LiveTeamTotals = { damage: 0, healing: 0 };
-  const theirs: LiveTeamTotals = { damage: 0, healing: 0 };
+  const yours: LiveTeamTotals = { damage: 0, healing: 0, deaths: 0 };
+  const theirs: LiveTeamTotals = { damage: 0, healing: 0, deaths: 0 };
   let sawOther = false;
+  let yoursReportedDeaths = false;
+  let theirsReportedDeaths = false;
   for (const p of roster) {
     if (p.team === undefined) continue;
     if (mine === undefined) continue;
-    const side = p.team === mine ? yours : theirs;
-    if (p.team !== mine) sawOther = true;
+    const isYours = p.team === mine;
+    const side = isYours ? yours : theirs;
+    if (!isYours) sawOther = true;
     side.damage += p.damage ?? 0;
     side.healing += p.healing ?? 0;
+    side.deaths += p.deaths ?? 0;
+    if (p.deaths !== undefined) {
+      if (isYours) yoursReportedDeaths = true;
+      else theirsReportedDeaths = true;
+    }
   }
-  return { yours, theirs, known: mine !== undefined && sawOther };
+  const known = mine !== undefined && sawOther;
+  return { yours, theirs, known, deathsKnown: known && yoursReportedDeaths && theirsReportedDeaths };
 }

@@ -26,6 +26,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   page, the manage-ranks dialog, and every rank picker — and the sidebar keeps the full name in its
   tooltip. Replaces the older half-measure that only shortened Platinum, Grandmaster and Champion.
 
+- **The Live screen shows deaths per team, not an elimination count.** One death can credit up to
+  five eliminations, so the two teams' elimination totals couldn't be compared — a single solo
+  death against five credited eliminations read 5–1 although each side lost exactly one player.
+  The new **deaths** line is the sum of the scoreboard's own **D** column, so it always matches the
+  rows beside it, and the side with fewer deaths is the brighter one. A destroyed turret or pylon
+  and a revive (Mercy, or Anran's self-revive) can't be counted — only players have a death count —
+  and they still show in the kill feed. A side that hasn't reported its deaths yet shows no line
+  rather than a 0, and in Stadium, where the game resets the scoreboard between rounds, the totals
+  are per round. The small chip beside **Live** in the sidebar shows the same deaths (`4–3`, your
+  team first), and **Settings → General → Live kill feed** now controls only the feed itself — the
+  team totals stay either way.
+
 ### Added
 
 - **A Players screen.** Everyone you've met, in one searchable list — sort by how often you've

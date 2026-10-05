@@ -814,28 +814,29 @@ export class App {
       existing?.remove();
       return;
     }
-    // "Ilios · 12:34 · 4-3 eliminations" once both the map and the kill feed
-    // have reported in; a plain "A match is in progress" before then.
+    // "Ilios · 12:34 · deaths 4–3 (your team – enemy team)" once the map and both
+    // sides' deaths have reported in; a plain "A match is in progress" before then.
     const clock = p!.startedAt ? matchClock(p!.startedAt) : undefined;
-    const title = [p!.map, clock, p!.kills.known ? `${p!.kills.yours}–${p!.kills.theirs} eliminations` : undefined]
+    const deaths = p!.totals.deathsKnown ? `${p!.totals.yours.deaths}–${p!.totals.theirs.deaths}` : null;
+    const title = [p!.map, clock, deaths ? `deaths ${deaths} (your team – enemy team)` : undefined]
       .filter(Boolean).join(' · ') || 'A match is in progress';
-    // A small mono kill chip beside the dot, only once the feed has actually
-    // said which side an attacker was on — the same `known` gate the Live
-    // screen's own tally uses, so the two can never disagree on a number.
-    const chipText = p!.kills.known ? `${p!.kills.yours}–${p!.kills.theirs}` : null;
+    // A small mono deaths chip beside the dot, only once both sides have
+    // reported deaths — the same `deathsKnown` gate the Live screen's own tally
+    // uses, so the two can never disagree on a number.
+    const chipText = deaths;
     if (existing) {
       existing.title = title;
       const dot = existing.querySelector('.nav-live-dot')!;
-      const chip = existing.querySelector('.nav-live-kills');
+      const chip = existing.querySelector('.nav-live-deaths');
       if (chipText) {
         if (chip) chip.textContent = chipText;
-        else dot.before(h('span', { class: 'nav-live-kills mono' }, chipText));
+        else dot.before(h('span', { class: 'nav-live-deaths mono' }, chipText));
       } else {
         chip?.remove();
       }
     } else {
       btn.append(h('span', { class: 'nav-live-indicator', title },
-        chipText ? h('span', { class: 'nav-live-kills mono' }, chipText) : null,
+        chipText ? h('span', { class: 'nav-live-deaths mono' }, chipText) : null,
         h('span', { class: 'nav-live-dot' }),
       ));
     }

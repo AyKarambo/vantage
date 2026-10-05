@@ -87,9 +87,6 @@ export function createLiveMatchMonitor(deps: {
 export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): LiveMatchPayload {
   const roster = liveRoster(state);
   const mine = localTeam(roster);
-  // A tally is only meaningful if the feed ever said which side an attacker was
-  // on. Reporting 0–0 when it never did would read as "nobody has died yet".
-  const known = killFeedEnabled && state.feed.some((k) => k.attackerFriendly !== undefined);
   return {
     live: state.phase === 'live',
     ...(state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
@@ -101,12 +98,10 @@ export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): Live
     // the one you open afterwards can't read differently for the same match.
     roster: orderScoreboard(roster.map(toScoreboardEntry)),
     totals: liveTeamTotals(roster),
-    // With the kill feed off, NOTHING kill-derived crosses the bridge — not the
-    // per-kill strip and not the elimination count, which is only a sum of the
-    // same events. Leaving a running kill count on screen would defeat the point
-    // of switching it off. Withheld at the source rather than hidden in the
-    // view, so the data genuinely does not reach the window.
-    kills: killFeedEnabled ? { ...state.kills, known } : { yours: 0, theirs: 0, known: false },
+    // With the kill feed off, the per-kill strip does not cross the bridge at
+    // all — withheld at the source rather than hidden in the view, so the data
+    // genuinely does not reach the window. The team totals above stay: they are
+    // TAB-screen numbers (the D column summed), not kill events.
     feed: killFeedEnabled ? state.feed : [],
     teamsKnown: mine !== undefined && roster.some((p) => !p.isLocal && p.team !== undefined),
   };

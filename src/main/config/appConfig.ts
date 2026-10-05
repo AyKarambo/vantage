@@ -68,7 +68,7 @@ export interface UiConfig {
   devMode: boolean;
   /** OS notifications on GEP service down/recovery (default true). */
   gepNotifications: boolean;
-  /** Show the kill feed + elimination tally on the live-match screen (default true). */
+  /** Show the kill feed on the live-match screen (default true). */
   liveKillFeed: boolean;
   /**
    * Whether the local MCP endpoint listens (spec #174). Default **false**: it

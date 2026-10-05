@@ -21,12 +21,13 @@ export interface AppUiSettings {
   /** OS notifications when GEP events go down / come back (default on). */
   gepNotifications: boolean;
   /**
-   * Whether the live-match screen shows the kill feed and its elimination
-   * tally (default on). Off leaves the live scoreboard and the known-players
-   * section intact — a running kill count while you are still in the game is
-   * exactly the sort of thing some players would rather not see. Read live in
-   * main, so switching it off stops the feed crossing the bridge at once
-   * rather than merely hiding it once it has arrived.
+   * Whether the live-match screen shows the kill feed (default on). Off leaves
+   * the live scoreboard, the per-team deaths/damage/healing (all read off the
+   * roster, not the feed) and the known-players section intact — a running
+   * kill-by-kill strip while you are still in the game is exactly the sort of
+   * thing some players would rather not see. Read live in main, so switching it
+   * off stops the feed crossing the bridge at once rather than merely hiding it
+   * once it has arrived.
    */
   liveKillFeed: boolean;
   /**

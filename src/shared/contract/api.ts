@@ -343,7 +343,7 @@ export interface OwStatsApi {
   /** Subscribe to "the pending (needs-result) set changed" (a match was held or resolved); returns an unsubscribe function. */
   onPendingChanged(cb: () => void): () => void;
   /**
-   * Subscribe to the in-progress match — roster, elimination tally and kill
+   * Subscribe to the in-progress match — roster, per-team totals and kill
    * feed, pushed while a match runs and cleared when it ends (or when GEP
    * detaches, since a crash or alt-F4 emits no match-end). Returns an
    * unsubscribe function.

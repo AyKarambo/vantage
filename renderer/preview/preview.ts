@@ -1306,7 +1306,7 @@ new App(must('#app'));
  * without this the Live screen could only ever be seen in its idle state, and
  * the one screen that most needs eyeballs would be the one screen the harness
  * couldn't show. This synthesizes a plausible match from the sample season's own
- * players, so the scoreboard, the elimination tally and (crucially) the
+ * players, so the scoreboard, the per-team totals and (crucially) the
  * with/vs records all render against real history.
  *
  * Drive it from the browser console:
@@ -1335,28 +1335,29 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
     })),
   ];
   // Summed the same way the real monitor sums the live roster, so the harness
-  // exercises the damage/healing rows rather than faking plausible numbers.
-  const side = (t: number): { damage: number; healing: number } => roster
+  // exercises the deaths/damage/healing rows rather than faking plausible numbers.
+  const side = (t: number): { damage: number; healing: number; deaths: number } => roster
     .filter((r) => r.team === t)
-    .reduce((a, r) => ({ damage: a.damage + (r.damage ?? 0), healing: a.healing + (r.healing ?? 0) }), { damage: 0, healing: 0 });
+    .reduce((a, r) => ({
+      damage: a.damage + (r.damage ?? 0),
+      healing: a.healing + (r.healing ?? 0),
+      deaths: a.deaths + (r.deaths ?? 0),
+    }), { damage: 0, healing: 0, deaths: 0 });
   return {
     live: true,
     startedAt: Date.now() - tick * 1000,
     map: 'Ilios',
-    totals: { yours: side(0), theirs: side(1), known: true },
+    totals: { yours: side(0), theirs: side(1), known: true, deathsKnown: true },
     gameType: 'competitive',
     // Through the same ordering the real monitor applies, so the harness shows
     // the 5v5 layout rather than whatever order this file happens to build in.
     roster: orderScoreboard(roster),
-    kills: appSettings.liveKillFeed
-      ? { yours: 4 + tick, theirs: 3 + Math.floor(tick / 2), known: true }
-      : { yours: 0, theirs: 0, known: false },
     // Mirrors what the real monitor does: the feed is withheld at the source
     // when the setting is off, not filtered out in the view. Without this the
     // Settings toggle would be untestable in the harness.
     feed: appSettings.liveKillFeed ? ([
       // A destroyed deployable and a revive, so the harness shows both of the
-      // non-elimination shapes the real feed produces alongside ordinary kills.
+      // non-kill shapes the real feed produces alongside ordinary kills.
       { at: Date.now(), attacker: 'Kirito', victim: 'Takigano', attackerHero: 'Pharah',
         attackerFriendly: true, deployable: { hero: 'Illari', label: 'Healing Pylon' } },
       { at: Date.now() - 2000, attacker: 'Kiriko', victim: 'Karambo', attackerHero: 'Kiriko',
@@ -1386,8 +1387,11 @@ let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
     clearInterval(previewLiveTimer);
     previewLiveTimer = undefined;
     for (const cb of liveMatchListeners) {
-      cb({ live: false, endedAt: Date.now(), roster: [], kills: { yours: 0, theirs: 0, known: false },
-        totals: { yours: { damage: 0, healing: 0 }, theirs: { damage: 0, healing: 0 }, known: false },
+      cb({ live: false, endedAt: Date.now(), roster: [],
+        totals: {
+          yours: { damage: 0, healing: 0, deaths: 0 }, theirs: { damage: 0, healing: 0, deaths: 0 },
+          known: false, deathsKnown: false,
+        },
         feed: [], teamsKnown: false });
     }
   },

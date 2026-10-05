@@ -29,12 +29,14 @@ describe('reduceLiveMatch — phase', () => {
     expect(s.startedAt).toBe(500);
   });
 
-  it('clears the previous match\'s roster and tally when a new one starts', () => {
+  it('clears the previous match\'s roster and feed when a new one starts', () => {
     let s = live();
-    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Old#1', kills: 9 }), 1001);
+    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Old#1', kills: 9, deaths: 4 }), 1001);
+    s = reduceLiveMatch(s, event('kill_feed', JSON.stringify({ attacker: 'A', victim: 'B' })), 1002);
+    expect(s.feed).toHaveLength(1);
     s = reduceLiveMatch(s, start(), 2000);
     expect(s.roster).toEqual({});
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
+    expect(liveTeamTotals(liveRoster(s)).deathsKnown).toBe(false);
     expect(s.feed).toEqual([]);
   });
 
@@ -153,27 +155,31 @@ describe('reduceLiveMatch — kill feed', () => {
       attacker_hero_name: 'GENJI', victim_hero_name: 'ANA', ...over,
     }));
 
-  it('tallies eliminations by side', () => {
+  it('records every kill in the feed, tagged with which side the attacker was on', () => {
     let s = live();
     s = reduceLiveMatch(s, kill(), 1001);
-    s = reduceLiveMatch(s, kill(), 1002);
-    s = reduceLiveMatch(s, kill({ is_attacker_teammate: false }), 1003);
-    expect(s.kills).toEqual({ yours: 2, theirs: 1 });
+    s = reduceLiveMatch(s, kill({ is_attacker_teammate: false }), 1002);
+    expect(s.feed.map((k) => k.attackerFriendly)).toEqual([false, true]);
   });
 
-  it('never counts a revive as an elimination', () => {
+  it('keeps no running count of its own — team deaths come off the roster', () => {
+    // The kill feed used to be summed into an elimination tally. Nothing is
+    // summed from it any more, so the state carries no such field to drift.
+    const s = reduceLiveMatch(live(), kill(), 1001);
+    expect(s).not.toHaveProperty('kills');
+  });
+
+  it('marks a revive as a revive', () => {
     let s = live();
     s = reduceLiveMatch(s, kill({ revived: 'Mate', revived_hero_name: 'ANA' }), 1001);
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
     expect(s.feed[0].revive).toBe(true);
   });
 
-  it('records the entry but counts nothing when the feed omits the team relation', () => {
-    // Guessing a side would be inventing data (guardrail #1).
+  it('records the entry even when the feed omits the team relation', () => {
     let s = live();
     s = reduceLiveMatch(s, kill({ is_attacker_teammate: undefined }), 1001);
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
     expect(s.feed).toHaveLength(1);
+    expect(s.feed[0].attackerFriendly).toBeUndefined();
   });
 
   it('keeps only the most recent entries, newest first', () => {
@@ -217,8 +223,8 @@ describe('reduceLiveMatch — kill feed payload shapes', () => {
   it('reads the documented wrapper — a JSON string under `name`', () => {
     const msg = event('kill_feed', { name: JSON.stringify(payload) });
     const s = reduceLiveMatch(live(), msg, 1001);
-    expect(s.kills).toEqual({ yours: 0, theirs: 1 });
-    expect(s.feed[0]).toMatchObject({ attacker: 'brandy', victimHero: 'Sojourn' });
+    expect(s.feed).toHaveLength(1);
+    expect(s.feed[0]).toMatchObject({ attacker: 'brandy', victimHero: 'Sojourn', attackerFriendly: false });
   });
 
   it('reads a bare JSON string', () => {
@@ -239,27 +245,27 @@ describe('reduceLiveMatch — kill feed payload shapes', () => {
 
   it('treats an EMPTY `revived` as a kill, not a revive', () => {
     // The documented example ships `"revived":""` on an ordinary kill — reading
-    // presence rather than content would silently stop counting eliminations.
+    // presence rather than content would label every kill in the feed a revive.
     const s = reduceLiveMatch(live(), event('kill_feed', JSON.stringify(payload)), 1001);
     expect(s.feed[0].revive).toBeUndefined();
-    expect(s.kills.theirs).toBe(1);
   });
 });
 
 describe('liveTeamTotals', () => {
   const p = (over: Record<string, unknown>) => over as never;
 
-  it('sums damage and healing per side', () => {
+  it('sums damage, healing and deaths per side', () => {
     const roster = [
-      p({ isLocal: true, team: 0, damage: 2000, healing: 6000 }),
-      p({ team: 0, damage: 3000, healing: 500 }),
-      p({ team: 1, damage: 4000, healing: 100 }),
-      p({ team: 1, damage: 1000, healing: 2000 }),
+      p({ isLocal: true, team: 0, damage: 2000, healing: 6000, deaths: 4 }),
+      p({ team: 0, damage: 3000, healing: 500, deaths: 2 }),
+      p({ team: 1, damage: 4000, healing: 100, deaths: 5 }),
+      p({ team: 1, damage: 1000, healing: 2000, deaths: 1 }),
     ];
     expect(liveTeamTotals(roster)).toEqual({
-      yours: { damage: 5000, healing: 6500 },
-      theirs: { damage: 5000, healing: 2100 },
+      yours: { damage: 5000, healing: 6500, deaths: 6 },
+      theirs: { damage: 5000, healing: 2100, deaths: 6 },
       known: true,
+      deathsKnown: true,
     });
   });
 
@@ -271,6 +277,44 @@ describe('liveTeamTotals', () => {
     expect(liveTeamTotals(roster)).toMatchObject({
       yours: { damage: 1000, healing: 0 },
       theirs: { damage: 0, healing: 700 },
+    });
+  });
+
+  describe('deaths', () => {
+    it('counts one per death, however many players were credited with the elimination', () => {
+      // One of your players died to a five-credit pick: the enemy's elimination
+      // column grows by 5, but exactly one player of yours is down — and nobody
+      // of theirs — so deaths read 1–0, not the 5–1 an elimination total would.
+      const roster = [
+        p({ isLocal: true, team: 0, kills: 1, deaths: 1 }),
+        p({ team: 0, kills: 0, deaths: 0 }),
+        p({ team: 1, kills: 5, deaths: 0 }),
+        p({ team: 1, kills: 0, deaths: 0 }),
+      ];
+      const t = liveTeamTotals(roster);
+      expect(t.yours.deaths).toBe(1);
+      expect(t.theirs.deaths).toBe(0);
+    });
+
+    it('is known once each side has reported a deaths value, zero included', () => {
+      // 0 is a report ("nobody has died yet"), unlike an absent field.
+      const roster = [p({ isLocal: true, team: 0, deaths: 0 }), p({ team: 1, deaths: 0 })];
+      expect(liveTeamTotals(roster).deathsKnown).toBe(true);
+    });
+
+    it('is withheld when a side never reported deaths, rather than shown as a confident 0', () => {
+      const roster = [
+        p({ isLocal: true, team: 0, deaths: 3 }),
+        p({ team: 1, damage: 500 }), // no deaths field at all
+      ];
+      const t = liveTeamTotals(roster);
+      expect(t.known).toBe(true);
+      expect(t.deathsKnown).toBe(false);
+    });
+
+    it('is withheld when the feed gave no teams, whatever the rows say', () => {
+      const roster = [p({ isLocal: true, deaths: 3 }), p({ deaths: 2 })];
+      expect(liveTeamTotals(roster).deathsKnown).toBe(false);
     });
   });
 
@@ -298,24 +342,35 @@ describe('liveTeamTotals', () => {
   });
 
   it('reads off the roster, so it stands with no kill feed at all', () => {
-    // Damage and healing are TAB-screen numbers, not kill-derived — which is why
-    // they survive the kill feed being switched off.
+    // Damage, healing and deaths are TAB-screen numbers, not kill-derived —
+    // which is why they survive the kill feed being switched off.
     let s = live();
-    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, damage: 1200, healed: 3400 }), 1001);
-    s = reduceLiveMatch(s, roster(1, { battle_tag: 'Foe#2', team: 1, damage: 800, healed: 100 }), 1002);
+    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, damage: 1200, healed: 3400, deaths: 2 }), 1001);
+    s = reduceLiveMatch(s, roster(1, { battle_tag: 'Foe#2', team: 1, damage: 800, healed: 100, deaths: 3 }), 1002);
     expect(liveTeamTotals(liveRoster(s))).toEqual({
-      yours: { damage: 1200, healing: 3400 },
-      theirs: { damage: 800, healing: 100 },
+      yours: { damage: 1200, healing: 3400, deaths: 2 },
+      theirs: { damage: 800, healing: 100, deaths: 3 },
       known: true,
+      deathsKnown: true,
     });
+  });
+
+  it('follows a player\'s deaths as the roster ticks up, merging partial snapshots', () => {
+    let s = live();
+    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, deaths: 1 }), 1001);
+    s = reduceLiveMatch(s, roster(1, { battle_tag: 'Foe#2', team: 1, deaths: 0 }), 1002);
+    s = reduceLiveMatch(s, roster(0, { deaths: 2 }), 1003); // a tick carrying only the changed field
+    const t = liveTeamTotals(liveRoster(s));
+    expect(t.yours.deaths).toBe(2);
+    expect(t.theirs.deaths).toBe(0);
   });
 });
 
-describe('reduceLiveMatch — deployables are not eliminations', () => {
+describe('reduceLiveMatch — deployables are tagged in the feed', () => {
   /**
    * Overwatch reports destroying a turret or pylon as an ordinary kill event —
-   * victim `Takigano`, victim hero `Illari Healing Pylon`. Counting those
-   * inflates the elimination tally in every single match, and nobody died.
+   * victim `Takigano`, victim hero `Illari Healing Pylon`. Nobody died, so the
+   * feed marks it as a destroy rather than a kill.
    */
   const destroy = (victimHero: string, over: Record<string, unknown> = {}) =>
     event('kill_feed', JSON.stringify({
@@ -323,13 +378,7 @@ describe('reduceLiveMatch — deployables are not eliminations', () => {
       attacker_hero_name: 'PHARAH', victim_hero_name: victimHero, ...over,
     }));
 
-  it('does not count a destroyed Healing Pylon as an elimination', () => {
-    const s = reduceLiveMatch(live(), destroy('Illari Healing Pylon'), 1001);
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
-  });
-
-  it('still records it in the feed, tagged with its owner and what it was', () => {
-    // It did happen — it just isn't a kill. Hiding it would lose real information.
+  it('records a destroyed Healing Pylon, tagged with its owner and what it was', () => {
     const s = reduceLiveMatch(live(), destroy('Illari Healing Pylon'), 1001);
     expect(s.feed[0]).toMatchObject({
       attacker: 'Kirito', victim: 'Takigano',
@@ -337,10 +386,9 @@ describe('reduceLiveMatch — deployables are not eliminations', () => {
     });
   });
 
-  it('still counts a kill on the HERO of the same name', () => {
+  it('does not tag a kill on the HERO of the same name', () => {
     // The discriminator must not swallow Illari herself.
     const s = reduceLiveMatch(live(), destroy('ILLARI'), 1001);
-    expect(s.kills).toEqual({ yours: 1, theirs: 0 });
     expect(s.feed[0].deployable).toBeUndefined();
   });
 
@@ -349,21 +397,14 @@ describe('reduceLiveMatch — deployables are not eliminations', () => {
     s = reduceLiveMatch(s, destroy('Torbjörn Turret'), 1001);
     s = reduceLiveMatch(s, destroy('Symmetra Teleporter'), 1002);
     s = reduceLiveMatch(s, destroy('Wrecking Ball Minefield'), 1003);
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
     expect(s.feed.map((k) => k.deployable?.hero)).toEqual(['Wrecking Ball', 'Symmetra', 'Torbjörn']);
   });
 
-  it('counts an UNKNOWN hero as a player kill, not a deployable', () => {
-    // A brand-new hero GEP knows before this build does should still have their
-    // deaths counted. The safe failure is a real elimination counted as one.
+  it('treats an UNKNOWN hero as a player, not a deployable', () => {
+    // A brand-new hero GEP knows before this build does should read as a normal
+    // kill. The safe failure is a real kill shown as one.
     const s = reduceLiveMatch(live(), destroy('SOMENEWHERO'), 1001);
-    expect(s.kills).toEqual({ yours: 1, theirs: 0 });
     expect(s.feed[0].deployable).toBeUndefined();
-  });
-
-  it('counts an enemy destroying YOUR deployable as neither side\'s elimination', () => {
-    const s = reduceLiveMatch(live(), destroy('Illari Healing Pylon', { is_attacker_teammate: false }), 1001);
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
   });
 });
 
@@ -380,6 +421,57 @@ describe('reduceLiveMatch — revives name the supporter and the revived', () =>
       revive: true, attacker: 'Kiriko', victim: 'Karambo',
       attackerHero: 'Kiriko', victimHero: 'Reinhardt',
     });
-    expect(s.kills).toEqual({ yours: 0, theirs: 0 });
+  });
+
+  it('reads a self-revive (the supporter and the revived are the same player) as a revive', () => {
+    const s = reduceLiveMatch(live(), event('kill_feed', JSON.stringify({
+      attacker: '', victim: '', supporter: 'Karambo', revived: 'Karambo',
+      supporter_hero_name: 'ANRAN', revived_hero_name: 'ANRAN',
+    })), 1001);
+    expect(s.feed[0]).toMatchObject({ revive: true, attackerHero: 'Anran', victimHero: 'Anran' });
+  });
+});
+
+describe('team deaths ignore the kill feed entirely', () => {
+  /**
+   * The requirement: a team's deaths are real player deaths. A destroyed turret
+   * or pylon, a Mercy resurrect and Anran's self-revive all arrive as kill-feed
+   * lines, and none of them may move the number. They cannot, because deaths are
+   * summed off the roster's own death counters — this pins that down so a
+   * feed-derived count is never quietly reintroduced.
+   */
+  it('is unmoved by destroyed deployables and revives', () => {
+    let s = live();
+    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, deaths: 2 }), 1001);
+    s = reduceLiveMatch(s, roster(1, { battle_tag: 'Foe#2', team: 1, deaths: 1 }), 1002);
+    const before = liveTeamTotals(liveRoster(s));
+
+    s = reduceLiveMatch(s, event('kill_feed', JSON.stringify({
+      attacker: 'Kirito', victim: 'Takigano', is_attacker_teammate: true,
+      attacker_hero_name: 'PHARAH', victim_hero_name: 'Illari Healing Pylon',
+    })), 1003);
+    s = reduceLiveMatch(s, event('kill_feed', JSON.stringify({
+      supporter: 'Mercy#1', revived: 'Me#1', supporter_hero_name: 'MERCY', revived_hero_name: 'ANA',
+    })), 1004);
+    s = reduceLiveMatch(s, event('kill_feed', JSON.stringify({
+      supporter: 'Foe#2', revived: 'Foe#2', supporter_hero_name: 'ANRAN', revived_hero_name: 'ANRAN',
+    })), 1005);
+
+    expect(s.feed).toHaveLength(3);
+    expect(liveTeamTotals(liveRoster(s))).toEqual(before);
+    expect(before.yours.deaths).toBe(2);
+    expect(before.theirs.deaths).toBe(1);
+  });
+
+  it('is unmoved by kill-feed kills too — only the roster counter moves it', () => {
+    let s = live();
+    s = reduceLiveMatch(s, roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, deaths: 0 }), 1001);
+    s = reduceLiveMatch(s, roster(1, { battle_tag: 'Foe#2', team: 1, deaths: 0 }), 1002);
+    s = reduceLiveMatch(s, event('kill_feed', JSON.stringify({
+      attacker: 'Me', victim: 'Foe', is_attacker_teammate: true, is_victim_teammate: false,
+    })), 1003);
+    expect(liveTeamTotals(liveRoster(s)).theirs.deaths).toBe(0);
+    s = reduceLiveMatch(s, roster(1, { deaths: 1 }), 1004);
+    expect(liveTeamTotals(liveRoster(s)).theirs.deaths).toBe(1);
   });
 });
