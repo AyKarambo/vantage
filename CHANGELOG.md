@@ -15,16 +15,9 @@ entries short, plain, and about impact.
 Releases before 0.32.0 predate this file. Their notes are auto-generated per PR on the
 [Releases page](https://github.com/AyKarambo/vantage/releases).
 
-## Unreleased
+## 0.40.1 — 5 October 2026
 
 ### Changed
-
-- **Ranks are written short where the screen is tight** — `G3`, `GM4`, `C2`, first letter plus the
-  division (`GM` for Grandmaster). You'll see it in the sidebar, the Rank tile on Overview, the
-  account switcher, the per-role chips in Settings, and the *Rank at start* column on Matches.
-  Everywhere with room to spare still says `Grandmaster 4` in full — the match detail, a player's
-  page, the manage-ranks dialog, and every rank picker — and the sidebar keeps the full name in its
-  tooltip. Replaces the older half-measure that only shortened Platinum, Grandmaster and Champion.
 
 - **The Live screen shows deaths per team, not an elimination count.** One death can credit up to
   five eliminations, so the two teams' elimination totals couldn't be compared — a single solo
@@ -37,6 +30,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   are per round. The small chip beside **Live** in the sidebar shows the same deaths (`4–3`, your
   team first), and **Settings → General → Live kill feed** now controls only the feed itself — the
   team totals stay either way.
+
+## 0.40.0 — 24 September 2026
+
+### Changed
+
+- **Ranks are written short where the screen is tight** — `G3`, `GM4`, `C2`, first letter plus the
+  division (`GM` for Grandmaster). You'll see it in the sidebar, the Rank tile on Overview, the
+  account switcher, the per-role chips in Settings, and the *Rank at start* column on Matches.
+  Everywhere with room to spare still says `Grandmaster 4` in full — the match detail, a player's
+  page, the manage-ranks dialog, and every rank picker — and the sidebar keeps the full name in its
+  tooltip. Replaces the older half-measure that only shortened Platinum, Grandmaster and Champion.
 
 ### Added
 
