@@ -196,6 +196,7 @@ export function viewHead(title: string, sub: string | Node, actions?: Node | Nod
 export function shorten(name: string): string {
   const SHORT: Record<string, string> = {
     'Watchpoint: Gibraltar': 'Watchpoint',
+    'Watchpoint: Grímsvötn': 'Grímsvötn',
     'Antarctic Peninsula': 'Antarctic',
     'Shambali Monastery': 'Shambali',
     'New Queen Street': 'NQ Street',

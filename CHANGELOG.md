@@ -15,6 +15,14 @@ entries short, plain, and about impact.
 Releases before 0.32.0 predate this file. Their notes are auto-generated per PR on the
 [Releases page](https://github.com/AyKarambo/vantage/releases).
 
+## Unreleased
+
+### Added
+
+- **Watchpoint: Grímsvötn**, the Season 5 Escort map, is now in the map list, so you can log
+  matches on it and it counts towards your per-map stats. Matches tracked live will show it by
+  name once its game id is known; until then it may appear as an unknown map.
+
 ## 0.40.1 — 5 October 2026
 
 ### Changed

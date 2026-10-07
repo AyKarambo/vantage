@@ -98,7 +98,7 @@ $mapCatalog = @(
     "King's Row", "Midtown", "Eichenwalde", "Hollywood", "Numbani",
     "Blizzard World", $mapParaiso, "Neon Junction", "Circuit Royal", "Dorado",
     "Havana", "Junkertown", "Rialto", "Route 66", "Shambali Monastery",
-    "Watchpoint: Gibraltar", "Antarctic Peninsula", "Busan", "Ilios",
+    "Watchpoint: Gibraltar", "Watchpoint: Grímsvötn", "Antarctic Peninsula", "Busan", "Ilios",
     "Lijiang Tower", "Nepal", "Oasis", "Samoa", "New Junk City", "Suravasa",
     "Aatlis", "Hanaoka", "Throne of Anubis"
 )
