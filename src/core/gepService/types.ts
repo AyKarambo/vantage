@@ -19,4 +19,11 @@ export interface ServiceStatus {
   level: ServiceStatusLevel;
   /** Overwolf's `maintenance_msg`, when present and the feed isn't `ok`. */
   message?: string;
+  /**
+   * The oldest GEP package Overwolf's feed says can still inject into the game
+   * (`min_gep_version_electron`, falling back to `min_gep_version`). Independent of
+   * `level`: it rides along on every authoritative reading, and is absent when the
+   * feed doesn't carry a readable version.
+   */
+  minGepVersion?: string;
 }

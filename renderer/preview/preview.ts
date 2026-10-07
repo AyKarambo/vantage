@@ -350,10 +350,12 @@ const gepPayload = (): GepStatusPayload => ({
   eventsThisSession: gepState === 'no-game' ? 0 : 128,
   matchInProgress: gepState === 'live' || gepState === 'stale',
   gepPackageVersion: '309.0.0',
-  // ?gep=down|degraded|staged previews the service-outage / restart-to-apply banner.
+  // ?gep=down|degraded|staged|outdated previews the service-outage / restart-to-apply banner.
   ...(gepParam === 'down' ? { serviceStatus: 'down', serviceMessage: 'Events are disabled' } : {}),
   ...(gepParam === 'degraded' ? { serviceStatus: 'degraded' } : {}),
   ...(gepParam === 'staged' ? { updateStaged: true } : {}),
+  // ?gep=outdated previews the "GEP update needed" banner (loaded package below Overwolf's minimum).
+  ...(gepParam === 'outdated' ? { gepMinVersion: '315.0.2', gepOutdated: true, gepPackageVersion: '315.0.1' } : {}),
 });
 if (gepParam === 'cycle') {
   let i = 1;

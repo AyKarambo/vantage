@@ -39,9 +39,23 @@ function worstFeatureState(features: unknown): number {
   return worst;
 }
 
+/** A dotted numeric version ('315.0.2'); anything else is ignored rather than guessed at. */
+function readMinVersion(raw: Record<string, unknown>): string | undefined {
+  for (const v of [raw.min_gep_version_electron, raw.min_gep_version]) {
+    if (typeof v === 'string' && /^\d+(\.\d+){0,3}$/.test(v.trim())) return v.trim();
+  }
+  return undefined;
+}
+
 export function parseServiceStatus(raw: unknown): ServiceStatus {
   if (!isObj(raw)) return { level: 'unknown' };
+  const status = parseLevel(raw);
+  // No authoritative reading → no version claim either.
+  const minGepVersion = status.level === 'unknown' ? undefined : readMinVersion(raw);
+  return minGepVersion ? { ...status, minGepVersion } : status;
+}
 
+function parseLevel(raw: Record<string, unknown>): ServiceStatus {
   const message =
     typeof raw.maintenance_msg === 'string' && raw.maintenance_msg.trim()
       ? raw.maintenance_msg.trim()

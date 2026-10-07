@@ -43,3 +43,30 @@ describe('gepStatusMonitor — service status + staged-update dimensions', () =>
     expect(published.at(-1)?.gepPackageVersion).toBe('310.0.0');
   });
 });
+
+describe('gepStatusMonitor — outdated GEP package', () => {
+  it('flags outdated only when the loaded version is below the feed minimum, and dedups', () => {
+    const { m, published } = harness();
+    m.setGepPackageVersion('315.0.1');
+    expect(published.at(-1)?.gepOutdated).toBeUndefined(); // no minimum known yet
+
+    m.setServiceStatus({ level: 'down', minGepVersion: '315.0.2' });
+    expect(published.at(-1)?.gepOutdated).toBe(true);
+    expect(published.at(-1)?.gepMinVersion).toBe('315.0.2');
+
+    const n = published.length;
+    m.setServiceStatus({ level: 'down', minGepVersion: '315.0.2' }); // unchanged → no publish
+    expect(published.length).toBe(n);
+
+    m.setGepPackageVersion('315.0.2'); // the fix loaded
+    expect(published.at(-1)?.gepOutdated).toBeUndefined();
+  });
+
+  it('keeps the warning through a transient unknown reading', () => {
+    const { m, published } = harness();
+    m.setGepPackageVersion('315.0.1');
+    m.setServiceStatus({ level: 'down', minGepVersion: '315.0.2' });
+    m.setServiceStatus({ level: 'unknown' }); // poller surrendered after repeated failures
+    expect(published.at(-1)?.gepOutdated).toBe(true);
+  });
+});

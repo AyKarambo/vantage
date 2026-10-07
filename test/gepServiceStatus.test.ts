@@ -48,3 +48,23 @@ describe('parseServiceStatus — Overwolf status feed', () => {
     expect(parseServiceStatus(raw)).toEqual({ level: 'ok' });
   });
 });
+
+describe('parseServiceStatus — minimum GEP version', () => {
+  it('reads min_gep_version_electron, falling back to min_gep_version', () => {
+    expect(parseServiceStatus({ state: 3, min_gep_version_electron: '315.0.2', min_gep_version: '300.0.0' }))
+      .toEqual({ level: 'down', minGepVersion: '315.0.2' });
+    expect(parseServiceStatus({ state: 1, min_gep_version: '309.1.0' }))
+      .toEqual({ level: 'ok', minGepVersion: '309.1.0' });
+  });
+
+  it('ignores an unreadable version and never attaches one to an unknown reading', () => {
+    expect(parseServiceStatus({ state: 1, min_gep_version_electron: 'latest' })).toEqual({ level: 'ok' });
+    expect(parseServiceStatus({ state: 1, min_gep_version_electron: 315 })).toEqual({ level: 'ok' });
+    expect(parseServiceStatus({ min_gep_version_electron: '315.0.2' })).toEqual({ level: 'unknown' });
+  });
+
+  it('keeps the version on an explicit disable', () => {
+    expect(parseServiceStatus({ state: 1, disabled_electron: true, min_gep_version_electron: '315.0.2' }))
+      .toEqual({ level: 'down', minGepVersion: '315.0.2' });
+  });
+});
