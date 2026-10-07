@@ -1051,7 +1051,9 @@ export class App {
   /**
    * The app-wide GEP banner (top of content), mutated in place so it never tears
    * down the active view. Shows a "restart to apply" prompt when a fixed GEP
-   * package is staged, an outage explanation while Overwolf's service is
+   * package is staged, a "GEP update needed" warning when the loaded package is
+   * below Overwolf's required minimum (the "No game" while Overwatch runs case),
+   * an outage explanation while Overwolf's service is
    * degraded/down, or — lowest priority, since the other two are the more
    * actionable Overwolf-side reads — a heads-up that the feed has gone quiet
    * mid-match (S6), so a stalled scoreboard on Live doesn't read as broken.
@@ -1063,7 +1065,8 @@ export class App {
     const outage = s?.serviceStatus === 'down' || s?.serviceStatus === 'degraded';
     const staged = Boolean(s?.updateStaged);
     const stale = s?.state === 'stale';
-    if (!outage && !staged && !stale) {
+    const outdated = Boolean(s?.gepOutdated);
+    if (!outage && !staged && !stale && !outdated) {
       this.gepBanner.className = 'gep-banner hidden';
       render(this.gepBanner);
       return;
@@ -1077,6 +1080,24 @@ export class App {
           class: 'gep-banner-action',
           on: { click: () => void bridge.applyGepUpdate() },
         }, 'Restart to apply'),
+      );
+      return;
+    }
+    // Loaded package below Overwolf's minimum: it refuses to inject, so Vantage reads
+    // "No game" with Overwatch running. Outranks the generic outage banner (which
+    // would wrongly promise automatic recovery), but not a staged fix.
+    if (outdated) {
+      this.gepBanner.className = 'gep-banner is-outage';
+      render(this.gepBanner,
+        h('span', { class: 'gep-banner-text' },
+          `Overwatch tracking is off: Overwolf now requires GEP ${s?.gepMinVersion ?? 'a newer version'}`
+          + `${s?.gepPackageVersion ? ` (you have ${s.gepPackageVersion})` : ''}. Updates roll out in phases — `
+          + "Vantage will offer a restart as soon as it's downloaded."),
+        h('button', {
+          class: 'gep-banner-link',
+          title: 'Open Overwolf’s game-events status page',
+          on: { click: () => void bridge.openExternal('https://support.overwolf.com/support/solutions/9000115816') },
+        }, 'Overwolf status ↗'),
       );
       return;
     }
@@ -1123,6 +1144,9 @@ export class App {
             ['State', gepLabelText(s)],
             ['Source', s.sensor === 'gep' ? 'Overwolf GEP' : 'Counterwatch'],
             ...(s.gepPackageVersion ? [['GEP package', s.gepPackageVersion] as [string, string]] : []),
+            ...(s.gepOutdated && s.gepMinVersion
+              ? [['Required GEP', `${s.gepMinVersion} — update pending`, true] as [string, string, boolean]]
+              : []),
             ['Last event', s.lastEventAt ? relTime(s.lastEventAt) : '—'],
             ['Events this session', String(s.eventsThisSession)],
             ['Match in progress', s.matchInProgress ? 'Yes' : 'No'],

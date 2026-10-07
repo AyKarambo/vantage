@@ -11,7 +11,7 @@ import {
 } from '../core/gepHealth';
 import { isMatchEndMessage, isMatchStartMessage } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
-import type { ServiceStatus } from '../core/gepService';
+import { isGepOutdated, type ServiceStatus } from '../core/gepService';
 import type { GepStatusPayload } from '../shared/contract';
 
 /** How often the staleness deadline is re-checked between events. */
@@ -51,6 +51,9 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
   let lastError: string | undefined;
   let serviceStatus: ServiceStatus | null = null;
   let gepPackageVersion: string | undefined;
+  // Kept across an 'unknown' reading (feed hiccup) so a flaky poll can't clear the
+  // "GEP update needed" warning while the package is still too old.
+  let minGepVersion: string | undefined;
   let updateStaged = false;
   // Composite dedup key: publish whenever ANY visible dimension changes, not just
   // the connection state — service status, staged update and package version all
@@ -69,11 +72,13 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
     ...(serviceStatus ? { serviceStatus: serviceStatus.level } : {}),
     ...(serviceStatus?.message ? { serviceMessage: serviceStatus.message } : {}),
     ...(gepPackageVersion ? { gepPackageVersion } : {}),
+    ...(minGepVersion ? { gepMinVersion: minGepVersion } : {}),
+    ...(isGepOutdated(gepPackageVersion, minGepVersion) ? { gepOutdated: true } : {}),
     ...(updateStaged ? { updateStaged: true } : {}),
   });
 
   const dedupKey = (p: GepStatusPayload): string =>
-    `${p.state}|${p.serviceStatus ?? '-'}|${p.serviceMessage ?? '-'}|${p.updateStaged ? 1 : 0}|${p.gepPackageVersion ?? '-'}`;
+    `${p.state}|${p.serviceStatus ?? '-'}|${p.serviceMessage ?? '-'}|${p.updateStaged ? 1 : 0}|${p.gepPackageVersion ?? '-'}|${p.gepMinVersion ?? '-'}|${p.gepOutdated ? 1 : 0}`;
 
   const evaluate = (): void => {
     const p = payload();
@@ -84,6 +89,7 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
       eventsThisSession: track.eventsThisSession,
       ...(p.serviceStatus ? { service: p.serviceStatus } : {}),
       ...(p.updateStaged ? { updateStaged: true } : {}),
+      ...(p.gepOutdated ? { gepOutdated: true, gepMinVersion: p.gepMinVersion ?? '' } : {}),
       ...(track.lastEventAt ? { sinceLastEventMs: now() - track.lastEventAt } : {}),
     });
     publishedKey = key;
@@ -103,6 +109,7 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
     },
     setServiceStatus(next) {
       serviceStatus = next;
+      if (next && next.level !== 'unknown') minGepVersion = next.minGepVersion;
       evaluate();
     },
     setGepPackageVersion(version) {

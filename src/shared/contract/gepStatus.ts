@@ -30,6 +30,15 @@ export interface GepStatusPayload {
   serviceMessage?: string;
   /** The loaded GEP package version (e.g. '309.0.0'); changes when Overwolf ships a fix. */
   gepPackageVersion?: string;
+  /** The minimum GEP package version Overwolf's status feed currently requires (e.g. '315.0.2'). */
+  gepMinVersion?: string;
+  /**
+   * The loaded GEP package is older than {@link gepMinVersion}: Overwolf refuses to
+   * inject into the game, so no events (and no `game-detected`) can arrive — the
+   * app reads "No game" with Overwatch running. Only set when BOTH versions are
+   * known; drives the "GEP update needed" banner.
+   */
+  gepOutdated?: boolean;
   /** A fixed GEP package is staged and needs a restart to apply (drives the "restart to apply" prompt). */
   updateStaged?: boolean;
 }

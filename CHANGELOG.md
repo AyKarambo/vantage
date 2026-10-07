@@ -19,6 +19,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **A warning when your GEP package is too old for Overwatch.** After a game patch, Overwolf raises
+  the minimum game-events (GEP) package version it will inject into the game, and an older one is
+  silently refused — Vantage then shows **No game** even though Overwatch is running. Vantage now
+  compares your package against that minimum and shows a banner naming both versions (and the
+  **GEP update needed** line in the status-bar details), plus a notification once, if you have GEP
+  alerts on. Overwolf rolls updates out in phases, so there may be a wait: Vantage offers
+  **Restart to apply** as soon as the new package has downloaded.
 - **Watchpoint: Grímsvötn**, the Season 5 Escort map, is now in the map list, so you can log
   matches on it and it counts towards your per-map stats. Matches tracked live will show it by
   name once its game id is known; until then it may appear as an unknown map.

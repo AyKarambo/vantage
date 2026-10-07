@@ -51,6 +51,26 @@ export function decideGepNotification(
 }
 
 /**
+ * One notification when the loaded GEP package falls below Overwolf's minimum
+ * (false → true). Staying outdated, or becoming current again, is silent — the
+ * banner carries the persistent state; this only exists so a user who isn't
+ * looking at the window still hears about it.
+ */
+export function decideOutdatedNotification(
+  prevOutdated: boolean,
+  nextOutdated: boolean,
+  loaded: string | undefined,
+  required: string | undefined,
+): GepNotification | null {
+  if (prevOutdated || !nextOutdated) return null;
+  return {
+    title: 'Overwatch tracking is off — GEP update needed',
+    body: `Overwolf now requires GEP ${required ?? 'a newer version'}${loaded ? ` (you have ${loaded})` : ''}. `
+      + "Until it's installed, Vantage can't see Overwatch. Updates roll out in phases — Vantage will offer a restart once it downloads.",
+  };
+}
+
+/**
  * The status to carry forward as the notification baseline. Keeps the last
  * AUTHORITATIVE reading (ok/degraded/down) across an `unknown` (a feed hiccup),
  * so a real down→recovery transition is never masked by a transient failure:

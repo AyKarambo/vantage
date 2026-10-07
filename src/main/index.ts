@@ -20,7 +20,7 @@ import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
 import { createGepServicePoller } from './gepServicePoller';
-import { decideGepNotification, nextNotifyBaseline, type ServiceStatus } from '../core/gepService';
+import { decideGepNotification, decideOutdatedNotification, nextNotifyBaseline, type ServiceStatus } from '../core/gepService';
 import { DEFAULT_MASTER_DATA, makeMapMode, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -653,6 +653,7 @@ function main(): void {
   pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
   publishDevModeAuth = (p) => dashboard.push(EVENT_CHANNELS.onDevModeAuthStatus, p);
   let prevService: ServiceStatus | null = null;
+  let prevOutdated = false;
   publishStatus = (p) => {
     dashboard.push(EVENT_CHANNELS.onGepStatus, p);
     tray.setHealth(p.state);
@@ -669,6 +670,14 @@ function main(): void {
     // Carry the last authoritative reading forward so a transient 'unknown' can't
     // mask a real down/recovery transition (nor re-fire on re-enable).
     prevService = nextNotifyBaseline(prevService, nextService);
+    // Separately warn once when the loaded GEP package falls below Overwolf's
+    // minimum — then Overwatch can't be seen at all ("No game" while it runs).
+    const outdated = Boolean(p.gepOutdated);
+    if (config.ui.gepNotifications) {
+      const note = decideOutdatedNotification(prevOutdated, outdated, p.gepPackageVersion, p.gepMinVersion);
+      if (note) tray.notify(note.title, note.body);
+    }
+    prevOutdated = outdated;
   };
   pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
   pushGameLogged = (payload) => {

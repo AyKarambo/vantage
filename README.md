@@ -1033,6 +1033,16 @@ lands as a staged package that needs a restart, the banner offers a **one-click 
 (Vantage never restarts on its own); when the fix applies live, it re-arms automatically. The loaded
 **GEP package version** is shown on the **About** screen so you can confirm a fix took.
 
+The other classic post-patch failure is **"No game" while Overwatch is clearly running**: Overwolf
+raises the minimum GEP package version it will inject (`min_gep_version_electron` in the same
+status feed) and silently refuses an older one, so `game-detected` never reaches Vantage. Vantage
+compares your loaded package against that minimum and shows a **GEP update needed** banner naming
+both versions (plus the status-bar details row, and a one-time notification under **GEP alerts**).
+Overwolf rolls new packages out in phases, so you may have to wait; the banner flips to **Restart
+to apply** once the package has downloaded. If it persists, the `[WARN] Detected GEP Version …
+is lower than the minimum allowed version` line in `%APPDATA%\ow-electron\<app-uid>\logs\gep\gep.log`
+confirms it.
+
 ## Debug log
 
 Every build — including releases — writes a structured log to `%APPDATA%/Vantage/logs/`
