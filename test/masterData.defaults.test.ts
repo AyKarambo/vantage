@@ -43,10 +43,10 @@ describe('default master-data snapshot', () => {
       expect(s.label.length).toBeGreaterThan(0);
       expect(Number.isFinite(s.start)).toBe(true);
     }
-    expect(DEFAULT_MASTER_DATA.seasons[DEFAULT_MASTER_DATA.seasons.length - 1].label).toBe('2026 Season 4');
+    expect(DEFAULT_MASTER_DATA.seasons[DEFAULT_MASTER_DATA.seasons.length - 1].label).toBe('2026 Season 5');
   });
 
-  it('flags the 2026-02-10 and 2026-08-11 ladder resets, and no others', () => {
+  it('flags the 2026-02-10 and 2026-08-11 ladder resets, and no others (S5 is a regular season)', () => {
     for (const s of DEFAULT_MASTER_DATA.seasons) {
       if (RESET_SEASON_STARTS.has(s.start)) expect(s.isReset, s.label).toBe(true);
       else expect(s.isReset, s.label).toBeUndefined();

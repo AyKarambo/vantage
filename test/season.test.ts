@@ -61,6 +61,14 @@ describe('season window', () => {
     expect(end).toBeGreaterThan(start);
   });
 
+  it('has S5 in the table: Oct 6 ends the S4 window instead of the 9-week extrapolation (Oct 13)', () => {
+    expect(currentSeason(at('2026-10-05')).end).toBe(at('2026-10-06'));
+    expect(currentSeason(at('2026-10-07')).start).toBe(at('2026-10-06'));
+    expect(currentSeasonWindow(at('2026-10-07')).label).toBe('2026 Season 5');
+    // Previously extrapolated: the 6th–12th still read as S4.
+    expect(seasonStart(at('2026-10-12'))).toBe(at('2026-10-06'));
+  });
+
   it('is defensive for a now that precedes the table', () => {
     const first = at('2024-08-20');
     const now = at('2024-01-01');
