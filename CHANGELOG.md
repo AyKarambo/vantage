@@ -30,6 +30,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   matches on it and it counts towards your per-map stats. Matches tracked live will show it by
   name once its game id is known; until then it may appear as an unknown map.
 
+### Fixed
+
+- **Season 5 now starts on 6 October.** Vantage didn't know about the new season yet and guessed
+  its start a week late, so games from the first days of Season 5 were still counted in Season 4
+  — in the **This season** filter, the season picker, **By season**, and the trend markers. They
+  now land in **2026 Season 5**. It's treated as a regular season rather than a ladder reset; if
+  Blizzard says otherwise, flip it in **Settings → Master data → Seasons**.
+
 ## 0.40.1 — 5 October 2026
 
 ### Changed

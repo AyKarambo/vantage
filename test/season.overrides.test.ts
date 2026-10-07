@@ -46,7 +46,7 @@ describe('editable season starts (injected)', () => {
   });
 
   it('still extrapolates by cadence past the last known start (AC 19)', () => {
-    const past = Date.parse('2026-06-16') + 63 * 86_400_000 * 2 + 10 * 86_400_000;
+    const past = SEASON_STARTS[SEASON_STARTS.length - 1] + 63 * 86_400_000 * 2 + 10 * 86_400_000;
     // No injected list → rolls forward from the last default start by whole cadences.
     expect(seasonStart(past)).toBeGreaterThan(SEASON_STARTS[SEASON_STARTS.length - 1]);
   });
