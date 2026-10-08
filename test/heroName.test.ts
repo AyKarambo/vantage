@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { deployableOf, resolveHeroName } from '../src/core/resolvers/hero';
+import { HERO_ID_TO_NAME, deployableOf, resolveHero, resolveHeroName } from '../src/core/resolvers/hero';
 import { ALL_HEROES } from '../src/core/heroes';
+import { parseRoster } from '../src/core/matchAggregator';
 
 describe('resolveHeroName', () => {
   it('canonicalizes the ALL-CAPS names GEP actually reports', () => {
@@ -87,5 +88,40 @@ describe('deployableOf', () => {
     expect(deployableOf(undefined)).toBeUndefined();
     expect(deployableOf(null)).toBeUndefined();
     expect(deployableOf('   ')).toBeUndefined();
+  });
+});
+
+describe('resolveHero (hero id fallback)', () => {
+  it('resolves a hero GEP names UNKNOWN by its numeric id (Doctrine = 1392)', () => {
+    expect(resolveHero('UNKNOWN', 1392)).toBe('Doctrine');
+    expect(resolveHero(undefined, '1392')).toBe('Doctrine');
+  });
+
+  it('prefers the name GEP reported over the id', () => {
+    expect(resolveHero('ANA', 1392)).toBe('Ana');
+  });
+
+  it('never guesses: unmapped, zero or missing ids stay unresolved', () => {
+    expect(resolveHero('UNKNOWN', 999999)).toBeUndefined();
+    expect(resolveHero('UNKNOWN', 0)).toBeUndefined();
+    expect(resolveHero('UNKNOWN', undefined)).toBeUndefined();
+    expect(resolveHero(undefined, null)).toBeUndefined();
+  });
+
+  it('maps every id to a hero in the canonical list', () => {
+    for (const name of Object.values(HERO_ID_TO_NAME)) expect(ALL_HEROES).toContain(name);
+  });
+});
+
+describe('parseRoster hero id fallback', () => {
+  it('names a teammate GEP reports as UNKNOWN by hero_id (live capture, release week)', () => {
+    const row = '{"player_name":"GLUZHAR","is_local":false,"hero_name":"UNKNOWN","hero_role":"SUPPORT","team":1,"kills":7,"deaths":2,"hero_id":1392,"is_teammate":true}';
+    const p = parseRoster(row);
+    expect(p?.heroName).toBe('Doctrine');
+    expect(p?.heroRole).toBe('SUPPORT');
+  });
+
+  it('leaves a masked row with hero_id 0 unresolved', () => {
+    expect(parseRoster({ hero_name: 'UNKNOWN', hero_role: 'UNKNOWN', hero_id: 0 })?.heroName).toBeUndefined();
   });
 });

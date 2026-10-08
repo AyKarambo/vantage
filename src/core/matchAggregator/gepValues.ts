@@ -5,7 +5,7 @@
  * stateful accumulator so it stays trivially unit-testable.
  */
 import type { RosterPlayer } from '../model';
-import { resolveHeroName } from '../resolvers/hero';
+import { resolveHero } from '../resolvers/hero';
 
 /** Parse a roster value (object or JSON string) into a RosterPlayer, tolerating field aliases. */
 export function parseRoster(value: unknown): RosterPlayer | undefined {
@@ -25,7 +25,11 @@ export function parseRoster(value: unknown): RosterPlayer | undefined {
     isLocal: asBool(pick('is_local', 'isLocal', 'local')),
     // GEP delivers hero names in ALL CAPS — canonicalize so they match the
     // proper-case names the rest of the app and the user's history key on.
-    heroName: resolveHeroName(asString(pick('heroName', 'hero_name', 'hero', 'character'))),
+    // A numeric hero_id covers a brand-new hero GEP names "UNKNOWN" (see HERO_ID_TO_NAME).
+    heroName: resolveHero(
+      asString(pick('heroName', 'hero_name', 'hero', 'character')),
+      asString(pick('heroId', 'hero_id')),
+    ),
     heroRole: asString(pick('heroRole', 'hero_role', 'role')),
     team: asNumber(pick('team', 'team_id', 'teamId')),
     kills: asNumber(pick('kills', 'eliminations', 'elims')),

@@ -51,6 +51,30 @@ export function resolveHeroName(value: string | undefined | null): string | unde
 }
 
 /**
+ * GEP hero id -> canonical name, for heroes the feed reports with a numeric
+ * `hero_id` but `hero_name: "UNKNOWN"` because Overwolf hasn't shipped the name
+ * yet (seen in live captures on release week). Only ids observed in real captures
+ * belong here — an id is never guessed. Names resolve through
+ * {@link resolveHeroName}, so each must exist in the hero list.
+ */
+export const HERO_ID_TO_NAME: Readonly<Record<string, string>> = {
+  '1392': 'Doctrine',
+};
+
+/**
+ * Resolve a hero from GEP's name, falling back to its numeric id when the name is
+ * absent or the `UNKNOWN` sentinel. A name GEP did report always wins; an id not
+ * in {@link HERO_ID_TO_NAME} (or none) leaves the hero unresolved.
+ */
+export function resolveHero(name: string | undefined | null, id: string | number | undefined | null): string | undefined {
+  const byName = resolveHeroName(name);
+  if (byName) return byName;
+  if (id === undefined || id === null) return undefined;
+  const mapped = HERO_ID_TO_NAME[String(id).trim()];
+  return mapped ? resolveHeroName(mapped) : undefined;
+}
+
+/**
  * A hero's DEPLOYABLE, when `value` names one rather than a player.
  *
  * Overwatch's kill feed reports destroying a turret, pylon or trap as a kill

@@ -19,7 +19,7 @@ export const HEROES_BY_ROLE: Record<Exclude<Role, 'openQ'>, readonly string[]> =
     'Venture', 'Widowmaker',
   ],
   support: [
-    'Ana', 'Baptiste', 'Brigitte', 'Illari', 'Jetpack Cat', 'Juno', 'Kiriko',
+    'Ana', 'Baptiste', 'Brigitte', 'Doctrine', 'Illari', 'Jetpack Cat', 'Juno', 'Kiriko',
     'Lifeweaver', 'Lúcio', 'Mercy', 'Mizuki', 'Moira', 'Wuyang', 'Zenyatta',
   ],
 };

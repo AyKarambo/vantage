@@ -28,6 +28,7 @@ describe('roleOfHero', () => {
     expect(roleOfHero('Reinhardt')).toBe('tank');
     expect(roleOfHero('Tracer')).toBe('damage');
     expect(roleOfHero('Ana')).toBe('support');
+    expect(roleOfHero('DOCTRINE')).toBe('support');
   });
 
   it('survives GEP casing, accents and punctuation', () => {

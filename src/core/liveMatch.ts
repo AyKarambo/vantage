@@ -2,7 +2,7 @@ import { battleTagName, type GepMessage, type RosterPlayer } from './model';
 import { isMatchEndMessage, isMatchStartMessage } from './matchAggregator';
 import { K } from './matchAggregator/keys';
 import { asNumber, asObject, asString, asBool, parseRoster } from './matchAggregator/gepValues';
-import { deployableOf, resolveHeroName } from './resolvers/hero';
+import { deployableOf, resolveHero } from './resolvers/hero';
 import { resolveMapId } from './resolvers/mapId';
 
 /**
@@ -214,15 +214,23 @@ function applyKillFeed(state: LiveMatchState, value: unknown, now: number): Live
   const actorHero = revive
     ? asString(pick('supporter_hero_name', 'supporterHeroName'))
     : asString(pick('attacker_hero_name', 'attackerHeroName'));
+  const actorHeroId = revive
+    ? asString(pick('supporter_hero_id', 'supporterHeroId'))
+    : asString(pick('attacker_hero_id', 'attackerHeroId'));
   const subject = revive ? revivedName : asString(pick('victim'));
   const subjectHero = revive ? asString(pick('revived_hero_name', 'revivedHeroName')) : rawVictimHero;
+  const subjectHeroId = revive
+    ? asString(pick('revived_hero_id', 'revivedHeroId'))
+    : asString(pick('victim_hero_id', 'victimHeroId'));
   const deployable = revive ? undefined : deployableOf(rawVictimHero);
+  const attackerHero = resolveHero(actorHero, actorHeroId);
+  const victimHero = resolveHero(subjectHero, subjectHeroId);
   const entry: LiveKill = {
     at: now,
     ...(actor ? { attacker: actor } : {}),
     ...(subject ? { victim: subject } : {}),
-    ...(resolveHeroName(actorHero) ? { attackerHero: resolveHeroName(actorHero) } : {}),
-    ...(resolveHeroName(subjectHero) ? { victimHero: resolveHeroName(subjectHero) } : {}),
+    ...(attackerHero ? { attackerHero } : {}),
+    ...(victimHero ? { victimHero } : {}),
     ...(attackerFriendly !== undefined ? { attackerFriendly } : {}),
     ...(revive ? { revive: true } : {}),
     ...(deployable ? { deployable } : {}),
