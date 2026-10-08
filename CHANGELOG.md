@@ -26,6 +26,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   **GEP update needed** line in the status-bar details), plus a notification once, if you have GEP
   alerts on. Overwolf rolls updates out in phases, so there may be a wait: Vantage offers
   **Restart to apply** as soon as the new package has downloaded.
+- **Doctrine**, the Season 5 Support hero, is now in the hero list, so he shows up in the
+  quick-log suggestions and his role is recognised. Overwolf does not send his name yet (the game
+  reports him as an unknown hero), so Vantage recognises him by his hero id on the scoreboard and
+  in the live kill feed. Matches you already tracked keep him blank.
 - **Watchpoint: Grímsvötn**, the Season 5 Escort map, is now in the map list, so you can log
   matches on it and it counts towards your per-map stats. Matches tracked live will show it by
   name once its game id is known; until then it may appear as an unknown map.
