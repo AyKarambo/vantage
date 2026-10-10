@@ -32,6 +32,11 @@ describe('resolveMapId', () => {
     expect(resolveMapId('3893')).toBe('Aatlis');
   });
 
+  it('resolves Watchpoint: Grímsvötn (GEP id 5050, string or number)', () => {
+    expect(resolveMapId('5050')).toBe('Watchpoint: Grímsvötn');
+    expect(resolveMapId(5050)).toBe('Watchpoint: Grímsvötn');
+  });
+
   it('returns undefined for empty/nullish', () => {
     expect(resolveMapId(undefined)).toBeUndefined();
     expect(resolveMapId(null)).toBeUndefined();
