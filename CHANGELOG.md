@@ -31,8 +31,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   reports him as an unknown hero), so Vantage recognises him by his hero id on the scoreboard and
   in the live kill feed. Matches you already tracked keep him blank.
 - **Watchpoint: Grímsvötn**, the Season 5 Escort map, is now in the map list, so you can log
-  matches on it and it counts towards your per-map stats. Matches tracked live will show it by
-  name once its game id is known; until then it may appear as an unknown map.
+  matches on it and it counts towards your per-map stats. Matches tracked live now show it by
+  name too, instead of as an unknown map (`5050`), and matches already saved under that number
+  now show it as well.
+
+### Changed
+
+- **The Live screen's team line now counts kills, not deaths.** It's the same number read from
+  the other side — your team's kills are the enemy team's deaths, and the other way round — so
+  the side with more is ahead, the same direction as damage and healing. Each team's kills still
+  come from the scoreboard's own death counter, so a destroyed turret or a revive can't be counted.
+  The chip beside **Live** in the sidebar follows (`3–4`, your team first); the **D** column and
+  the match detail page's totals are unchanged.
 
 ### Fixed
 

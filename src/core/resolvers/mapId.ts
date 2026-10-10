@@ -37,6 +37,7 @@ export const MAP_ID_TO_NAME: Record<string, string> = {
   '1467': 'Route 66',
   '3205': 'Shambali Monastery',
   '388': 'Watchpoint: Gibraltar',
+  '5050': 'Watchpoint: Grímsvötn',
   // Push
   '2868': 'Colosseo',
   '3411': 'Esperança',

@@ -16,6 +16,7 @@ import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
 import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
+import { liveTeamKills } from '../../../src/core/liveMatch';
 import { initShortcuts, overlayCapturing, registerShortcut, shortcutGroups } from '../shortcuts';
 import { isUpwardAction, nextScrollTop, resolveScroller, type ScrollAction } from '../scrollNav';
 import { openPopover } from '../components/popover';
@@ -814,16 +815,17 @@ export class App {
       existing?.remove();
       return;
     }
-    // "Ilios · 12:34 · deaths 4–3 (your team – enemy team)" once the map and both
+    // "Ilios · 12:34 · kills 3–4 (your team – enemy team)" once the map and both
     // sides' deaths have reported in; a plain "A match is in progress" before then.
     const clock = p!.startedAt ? matchClock(p!.startedAt) : undefined;
-    const deaths = p!.totals.deathsKnown ? `${p!.totals.yours.deaths}–${p!.totals.theirs.deaths}` : null;
-    const title = [p!.map, clock, deaths ? `deaths ${deaths} (your team – enemy team)` : undefined]
+    const kills = p!.totals.deathsKnown ? liveTeamKills(p!.totals) : null;
+    const killsText = kills ? `${kills.yours}–${kills.theirs}` : null;
+    const title = [p!.map, clock, killsText ? `kills ${killsText} (your team – enemy team)` : undefined]
       .filter(Boolean).join(' · ') || 'A match is in progress';
-    // A small mono deaths chip beside the dot, only once both sides have
-    // reported deaths — the same `deathsKnown` gate the Live screen's own tally
-    // uses, so the two can never disagree on a number.
-    const chipText = deaths;
+    // A small mono kills chip beside the dot, only once both sides have
+    // reported deaths — the same `deathsKnown` gate and `liveTeamKills` flip the
+    // Live screen's own tally uses, so the two can never disagree on a number.
+    const chipText = killsText;
     if (existing) {
       existing.title = title;
       const dot = existing.querySelector('.nav-live-dot')!;
