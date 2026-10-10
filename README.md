@@ -88,7 +88,7 @@ account's per-role lines beneath it.
   a coarse "started 12m ago". The kill feed is now labelled **Kill feed** (not the bare
   "Recent") with its own **Hide** link, and a dim hint appears under the tally when it's off
   with a **turn on** link back. Outside the screen: a green dot appears on the nav item while
-  a match is running, joined by a small **deaths chip** ("4–3", your team – the enemy) once both
+  a match is running, joined by a small **kills chip** ("3–4", your team – the enemy) once both
   sides' deaths have been reported; the Overview header shows a **"Live · `<map>` ·
   `<hero>` →"** pill the moment a match starts; and the Windows tray's hover tooltip and menu
   gain a **"Live: `<map>` · started `<N>`m ago"** line and a **"This sitting: `<W>`–`<L>`"**
@@ -100,22 +100,22 @@ account's per-role lines beneath it.
   match →**, and **Grade it on Review →** when it's still ungraded. A match GEP delivered
   with no result at all reads **"The game didn't report a win or loss for this one"** with
   a **Set result on Review →** link instead.
-  Above it, **deaths, damage and healing totalled per team** — the side ahead on each line
-  (fewer deaths, more damage, more healing) is the brighter one. All three are read off the
-  game's own scoreboard, so the deaths line is exactly the sum of the **D** column below it and
+  Above it, **kills, damage and healing totalled per team** — the side ahead on each line
+  (more of each) is the brighter one. All three are read off the game's own scoreboard, so
+  a team's kills line is exactly the sum of the **other** team's **D** column below it and
   they remain when the kill feed is off. Rows are ordered the way the game orders them: your
   team first, then tank, both DPS, both supports (the same ordering the stored match detail uses).
-  **Deaths, not eliminations**: one death can credit up to five eliminations, so a team's
+  **Players downed, not eliminations**: one death can credit up to five eliminations, so a team's
   elimination total can't be compared — a single solo death against five credited eliminations
-  would read 5–1 although each side lost exactly one player. Because deaths come from the
-  scoreboard's own death counter, a destroyed turret or pylon and a revive (a Mercy resurrect,
-  Anran's self-revive) can never be counted: only players have one. They still show in the kill
-  feed, as a destroy / a revive. A side that hasn't reported deaths yet shows no deaths line
-  rather than a 0. (In Stadium the game resets the scoreboard between rounds, so there the
+  would read 5–1 although each side lost exactly one player. A team's kills are therefore the
+  other team's deaths, taken from the scoreboard's own death counter, so a destroyed turret or
+  pylon and a revive (a Mercy resurrect, Anran's self-revive) can never be counted: only players
+  have one. They still show in the kill feed, as a destroy / a revive. A side that hasn't
+  reported deaths yet shows no kills line rather than a 0. (In Stadium the game resets the scoreboard between rounds, so there the
   totals are per round.)
   There is deliberately **no score line**: Overwatch's event feed reports no objective
   score of any kind (its `match_info` updates are map, match id, outcome, and a
-  Stadium-only round outcome), so Vantage shows team **deaths** and labels them as such (the
+  Stadium-only round outcome), so Vantage shows team **kills** and labels them as such (the
   card's tooltip spells this out) rather than inventing a scoreline. The kill feed can
   be switched off in **Settings → General** — off means it isn't sent to the window at all,
   not merely hidden; the scoreboard, the team totals and the with/vs records are unaffected.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   INITIAL_LIVE_MATCH, LIVE_FEED_CAP, reduceLiveMatch, liveMatchDetached,
-  liveRoster, liveOpponentNames, liveTeamTotals, localTeam, type LiveMatchState,
+  liveRoster, liveOpponentNames, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
 } from '../src/core/liveMatch';
 import type { GepMessage } from '../src/core/model';
 
@@ -315,6 +315,30 @@ describe('liveTeamTotals', () => {
     it('is withheld when the feed gave no teams, whatever the rows say', () => {
       const roster = [p({ isLocal: true, deaths: 3 }), p({ deaths: 2 })];
       expect(liveTeamTotals(roster).deathsKnown).toBe(false);
+    });
+  });
+
+  describe('kills', () => {
+    it('are the other side\'s deaths, so each team reads the way the game credits it', () => {
+      // Yours lost 6 players, theirs lost 2: you took 2 kills, they took 6.
+      const roster = [
+        p({ isLocal: true, team: 0, deaths: 4 }),
+        p({ team: 0, deaths: 2 }),
+        p({ team: 1, deaths: 1 }),
+        p({ team: 1, deaths: 1 }),
+      ];
+      expect(liveTeamKills(liveTeamTotals(roster))).toEqual({ yours: 2, theirs: 6 });
+    });
+
+    it('count one per player down, not per elimination credited', () => {
+      // The solo death from the deaths case above: one kill for them, none for you.
+      const roster = [
+        p({ isLocal: true, team: 0, kills: 1, deaths: 1 }),
+        p({ team: 0, kills: 0, deaths: 0 }),
+        p({ team: 1, kills: 5, deaths: 0 }),
+        p({ team: 1, kills: 0, deaths: 0 }),
+      ];
+      expect(liveTeamKills(liveTeamTotals(roster))).toEqual({ yours: 0, theirs: 1 });
     });
   });
 

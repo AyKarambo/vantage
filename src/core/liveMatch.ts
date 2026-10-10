@@ -380,3 +380,15 @@ export function liveTeamTotals(roster: RosterPlayer[]): {
   const known = mine !== undefined && sawOther;
   return { yours, theirs, known, deathsKnown: known && yoursReportedDeaths && theirsReportedDeaths };
 }
+
+/**
+ * Each side's kills, read as the OTHER side's deaths — the same flip the game
+ * itself makes, and the direction every other live total already points (higher
+ * is better). Still one count per player down, however many players were
+ * credited with the elimination, so it can't be inflated by assists or a
+ * five-credit pick the way summed eliminations would be. Gated by the same
+ * `deathsKnown` as the deaths it is derived from.
+ */
+export function liveTeamKills(totals: { yours: { deaths: number }; theirs: { deaths: number } }): { yours: number; theirs: number } {
+  return { yours: totals.theirs.deaths, theirs: totals.yours.deaths };
+}
