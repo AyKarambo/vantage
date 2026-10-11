@@ -176,7 +176,7 @@ function devModeSection(s: AppUiSettings): HTMLElement {
         label: 'Open Review on match end',
         on: s.autoSwitchToReview,
         onChange: () => apply({ autoSwitchToReview: !s.autoSwitchToReview }),
-        hint: 'Opens that game’s Review page once the match is recorded. Never pulls Vantage in front of your game.',
+        hint: 'Opens that game’s Review page when the match ends — or Needs result, if no result came through. Never pulls Vantage in front of your game.',
       }),
       h('div', null,
         toggleRow({

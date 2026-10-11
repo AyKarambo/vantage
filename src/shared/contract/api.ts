@@ -11,7 +11,7 @@ import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { ThresholdSuggestion } from '../../core/targets';
-import type { DashboardFilters, DashboardData, HeroDetail, MatchRow } from './dashboard';
+import type { DashboardFilters, DashboardData, HeroDetail, MatchRow, PendingChangedPayload } from './dashboard';
 import type { MatchesTextFilter } from '../../core/dashboardData';
 import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
 import type { PlayerList, PlayerListQuery } from './players';
@@ -340,8 +340,8 @@ export interface OwStatsApi {
   /** Subscribe to newly recorded competitive matches (live or hand-logged) — drives the
    *  live dashboard refresh + account auto-switch; returns an unsubscribe function. */
   onGameLogged(cb: (p: GameLoggedPayload) => void): () => void;
-  /** Subscribe to "the pending (needs-result) set changed" (a match was held or resolved); returns an unsubscribe function. */
-  onPendingChanged(cb: () => void): () => void;
+  /** Subscribe to "the pending (needs-result) set changed" (a match was held, resolved or dismissed — `held` is set only for a match just held); returns an unsubscribe function. */
+  onPendingChanged(cb: (p: PendingChangedPayload) => void): () => void;
   /**
    * Subscribe to the in-progress match — roster, per-team totals and kill
    * feed, pushed while a match runs and cleared when it ends (or when GEP
