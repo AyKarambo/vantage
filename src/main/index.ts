@@ -456,6 +456,7 @@ function main(): void {
         gepNotifications: config.ui.gepNotifications,
         liveKillFeed: config.ui.liveKillFeed,
         autoSwitchToLive: config.ui.autoSwitchToLive,
+        autoSwitchToReview: config.ui.autoSwitchToReview,
         lastSeenVersion: config.ui.lastSeenVersion,
         mcpEnabled: config.ui.mcpEnabled,
         uiZoom: config.ui.uiZoom,
@@ -498,6 +499,10 @@ function main(): void {
           saveLocalUiConfig({ autoSwitchToLive: patch.autoSwitchToLive });
           config = loadConfig();
         }
+        if (patch.autoSwitchToReview !== undefined) {
+          saveLocalUiConfig({ autoSwitchToReview: patch.autoSwitchToReview });
+          config = loadConfig();
+        }
         if (patch.lastSeenVersion !== undefined) {
           saveLocalUiConfig({ lastSeenVersion: patch.lastSeenVersion });
           config = loadConfig();
@@ -529,6 +534,7 @@ function main(): void {
           gepNotifications: config.ui.gepNotifications,
           liveKillFeed: config.ui.liveKillFeed,
           autoSwitchToLive: config.ui.autoSwitchToLive,
+          autoSwitchToReview: config.ui.autoSwitchToReview,
           lastSeenVersion: config.ui.lastSeenVersion,
           mcpEnabled: config.ui.mcpEnabled,
           uiZoom: config.ui.uiZoom,

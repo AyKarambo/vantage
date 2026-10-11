@@ -364,6 +364,32 @@ export class App {
     // exists for. The modal simply waits until they alt-tab back.
     if (payload.source === 'gep') {
       void maybeOfferPlacements(payload.account, payload.role, () => void store.refresh());
+      void this.switchToReviewIfWanted(payload.matchId);
+    }
+  }
+
+  /**
+   * "Open Review on match end" (Settings → App behavior): once a live-tracked
+   * match has been recorded, open that game's Review page. The setting is read
+   * when the push arrives, so a toggle applies to the very next match. It moves
+   * the SCREEN only — never the window's focus or visibility.
+   *
+   * Waits for a fresh dashboard first: Review's deep link only opens a card the
+   * inbox already holds and consumes the link on its first render, so
+   * navigating before the new match has landed would lose it. The inbox honours
+   * the Role filter, so a filter can still hide the match; then the game's own
+   * page opens rather than an unrelated game's Review card.
+   */
+  private async switchToReviewIfWanted(matchId: string): Promise<void> {
+    try {
+      if (!(await bridge.getAppSettings()).autoSwitchToReview) return;
+      await store.refresh();
+      const { view, params } = store.get();
+      if (view === 'review' && params.matchId === matchId) return;
+      const inInbox = store.get().data?.reviewInbox.some((m) => m.matchId === matchId) ?? false;
+      store.setView(inInbox ? 'review' : 'matchDetail', { matchId });
+    } catch {
+      /* settings unreadable or the refresh failed — stay where you are */
     }
   }
 
@@ -1490,6 +1516,13 @@ function settingsActions(
       run: () => {
         void bridge.setAppSettings({ autoSwitchToLive: !appSettings.autoSwitchToLive })
           .then((s) => toast(`Open Live on match start: ${s.autoSwitchToLive ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Open Review on match end', hint: onOff(appSettings.autoSwitchToReview),
+      run: () => {
+        void bridge.setAppSettings({ autoSwitchToReview: !appSettings.autoSwitchToReview })
+          .then((s) => toast(`Open Review on match end: ${s.autoSwitchToReview ? 'on' : 'off'}`));
       },
     },
     {

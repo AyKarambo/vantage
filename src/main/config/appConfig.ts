@@ -72,6 +72,8 @@ export interface UiConfig {
   liveKillFeed: boolean;
   /** Switch to the Live screen when a match starts (default false). Never focuses the window. */
   autoSwitchToLive: boolean;
+  /** Switch to the finished game's Review page once it is recorded (default false). Never focuses the window. */
+  autoSwitchToReview: boolean;
   /**
    * Whether the local MCP endpoint listens (spec #174). Default **false**: it
    * exposes match history and the manual-write surface to any process running
@@ -155,7 +157,7 @@ const DEFAULTS: AppConfig = {
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: {
     closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true,
-    liveKillFeed: true, autoSwitchToLive: false, mcpEnabled: false,
+    liveKillFeed: true, autoSwitchToLive: false, autoSwitchToReview: false, mcpEnabled: false,
   },
 };
 

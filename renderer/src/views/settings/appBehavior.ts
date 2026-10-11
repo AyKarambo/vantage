@@ -172,6 +172,12 @@ function devModeSection(s: AppUiSettings): HTMLElement {
         onChange: () => apply({ autoSwitchToLive: !s.autoSwitchToLive }),
         hint: 'Switches to the Live screen when a match starts. Never pulls Vantage in front of your game.',
       }),
+      toggleRow({
+        label: 'Open Review on match end',
+        on: s.autoSwitchToReview,
+        onChange: () => apply({ autoSwitchToReview: !s.autoSwitchToReview }),
+        hint: 'Opens that game’s Review page once the match is recorded. Never pulls Vantage in front of your game.',
+      }),
       h('div', null,
         toggleRow({
           label: 'MCP endpoint',

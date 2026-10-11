@@ -117,6 +117,20 @@ describe('loadConfig — dataFolder rename + logFilter removal', () => {
     expect(loadConfig().ui.autoSwitchToLive).toBe(true);
   });
 
+  it('defaults "open Review on match end" off, independently of the Live switch', async () => {
+    fs.writeFileSync(userConfigFile(), JSON.stringify({ ui: { autoSwitchToLive: true } }), 'utf8');
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.autoSwitchToReview).toBe(false);
+  });
+
+  it('round-trips a ui.autoSwitchToReview=true local override', async () => {
+    fs.writeFileSync(userConfigFile(), JSON.stringify({ ui: { autoSwitchToReview: true } }), 'utf8');
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    const ui = loadConfig().ui;
+    expect(ui.autoSwitchToReview).toBe(true);
+    expect(ui.autoSwitchToLive).toBe(false);
+  });
+
   // "What's new" (T21) gates a blocking modal on lastSeenVersion being unset,
   // so an absent value must mean "never shown anything" — never a fabricated
   // baseline like '0.0.0', which would pop the changelog on every fresh install.

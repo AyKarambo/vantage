@@ -39,6 +39,14 @@ export interface AppUiSettings {
    */
   autoSwitchToLive: boolean;
   /**
+   * Whether the window switches to that game's Review page as soon as a
+   * live-tracked match has been recorded (default **off**). Same rule as
+   * {@link autoSwitchToLive}: it moves the screen inside Vantage and never
+   * shows, focuses or restores the window. A hand-logged match never triggers
+   * it — the log form is already in front of you.
+   */
+  autoSwitchToReview: boolean;
+  /**
    * Whether the local MCP endpoint listens, letting an MCP client (an LLM
    * coach) read your stats and write the manual layer. Default **off** — it is
    * reachable by any process running as this user, so enabling it is a

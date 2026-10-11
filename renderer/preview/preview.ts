@@ -292,6 +292,7 @@ let appSettings: AppUiSettings = {
   gepNotifications: true,
   liveKillFeed: true,
   autoSwitchToLive: false,
+  autoSwitchToReview: false,
   // Off, like the real default: the preview harness has no main process to
   // host the pipe, so the toggle is only ever cosmetic here.
   mcpEnabled: false,
@@ -1382,7 +1383,7 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
 
 let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
 let previewLiveStartedAt = Date.now();
-(window as unknown as { previewLive: { start(): void; stop(): void } }).previewLive = {
+(window as unknown as { previewLive: { start(): void; stop(): void; finish(role?: Role): string } }).previewLive = {
   start: () => {
     let tick = 0;
     previewLiveStartedAt = Date.now();
@@ -1402,5 +1403,22 @@ let previewLiveStartedAt = Date.now();
         },
         feed: [], teamsKnown: false });
     }
+  },
+  // A live-tracked match ENDING: the live feed goes idle and the pipeline records the
+  // game, pushing onGameLogged with source 'gep' — the push "Open Review on match end"
+  // reacts to. (logMatch's own push is 'manual', which deliberately never triggers it.)
+  finish: (role: Role = 'damage') => {
+    (window as unknown as { previewLive: { stop(): void } }).previewLive.stop();
+    const matchId = `preview-gep-${Date.now()}`;
+    const account = Object.values(previewAccounts)[0] || 'You';
+    logged.push({
+      matchId, timestamp: Date.now(), account, role, map: 'Ilios', result: 'Win',
+      gameType: 'Competitive', source: 'gep', heroes: ['Genji'],
+    });
+    save(LOGGED_KEY, logged);
+    for (const cb of gameLoggedListeners) {
+      cb({ matchId, account, configured: isConfiguredAccount(account, previewAccounts), role, source: 'gep' });
+    }
+    return matchId;
   },
 };
