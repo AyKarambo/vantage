@@ -67,6 +67,14 @@ export function statBar(o: {
   /** Widen the value column past the default 34px when the value is more than a
    *  short number (e.g. a "rate · count" pair) that would otherwise wrap. */
   valueWidth?: number;
+  /**
+   * Label and value share the top line (label left, value right, both wrap
+   * rather than clip) with the bar underneath, instead of the label · bar ·
+   * value row. For narrow cards, where a fixed label column plus a value
+   * column leave the bar a sliver and a long label spills over it. Ignores
+   * `valueWidth` — the value takes the room it needs.
+   */
+  stacked?: boolean;
   /** Explains what this specific bar means (e.g. Mental's Calm/Tilted formulas). */
   title?: string;
 }): HTMLElement {
@@ -74,7 +82,14 @@ export function statBar(o: {
   applyStyle(fill, { width: `${Math.round(Math.max(0, Math.min(1, o.frac)) * 100)}%`, background: o.color ?? PALETTE.accent });
   const valueStyle: Record<string, string> = {};
   if (o.color) valueStyle.color = o.color;
-  if (o.valueWidth) valueStyle.width = `${o.valueWidth}px`;
+  if (o.valueWidth && !o.stacked) valueStyle.width = `${o.valueWidth}px`;
+  if (o.stacked) {
+    return h('div', { class: 'statbar statbar--stacked', title: o.title },
+      h('span', { class: 'statbar-label' }, o.label),
+      h('span', { class: 'statbar-value', style: Object.keys(valueStyle).length ? valueStyle : undefined }, o.valueText),
+      h('div', { class: `track${o.slim ? ' track--slim' : ''}` }, fill),
+    );
+  }
   return h('div', { class: 'statbar', title: o.title },
     h('span', { class: 'statbar-label' }, o.label),
     h('div', { class: `track${o.slim ? ' track--slim' : ''}` }, fill),
@@ -103,16 +118,25 @@ function localDateFromKey(dateKey: string): Date {
   return new Date(y, m - 1, d);
 }
 
-/** Every other row (Mon/Wed/Fri) — labelling all seven would be denser than the 13px cells can read. */
-const WEEKDAY_ROW_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+/** Every other row (Mon/Wed/Fri), one letter each — a three-letter label would eat a quarter of a narrow card's width. */
+const WEEKDAY_ROW_LABELS = ['', 'M', '', 'W', '', 'F', ''];
+/** A month label is only drawn when its month spans at least this many week-columns — fewer can't hold the three-letter name without running into the next one. */
+const MONTH_LABEL_MIN_COLS = 3;
 
 /**
- * GitHub-style activity heatmap: small fixed-size cells laid out as columns of
- * weeks × rows of weekdays. Colour encodes winrate, opacity the game count.
- * `onPick` (optional) makes cells with `games > 0` clickable — cells with no
- * games stay inert either way. A weekday column (O5) and a month label above
- * the first column of each new month orient a grid that can now span up to
- * 13 weeks (see `activityWindowDays`), not just a fixed 5.
+ * GitHub-style activity heatmap: columns of weeks × rows of weekdays. Colour
+ * encodes winrate, opacity the game count. `onPick` (optional) makes cells with
+ * `games > 0` clickable — cells with no games stay inert either way. A weekday
+ * column (O5) and a month label above the first column of each new month orient
+ * a grid that can span up to 13 weeks (see `activityWindowDays`).
+ *
+ * The grid is fluid: the week columns share whatever width the card gives them
+ * and every cell is square, so a 13-week window always fits its card (the old
+ * fixed 13px cells made a 14-column grid ~250px wide and spilled out of a
+ * ~180px card). Everything is placed on one CSS grid by explicit row/column, so
+ * the weekday labels and month labels line up with the cells at any width. A
+ * month too short to fit its name (a single trailing week) drops its label, or
+ * right-aligns it into free space when there is room, rather than overflowing.
  */
 export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => void): HTMLElement {
   const wrap = h('div', { class: 'heatmap-wrap' });
@@ -124,26 +148,57 @@ export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => 
   const colStart = (col: number): number => (col === 0 ? 0 : (7 - firstWeekday) + (col - 1) * 7);
   const columns = days.length ? Math.ceil((firstWeekday + days.length) / 7) : 0;
 
-  const monthsRow = h('div', { class: 'heatmap-months' });
+  const grid = h('div', { class: 'heatmap' });
+  grid.style.setProperty('--hm-cols', String(Math.max(columns, 1)));
+
+  // Grid column 1 is the weekday labels; week `c` sits in grid column c + 2.
+  const weekCol = (c: number): number => c + 2;
+
+  // Month labels (row 1): where each month's first week-column falls.
+  const starts: Array<{ col: number; text: string }> = [];
   let prevMonth = -1;
   for (let col = 0; col < columns; col++) {
     const day = days[colStart(col)];
-    const month = day ? localDateFromKey(day.date).getMonth() : prevMonth;
-    const isNewMonth = day !== undefined && month !== prevMonth;
-    if (day) prevMonth = month;
-    monthsRow.append(h('div', { class: 'heatmap-month-label' },
-      isNewMonth ? localDateFromKey(day!.date).toLocaleDateString(undefined, { month: 'short' }) : ''));
+    if (!day) continue;
+    const date = localDateFromKey(day.date);
+    if (date.getMonth() !== prevMonth) {
+      starts.push({ col, text: date.toLocaleDateString(undefined, { month: 'short' }) });
+      prevMonth = date.getMonth();
+    }
   }
+  starts.forEach((s, k) => {
+    const span = (starts[k + 1]?.col ?? columns) - s.col;
+    const label = h('div', { class: 'heatmap-month-label' }, s.text);
+    if (span >= MONTH_LABEL_MIN_COLS) {
+      label.style.gridColumn = `${weekCol(s.col)} / span ${span}`;
+    } else if (k > 0 && k === starts.length - 1 && s.col - starts[k - 1].col >= MONTH_LABEL_MIN_COLS + 1) {
+      // The trailing partial month: the previous label's three letters only
+      // reach about two columns past its start, so when it started four or
+      // more columns back there is room to right-align this one over the
+      // last three.
+      label.style.gridColumn = `${weekCol(s.col - (MONTH_LABEL_MIN_COLS - 1))} / span ${MONTH_LABEL_MIN_COLS}`;
+      label.style.justifySelf = 'end';
+    } else {
+      return; // no room — the cell tooltips still carry every date
+    }
+    grid.append(label);
+  });
 
-  const weekdaysCol = h('div', { class: 'heatmap-weekdays' },
-    ...WEEKDAY_ROW_LABELS.map((label) => h('div', { class: 'heatmap-weekday-label' }, label)));
+  WEEKDAY_ROW_LABELS.forEach((text, row) => {
+    if (!text) return;
+    const label = h('div', { class: 'heatmap-weekday-label' }, text);
+    label.style.gridRow = String(row + 2);
+    grid.append(label);
+  });
 
-  const grid = h('div', { class: 'heatmap' });
   days.forEach((d, i) => {
     const clickable = Boolean(onPick && d.games);
+    const slot = firstWeekday + i; // index in the week × weekday lattice
     const cell = h('div', {
       class: 'heatmap-cell',
       style: {
+        gridColumn: String(weekCol(Math.floor(slot / 7))),
+        gridRow: String((slot % 7) + 2),
         background: d.games ? wrColor(d.winrate ?? 0) : 'var(--surface-3)',
         opacity: d.games ? String(0.4 + Math.min(d.games, 6) / 6 * 0.6) : '1',
         ...(clickable ? { cursor: 'pointer' } : {}),
@@ -151,8 +206,6 @@ export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => 
       ...(clickable ? { role: 'button', on: { click: () => onPick!(d.date) } } : {}),
     });
     tips.attach(cell, d.games ? `${d.date} · ${d.games}g · ${pct(d.winrate ?? 0)}` : `${d.date} · no games`);
-    // Align the first cell to its weekday row; the rest flow down each column.
-    if (i === 0) cell.style.gridRowStart = String(firstWeekday + 1);
     grid.append(cell);
   });
 
@@ -162,13 +215,9 @@ export function calendarHeatmap(days: CalendarDay[], onPick?: (date: string) => 
     heatSwatch(PALETTE.win, 'Winning'),
     // Colour is winrate; opacity is volume (O5) — without this the legend
     // never said what the faint-vs-solid cells actually meant.
-    h('span', { class: 'legend-item u-dim', style: { fontSize: '10px' } }, '1 · 3 · 6+ games (opacity)'),
+    h('span', { class: 'legend-item u-dim' }, '1 · 3 · 6+ games (opacity)'),
   );
-  wrap.append(
-    h('div', { class: 'heatmap-main' }, monthsRow, h('div', { class: 'heatmap-body' }, weekdaysCol, grid)),
-    legend,
-    tips.tip,
-  );
+  wrap.append(grid, legend, tips.tip);
   return wrap;
 }
 

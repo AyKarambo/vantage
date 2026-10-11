@@ -32,6 +32,8 @@ export interface TextOpts {
   size?: number;
   weight?: number;
   mono?: boolean;
+  /** Stylesheet class — lets a chart restyle its text (colour, tracking) from CSS tokens instead of literals. */
+  class?: string;
 }
 
 /** Positioned SVG label — svgText(0, 0, '54%') → a <text> node reading "54%". */
@@ -45,6 +47,7 @@ export function svgText(x: number, y: number, str: string, opts: TextOpts = {}):
   });
   if (opts.weight) t.setAttribute('font-weight', String(opts.weight));
   if (opts.mono) t.setAttribute('font-family', "'Geist Mono', monospace");
+  if (opts.class) t.setAttribute('class', opts.class);
   t.textContent = str;
   return t;
 }

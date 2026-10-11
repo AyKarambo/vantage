@@ -43,6 +43,19 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   come from the scoreboard's own death counter, so a destroyed turret or a revive can't be counted.
   The chip beside **Live** in the sidebar follows (`3–4`, your team first); the **D** column and
   the match detail page's totals are unchanged.
+- **The Overview's map chart now names every map.** Dots used to be coloured by game mode, with
+  names printed only beside a few of them and overlapping where maps clustered, so most dots
+  couldn't be told apart. Each map is now its own dot with its own label, placed so no two labels
+  collide (a thin line ties a label back to its dot where it had to move), coloured by winrate like
+  the Top-priority list beside it, and sized by games played. Hover or Tab to a dot to light it up
+  with its winrate, games and W–L; click a dot or its name to open that map's games. The games axis
+  is now logarithmic, so maps you rarely play spread out instead of piling up on the left. The game
+  mode legend is gone.
+- **The Overview reads more evenly and nothing on it is cut off.** Text on the Overview now uses
+  four sizes instead of a dozen, none smaller than 11px (the chart's labels were tiny at some
+  window widths). The Activity heatmap fits its card instead of running into the Mental card, and
+  the Mental subtitle, long target names, hero names and the Top-priority map names wrap instead of
+  being squeezed or clipped.
 
 ### Fixed
 
@@ -51,6 +64,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   — in the **This season** filter, the season picker, **By season**, and the trend markers. They
   now land in **2026 Season 5**. It's treated as a regular season rather than a ladder reset; if
   Blizzard says otherwise, flip it in **Settings → Master data → Seasons**.
+- **The Maps screen no longer counts a game without a map as a map.** A game Overwolf never
+  reported a map for showed up as its own "Unknown" map — in the ranking, the Maps-played donut
+  ("Other (22 maps)" was really 21), an "Unknown" game mode and the Overview chart. That game still
+  counts in every game total; it just isn't listed as a map, and the subtitle says how many games
+  were left out. Open it from **Matches** (search "Unknown") and set the real map with **Edit**.
+- **The Maps subtitle now shows what you're looking at**, e.g. "31 maps · 1,352 games · Damage ·
+  all time · Karambo". The account switcher and the Role filter narrow every number on the screen,
+  but only the season was visible, so "All time" could quietly mean one account's games.
 
 ## 0.40.1 — 5 October 2026
 

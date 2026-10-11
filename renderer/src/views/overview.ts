@@ -1,14 +1,13 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h, render } from '../dom';
 import type { DashboardData, Group, LiveMatchPayload, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
-import { dayKey, dayPartAt, MAP_MIN_GAMES } from '../../../src/core/analytics';
+import { dayKey, dayPartAt, MAP_MIN_GAMES, splitUnknownMap } from '../../../src/core/analytics';
 import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
 import { READINESS_TUNING } from '../../../src/core/readiness';
 import { isStale } from '../../../src/core/staleness';
-import { makeMapMode } from '../../../src/core/masterData/resolver';
 import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
-import { PALETTE, wrColor, wrHsl, modeColor } from '../theme';
+import { PALETTE, wrColor, wrHsl } from '../theme';
 import { scatterChart, sparkline, type ScatterPoint } from '../charts/plots';
 import { button, calendarHeatmap, card, chip, kpiCard, statBar, statBox, unlockHint } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
@@ -46,7 +45,8 @@ export function overview(ctx: ViewContext): HTMLElement {
     [livePillHost, button('Log match', { variant: 'primary', onClick: ctx.openLogMatch })],
   );
 
-  return h('div', { class: 'view' },
+  // `view--overview` scopes the Overview's type scale (--fs-*, see app.css).
+  return h('div', { class: 'view view--overview' },
     head,
     checkInStrip(ctx),
     nextUpStrip(ctx),
@@ -518,7 +518,7 @@ function scatterCalloutsEmpty(d: DashboardData): HTMLElement {
 
 function scatterCard(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
-  const points = toScatter(d.byMap, makeMapMode(d.masterData.maps));
+  const points = toScatter(d.byMap);
   const focus = d.focusMaps.filter((f) => f.net > 0).slice(0, 3);
   // H1: a map the master-data catalog marks out of the competitive pool still
   // gets a row (it happened, it stays in the picture) but is flagged — same
@@ -526,7 +526,7 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   const isActive = new Map(d.masterData.maps.map((m) => [m.name, m.isActive]));
 
   const callouts = h('div', { class: 'scatter-callouts' },
-    h('div', { style: { fontSize: '12px', fontWeight: '600', color: 'var(--loss-text)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' } }, 'Top priority'),
+    h('div', { class: 'scatter-callouts-title' }, 'Top priority'),
     ...(focus.length
       ? focus.map((m) => h('div', {
           class: 'row', style: { cursor: 'pointer' },
@@ -537,8 +537,8 @@ function scatterCard(ctx: ViewContext): HTMLElement {
         },
           h('span', { class: 'dot', style: { background: wrHsl(m.winrate) } }),
           h('div', { class: 'row-main' },
-            h('div', { class: 'row-name', style: { display: 'flex', alignItems: 'baseline', gap: '6px' } },
-              m.key,
+            h('div', { class: 'row-name scatter-callout-name' },
+              h('span', null, m.key),
               isActive.get(m.key) === false
                 ? h('span', { class: 'tag', title: 'Not in the current competitive map pool' }, 'Out of pool')
                 : null),
@@ -549,7 +549,7 @@ function scatterCard(ctx: ViewContext): HTMLElement {
               practiceTargetButton(ctx, 'map', m.key),
             ),
           ),
-          h('span', { class: 'mono', style: { fontSize: '14px', color: wrColor(m.winrate) } }, pct(m.winrate)),
+          h('span', { class: 'mono scatter-callout-rate', style: { color: wrColor(m.winrate) } }, pct(m.winrate)),
         ))
       : [scatterCalloutsEmpty(d)]),
     h('div', { style: { marginTop: 'auto', paddingTop: '12px' } },
@@ -566,35 +566,11 @@ function scatterCard(ctx: ViewContext): HTMLElement {
   );
 
   return card(
-    { title: 'Every map · winrate × volume', sub: 'Below the line = losing. Further right = you play it a lot. Fix the bottom-right first. Click a dot to open its matches.', style: { flex: '1' } },
+    { title: 'Every map · winrate × volume', sub: 'Below the line = losing. Further right = you play it a lot. Fix the bottom-right first. Click a map to open its matches.', style: { flex: '1' } },
     h('div', { class: 'overview-scatter' },
       h('div', { class: 'scatter-plot' },
-        scatterChart(points, (name) => ctx.navigate('matches', { map: name })),
-        scatterLegend(points)),
+        scatterChart(points, (name) => ctx.navigate('matches', { map: name }))),
       callouts,
-    ),
-  );
-}
-
-/**
- * Legend of the game MODES in the scatter (O2), not the maps — dot colour
- * encodes mode, so a per-map legend entry would repeat the same swatch up to
- * a dozen times and couldn't identify anything at a full ~30-map pool. At
- * most 7 modes exist, so this never needs its own scroll/wrap handling the
- * old 33-item map legend did.
- */
-function scatterLegend(points: ScatterPoint[]): HTMLElement {
-  const byMode = new Map<string, { color: string; games: number }>();
-  for (const p of points) {
-    const m = byMode.get(p.mode) ?? { color: p.color, games: 0 };
-    m.games += p.volume;
-    byMode.set(p.mode, m);
-  }
-  const modes = [...byMode.entries()].sort((a, b) => b[1].games - a[1].games);
-  return h('div', { class: 'chart-legend' },
-    ...modes.map(([mode, m]) =>
-      h('span', { class: 'legend-item', title: `${mode} · ${m.games} games` },
-        h('span', { class: 'legend-dot', style: { background: m.color } }), mode),
     ),
   );
 }
@@ -657,16 +633,18 @@ function activeTargetsCard(ctx: ViewContext): HTMLElement {
     h('div', { class: 'stack', style: { gap: '8px' } },
       ...active.map((t) => {
         const stale = isStale(t.activatedAt, t.matchesSinceActive, now, d.staleness);
+        // The name wraps (never truncates) and the trend + rate drop under it
+        // when the card is too narrow for both on one line — see .target-row.
         return h('div', {
-          style: { display: 'flex', alignItems: 'center', gap: '9px', cursor: 'pointer' },
+          class: 'target-row',
           ...clickableRow(() => ctx.navigate('targetDetail', { targetId: t.id })),
         },
-          h('span', {
-            class: 'row-main', style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12.5px' },
-          }, t.name),
-          sparkline(t.spark, { width: 46, height: 16, color: wrColor(t.hitRate) }),
-          h('span', { class: 'mono', style: { fontSize: '12.5px', color: wrColor(t.hitRate), flex: '0 0 auto' } }, pct(t.hitRate)),
-          stale ? h('span', { style: { fontSize: '10px', color: 'var(--warn-text)', flex: '0 0 auto' }, title: 'Overdue for rotation' }, 'stale') : null,
+          h('span', { class: 'target-row-name', title: t.name }, t.name),
+          h('span', { class: 'target-row-stats' },
+            sparkline(t.spark, { width: 46, height: 16, color: wrColor(t.hitRate) }),
+            h('span', { class: 'mono target-row-rate', style: { color: wrColor(t.hitRate) } }, pct(t.hitRate)),
+            stale ? h('span', { class: 'target-row-stale', title: 'Overdue for rotation' }, 'stale') : null,
+          ),
         );
       }),
     ),
@@ -692,11 +670,11 @@ function overviewHeroesCard(ctx: ViewContext): HTMLElement {
         style: { cursor: 'pointer' },
         ...clickableRow(() => ctx.navigate('heroes', { highlight: hs.key })),
       },
-        // A "rate · count" pair overflows statBar's default 34px value
-        // column (fixed-width, non-wrapping, no clip) once winrate hits
-        // 100% or games climbs past single digits — same bug as Maps' mode
-        // cards; 78px comfortably covers "100% · 999g".
-        statBar({ label: hs.key, frac: hs.winrate, color: wrColor(hs.winrate), valueText: `${pct(hs.winrate)} · ${hs.games}g`, valueWidth: 78 }),
+        // Stacked (name + "rate · count" on one line, the bar under it): at
+        // five-cards-across the card is ~180px, too narrow for a fixed label
+        // column, a bar and a "100% · 999g" value side by side — the hero name
+        // ("Soldier: 76", "Junker Queen") used to spill over the bar.
+        statBar({ label: hs.key, frac: hs.winrate, color: wrColor(hs.winrate), valueText: `${pct(hs.winrate)} · ${hs.games}g`, stacked: true }),
       )),
     ),
   );
@@ -737,8 +715,8 @@ export function readinessCard(ctx: ViewContext): HTMLElement | null {
   return card({ title: 'Readiness', style: { flex: '1' } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', marginTop: '2px' } },
       h('span', { style: { width: '11px', height: '11px', borderRadius: '50%', background: meta.color, flex: '0 0 auto' } }),
-      h('span', { style: { fontSize: '15px', fontWeight: '600' } }, meta.label),
-      showScore ? h('span', { class: 'mono', style: { marginLeft: 'auto', fontSize: '15px', color: meta.color } }, String(r.score)) : null,
+      h('span', { style: { fontSize: 'var(--fs-heading)', fontWeight: '600' } }, meta.label),
+      showScore ? h('span', { class: 'mono', style: { marginLeft: 'auto', fontSize: 'var(--fs-heading)', color: meta.color } }, String(r.score)) : null,
     ),
     h('div', { class: 'hint', style: { marginTop: '9px', lineHeight: '1.45' } }, r.recommendationText || r.headline),
     h('div', { style: { marginTop: '10px' } },
@@ -749,24 +727,23 @@ export function readinessCard(ctx: ViewContext): HTMLElement | null {
 
 // --- helpers ----------------------------------------------------------------
 
-function toScatter(byMap: Group[], mapModeOf: (name: string) => string): ScatterPoint[] {
-  // Most-played first, so the legend leads with the most-relevant modes.
-  return [...byMap]
+/**
+ * One dot per real map, most-played first. The 'Unknown' placeholder isn't a
+ * map, so it gets no dot of its own. Every map stays its own point — nothing is
+ * grouped or coloured by game mode, so each one can be named on the chart.
+ */
+function toScatter(byMap: Group[]): ScatterPoint[] {
+  return [...splitUnknownMap(byMap).maps]
     .sort((a, b) => b.games - a.games)
     .map((m) => {
       const net = m.losses - m.wins;
-      const mode = mapModeOf(m.key);
       return {
         name: m.key,
         short: shorten(m.key),
-        mode,
-        // O2: dot colour encodes the game MODE (7 stable hues), not a
-        // per-map index — the old CATEGORICAL[i % 11] repeated every 11
-        // maps, so with a full ~30-map pool every colour was shared by
-        // three unrelated maps and the legend couldn't identify a dot.
-        color: modeColor(mode),
         winrate: m.winrate,
         volume: m.games,
+        wins: m.wins,
+        losses: m.losses,
         net,
         focus: net >= 3,
       };
