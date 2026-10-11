@@ -12,12 +12,12 @@ import type {
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
-  PlacementOffer, LiveMatchPayload,
+  PlacementOffer, LiveMatchPayload, PendingChangedPayload, PendingMatch,
   GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } from '../../src/core/targets';
-import type { Role } from '../../src/core/model';
+import type { Result, Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
@@ -403,6 +403,9 @@ if (devModeAuthParam === 'cycle') {
 
 const syncListeners = new Set<(p: SyncProgress) => void>();
 const gameLoggedListeners = new Set<(p: GameLoggedPayload) => void>();
+const pendingChangedListeners = new Set<(p: PendingChangedPayload) => void>();
+/** Matches that ended without a result, held for Review's Needs-result card. Session-only (the real store is a SQLite table). */
+const previewPending: PendingMatch[] = [];
 
 // Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
 let previewImportedMatches = 0;
@@ -452,7 +455,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()], checkIns: previewCheckIns }, effectiveMasterData()),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()], checkIns: previewCheckIns }, effectiveMasterData(), previewPending),
   heroDetail: async (hero: string, f: DashboardFilters) =>
     heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
@@ -1195,7 +1198,10 @@ const mock: OwStatsApi = {
     gameLoggedListeners.add(cb);
     return () => gameLoggedListeners.delete(cb);
   },
-  onPendingChanged: (_cb: () => void) => () => {},
+  onPendingChanged: (cb: (p: PendingChangedPayload) => void) => {
+    pendingChangedListeners.add(cb);
+    return () => pendingChangedListeners.delete(cb);
+  },
   // The harness writes straight into its own in-memory stores rather than
   // through a provider, so there is nothing to announce — the views' own
   // `store.refresh()` already re-reads them.
@@ -1275,10 +1281,30 @@ const mock: OwStatsApi = {
     delete previewReviews[matchId];
     save(REVIEWS_KEY, previewReviews);
   },
-  // No pending (no-outcome) matches exist in the browser harness — the pending
-  // store is a real-app SQLite table. The stubs keep the UI buildable/typed.
-  resolvePendingMatch: async () => {},
-  dismissPendingMatch: async () => {},
+  // The pending store is a real-app SQLite table; here it is a session-only list that
+  // previewLive.finishWithoutResult() fills, mirroring the pipeline's signals: a hold
+  // names its match, a dismissal signals with no payload, and a resolve signals the same
+  // way and then records the game (an onGameLogged push with source 'gep').
+  resolvePendingMatch: async (matchId: string, result: Result) => {
+    const i = previewPending.findIndex((m) => m.matchId === matchId);
+    if (i < 0) return;
+    const [held] = previewPending.splice(i, 1);
+    logged.push({
+      matchId: held.matchId, timestamp: held.timestamp, account: held.account, role: held.role, map: held.map,
+      result, gameType: 'Competitive', source: 'gep', heroes: held.heroes,
+    });
+    save(LOGGED_KEY, logged);
+    for (const cb of pendingChangedListeners) cb({});
+    for (const cb of gameLoggedListeners) {
+      cb({ matchId: held.matchId, account: held.account, configured: isConfiguredAccount(held.account, previewAccounts), role: held.role, source: 'gep' });
+    }
+  },
+  dismissPendingMatch: async (matchId: string) => {
+    const i = previewPending.findIndex((m) => m.matchId === matchId);
+    if (i < 0) return;
+    previewPending.splice(i, 1);
+    for (const cb of pendingChangedListeners) cb({});
+  },
   previewPendingReviewIgnore: async (input) => ({ count: eligibleForIgnore(input).length }),
   ignorePendingReviews: async (input) => {
     const eligible = eligibleForIgnore(input);
@@ -1383,7 +1409,7 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
 
 let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
 let previewLiveStartedAt = Date.now();
-(window as unknown as { previewLive: { start(): void; stop(): void; finish(role?: Role): string } }).previewLive = {
+(window as unknown as { previewLive: { start(): void; stop(): void; finish(role?: Role): string; finishWithoutResult(role?: Role): string } }).previewLive = {
   start: () => {
     let tick = 0;
     previewLiveStartedAt = Date.now();
@@ -1419,6 +1445,18 @@ let previewLiveStartedAt = Date.now();
     for (const cb of gameLoggedListeners) {
       cb({ matchId, account, configured: isConfiguredAccount(account, previewAccounts), role, source: 'gep' });
     }
+    return matchId;
+  },
+  // A tracked match ending WITHOUT a confirmed result: the pipeline holds it for Review's
+  // Needs-result card and pushes onPendingChanged naming it (no onGameLogged).
+  finishWithoutResult: (role: Role = 'damage') => {
+    (window as unknown as { previewLive: { stop(): void } }).previewLive.stop();
+    const matchId = `preview-held-${Date.now()}`;
+    previewPending.push({
+      matchId, map: 'Ilios', heroes: ['Genji'], role,
+      account: Object.values(previewAccounts)[0] || 'You', timestamp: Date.now(), rosterCount: 10,
+    });
+    for (const cb of pendingChangedListeners) cb({ held: matchId });
     return matchId;
   },
 };

@@ -143,6 +143,16 @@ export interface PendingMatch {
 }
 
 /**
+ * Pushed (via `onPendingChanged`) when the pending ("needs result") set changes.
+ * `held` names a match that was JUST held — absent when one was resolved or
+ * dismissed — so a listener can tell "a match ended without a result" from "the
+ * list was tidied up".
+ */
+export interface PendingChangedPayload {
+  held?: string;
+}
+
+/**
  * The comparison window immediately before the active filter's (C3): the
  * previous season for a season filter, the `[now−2N, now−N)` block for an
  * N-day filter — same account/role scoping as the active window's `games`.

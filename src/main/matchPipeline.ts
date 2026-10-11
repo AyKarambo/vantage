@@ -7,7 +7,7 @@ import { streak, type GameRecord } from '../core/analytics';
 import { classifyGameType, isCompetitive } from '../core/matchFilter';
 import { isConfiguredAccount } from '../core/accountsManage';
 import { sourceOf } from '../core/source';
-import type { GameLoggedPayload } from '../shared/contract';
+import type { GameLoggedPayload, PendingChangedPayload } from '../shared/contract';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
 } from '../core/breakReminder';
@@ -40,8 +40,12 @@ export interface MatchPipelineDeps {
    * headless paths can omit it.
    */
   onGameLogged?(payload: GameLoggedPayload): void;
-  /** Fired when the pending ("needs result") holding store changes — drives the Review refresh. */
-  onPendingChanged?(): void;
+  /**
+   * Fired when the pending ("needs result") holding store changes — drives the Review
+   * refresh. `held` names a match that was JUST held; resolving or dismissing one
+   * fires it with no payload.
+   */
+  onPendingChanged?(payload?: PendingChangedPayload): void;
 }
 
 /**
@@ -145,7 +149,7 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
         'Match needs review',
         'A match ended without a confirmed result — set it in Review, or dismiss it if it wasn’t a real match.',
       );
-      deps.onPendingChanged?.();
+      deps.onPendingChanged?.({ held: record.matchId });
     }
   }
 

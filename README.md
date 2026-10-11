@@ -125,7 +125,9 @@ account's per-role lines beneath it.
   game, and opening Vantage mid-match doesn't trigger it. **Open Review on match end** (same
   place, also off by default) does the mirror image: once a tracked match is recorded it opens
   that game's **Review** card — or the game's own page when your Role filter hides it from the
-  inbox. A hand-logged game never triggers it.
+  inbox. A match that ended **without a confirmed result** opens Review at its **Needs result**
+  card instead. A hand-logged game never triggers it, and nothing happens while Review is
+  already open (so it never resets the card you're grading).
 - **Matches** — the recent game log, grouped **by day or by sitting** (a "By day / By sitting"
   toggle, S4) — sitting grouping follows the same gap-based boundary as the sidebar's Current
   session card, so a sitting spanning midnight stays one block instead of splitting across two

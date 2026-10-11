@@ -308,7 +308,12 @@ export class App {
     initZoom();
     // A no-outcome match held (or resolved) refetches so the Review "Needs
     // result" section stays in step with the pending store.
-    bridge.onPendingChanged(() => void store.refresh());
+    bridge.onPendingChanged((p) => {
+      void store.refresh();
+      // A match that ended without a confirmed result is "the end of a match" too:
+      // it is waiting under Review's Needs-result card, not in history.
+      if (p?.held) void this.switchToReviewIfWanted({ matchId: p.held, held: true });
+    });
     // Any write that moves the dashboard — a review's ±SR, a rank anchor, a
     // placement run, an import — refetches, so the top-left rank chip can never
     // sit on a pre-write value. Covers writes this window didn't make itself
@@ -364,30 +369,43 @@ export class App {
     // exists for. The modal simply waits until they alt-tab back.
     if (payload.source === 'gep') {
       void maybeOfferPlacements(payload.account, payload.role, () => void store.refresh());
-      void this.switchToReviewIfWanted(payload.matchId);
+      void this.switchToReviewIfWanted({ matchId: payload.matchId });
     }
   }
 
   /**
    * "Open Review on match end" (Settings → App behavior): once a live-tracked
-   * match has been recorded, open that game's Review page. The setting is read
-   * when the push arrives, so a toggle applies to the very next match. It moves
-   * the SCREEN only — never the window's focus or visibility.
+   * match has been recorded — or held for a missing result (`held`) — open its
+   * Review page. The setting is read when the push arrives, so a toggle applies
+   * to the very next match. It moves the SCREEN only — never the window's focus
+   * or visibility.
    *
    * Waits for a fresh dashboard first: Review's deep link only opens a card the
    * inbox already holds and consumes the link on its first render, so
-   * navigating before the new match has landed would lose it. The inbox honours
-   * the Role filter, so a filter can still hide the match; then the game's own
-   * page opens rather than an unrelated game's Review card.
+   * navigating before the new match has landed would lose it.
+   *
+   * Does nothing while Review is already open. The refresh has already put the
+   * game in front of you there, and navigating would only reset the card you are
+   * working on — the case when you grade on a second screen, and also when you
+   * set a held match's result (which records it, and so ends up here too).
+   *
+   * A held match lives in Review's Needs-result card, not in the inbox, so it
+   * opens Review itself. A recorded one opens its own card — unless the Role
+   * filter hides it from the inbox, in which case its own page opens rather than
+   * an unrelated game's card.
    */
-  private async switchToReviewIfWanted(matchId: string): Promise<void> {
+  private async switchToReviewIfWanted(match: { matchId: string; held?: boolean }): Promise<void> {
     try {
       if (!(await bridge.getAppSettings()).autoSwitchToReview) return;
       await store.refresh();
-      const { view, params } = store.get();
-      if (view === 'review' && params.matchId === matchId) return;
-      const inInbox = store.get().data?.reviewInbox.some((m) => m.matchId === matchId) ?? false;
-      store.setView(inInbox ? 'review' : 'matchDetail', { matchId });
+      const { view, data } = store.get();
+      if (view === 'review') return;
+      if (match.held) {
+        if (data?.pendingMatches?.some((m) => m.matchId === match.matchId)) store.setView('review');
+        return;
+      }
+      const inInbox = data?.reviewInbox.some((m) => m.matchId === match.matchId) ?? false;
+      store.setView(inInbox ? 'review' : 'matchDetail', { matchId: match.matchId });
     } catch {
       /* settings unreadable or the refresh failed — stay where you are */
     }

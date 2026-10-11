@@ -30,8 +30,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   away while it's fresh. Same rule as above: it only changes the screen inside Vantage and never
   takes focus from the game. It reacts to a tracked match being recorded — a game you log by hand
   never triggers it — and if your Role filter hides the game from the Review inbox, you land on the
-  game's own page instead of an unrelated game's card. A match that finished without a result (it
-  waits under **Needs result**) doesn't trigger it yet. Also in the **Ctrl+K** palette.
+  game's own page instead of an unrelated game's card. A match that finished **without a
+  confirmed result** triggers it too: it opens Review at the **Needs result** card, where it waits
+  for you to set the result or discard it. It does nothing while Review is already open, so it
+  never resets the card you're working on — or jumps when you set a held match's result there.
+  Also in the **Ctrl+K** palette.
 - **A warning when your GEP package is too old for Overwatch.** After a game patch, Overwolf raises
   the minimum game-events (GEP) package version it will inject into the game, and an older one is
   silently refused — Vantage then shows **No game** even though Overwatch is running. Vantage now

@@ -45,7 +45,7 @@ import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import { createLiveMatchMonitor } from './liveMatchMonitor';
 import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type GepStatusPayload, type DevModeAuthStatusPayload, type LiveMatchPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type PendingChangedPayload, type GepStatusPayload, type DevModeAuthStatusPayload, type LiveMatchPayload } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -360,7 +360,7 @@ function main(): void {
 
   // Fires when the pending ("needs result") set changes, so an open Review
   // screen re-fetches (placeholder until the window exists, like pushGameLogged).
-  let pushPendingChanged: () => void = () => {};
+  let pushPendingChanged: (payload?: PendingChangedPayload) => void = () => {};
   // Fires after any write that moves the dashboard (a review, ±SR, a rank
   // anchor, a placement run, an import) — including writes the MCP server makes
   // on the user's behalf, which reach no renderer callback of their own.
@@ -374,7 +374,7 @@ function main(): void {
     // Tell the renderer which account a newly recorded competitive match landed on
     // — drives the live dashboard refresh and the F4 account auto-switch.
     onGameLogged: (payload) => pushGameLogged(payload),
-    onPendingChanged: () => pushPendingChanged(),
+    onPendingChanged: (payload) => pushPendingChanged(payload),
   });
 
   // The in-progress match: the same GEP stream the pipeline consumes, folded
@@ -703,7 +703,7 @@ function main(): void {
     const session = currentSession(scoped, Date.now(), config.sessionSettings.gapMinutes);
     tray.setState({ session: session ? { wins: session.wins, losses: session.losses } : undefined });
   };
-  pushPendingChanged = () => dashboard.push(EVENT_CHANNELS.onPendingChanged, undefined);
+  pushPendingChanged = (payload) => dashboard.push(EVENT_CHANNELS.onPendingChanged, payload);
   pushLiveMatch = (p) => {
     dashboard.push(EVENT_CHANNELS.onLiveMatch, p);
     // The tray's "Live: …" read (S5) — outside the dashboard window is where

@@ -3,6 +3,7 @@ import { createMatchPipeline, type MatchPipelineDeps } from '../src/main/matchPi
 import type { AppConfig } from '../src/main/config';
 import type { GameRecord } from '../src/core/analytics';
 import type { MatchRecord, Result } from '../src/core/model';
+import type { PendingChangedPayload } from '../src/shared/contract';
 
 /** A full AppConfig for the pipeline's getConfig() dep — no Electron involved. */
 function appConfig(p: Partial<AppConfig> = {}): AppConfig {
@@ -93,6 +94,7 @@ function harness(config: AppConfig = appConfig()) {
   const notifications: Array<{ title: string; body: string }> = [];
   const logged: Array<{ matchId: string; account: string; configured: boolean }> = [];
   let pendingSignals = 0;
+  const pendingPayloads: Array<PendingChangedPayload | undefined> = [];
   const deps: MatchPipelineDeps = {
     history,
     aggregator: { handle: () => null },
@@ -104,8 +106,9 @@ function harness(config: AppConfig = appConfig()) {
     onGameLogged: (payload) => {
       logged.push(payload);
     },
-    onPendingChanged: () => {
+    onPendingChanged: (payload) => {
       pendingSignals++;
+      pendingPayloads.push(payload);
     },
   };
   return {
@@ -114,6 +117,7 @@ function harness(config: AppConfig = appConfig()) {
     notifications,
     logged,
     pendingSignals: () => pendingSignals,
+    pendingPayloads,
   };
 }
 
@@ -312,6 +316,21 @@ describe('createMatchPipeline — uncertain matches held for Review', () => {
     pipeline.addMatch(noOutcomeMatch('gep-no-result'));
     expect(history.pending).toHaveLength(1);
     expect(pendingSignals()).toBe(1);
+  });
+
+  // "Open Review on match end" needs to tell a match that JUST ended without a result
+  // from the user tidying the list, so the hold names its match id and nothing else does.
+  it('names the match it just held in the onPendingChanged payload', () => {
+    const { pipeline, pendingPayloads } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-no-result'));
+    expect(pendingPayloads).toEqual([{ held: 'gep-no-result' }]);
+  });
+
+  it('dismissing a held match signals with no held id — it is housekeeping, not a match ending', () => {
+    const { pipeline, pendingPayloads } = harness();
+    pipeline.addMatch(noOutcomeMatch('gep-no-result'));
+    pipeline.dismissPending('gep-no-result');
+    expect(pendingPayloads).toEqual([{ held: 'gep-no-result' }, undefined]);
   });
 
   it('drops an EXPLICITLY non-competitive no-outcome match (quickplay/arcade) — not held, no notify', () => {
