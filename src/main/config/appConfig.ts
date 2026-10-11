@@ -70,6 +70,8 @@ export interface UiConfig {
   gepNotifications: boolean;
   /** Show the kill feed on the live-match screen (default true). */
   liveKillFeed: boolean;
+  /** Switch to the Live screen when a match starts (default false). Never focuses the window. */
+  autoSwitchToLive: boolean;
   /**
    * Whether the local MCP endpoint listens (spec #174). Default **false**: it
    * exposes match history and the manual-write surface to any process running
@@ -153,7 +155,7 @@ const DEFAULTS: AppConfig = {
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: {
     closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true,
-    liveKillFeed: true, mcpEnabled: false,
+    liveKillFeed: true, autoSwitchToLive: false, mcpEnabled: false,
   },
 };
 

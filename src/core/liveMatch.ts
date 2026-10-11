@@ -392,3 +392,25 @@ export function liveTeamTotals(roster: RosterPlayer[]): {
 export function liveTeamKills(totals: { yours: { deaths: number }; theirs: { deaths: number } }): { yours: number; theirs: number } {
   return { yours: totals.theirs.deaths, theirs: totals.yours.deaths };
 }
+
+/** How recent a match's `startedAt` must be for a window's FIRST push to read as "a match just started" rather than "catching up on one already running". */
+export const FRESH_MATCH_START_MS = 30_000;
+
+/**
+ * Whether `next` is the push that announces a match STARTING — what "switch to
+ * Live when a match starts" reacts to. A mid-match tick of a match already seen
+ * is not one, and neither is a window that opens (or reloads) while a match is
+ * already running: that first push says `live`, but nobody just started
+ * anything, and yanking someone off the screen they opened is the wrong move.
+ * `prev` is the last payload this window received, `null` before the first.
+ */
+export function isMatchStart(
+  prev: { live: boolean; startedAt?: number } | null,
+  next: { live: boolean; startedAt?: number },
+  now: number,
+): boolean {
+  if (!next.live || next.startedAt === undefined) return false;
+  if (prev?.live && prev.startedAt === next.startedAt) return false;
+  if (!prev) return now - next.startedAt <= FRESH_MATCH_START_MS;
+  return true;
+}

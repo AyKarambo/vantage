@@ -120,6 +120,9 @@ account's per-role lines beneath it.
   card's tooltip spells this out) rather than inventing a scoreline. The kill feed can
   be switched off in **Settings → General** — off means it isn't sent to the window at all,
   not merely hidden; the scoreboard, the team totals and the with/vs records are unaffected.
+  **Open Live on match start** (Settings → App behavior, off by default) switches to this screen
+  as a match begins — inside Vantage only: it never raises the window or takes focus from the
+  game, and opening Vantage mid-match doesn't trigger it.
 - **Matches** — the recent game log, grouped **by day or by sitting** (a "By day / By sitting"
   toggle, S4) — sitting grouping follows the same gap-based boundary as the sidebar's Current
   session card, so a sitting spanning midnight stays one block instead of splitting across two
@@ -561,7 +564,7 @@ between match details, `Ctrl+Home/End` to jump to the top/bottom and `PageUp/Pag
 through the current view — including the Heroes table and the Logs tail, `H/P/M/S` grading on
 Review, `W/L/D`+`Enter` in the log dialog, `Ctrl+=`/`Ctrl+-`/`Ctrl+Shift+0` to step/reset the
 app's text-size zoom (90–130%, also a Settings → App behavior select, W7)), the palette can also flip the MCP endpoint, the live
-kill feed, the break reminder, demo data, log debug detail, the winrate colour scheme, or the list
+kill feed, Open Live on match start, the break reminder, demo data, log debug detail, the winrate colour scheme, or the list
 density without a trip to Settings (M5, density W7), toasts with
 **Undo** for reversible actions, day-grouped match log with hero/map cross-links, **drill-down
 everywhere** (click a heatmap day, a Mental flag count, or any "open the map" surface app-wide —

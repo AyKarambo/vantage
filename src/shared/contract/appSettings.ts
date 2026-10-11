@@ -31,6 +31,14 @@ export interface AppUiSettings {
    */
   liveKillFeed: boolean;
   /**
+   * Whether the window switches to the Live screen the moment a match starts
+   * (default **off**). It only changes the screen inside Vantage — it never
+   * shows, focuses or restores the window, because Vantage must not pull focus
+   * off a game. Read by the renderer when a start arrives, so a toggle applies
+   * to the very next match without a restart.
+   */
+  autoSwitchToLive: boolean;
+  /**
    * Whether the local MCP endpoint listens, letting an MCP client (an LLM
    * coach) read your stats and write the manual layer. Default **off** — it is
    * reachable by any process running as this user, so enabling it is a

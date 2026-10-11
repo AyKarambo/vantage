@@ -9,12 +9,14 @@
  * whose answer arrives later than the push it races.
  */
 import type { LiveMatchPayload } from '../../src/shared/contract';
+import { isMatchStart } from '../../src/core/liveMatch';
 import { bridge } from './bridge';
 
 type Listener = (s: LiveMatchPayload | null) => void;
 
 let current: LiveMatchPayload | null = null;
 const listeners = new Set<Listener>();
+const startListeners = new Set<() => void>();
 let started = false;
 
 /** Start the feed (idempotent). Call once from the shell. */
@@ -22,8 +24,10 @@ export function initLiveMatch(): void {
   if (started) return;
   started = true;
   bridge.onLiveMatch((s) => {
+    const matchStarted = isMatchStart(current, s, Date.now());
     current = s;
     for (const fn of listeners) fn(current);
+    if (matchStarted) for (const fn of startListeners) fn();
   });
 }
 
@@ -35,4 +39,14 @@ export function getLiveMatch(): LiveMatchPayload | null {
 export function subscribeLiveMatch(fn: Listener): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+/**
+ * Fires once when a match STARTS (see `isMatchStart`) — not on every tick, and
+ * not when a window opens mid-match. Runs after the plain subscribers have
+ * already seen the new payload.
+ */
+export function subscribeMatchStart(fn: () => void): () => void {
+  startListeners.add(fn);
+  return () => startListeners.delete(fn);
 }

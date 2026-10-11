@@ -291,6 +291,7 @@ let appSettings: AppUiSettings = {
   devMode: true,
   gepNotifications: true,
   liveKillFeed: true,
+  autoSwitchToLive: false,
   // Off, like the real default: the preview harness has no main process to
   // host the pipe, so the toggle is only ever cosmetic here.
   mcpEnabled: false,
@@ -1347,7 +1348,10 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
     }), { damage: 0, healing: 0, deaths: 0 });
   return {
     live: true,
-    startedAt: Date.now() - tick * 1000,
+    // Fixed for the whole simulated match, like the real monitor's `startedAt`
+    // (set once at match_start). Recomputing it per tick jitters by a few ms,
+    // which reads as a brand-new match every second.
+    startedAt: previewLiveStartedAt,
     map: 'Ilios',
     totals: { yours: side(0), theirs: side(1), known: true, deathsKnown: true },
     gameType: 'competitive',
@@ -1377,9 +1381,11 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
 }
 
 let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
+let previewLiveStartedAt = Date.now();
 (window as unknown as { previewLive: { start(): void; stop(): void } }).previewLive = {
   start: () => {
     let tick = 0;
+    previewLiveStartedAt = Date.now();
     const emit = (p: LiveMatchPayload): void => { for (const cb of liveMatchListeners) cb(p); };
     emit(buildPreviewLiveMatch(tick));
     clearInterval(previewLiveTimer);

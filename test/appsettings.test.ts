@@ -105,6 +105,18 @@ describe('loadConfig — dataFolder rename + logFilter removal', () => {
     expect(loadConfig().ui.gepNotifications).toBe(false);
   });
 
+  // Switching the screen under someone is a behaviour change they should opt into.
+  it('defaults "open Live on match start" off (no local override)', async () => {
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.autoSwitchToLive).toBe(false);
+  });
+
+  it('round-trips a ui.autoSwitchToLive=true local override', async () => {
+    fs.writeFileSync(userConfigFile(), JSON.stringify({ ui: { autoSwitchToLive: true } }), 'utf8');
+    const { loadConfig } = await import('../src/main/config/appConfig');
+    expect(loadConfig().ui.autoSwitchToLive).toBe(true);
+  });
+
   // "What's new" (T21) gates a blocking modal on lastSeenVersion being unset,
   // so an absent value must mean "never shown anything" — never a fabricated
   // baseline like '0.0.0', which would pop the changelog on every fresh install.

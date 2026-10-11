@@ -13,7 +13,7 @@ import { demoTransition } from '../../../src/core/demoPreference';
 import { DETAIL_PARENT, statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
-import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
+import { getLiveMatch, initLiveMatch, subscribeLiveMatch, subscribeMatchStart } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
 import { liveTeamKills } from '../../../src/core/liveMatch';
@@ -296,6 +296,7 @@ export class App {
     initLiveMatch();
     subscribeLiveMatch(() => this.renderLiveNav());
     this.renderLiveNav();
+    subscribeMatchStart(() => this.switchToLiveIfWanted());
     // Start the log feed at shell mount, not on Logs' first render (W5) — the
     // error/warning counter should reflect the whole session, since a player
     // usually opens Logs BECAUSE something already went wrong, not before.
@@ -799,6 +800,19 @@ export class App {
 
   /** Reflect the pending-review count on the Review nav item in place, so the
    *  button (a live click target) is never rebuilt. */
+  /**
+   * "Switch to Live when a match starts" (Settings → App behavior). The setting
+   * is read at the moment the start arrives rather than cached, so flipping it
+   * applies to the very next match. It moves the SCREEN only — never the
+   * window's focus or visibility, since Vantage must not pull focus off a game.
+   */
+  private switchToLiveIfWanted(): void {
+    if (store.get().view === 'live') return;
+    void bridge.getAppSettings().then((s) => {
+      if (s.autoSwitchToLive) store.setView('live');
+    }).catch(() => { /* settings unreadable — stay where you are */ });
+  }
+
   /**
    * A live dot on the Live nav item while a match is running, so the screen
    * advertises itself without stealing focus. Mutated in place for the same
@@ -1469,6 +1483,13 @@ function settingsActions(
       run: () => {
         void bridge.setAppSettings({ liveKillFeed: !appSettings.liveKillFeed })
           .then((s) => toast(`Live kill feed: ${s.liveKillFeed ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Open Live on match start', hint: onOff(appSettings.autoSwitchToLive),
+      run: () => {
+        void bridge.setAppSettings({ autoSwitchToLive: !appSettings.autoSwitchToLive })
+          .then((s) => toast(`Open Live on match start: ${s.autoSwitchToLive ? 'on' : 'off'}`));
       },
     },
     {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  INITIAL_LIVE_MATCH, LIVE_FEED_CAP, reduceLiveMatch, liveMatchDetached,
+  FRESH_MATCH_START_MS, INITIAL_LIVE_MATCH, LIVE_FEED_CAP, isMatchStart, reduceLiveMatch, liveMatchDetached,
   liveRoster, liveOpponentNames, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
 } from '../src/core/liveMatch';
 import type { GepMessage } from '../src/core/model';
@@ -497,5 +497,45 @@ describe('team deaths ignore the kill feed entirely', () => {
     expect(liveTeamTotals(liveRoster(s)).theirs.deaths).toBe(0);
     s = reduceLiveMatch(s, roster(1, { deaths: 1 }), 1004);
     expect(liveTeamTotals(liveRoster(s)).theirs.deaths).toBe(1);
+  });
+});
+
+describe('isMatchStart — what "switch to Live when a match starts" reacts to', () => {
+  const NOW = 1_000_000;
+  const idle = { live: false };
+  const running = (startedAt: number) => ({ live: true, startedAt });
+
+  it('fires when an idle window sees a match go live', () => {
+    expect(isMatchStart(idle, running(NOW), NOW)).toBe(true);
+  });
+
+  it('fires when a new match opens while the previous one still reads as live', () => {
+    // match_start opens a fresh match from ANY phase, so no idle push may sit between the two.
+    expect(isMatchStart(running(NOW - 600_000), running(NOW), NOW)).toBe(true);
+  });
+
+  it('does not fire on the mid-match ticks of a match it already saw start', () => {
+    expect(isMatchStart(running(NOW - 5000), running(NOW - 5000), NOW)).toBe(false);
+  });
+
+  it('does not fire when the match ends', () => {
+    expect(isMatchStart(running(NOW - 600_000), { live: false }, NOW)).toBe(false);
+    expect(isMatchStart(idle, idle, NOW)).toBe(false);
+  });
+
+  it('does not fire on a payload that is live but carries no start time', () => {
+    expect(isMatchStart(idle, { live: true }, NOW)).toBe(false);
+  });
+
+  it('treats the first push a window gets as a start only when the match just began', () => {
+    expect(isMatchStart(null, running(NOW - 2000), NOW)).toBe(true);
+    expect(isMatchStart(null, running(NOW - FRESH_MATCH_START_MS), NOW)).toBe(true);
+    // A window opened (or reloaded) mid-match is catching up, not witnessing a start.
+    expect(isMatchStart(null, running(NOW - FRESH_MATCH_START_MS - 1), NOW)).toBe(false);
+    expect(isMatchStart(null, running(NOW - 20 * 60_000), NOW)).toBe(false);
+  });
+
+  it('never fires on a first push that is idle', () => {
+    expect(isMatchStart(null, idle, NOW)).toBe(false);
   });
 });

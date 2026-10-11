@@ -19,6 +19,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **Open Live on match start** — a new switch in **Settings → App behavior** (off by default).
+  When it's on, Vantage switches to the **Live** screen the moment a match begins, so the scoreboard
+  is already up when you alt-tab. It only changes the screen *inside* Vantage: it never brings the
+  window to the front or takes focus from the game. It reacts to a match *starting* — opening
+  Vantage while a match is already running leaves you where you are — and it won't pull you back if
+  you navigate away mid-match. Also in the **Ctrl+K** palette.
 - **A warning when your GEP package is too old for Overwatch.** After a game patch, Overwolf raises
   the minimum game-events (GEP) package version it will inject into the game, and an older one is
   silently refused — Vantage then shows **No game** even though Overwatch is running. Vantage now
