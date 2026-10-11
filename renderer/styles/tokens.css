@@ -143,6 +143,22 @@
   --font-head: 'Space Grotesk', 'Geist', system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Code', monospace;
 
+  /* Type scale — four steps plus the display size. The Overview is built on
+     these alone (see `.view--overview` in app.css); other screens still carry
+     their older ad-hoc sizes and can adopt the scale as they're reworked.
+       caption — labels, hints, meta lines, axis ticks, tags, legends
+       body    — row names, chips, buttons, prose
+       heading — card titles and the key figure in a list row (a win-rate)
+       display — the KPI numbers and the page title
+     Emphasis within a step is weight (600) or colour, never another size.
+     Nothing in the scale is below 11px. Charts draw their SVG text at these
+     same pixel sizes (see charts/plots/scatterChart.ts), so a chart label and
+     a card label of the same role are the same size. */
+  --fs-caption: 11px;
+  --fs-body: 13px;
+  --fs-heading: 15px;
+  --fs-display: 22px;
+
   /* Backgrounds ---------------------------------------------------------- */
   --aurora-app: radial-gradient(900px 480px at 8% -12%, rgba(124, 108, 245, 0.16), transparent 58%), var(--bg);
   --aurora-panel: radial-gradient(600px 360px at 25% -10%, rgba(124, 108, 245, 0.16), transparent 60%);

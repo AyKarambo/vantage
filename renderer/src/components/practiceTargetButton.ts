@@ -24,8 +24,7 @@ export function practiceTargetButton(ctx: ViewContext, dimension: PracticeTarget
     ...(dimension === 'map' ? { prefillMap: [key] } : {}),
   };
   const btn = h('button', {
-    class: 'btn btn--ghost',
-    style: { padding: '3px 8px', fontSize: '10.5px' },
+    class: 'btn btn--ghost btn--xs',
     title: `Create a practice target for ${label}`,
   }, 'Track as target');
   btn.addEventListener('click', (e) => {

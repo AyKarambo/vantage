@@ -13,7 +13,7 @@ import { infoTip } from '../components/infoTip';
 import { inlineLink } from '../components/inlineLink';
 import { openDrawer } from '../components/overlay';
 import { trendArrow } from '../components/trendArrow';
-import { viewHead, type ViewContext } from './view';
+import { scopeCaption, viewHead, type ViewContext } from './view';
 
 const MIN_GAMES_STEPS = [1, 5, 10] as const;
 
@@ -179,25 +179,6 @@ export function openHeroDrawer(ctx: ViewContext, hero: string): void {
   });
 }
 
-/** "Damage · last 30 days · all accounts" — Players' scope-text convention
- *  (H7), so the drawer states plainly that these numbers follow the filter
- *  bar rather than being a hero's all-time record. */
-function heroDrawerScope(ctx: ViewContext): string {
-  const f = ctx.data.filters;
-  const days = f.days;
-  let season: string;
-  if (typeof days === 'object') {
-    season = ctx.data.options.seasons.find((x) => x.id === days.season)?.label ?? 'one season';
-  } else {
-    season = days === 'all' ? 'all time' : `last ${days} days`;
-  }
-  return [
-    f.role === 'all' ? 'all roles' : roleLabel(f.role),
-    season,
-    f.account === 'all' ? 'all accounts' : f.account,
-  ].join(' · ');
-}
-
 function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLElement {
   const s = d.stats;
   const p = s?.per10;
@@ -215,7 +196,8 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
     ),
     h('p', { class: 'u-muted', style: { fontSize: '12px', margin: '2px 0 2px' } },
       `${d.overall.games} games · ${pct(d.overall.winrate)} winrate · ${d.overall.wins}W ${d.overall.losses}L`),
-    h('p', { class: 'u-dim', style: { fontSize: '11px', margin: '0 0 14px' } }, heroDrawerScope(ctx)),
+    // H7: states plainly that these numbers follow the filter bar, not a hero's all-time record.
+    h('p', { class: 'u-dim', style: { fontSize: '11px', margin: '0 0 14px' } }, scopeCaption(ctx.data.filters, ctx.data.options.seasons)),
     formStrip(s),
     s
       ? h('div', { class: 'stat-grid' },

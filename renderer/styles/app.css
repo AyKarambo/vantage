@@ -600,6 +600,63 @@
 }
 
 /* Overview ------------------------------------------------------------------ */
+
+/* The Overview's type scale (tokens.css: --fs-caption / body / heading /
+   display). The shared components below keep their own sizes on other screens;
+   inside .view--overview they snap to the four steps, so every role — a label,
+   a meta line, a row name, a card title, a KPI — is one size wherever it
+   appears. Emphasis within a step is weight or colour, never another size.
+   The Button/KPI rules carry an extra class where a component rule of equal
+   specificity would otherwise win on source order. */
+.view--overview .view-title,
+.view--overview .kpi-value {
+  font-size: var(--fs-display);
+}
+.view--overview .card-title,
+.view--overview .stat-box-value,
+.view--overview .scatter-callout-rate {
+  font-size: var(--fs-heading);
+}
+.view--overview .view-sub,
+.view--overview .btn,
+.view--overview .chip,
+.view--overview .next-up-item,
+.view--overview .empty,
+.view--overview .row-name,
+.view--overview .target-row-name,
+.view--overview .target-row-rate {
+  font-size: var(--fs-body);
+}
+.view--overview .card-sub,
+.view--overview .hint,
+.view--overview .kpi-label,
+.view--overview .kpi-delta,
+.view--overview .kpi-sub,
+.view--overview .btn.kpi-action,
+.view--overview .btn.btn--xs,
+.view--overview .row-meta,
+.view--overview .statbar-label,
+.view--overview .statbar-value,
+.view--overview .stat-box-label,
+.view--overview .tag,
+.view--overview .legend-item,
+.view--overview .chart-tooltip,
+.view--overview .target-row-stale,
+.view--overview .scatter-callouts-title {
+  font-size: var(--fs-caption);
+}
+/* A card's subtitle drops under its title when the two don't fit on a line (the
+   Mental card's "two independent 0–100 reads, not a split" at five cards
+   across) instead of being squeezed into a sliver beside it. */
+.view--overview .card-title {
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.view--overview .card-sub {
+  min-width: 0;
+}
+
 .overview-scatter {
   display: flex;
   gap: 18px;
@@ -632,9 +689,54 @@
   border-radius: var(--r-md);
   outline: none;
 }
+.scatter-callouts-title {
+  font-weight: 600;
+  color: var(--loss-text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+/* A map name + its "Out of pool" tag: wraps (the tag drops under a long name)
+   rather than being clipped by .row-name's nowrap/ellipsis. */
+.scatter-callouts .scatter-callout-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+.scatter-callout-rate {
+  flex: 0 0 auto;
+}
 .overview-bottom {
   display: flex;
   gap: 12px;
+}
+/* Active-targets row: the name wraps (never truncates), and the trend line,
+   rate and stale tag drop onto their own line under it when the card is too
+   narrow to hold both. */
+.target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 9px;
+  cursor: pointer;
+}
+.target-row-name {
+  flex: 1 1 110px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.target-row-stats {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+.target-row-stale {
+  color: var(--warn-text);
 }
 /* Five cards (O3 added Active targets + Heroes to the original three) no
    longer fit one legible row below ~1300px — a 2-column grid keeps every

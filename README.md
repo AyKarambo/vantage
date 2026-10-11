@@ -58,8 +58,9 @@ account's per-role lines beneath it.
   Settings → Accounts (O4) — and a **role strip** under them breaks the blended winrate down
   per role, "Tank 43% · 56g", one click to filter to it (hidden with fewer than 2 roles). The
   flagship
-  *winrate × volume* scatter — dots coloured by game mode with a 6-7-swatch legend, a
-  short-name label beside every priority dot, and numeric axis ticks — with a top-priority
+  *winrate × volume* scatter — every map its own dot (coloured by winrate, sized by games,
+  never grouped by game mode) with its own collision-free label, hover/Tab highlight and a log
+  games axis with numeric ticks — with a top-priority
   callout (each row now a real clickable control with Focus's own **"Track as target"**
   quick-create, O4), an activity heatmap (games/day, click a day to open its matches — the
   window now follows the active filter instead of a fixed 35 days, weekday and month labels

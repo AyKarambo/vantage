@@ -134,6 +134,26 @@ export function filterBarReason(text: string): HTMLElement {
   );
 }
 
+/**
+ * "Damage · 2026 Season 5 · Karambo" — names every filter, even at the defaults,
+ * so a count never passes as an all-time one when the Role filter or the account
+ * switcher (which the filter bar has no field for) is quietly narrowing it.
+ */
+export function scopeCaption(f: DashboardData['filters'], seasons: DashboardData['options']['seasons']): string {
+  let range: string;
+  if (typeof f.days === 'object') {
+    const id = f.days.season;
+    range = seasons.find((s) => s.id === id)?.label ?? 'one season';
+  } else {
+    range = f.days === 'all' ? 'all time' : `last ${f.days} days`;
+  }
+  return [
+    f.role === 'all' ? 'all roles' : roleLabel(f.role),
+    range,
+    f.account === 'all' ? 'all accounts' : f.account,
+  ].join(' · ');
+}
+
 function filterField(label: string, value: string, options: SelectOption[], onChange: (v: string) => void): HTMLElement {
   return h('label', { class: 'filter-field' },
     h('span', { class: 'filter-label' }, label),
