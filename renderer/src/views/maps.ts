@@ -1,9 +1,9 @@
 /** Maps — by game mode, games-played share, and every map ranked best → worst. */
 import { h } from '../dom';
 import type { DashboardData, Group, ScoreSplit } from '../../../src/shared/contract';
-import { MAP_MIN_GAMES } from '../../../src/core/analytics';
+import { MAP_MIN_GAMES, modeGroups, splitUnknownMap } from '../../../src/core/analytics';
 import { makeMapMode, makeMapActive, type MapModeResolver } from '../../../src/core/masterData';
-import { fmt, pct, signed } from '../format';
+import { fmt, int, pct, signed } from '../format';
 import { wrColor, CATEGORICAL, OTHER_COLOR } from '../theme';
 import { donutChart, horizontalBars, type DonutSlice } from '../charts/plots';
 import { card, chip, statBar } from '../components/primitives';
@@ -12,7 +12,7 @@ import { trendArrow } from '../components/trendArrow';
 import { clickableRow } from '../components/clickableRow';
 import { prefs } from '../prefs';
 import { store } from '../store';
-import { viewHead, type ViewContext } from './view';
+import { scopeCaption, viewHead, type ViewContext } from './view';
 
 const TOP_SLICES = 10;
 const MIN_GAMES_STEPS = [1, 3, 5] as const;
@@ -26,6 +26,11 @@ export function maps(ctx: ViewContext): HTMLElement {
   const isMapActive = makeMapActive(d.masterData.maps);
   const minMapGames = prefs.get('minMapGames') ?? MAP_MIN_GAMES;
   const modeFilter = prefs.get('mapModeFilter');
+  // 'Unknown' (a game GEP never reported a map for) is a placeholder, not a
+  // map: its games stay in every total but it is left out of the map list, the
+  // map count and the mode roll-up — and the subtitle names how many.
+  const { maps: mapGroups, unknownGames } = splitUnknownMap(d.byMap);
+  const modes = modeGroups(mapGroups, mapModeOf);
 
   // Cross-links must always land (H4): a mode card, the Overview scatter, a
   // Focus row, the Heroes drawer's By-map rows and the palette's Map entries
@@ -34,12 +39,12 @@ export function maps(ctx: ViewContext): HTMLElement {
   // previous visit. Scoped to the highlighted map only; every other map still
   // respects the real, persisted floor/filter.
   const highlight = ctx.params.highlight;
-  const highlightMap = highlight ? d.byMap.find((m) => m.key === highlight) : undefined;
+  const highlightMap = highlight ? mapGroups.find((m) => m.key === highlight) : undefined;
   const modeBlocksHighlight = !!(highlightMap && modeFilter && mapModeOf(highlightMap.key) !== modeFilter);
   const effectiveMode = modeBlocksHighlight ? undefined : modeFilter;
   const effectiveMinGames = highlightMap && highlightMap.games < minMapGames ? 1 : minMapGames;
 
-  const modeScoped = effectiveMode ? d.byMap.filter((m) => mapModeOf(m.key) === effectiveMode) : d.byMap;
+  const modeScoped = effectiveMode ? mapGroups.filter((m) => mapModeOf(m.key) === effectiveMode) : mapGroups;
   // The floor filter falls back to EVERY scoped map (including 1-game ones)
   // once nothing meets it, so the subtitle would otherwise keep claiming a
   // floor that isn't actually being applied (F1).
@@ -56,7 +61,7 @@ export function maps(ctx: ViewContext): HTMLElement {
 
   const modeChips = h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
     chip('All', !modeFilter, () => { prefs.remove('mapModeFilter'); store.rerender(); }),
-    ...d.byMapType.map((g) => chip(g.key, modeFilter === g.key, () => {
+    ...modes.map((g) => chip(g.key, modeFilter === g.key, () => {
       prefs.set('mapModeFilter', g.key);
       store.rerender();
     })),
@@ -80,15 +85,15 @@ export function maps(ctx: ViewContext): HTMLElement {
     : `no map has ${effectiveMinGames} game${effectiveMinGames === 1 ? '' : 's'} yet — showing all ${modeScoped.length} · low sample`;
 
   const view = h('div', { class: 'view' },
-    viewHead('Maps', 'Where the games actually go — by mode, then map by map'),
-    h('div', { class: 'grid-3' }, ...d.byMapType.map((g) =>
-      modeCard(g, modeFilter === g.key, modeBestWorst(d.byMap, g.key, mapModeOf, minMapGames), d.scoreSplits.byMode[g.key], () => {
+    viewHead('Maps', mapsSubtitle(d, mapGroups.length, unknownGames)),
+    h('div', { class: 'grid-3' }, ...modes.map((g) =>
+      modeCard(g, modeFilter === g.key, modeBestWorst(mapGroups, g.key, mapModeOf, minMapGames), d.scoreSplits.byMode[g.key], () => {
         prefs.set('mapModeFilter', g.key);
         scrollToRanking = true;
         store.rerender();
       }))),
     card({ title: 'Maps played', sub: 'share of games in range' },
-      donutChart(mapsPlayed(d)),
+      donutChart(mapsPlayed(mapGroups)),
     ),
     chartCard({
       title: 'Winrate by map',
@@ -153,7 +158,26 @@ export function maps(ctx: ViewContext): HTMLElement {
   return view;
 }
 
-const sortByWinrate = (gs: readonly Group[]): Group[] => [...gs].sort((a, b) => b.winrate - a.winrate);
+/**
+ * "31 maps · 2,973 games · all roles · all time · all accounts" — the count and
+ * the scope in one line, so a number here is never read as an all-time one when
+ * the Role filter or the account switcher (which the filter bar has no field
+ * for) is narrowing it. Games on the 'Unknown' placeholder are named, not
+ * silently dropped.
+ */
+function mapsSubtitle(d: DashboardData, mapCount: number, unknownGames: number): string {
+  const parts = [
+    `${int(mapCount)} ${mapCount === 1 ? 'map' : 'maps'}`,
+    `${int(d.overall.games)} ${d.overall.games === 1 ? 'game' : 'games'}`,
+    scopeCaption(d.filters, d.options.seasons),
+  ];
+  if (unknownGames > 0) {
+    parts.push(`${int(unknownGames)} ${unknownGames === 1 ? 'game' : 'games'} without a recorded map not listed`);
+  }
+  return parts.join(' · ');
+}
+
+const sortByWinrate =(gs: readonly Group[]): Group[] => [...gs].sort((a, b) => b.winrate - a.winrate);
 
 /** The mode's own best/worst map by winrate, over the same floor the main ranking applies (falling back to every map in the mode when none meets it). Absent when the mode has no map data at all. */
 function modeBestWorst(
@@ -239,8 +263,8 @@ function modeCard(g: Group, active: boolean, bestWorst: { best?: string; worst?:
 }
 
 /** Games-played distribution: the top maps individually, the rest as "Other". */
-function mapsPlayed(d: DashboardData): DonutSlice[] {
-  const sorted = [...d.byMap].sort((a, b) => b.games - a.games);
+function mapsPlayed(maps: readonly Group[]): DonutSlice[] {
+  const sorted = [...maps].sort((a, b) => b.games - a.games);
   const top = sorted.slice(0, TOP_SLICES);
   const rest = sorted.slice(TOP_SLICES);
   const slices: DonutSlice[] = top.map((m, i) => ({ label: m.key, value: m.games, color: CATEGORICAL[i % CATEGORICAL.length] }));

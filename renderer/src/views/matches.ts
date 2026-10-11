@@ -2,7 +2,7 @@
 import { h, render } from '../dom';
 import type { DashboardFilters, MatchFlagKey, MatchRow, Result, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { aggregateGrade, dayKey, groupByDay, groupBySitting } from '../../../src/core/analytics';
+import { aggregateGrade, dayKey, groupByDay, groupBySitting, UNKNOWN_MAP } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { pct, prettyDay, rankLabel, relTime, roleLabel, signed, time } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
@@ -652,11 +652,14 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
     h('div', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
     h('div', { class: 'row-main' },
       h('div', { class: 'row-name' },
-        inlineLink(m.map, {
-          strong: true,
-          title: `Find ${m.map} on the Maps screen`,
-          onClick: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); },
-        }),
+        // The Maps screen doesn't list the 'Unknown' placeholder, so there is nothing to find there.
+        m.map === UNKNOWN_MAP
+          ? m.map
+          : inlineLink(m.map, {
+              strong: true,
+              title: `Find ${m.map} on the Maps screen`,
+              onClick: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); },
+            }),
       ),
       metaLine,
     ),

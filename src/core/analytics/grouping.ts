@@ -145,6 +145,50 @@ export const byRole = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => x
 /** Winrate per tracked account. */
 export const byAccount = (g: GameRecord[]) => groupBy(g, (x) => x.account);
 
+/** The `map` of a game whose map was never reported (GEP sent none, or an import had none) — a placeholder, not a map. */
+export const UNKNOWN_MAP = 'Unknown';
+
+/**
+ * Split the {@link UNKNOWN_MAP} placeholder out of a by-map breakdown. Its games
+ * are real and stay in every total; it just isn't a map — listing it inflates
+ * "how many maps" and ranks a bucket nobody can queue into. `unknownGames` lets
+ * the caller say how many games were left out instead of dropping them silently.
+ */
+export function splitUnknownMap(byMap: readonly Group[]): { maps: Group[]; unknownGames: number } {
+  return {
+    maps: byMap.filter((m) => m.key !== UNKNOWN_MAP),
+    unknownGames: byMap.find((m) => m.key === UNKNOWN_MAP)?.games ?? 0,
+  };
+}
+
+/**
+ * Roll a by-map breakdown up into one group per game mode, most games first.
+ * The same numbers `groupBy(games, mapModeOf)` gives, built from maps that are
+ * already aggregated so the caller can leave {@link UNKNOWN_MAP} out first.
+ */
+export function modeGroups(maps: readonly Group[], mapModeOf: MapModeResolver): Group[] {
+  const buckets = new Map<string, Group>();
+  for (const m of maps) {
+    const mode = mapModeOf(m.key);
+    const cur = buckets.get(mode);
+    if (!cur) {
+      buckets.set(mode, { ...m, key: mode });
+      continue;
+    }
+    cur.games += m.games;
+    cur.wins += m.wins;
+    cur.losses += m.losses;
+    cur.draws += m.draws;
+    if (m.srNet !== undefined) {
+      cur.srNet = (cur.srNet ?? 0) + m.srNet;
+      cur.srLogged = (cur.srLogged ?? 0) + (m.srLogged ?? 0);
+    }
+  }
+  return [...buckets.values()]
+    .map((g) => ({ ...g, winrate: g.wins + g.losses ? g.wins / (g.wins + g.losses) : 0 }))
+    .sort((a, b) => b.games - a.games);
+}
+
 /**
  * Hero winrate with career-profile credit: every hero the player used in a game
  * earns the fraction of it equal to its share of the player's time (an equal

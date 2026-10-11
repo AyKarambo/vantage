@@ -36,7 +36,7 @@ import { commsTone } from '../../../src/core/comms';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { heroLines, combinedHeroLine, type PerTen } from '../../../src/core/perHero';
 import { matchInTargetScope } from '../../../src/core/targets';
-import { groupByDay } from '../../../src/core/analytics';
+import { groupByDay, UNKNOWN_MAP } from '../../../src/core/analytics';
 import { PALETTE, wrHsl } from '../theme';
 import { openHeroDrawer } from './heroes';
 import { backControl, type ViewContext } from './view';
@@ -189,11 +189,14 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
       // The richest page about a match used to have fewer exits than its own
       // row — the row already links the map and every hero (M4).
       h('h1', { class: 'detail-map' },
-        inlineLink(d.map, {
-          strong: true,
-          title: `Find ${d.map} on the Maps screen`,
-          onClick: () => ctx.navigate('maps', { highlight: d.map }),
-        }),
+        // The Maps screen doesn't list the 'Unknown' placeholder, so there is nothing to find there.
+        d.map === UNKNOWN_MAP
+          ? d.map
+          : inlineLink(d.map, {
+              strong: true,
+              title: `Find ${d.map} on the Maps screen`,
+              onClick: () => ctx.navigate('maps', { highlight: d.map }),
+            }),
       ),
       meta,
       mentalFlags(d),

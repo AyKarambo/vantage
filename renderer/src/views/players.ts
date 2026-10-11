@@ -15,12 +15,12 @@
 import { h, must, render } from '../dom';
 import type { PlayerList, PlayerListRow, PlayerRelation, PlayerSortKey } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { relTime, roleLabel, RELATION_LABEL } from '../format';
+import { relTime, RELATION_LABEL } from '../format';
 import { button, card, chip, emptyState } from '../components/primitives';
 import { dataTable, type Column } from '../components/table';
 import { prefs } from '../prefs';
 import { wrColor } from '../theme';
-import { viewHead, type ViewContext } from './view';
+import { scopeCaption, viewHead, type ViewContext } from './view';
 
 /** The minimum-games chip steps, mirroring the Heroes screen's idiom. */
 const MIN_GAMES_STEPS = [1, 2, 5, 10] as const;
@@ -71,24 +71,6 @@ function minGamesPref(): number {
 function relationPref(): PlayerRelation {
   const r = prefs.get('playerRelation');
   return RELATION_STEPS.some((s) => s.value === r) ? r! : 'any';
-}
-
-/** "Damage · Season 15 · Karambo" — always names the filters, even at defaults,
- *  so a count on this screen is never mistaken for an all-time one. */
-function scopeLabel(p: PlayerList, ctx: ViewContext): string {
-  const s = p.scope;
-  let season: string;
-  if (typeof s.days === 'object') {
-    const id = s.days.season;
-    season = ctx.data.options.seasons.find((x) => x.id === id)?.label ?? 'one season';
-  } else {
-    season = s.days === 'all' ? 'all time' : `last ${s.days} days`;
-  }
-  return [
-    s.role === 'all' ? 'all roles' : roleLabel(s.role),
-    season,
-    s.account === 'all' ? 'all accounts' : s.account,
-  ].join(' · ');
 }
 
 /** The header tooltip on both With you/Against you columns (M6) — states the exact sort/sink rule `RANKERS`'s `winrateOf` actually applies, since the column looks like it sorts by win COUNT. */
@@ -262,7 +244,7 @@ export function players(ctx: ViewContext): HTMLElement {
 
   function paint(p: PlayerList): void {
     tableHost.style.opacity = '1';
-    const scope = scopeLabel(p, ctx);
+    const scope = scopeCaption(p.scope, ctx.data.options.seasons);
     must('.view-sub', head).textContent =
       `${p.totalInScope.toLocaleString()} ${p.totalInScope === 1 ? 'player' : 'players'} met in this filter scope · ${scope}`;
     // The scope (role/season/account) is already stated once in the subtitle
