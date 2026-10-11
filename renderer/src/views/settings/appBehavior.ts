@@ -166,6 +166,18 @@ function devModeSection(s: AppUiSettings): HTMLElement {
           + 'kills, damage and healing, and the players-you’ve-met section exactly as they are — and stops the '
           + 'feed being sent to the window at all, rather than just hiding it.',
       }),
+      toggleRow({
+        label: 'Open Live on match start',
+        on: s.autoSwitchToLive,
+        onChange: () => apply({ autoSwitchToLive: !s.autoSwitchToLive }),
+        hint: 'Switches to the Live screen when a match starts. Never pulls Vantage in front of your game.',
+      }),
+      toggleRow({
+        label: 'Open Review on match end',
+        on: s.autoSwitchToReview,
+        onChange: () => apply({ autoSwitchToReview: !s.autoSwitchToReview }),
+        hint: 'Opens that game’s Review page once the match is recorded. Never pulls Vantage in front of your game.',
+      }),
       h('div', null,
         toggleRow({
           label: 'MCP endpoint',

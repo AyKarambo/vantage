@@ -455,6 +455,8 @@ function main(): void {
         devMode: config.ui.devMode,
         gepNotifications: config.ui.gepNotifications,
         liveKillFeed: config.ui.liveKillFeed,
+        autoSwitchToLive: config.ui.autoSwitchToLive,
+        autoSwitchToReview: config.ui.autoSwitchToReview,
         lastSeenVersion: config.ui.lastSeenVersion,
         mcpEnabled: config.ui.mcpEnabled,
         uiZoom: config.ui.uiZoom,
@@ -491,6 +493,16 @@ function main(): void {
           saveLocalUiConfig({ liveKillFeed: patch.liveKillFeed });
           config = loadConfig();
         }
+        // Pure preference: the renderer reads it when a match start arrives, so
+        // persisting it is enough — nothing in main reacts to it.
+        if (patch.autoSwitchToLive !== undefined) {
+          saveLocalUiConfig({ autoSwitchToLive: patch.autoSwitchToLive });
+          config = loadConfig();
+        }
+        if (patch.autoSwitchToReview !== undefined) {
+          saveLocalUiConfig({ autoSwitchToReview: patch.autoSwitchToReview });
+          config = loadConfig();
+        }
         if (patch.lastSeenVersion !== undefined) {
           saveLocalUiConfig({ lastSeenVersion: patch.lastSeenVersion });
           config = loadConfig();
@@ -521,6 +533,8 @@ function main(): void {
           devMode: config.ui.devMode,
           gepNotifications: config.ui.gepNotifications,
           liveKillFeed: config.ui.liveKillFeed,
+          autoSwitchToLive: config.ui.autoSwitchToLive,
+          autoSwitchToReview: config.ui.autoSwitchToReview,
           lastSeenVersion: config.ui.lastSeenVersion,
           mcpEnabled: config.ui.mcpEnabled,
           uiZoom: config.ui.uiZoom,

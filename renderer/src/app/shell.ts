@@ -13,7 +13,7 @@ import { demoTransition } from '../../../src/core/demoPreference';
 import { DETAIL_PARENT, statusText, store } from '../store';
 import { bridge } from '../bridge';
 import { getGepStatus, initGepStatus, subscribeGepStatus } from '../gepStatus';
-import { getLiveMatch, initLiveMatch, subscribeLiveMatch } from '../liveMatch';
+import { getLiveMatch, initLiveMatch, subscribeLiveMatch, subscribeMatchStart } from '../liveMatch';
 import { getDevModeAuthStatus, initDevModeAuthStatus, subscribeDevModeAuthStatus } from '../devModeAuthStatus';
 import { classifyDevModeBadge } from '../../../src/core/devMode';
 import { liveTeamKills } from '../../../src/core/liveMatch';
@@ -296,6 +296,7 @@ export class App {
     initLiveMatch();
     subscribeLiveMatch(() => this.renderLiveNav());
     this.renderLiveNav();
+    subscribeMatchStart(() => this.switchToLiveIfWanted());
     // Start the log feed at shell mount, not on Logs' first render (W5) — the
     // error/warning counter should reflect the whole session, since a player
     // usually opens Logs BECAUSE something already went wrong, not before.
@@ -363,6 +364,32 @@ export class App {
     // exists for. The modal simply waits until they alt-tab back.
     if (payload.source === 'gep') {
       void maybeOfferPlacements(payload.account, payload.role, () => void store.refresh());
+      void this.switchToReviewIfWanted(payload.matchId);
+    }
+  }
+
+  /**
+   * "Open Review on match end" (Settings → App behavior): once a live-tracked
+   * match has been recorded, open that game's Review page. The setting is read
+   * when the push arrives, so a toggle applies to the very next match. It moves
+   * the SCREEN only — never the window's focus or visibility.
+   *
+   * Waits for a fresh dashboard first: Review's deep link only opens a card the
+   * inbox already holds and consumes the link on its first render, so
+   * navigating before the new match has landed would lose it. The inbox honours
+   * the Role filter, so a filter can still hide the match; then the game's own
+   * page opens rather than an unrelated game's Review card.
+   */
+  private async switchToReviewIfWanted(matchId: string): Promise<void> {
+    try {
+      if (!(await bridge.getAppSettings()).autoSwitchToReview) return;
+      await store.refresh();
+      const { view, params } = store.get();
+      if (view === 'review' && params.matchId === matchId) return;
+      const inInbox = store.get().data?.reviewInbox.some((m) => m.matchId === matchId) ?? false;
+      store.setView(inInbox ? 'review' : 'matchDetail', { matchId });
+    } catch {
+      /* settings unreadable or the refresh failed — stay where you are */
     }
   }
 
@@ -799,6 +826,19 @@ export class App {
 
   /** Reflect the pending-review count on the Review nav item in place, so the
    *  button (a live click target) is never rebuilt. */
+  /**
+   * "Switch to Live when a match starts" (Settings → App behavior). The setting
+   * is read at the moment the start arrives rather than cached, so flipping it
+   * applies to the very next match. It moves the SCREEN only — never the
+   * window's focus or visibility, since Vantage must not pull focus off a game.
+   */
+  private switchToLiveIfWanted(): void {
+    if (store.get().view === 'live') return;
+    void bridge.getAppSettings().then((s) => {
+      if (s.autoSwitchToLive) store.setView('live');
+    }).catch(() => { /* settings unreadable — stay where you are */ });
+  }
+
   /**
    * A live dot on the Live nav item while a match is running, so the screen
    * advertises itself without stealing focus. Mutated in place for the same
@@ -1469,6 +1509,20 @@ function settingsActions(
       run: () => {
         void bridge.setAppSettings({ liveKillFeed: !appSettings.liveKillFeed })
           .then((s) => toast(`Live kill feed: ${s.liveKillFeed ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Open Live on match start', hint: onOff(appSettings.autoSwitchToLive),
+      run: () => {
+        void bridge.setAppSettings({ autoSwitchToLive: !appSettings.autoSwitchToLive })
+          .then((s) => toast(`Open Live on match start: ${s.autoSwitchToLive ? 'on' : 'off'}`));
+      },
+    },
+    {
+      label: 'Settings: Open Review on match end', hint: onOff(appSettings.autoSwitchToReview),
+      run: () => {
+        void bridge.setAppSettings({ autoSwitchToReview: !appSettings.autoSwitchToReview })
+          .then((s) => toast(`Open Review on match end: ${s.autoSwitchToReview ? 'on' : 'off'}`));
       },
     },
     {
