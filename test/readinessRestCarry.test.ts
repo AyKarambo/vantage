@@ -1,11 +1,12 @@
 /**
- * Session-bound rest bonus + "today frame" (readiness-score-accuracy, issue #307, T7).
+ * Session-bound rest bonus — the morning-to-live crossfade (readiness-score-accuracy, issue #307).
  *
  * The morning read of a play day holds the rest effect of the gap since the previous
- * active day. That bonus used to vanish with the first game — a median 18-point cliff on
- * a real history, win or lose. It is now used up over the first N games of the day, with
- * N = half the player's usual games per active day (3–10), and the read is evaluated as
- * of the reference day so a rest-day morning flows into the first game.
+ * active day. Switching to the live read used to happen all at once with the first game —
+ * a median 18-point cliff on a real history, win or lose. The score now crossfades from the
+ * morning read to the live read over the first N games, N = half the player's usual games
+ * per active day (3–10). Rest days keep their own recovery curve: a surge fades over 1–2
+ * rest days (supercompensation), not overnight.
  */
 import { describe, it, expect } from 'vitest';
 import { computeReadiness, READINESS_TUNING as T } from '../src/core/readiness';
@@ -53,7 +54,17 @@ describe('the morning rest bonus is used up over the first N games (AC8)', () =>
   });
 });
 
-describe('a rest-day morning flows into the first game (today frame)', () => {
+describe('rest days keep their recovery curve; the first game crossfades into the live read', () => {
+  it('a three-day surge still weighs on the first rest day — recovery takes 1–2 days, not one night', () => {
+    const history = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
+    const surgeEnd = computeReadiness(history, ts(27, 23, 30)).score!;
+    const restDay1 = computeReadiness(history, ts(28, 20)).score!;
+    const restDay2 = computeReadiness(history, ts(29, 20)).score!;
+    expect(restDay1).toBeGreaterThan(surgeEnd); // rest helps...
+    expect(restDay1).toBeLessThanOrEqual(T.baseScore); // ...but one night does not erase the surge
+    expect(restDay2).toBeGreaterThan(restDay1); // a second rest day lifts it further (rest curve)
+  });
+
   it('after a three-day surge, the first game moves the score by little more than one share of the bonus', () => {
     // 4/day habit, a 10/day surge for three days, one rest day, then play resumes.
     const history = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];

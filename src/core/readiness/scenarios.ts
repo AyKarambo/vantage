@@ -157,7 +157,7 @@ export const CURATED_SCENARIOS: readonly CuratedScenario[] = [
     group: 'guardrail',
     title: 'A brutal losing week',
     plain: 'A week of losses while your own stats hold steady — you get a note, not a lower score.',
-    teaches: 'Matchmaking pulls every winrate toward 50%, so losses with your play holding read as coin flips, not decline. Losing only costs points when your own stats drop too, or when there are no stats to check it against.',
+    teaches: 'Matchmaking pulls every winrate toward 50%, so losses with your play holding read as coin flips, not decline. Losing only costs points when your own stats drop too, when you are grinding hard without a break, or when there are no stats to check it against.',
     match: { bandGroup: 'green', regime: 'stats', centroid: { load: 0, perf: 0, subj: 0 }, requiresSignal: 'winrate-dip' },
   },
   {

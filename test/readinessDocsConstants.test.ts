@@ -39,6 +39,8 @@ describe('deep-tier constants — numeric-literal pins (AC4a)', () => {
     dampFactor: 0.5,
     wrDipMinPoints: 10,
     wrSignificanceZ: 2,
+    wrSignificanceFromZ: 1.5,
+    wrSignificanceFullZ: 2.5,
     wrPenaltyCap: 15,
     wrPenaltyCapManual: 30,
     restRecoveryCap: 25,
@@ -88,6 +90,8 @@ describe('deep-tier constants — still derived from READINESS_TUNING (AC4b)', (
     expect(dc.wrPenaltyCapManual).toBe(T.wrPenaltyCap + T.wrManualCapBoost);
     expect(dc.wrDipMinPoints).toBe(T.wrDipMin * 100);
     expect(dc.wrSignificanceZ).toBe(T.wrSignificanceZ);
+    expect(dc.wrSignificanceFromZ).toBe(T.wrSignificanceZ - T.wrSignificanceRamp);
+    expect(dc.wrSignificanceFullZ).toBe(T.wrSignificanceZ + T.wrSignificanceRamp);
     expect(dc.formLambda).toBe(T.formLambda);
     expect(dc.formDeadband).toBe(T.formDeadband);
     expect(dc.heroLearnGames).toBe(T.heroLearnGames);
@@ -125,7 +129,7 @@ describe('deep-tier copy — prose contains the interpolated constants (AC4c)', 
     ['declineDetection', deepCopy.declineDetection, ['formLambda', 'formDeadband', 'evidenceMinGames', 'heroLearnGames', 'dominantHeroSharePct']],
     ['accountWeighting', deepCopy.accountWeighting, ['altRankCloseGapDivisions', 'altRankSmurfGapDivisions', 'altRankFloorWeight', 'mainRankWindowDays', 'altAccountWeight']],
     ['tiltCaps', deepCopy.tiltCaps, ['tiltPenCap', 'tiltPenCapManual']],
-    ['dampenerAndOutcomeCap', deepCopy.dampenerAndOutcomeCap, ['dampFactor', 'wrPenaltyCap', 'wrPenaltyCapManual', 'wrDipMinPoints', 'wrSignificanceZ']],
+    ['dampenerAndOutcomeCap', deepCopy.dampenerAndOutcomeCap, ['dampFactor', 'wrPenaltyCap', 'wrPenaltyCapManual', 'wrDipMinPoints', 'wrSignificanceZ', 'wrSignificanceFromZ', 'wrSignificanceFullZ']],
     ['restAndRust', deepCopy.restAndRust, ['restRecoveryCap', 'rustDecayPerDay', 'rustDays', 'rustFloor', 'restCarryPct', 'restCarryMinGames', 'restCarryMaxGames']],
     ['longSessions', deepCopy.longSessions, ['longSessionFloorHours', 'longSessionPercentile', 'longSessionWindowDays', 'longSessionMinSessions', 'longSessionRampMultiple', 'longSessionPen']],
     ['confidenceGates', deepCopy.confidenceGates, ['confidenceActiveDays', 'confidenceWindowDays', 'statCoverageHighPct', 'wrMinDecidedAcute', 'wrMinDecidedBase', 'accountMixBarPct']],
