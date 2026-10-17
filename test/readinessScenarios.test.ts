@@ -361,7 +361,9 @@ const SCENARIOS: Scenario[] = [
     // 16 → 28 (readiness-score-accuracy T3/T5): the marathon's slump is now clearer (7000/6/17, was
     // 8100/5/20 — the current form read that milder one at only −17.6, red by a single point), and the
     // 17-point loss dip on 30/56 decided games is within 2 SE, so it no longer costs points.
-    expect: {"score":28,"band":"in-the-hole","regime":"stats","confidence":"high"},
+    // 28 → 36 (T6): the 156-min marathon is only 6 min past the 2.5h floor, so the scaled long-session
+    // penalty is 0.64, not the old flat 8. The red gate's marathon arm (absolute ≥150 min / 10 games) is unchanged.
+    expect: {"score":36,"band":"in-the-hole","regime":"stats","confidence":"high"},
     fixture: () => {
       const BASE = { hero: 'Tracer', damage: 9000, deaths: 4, elims: 22 };
       const games = [

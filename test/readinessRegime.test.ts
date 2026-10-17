@@ -205,6 +205,7 @@ describe('T4 — absolute-load arm (the core manual-regime lever)', () => {
       consecutiveDays: 1,
       chronicActiveDays: 21,
       activeDaysPerWeek: 4,
+      longSession: null,
       recentLongSession: false,
       lastSessionGames: 12,
       lastSessionMinutes: null,

@@ -224,6 +224,15 @@ function goodFormLabel(state: StateAt): string {
   return `playing above your own recent baseline${what}`;
 }
 
+/** Hours to one decimal ('5.0h') — the long-session signal names both the session and the bar it crossed. */
+const hoursLabel = (minutes: number): string => `${(minutes / 60).toFixed(1)}h`;
+
+function longSessionLabel(ls: { minutes: number; threshold: number }): string {
+  return ls.threshold > T.sessionLongMinutes
+    ? `a ${hoursLabel(ls.minutes)} session — longer than ${Math.round(T.longSessionPercentile * 10)} in 10 of your sessions (~${hoursLabel(ls.threshold)})`
+    : `a ${hoursLabel(ls.minutes)} session — over ${hoursLabel(T.sessionLongMinutes)}`;
+}
+
 function buildSignals(state: StateAt): ReadinessSignal[] {
   const { load, mental, outcome, perf, subj } = state;
   const out: ReadinessSignal[] = [];
@@ -256,8 +265,8 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
       severity: load.ratio >= T.ratioHigh ? 'high' : 'watch',
     });
   }
-  if (loadCurrent && load.recentLongSession) {
-    out.push({ key: 'long-session', label: 'a session over 2.5h recently', severity: 'watch' });
+  if (loadCurrent && load.longSession && load.longSession.severity > 0) {
+    out.push({ key: 'long-session', label: longSessionLabel(load.longSession), severity: 'watch' });
   }
 
   // Objective performance vs the player's own baselines (the new primary family).

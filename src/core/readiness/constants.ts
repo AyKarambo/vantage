@@ -22,8 +22,16 @@ export const READINESS_TUNING = {
   sessionGapMinutes: 90,
   /** Fallback minutes for a game with no recorded duration (END-only timestamps undercount session length). */
   defaultGameMinutes: 12,
-  /** A single session at/above this length (≈2.5h) is a fatigue signal (matches the cognitive-fatigue session length in the research). */
+  /** FLOOR of the personal long-session threshold (≈2.5h, the cognitive-fatigue session length in the research) — and still the absolute bar of the marathon red-gate arm. */
   sessionLongMinutes: 150,
+  /** Trailing window (days, ending the day before the reference day) whose sessions the personal long-session threshold is learned from. */
+  longSessionWindowDays: 30,
+  /** Fewer sessions than this in that window and the threshold stays at the sessionLongMinutes floor — too few to know what is "long" for this player. */
+  longSessionMinSessions: 10,
+  /** The threshold is this percentile of the player's own session lengths ("longer than 9 in 10 of your sessions") — a regular long-session player is not penalized for their normal. */
+  longSessionPercentile: 0.9,
+  /** The long-session penalty ramps from 0 at the threshold to full at threshold × (1 + this) — continuous, no cliff at the edge. */
+  longSessionRampShare: 0.5,
 
   /** Acute window (recent load) in days. */
   acuteDays: 3,
@@ -127,7 +135,7 @@ export const READINESS_TUNING = {
   volPenCap: 22,
   /** Cap on the consecutive-days arm (only fires during a genuine surge). */
   streakPenCap: 12,
-  /** Flat penalty for a recent ≥2.5h session. */
+  /** Cap of the scaled long-session penalty (full at threshold × (1 + longSessionRampShare), 0 at the personal threshold). */
   longSessionPen: 8,
   /** Volume only penalizes above max(absElevatedPerDay, habitFactor × own chronic norm) — habit is not risk. */
   habitFactor: 1.25,

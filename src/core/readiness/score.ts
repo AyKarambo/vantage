@@ -61,7 +61,7 @@ const EMPTY_STATE: StateAt = {
   restDays: 0,
   load: {
     acutePerDay: 0, chronicPerDay: 0, ratio: 1, ratioTrusted: false, consecutiveDays: 0,
-    chronicActiveDays: 0, activeDaysPerWeek: 0, recentLongSession: false, lastSessionGames: 0,
+    chronicActiveDays: 0, activeDaysPerWeek: 0, longSession: null, recentLongSession: false, lastSessionGames: 0,
     lastSessionMinutes: null, highLoad: false, sustainedLoad: false, historySpanDays: 0,
   },
   mental: { coverage: 0, tiltKnown: false, acuteTilt: 0, baseTilt: 0, acutePositive: 0, fatigued: false },
@@ -122,7 +122,7 @@ export function loadParts(
   const volPen = Math.min(T.volPenCap, Math.max(0, load.acutePerDay - habitBar) * 3);
   const surging = ratioPen > 0 || volPen > 0;
   const streakPen = surging ? Math.min(T.streakPenCap, Math.max(0, load.consecutiveDays - T.sustainedDays) * 3) : 0;
-  const longPen = load.recentLongSession ? T.longSessionPen : 0;
+  const longPen = T.longSessionPen * (load.longSession?.severity ?? 0);
   const fade = Math.max(0, 1 - restDays / (T.restFullRecoverDays + 1));
 
   // Absolute-load arm (manual regime). absTrust ramps on BOTH active-day density and
