@@ -27,54 +27,37 @@ import { regimeFor } from './regime';
 import { rankTrendFor, type RankTrend } from './rankTrend';
 import type { ReadinessBand, ReadinessDriver, ReadinessRegime } from './types';
 
-/** The five family states, evaluated as of one day ordinal. */
-export interface Frame {
+/** The family states as of one day ordinal, plus that day's marathon flag. */
+interface Frame {
   load: LoadState;
   mental: MentalState;
   outcome: OutcomeState;
   perf: PerfState;
   subj: SubjState;
-}
-
-/** A rest bonus carried into the first games of a play day (see `restCarryAt`). */
-export interface RestCarry {
-  /** The rest effect still in force (the morning's bonus × the share of the carry left). */
-  restEffect: number;
-  /** The multiplier on the pre-rest performance/self-report reads: the morning's rest fade, giving way to 1 as the carry is used up. */
-  fade: number;
-}
-
-/** Overrides `loadParts`' rest handling: the rest effect to add and the fade on the overload penalty. */
-export interface RestOverride {
-  restEffect: number;
-  fade: number;
+  /** A ≥2.5h, ≥marathonMinGames session ending on that day — the single-session red-corroboration arm. */
+  marathon: boolean;
 }
 
 export interface StateAt {
   hasData: boolean;
   lastActiveOrdinal: number;
   restDays: number;
-  /**
-   * The family states as of the REFERENCE day ("now"): rest days sit in every window as
-   * zero-load days, so the read moves continuously from a rest-day morning into the first
-   * game instead of jumping between two frames. Drives the deltas and the signals.
-   */
+  /** The family states, evaluated as of the LAST ACTIVE day (rest days fade them, see `computeStateAt`). */
   load: LoadState;
   mental: MentalState;
   outcome: OutcomeState;
   perf: PerfState;
   subj: SubjState;
-  /**
-   * The family states as of the LAST ACTIVE day — what the player's data looked like when
-   * they last played. Feeds what describes that session rather than today: the recovering
-   * gate (`heavy`), confidence and its data notes, and the main account. The same object as
-   * the now-frame on a play day.
-   */
-  last: Frame;
   /** Was the player in a loaded/fatigued state when they last played? (recovering-gate input) */
   heavy: boolean;
   /** A ≥2.5h, ≥marathonMinGames session ending on the last active day — the single-session red-corroboration arm. */
   marathonSession: boolean;
+  /**
+   * On a play day, the share of the MORNING read (the score before today's first game) still
+   * blended into the deltas: 1 → 0 over the first N games (see `morningRead`). 0 on rest days,
+   * once N games are played, and without an earlier active day.
+   */
+  morningShare: number;
   /** The three family deltas (already clamped to their bounds). */
   deltas: { load: number; perf: number; subj: number };
   /** Fade-adjusted overload penalty (drives the `overload` driver tag). */
@@ -90,7 +73,10 @@ export interface StateAt {
   rankTrend: RankTrend;
 }
 
-const EMPTY_FRAME: Frame = {
+const EMPTY_STATE: StateAt = {
+  hasData: false,
+  lastActiveOrdinal: 0,
+  restDays: 0,
   load: {
     acutePerDay: 0, chronicPerDay: 0, ratio: 1, ratioTrusted: false, consecutiveDays: 0,
     chronicActiveDays: 0, activeDaysPerWeek: 0, longSession: null, recentLongSession: false, lastSessionGames: 0,
@@ -100,16 +86,9 @@ const EMPTY_FRAME: Frame = {
   outcome: { lossStreak: 0 },
   perf: EMPTY_PERF,
   subj: EMPTY_SUBJ,
-};
-
-const EMPTY_STATE: StateAt = {
-  hasData: false,
-  lastActiveOrdinal: 0,
-  restDays: 0,
-  ...EMPTY_FRAME,
-  last: EMPTY_FRAME,
   heavy: false,
   marathonSession: false,
+  morningShare: 0,
   deltas: { load: 0, perf: 0, subj: 0 },
   overloadPen: 0,
   streakFired: false,
@@ -146,20 +125,8 @@ export function restCarryGames(usualGamesPerActiveDay: number): number {
   return clamp(Math.round(T.restCarryShare * usualGamesPerActiveDay), T.restCarryMinGames, T.restCarryMaxGames);
 }
 
-/**
- * The rest bonus a play day carries from its morning. Before the first game the read already
- * holds the rest effect of the gap since the previous active day (and that gap's penalty fade);
- * one game used to drop both at once — a median 18-point cliff on a real history, win or lose.
- * Now the bonus is used up linearly over the first N games and the fade gives way the same way,
- * so the score moves with the games actually played. Only the positive bonus carries — rust
- * (a long layoff's negative effect) keeps its existing rule. Undefined without a prior active day.
- */
-export function restCarryAt(games: GameRecord[], dayOrd: number): RestCarry | undefined {
-  const byDay = gamesByDay(games);
-  let previous = -Infinity;
-  for (const d of byDay.keys()) if (d < dayOrd && d > previous) previous = d;
-  if (!Number.isFinite(previous)) return undefined;
-
+/** Usual games per ACTIVE day over the chronic window before `dayOrd` (0 with none). */
+function usualGamesPerActiveDay(byDay: Map<number, number>, dayOrd: number): number {
   let total = 0;
   let activeDays = 0;
   for (let d = dayOrd - T.chronicDays; d < dayOrd; d += 1) {
@@ -169,12 +136,7 @@ export function restCarryAt(games: GameRecord[], dayOrd: number): RestCarry | un
       activeDays += 1;
     }
   }
-  const gapDays = dayOrd - previous;
-  const share = Math.max(0, 1 - (byDay.get(dayOrd) ?? 0) / restCarryGames(activeDays > 0 ? total / activeDays : 0));
-  return {
-    restEffect: Math.max(0, restEffectFor(gapDays)) * share,
-    fade: share * restFadeFor(gapDays) + (1 - share),
-  };
+  return activeDays > 0 ? total / activeDays : 0;
 }
 
 /**
@@ -200,7 +162,6 @@ export function loadParts(
   restDays: number,
   blend: number,
   rankTrend: RankTrend = 'unknown',
-  rest?: RestOverride,
 ): { delta: number; overloadPen: number; streakFired: boolean } {
   const trust = Math.min(1, load.chronicActiveDays / T.minChronicActiveDays);
   const ratioPen = load.ratio > T.ratioElevated ? Math.min((load.ratio - T.ratioElevated) * 30, T.ratioPenCap) : 0;
@@ -209,8 +170,7 @@ export function loadParts(
   const surging = ratioPen > 0 || volPen > 0;
   const streakPen = surging ? Math.min(T.streakPenCap, Math.max(0, load.consecutiveDays - T.sustainedDays) * 3) : 0;
   const longPen = T.longSessionPen * (load.longSession?.severity ?? 0);
-  // computeStateAt overrides both (see there); direct callers keep the frozen-frame rest fade.
-  const fade = rest ? rest.fade : restFadeFor(restDays);
+  const fade = restFadeFor(restDays);
 
   // Absolute-load arm (manual regime). absTrust ramps on BOTH active-day density and
   // uncapped history span, so norm-free claims need a genuinely established player.
@@ -246,7 +206,7 @@ export function loadParts(
       ? Math.min(T.freqPenCap, (T.lowFrequencyDaysPerWeek - load.activeDaysPerWeek) * 3)
       : 0;
   return {
-    delta: clamp((rest ? rest.restEffect : restEffectFor(restDays)) - overloadPen - freqPen, T.loadDeltaMin, T.loadDeltaMax),
+    delta: clamp(restEffectFor(restDays) - overloadPen - freqPen, T.loadDeltaMin, T.loadDeltaMax),
     overloadPen,
     // Did the day-streak penalty itself actually contribute (C8), not just
     // "is the streak long" — the consecutive-days signal's severity reads
@@ -256,14 +216,65 @@ export function loadParts(
   };
 }
 
-/** The five family states as of `dayOrd` (windows end on that day; `games` must already be cut at the reference day). */
+/** The family states as of `dayOrd` (windows end on that day; `games` must already be cut at it). */
 function frameAt(games: GameRecord[], dayOrd: number, ctx: ReadinessContext): Frame {
   const load = loadState(games, dayOrd);
   const mental = mentalState(games, dayOrd);
   const outcome = outcomeState(games, dayOrd);
-  const perf = perfState(games, dayOrd, ctx, mental.fatigued);
+  const marathon = detectSessions(games).some(
+    (s) => s.endOrdinal === dayOrd && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
+  );
+  // Heavy, uninterrupted play — the red gate's own load corroboration — is where losing counts in
+  // full even while the per-10 stats hold (see the winrate note in performance.ts).
+  const perf = perfState(games, dayOrd, ctx, mental.fatigued, load.sustainedLoad || marathon);
   const subj = subjState(games, dayOrd, mental, perf.objectiveAdverse, perf.blend);
-  return { load, mental, outcome, perf, subj };
+  return { load, mental, outcome, perf, subj, marathon };
+}
+
+interface Read {
+  deltas: { load: number; perf: number; subj: number };
+  overloadPen: number;
+  streakFired: boolean;
+}
+
+/**
+ * The family deltas of a frame read `restDays` after its day: the load family with the
+ * supercompensation rest curve and its rest fade (see `loadParts`), and the performance and
+ * self-report reads faded by the same rest days — a pre-layoff tilt or dip must not drag a fully
+ * rested player's score forever.
+ */
+function readOf(frame: Frame, restDays: number, rankTrend: RankTrend): Read {
+  const lp = loadParts(frame.load, restDays, frame.perf.blend, rankTrend);
+  const fade = restFadeFor(restDays);
+  return {
+    deltas: { load: lp.delta, perf: frame.perf.delta * fade, subj: frame.subj.delta * fade },
+    overloadPen: lp.overloadPen,
+    streakFired: lp.streakFired,
+  };
+}
+
+/**
+ * The read this play day started from — exactly what the score showed before today's first game —
+ * and how much of it is still blended in. Switching from that rest-day read to the live read used
+ * to happen all at once with the first game: a median 18-point cliff on a real history, win or lose.
+ * Instead the score now crossfades from the morning read to the live read over the first N games
+ * (N = half the player's usual games per active day, 3–10), so one game moves it by about 1/N of
+ * the difference, and rest days keep their own recovery curve (a surge fades over 1–2 days, not
+ * overnight). Only a morning carrying a positive rest effect crossfades: a layoff's rust keeps its
+ * existing rule. Null without an earlier active day or once N games are played.
+ */
+function morningRead(upTo: GameRecord[], today: number, ctx: ReadinessContext): { share: number; read: Read } | null {
+  const byDay = gamesByDay(upTo);
+  let previous = -Infinity;
+  for (const d of byDay.keys()) if (d < today && d > previous) previous = d;
+  if (!Number.isFinite(previous)) return null;
+  const gapDays = today - previous;
+  if (restEffectFor(gapDays) < 0) return null;
+  const share = Math.max(0, 1 - (byDay.get(today) ?? 0) / restCarryGames(usualGamesPerActiveDay(byDay, today)));
+  if (share <= 0) return null;
+  const before = upTo.filter((g) => dayOrdinal(g.timestamp) < today);
+  const rankTrend = rankTrendFor(before, today, ctx.rankAnchors, ctx.suppressed);
+  return { share, read: readOf(frameAt(before, previous, ctx), gapDays, rankTrend) };
 }
 
 /** Evaluate the player's full training state as of `refOrdinal` (uses only games on or before that day). */
@@ -278,35 +289,29 @@ export function computeStateAt(
   const lastActiveOrdinal = upTo.reduce((m, g) => Math.max(m, dayOrdinal(g.timestamp)), -Infinity);
   const restDays = Math.max(0, refOrdinal - lastActiveOrdinal);
 
-  // Two frames, one engine: on a play day they are the same object; on a rest day the now-frame
-  // carries the rest days inside its windows, while the last frame still describes the session the
-  // player last played (the recovering gate and data-quality reads are about THAT session).
-  const last = frameAt(upTo, lastActiveOrdinal, ctx);
-  const now = restDays === 0 ? last : frameAt(upTo, refOrdinal, ctx);
-  const { load, mental, outcome, perf, subj } = now;
-  const heavy = (last.load.sustainedLoad && last.mental.fatigued) || last.load.highLoad || last.mental.fatigued;
-  const marathonSession = detectSessions(upTo).some(
-    (s) => s.endOrdinal === lastActiveOrdinal && s.minutes >= T.sessionLongMinutes && s.games >= T.marathonMinGames,
-  );
+  // State is evaluated as of the LAST ACTIVE day; rest days then fade it and add the rest curve.
+  const frame = frameAt(upTo, lastActiveOrdinal, ctx);
+  const { load, mental, outcome, perf, subj } = frame;
+  const heavy = (load.sustainedLoad && mental.fatigued) || load.highLoad || mental.fatigued;
 
   const rankTrend = rankTrendFor(upTo, refOrdinal, ctx.rankAnchors, ctx.suppressed);
-  // A play day carries its morning's rest bonus through its first games (see restCarryAt).
-  const carry = restDays === 0 ? restCarryAt(upTo, lastActiveOrdinal) : undefined;
-  // The now-frame's load windows already hold the rest days as zero-load days, so the load
-  // family's own decay IS its recovery: no rest fade on the overload (fading it as well would
-  // count every rest day twice). The rest effect itself is today's, or the carried bonus.
-  const lp = loadParts(load, restDays, perf.blend, rankTrend, {
-    restEffect: carry ? carry.restEffect : restEffectFor(restDays),
-    fade: 1,
-  });
+  const live = readOf(frame, restDays, rankTrend);
+  const morning = restDays === 0 ? morningRead(upTo, lastActiveOrdinal, ctx) : null;
+  const share = morning ? morning.share : 0;
+  const mix = (m: number, l: number): number => share * m + (1 - share) * l;
+  const read: Read = morning
+    ? {
+        deltas: {
+          load: mix(morning.read.deltas.load, live.deltas.load),
+          perf: mix(morning.read.deltas.perf, live.deltas.perf),
+          subj: mix(morning.read.deltas.subj, live.deltas.subj),
+        },
+        overloadPen: mix(morning.read.overloadPen, live.overloadPen),
+        streakFired: live.streakFired,
+      }
+    : live;
   const driver: ReadinessDriver =
-    restDays >= T.rustSignalDays ? 'rust' : restDays === 0 && lp.overloadPen >= T.driverBar ? 'overload' : 'neutral';
-
-  // Performance/subjective reads still hold the games from before the rest, so — like the
-  // overload penalty — they fade as real rest days pass (and fade back in with the carry over
-  // the first games of a play day); otherwise a pre-layoff tilt or dip would drag a fully rested
-  // player's score forever.
-  const fade = carry ? carry.fade : restFadeFor(restDays);
+    restDays >= T.rustSignalDays ? 'rust' : restDays === 0 && read.overloadPen >= T.driverBar ? 'overload' : 'neutral';
 
   return {
     hasData: true,
@@ -317,16 +322,15 @@ export function computeStateAt(
     outcome,
     perf,
     subj,
-    last,
     heavy,
-    marathonSession,
-    deltas: { load: lp.delta, perf: perf.delta * fade, subj: subj.delta * fade },
-    overloadPen: lp.overloadPen,
-    streakFired: lp.streakFired,
+    marathonSession: frame.marathon,
+    morningShare: share,
+    deltas: read.deltas,
+    overloadPen: read.overloadPen,
+    streakFired: read.streakFired,
     driver,
-    // The regime badge (and the confidence it caps) describes the data behind the read: the last frame.
-    blend: last.perf.blend,
-    regime: regimeFor(last.perf.blend),
+    blend: perf.blend,
+    regime: regimeFor(perf.blend),
     rankTrend,
   };
 }

@@ -110,7 +110,7 @@ export interface PerfState {
   statPenalty: number;
   /** Pooled per-account winrate dip (baseline − acute), null when under-sampled. Stays set when the dip isn't significant — the confidence gate reads the sample, not the verdict. */
   wrDip: number | null;
-  /** The dip clears both wrDipMin and wrSignificanceZ standard errors of the two-sample difference — real signal, not coin flips. */
+  /** The dip clears wrDipMin and stands far enough beyond chance (past wrSignificanceZ − wrSignificanceRamp standard errors) to count at all — real signal, not coin flips. */
   wrSignificant: boolean;
   wrPenalty: number;
   bonus: number;
@@ -155,6 +155,17 @@ export function formOf(gameScores: readonly number[]): number {
 /** Penalty for a form below the dead-band — 0 inside it, continuous past its edge, capped. */
 export function formPenalty(form: number): number {
   return Math.min(T.statPenaltyCap, T.formPenaltySlope * Math.max(0, -form - T.formDeadband));
+}
+
+/**
+ * How much of a winrate dip counts (0..1): nothing below `wrDipMin` or within
+ * `wrSignificanceZ − wrSignificanceRamp` standard errors of chance, all of it from
+ * `wrSignificanceZ + wrSignificanceRamp`, linear in between — so a single win or loss near the
+ * line moves the penalty a little instead of switching it on or off.
+ */
+export function winrateEvidence(dip: number | null, se: number): number {
+  if (dip === null || dip < T.wrDipMin || !(se > 0)) return 0;
+  return clamp((dip / se - (T.wrSignificanceZ - T.wrSignificanceRamp)) / (2 * T.wrSignificanceRamp), 0, 1);
 }
 
 /** Bonus for a form above the dead-band — the mirror of {@link formPenalty}, capped at perfBonusCap. */
@@ -254,6 +265,8 @@ export function perfState(
   refOrdinal: number,
   ctx: ReadinessContext,
   fatigued: boolean,
+  /** Sustained heavy play or a same-day marathon (the red gate's load corroboration) — losing then counts in full, see the winrate note. */
+  heavyPlay = false,
 ): PerfState {
   const acuteStart = refOrdinal - T.acuteMentalDays + 1;
   const acuteGames = games.filter((g) => {
@@ -465,25 +478,32 @@ export function perfState(
   }
   const wrDip = dipWeight > 0 ? dipWeighted / dipWeight : null;
   const wrSe = dipWeight > 0 ? Math.sqrt(dipVarWeighted) / dipWeight : 0;
-  const wrSignificant = wrDip !== null && wrDip >= Math.max(T.wrDipMin, T.wrSignificanceZ * wrSe);
+  // How far the dip stands beyond chance, faded in over ±wrSignificanceRamp standard errors around
+  // wrSignificanceZ instead of switching at it: a hard 2-SE gate flipped a full penalty on and off
+  // as single wins and losses nudged the dip across the line (a 15-point swing per game mid-grind).
+  const wrEvidence = winrateEvidence(wrDip, wrSe);
+  const wrSignificant = wrEvidence > 0;
   // Manual regime PROMOTES the results arm — cap only. The ceiling lerps 15 → 30 by (1−b); the
   // firing threshold (wrDipMin) and slope (wrPenaltySlope) stay regime-invariant, so `objectiveAdverse`
   // never flips with b and ordinary winrate noise never reddens (only a genuinely deep, sustained dip
   // reaches the promoted ceiling). At b=1: cap = wrPenaltyCap exactly ⇒ bit-identical.
   const wrCap = T.wrPenaltyCap + T.wrManualCapBoost * (1 - blend);
-  const wrRaw = wrSignificant && wrDip !== null ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope) : 0;
+  const wrRaw = wrSignificant && wrDip !== null ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope) * wrEvidence : 0;
   // Corroboration: Overwatch matchmaking pulls every winrate toward 50% (a climb's high baseline
   // regresses on the new rank), so where the stats can see the games, a winrate dip only costs points
   // to the extent the player's own form is down too — 0 at baseline or better, full from the form
   // dead-band edge. The share that needs that backing grows with the regime blend b: at b = 0
   // (manual) the dip stands alone as before; at b = 1 with form holding it is a note, not a penalty.
   // Without enough counted games the stats can't vouch, so the dip stands alone there too.
+  // Under heavy, uninterrupted play the dip needs no backing at all: losing while grinding is the
+  // overtraining read the model exists for (within-session winrate decay is the one empirically
+  // validated esports fatigue effect), and fatigue can show in decisions before it shows in per-10s.
   const formAdverse = enoughEvidence && form !== null ? clamp(-form / T.formDeadband, 0, 1) : 1;
-  const wrBacking = 1 - blend + blend * formAdverse;
+  const wrBacking = heavyPlay ? 1 : 1 - blend + blend * formAdverse;
   const wrPenalty = wrRaw * wrBacking;
   // The dip only counts as an objective ADVERSE family (red gate, subjective agree-gating) when at
   // least half of it stands — a sliver of corroboration from a form a hair below baseline must not.
-  const wrAdverse = wrPenalty > 0 && wrBacking >= 0.5;
+  const wrAdverse = wrPenalty > 0 && wrBacking * wrEvidence >= 0.5;
 
   // --- target-focus dampener (deliberate-practice exemption) ---
   // Day-gated on BOTH ends: a target only counts from its creation day, and an

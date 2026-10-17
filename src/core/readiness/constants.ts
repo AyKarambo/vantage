@@ -234,8 +234,10 @@ export const READINESS_TUNING = {
   wrMinDecidedBase: 30,
   /** Winrate dips below this (in winrate fraction) are ordinary variance — no penalty. */
   wrDipMin: 0.1,
-  /** ...and a dip must also clear this many standard errors of the two-sample difference: at 20/30 decided games pure coin flips produce a 10-point dip in ~23% of weeks, a 2-SE dip in ~2%. */
+  /** ...and a dip must also stand this many standard errors beyond chance (the centre of the ramp below): at 20/30 decided games pure coin flips produce a 10-point dip in ~23% of weeks, a 2-SE dip in ~2%. */
   wrSignificanceZ: 2,
+  /** The winrate penalty fades in from wrSignificanceZ − this to + this standard errors (1.5 → 2.5) rather than switching at 2, so single wins and losses near the line move it by a point or two, not on/off. */
+  wrSignificanceRamp: 0.5,
   /** Penalty slope above the dip floor (dip 0.10 → 5, dip 0.20 → 15). */
   wrPenaltySlope: 100,
   /** Cap on the winrate penalty — the named "outcome cap": losses alone can never move the score more than this. */

@@ -338,10 +338,10 @@ account's per-role lines beneath it.
   it: a sustained slump costs points while it lasts and stops costing them as soon as your games
   are back at your usual, and a good stretch earns a small bonus. A game where you swapped heroes
   counts for the hero you mostly played (60%+ of the time), on that hero's own stats and minutes.
-  A winrate dip only counts when it is 10+ points *and* beyond what luck explains (2 standard
-  errors), and with live stats it only costs points to the extent your own form is down too —
+  A winrate dip only counts when it is 10+ points *and* beyond what luck explains (it fades in
+  from 1.5 to 2.5 standard errors, so one game near the line never switches it on or off), and with live stats it only costs points to the extent your own form is down too —
   matchmaking pulls every winrate toward 50%, so losses while your stats hold are a note, not a
-  penalty), and
+  penalty — except during heavy, uninterrupted play, where losing while grinding counts in full), and
   down-weighted **self-report** (tilt + your performance rating, hard-capped so a feeling
   never outweighs the evidence). Working on your **improvement targets** softens a results dip
   (deliberate practice makes you temporarily worse — that's normal) unless your tilt is clearly
@@ -906,8 +906,9 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   recorded game.
 - `core/readiness/` — the pure readiness / training-load model: gap-based sessions, a local
   4am-day boundary, EWMA acute-vs-chronic load (`signals.ts` / `score.ts`: a personal
-  long-session bar — the player's own P90 session length, floored at 2.5 h — and a rest bonus
-  carried through the first games of a play day), per-account/per-hero stat **baselines** (a
+  long-session bar — the player's own P90 session length, floored at 2.5 h — and a play day that
+  crossfades from its morning read to the live read over the first games, so rest days keep their
+  1–2-day recovery curve and the first game is no cliff), per-account/per-hero stat **baselines** (a
   hero-swap game counts for its dominant hero) read through a **form curve** — an EWMA of per-game
   scores with a dead-band, a continuous penalty and a mirror-image bonus — and a winrate dip that
   must be statistically significant and, with live stats, backed by that form

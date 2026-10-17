@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { blendFor, regimeFor } from '../src/core/readiness/regime';
 import { manualLerp, READINESS_TUNING as T } from '../src/core/readiness/constants';
-import { perfState, EMPTY_CONTEXT } from '../src/core/readiness/performance';
+import { perfState, EMPTY_CONTEXT, winrateEvidence } from '../src/core/readiness/performance';
 import { loadState } from '../src/core/readiness/signals';
 import { loadParts } from '../src/core/readiness/score';
 import { computeReadiness } from '../src/core/readiness';
@@ -241,15 +241,35 @@ describe('T5 — promoted results (winrate) ceiling', () => {
   // readiness-score-accuracy AC14: at b = 1 the stats can see the games, so a winrate dip only
   // costs points when the player's own form is down too (matchmaking pulls every winrate to 50%).
   it('AC14: b=1 with stats holding — a significant dip is a watch note, not a penalty', () => {
-    const p = perfState(statsDip, refOf(statsDip), EMPTY_CONTEXT, false);
+    // A calm 3-games/day week: no sustained load, so losing with the stats holding reads as
+    // matchmaking variance (every winrate is pulled toward 50%).
+    const calmDip = [
+      ...statSpan(0, 28, { perDay: 3, result: 'Win', mental: CALM }),
+      ...statSpan(29, 35, { perDay: 3, result: 'Loss', mental: CALM }),
+    ];
+    const p = perfState(calmDip, refOf(calmDip), EMPTY_CONTEXT, false);
     expect(p.blend).toBe(1);
     expect(p.wrSignificant).toBe(true);
     expect(p.wrDip).not.toBeNull(); // the sample still counts for confidence
     expect(p.wrPenalty).toBe(0);
-    const r = computeReadiness(statsDip, ts(35, 20));
+    const r = computeReadiness(calmDip, ts(35, 20));
     const note = r.signals.find((s) => s.key === 'winrate-dip');
     expect(note?.severity).toBe('watch');
     expect(note?.label).toMatch(/stats are holding/);
+  });
+
+  it('under sustained heavy play the same dip counts in full, stats holding or not (losing while grinding)', () => {
+    // 12 games every day: sustained load (the red gate's own corroboration). Losing while grinding
+    // is the overtraining read itself, so the dip needs no backing from the per-10 form.
+    const atRest = perfState(statsDip, refOf(statsDip), EMPTY_CONTEXT, false, false);
+    const grinding = perfState(statsDip, refOf(statsDip), EMPTY_CONTEXT, false, true);
+    expect(atRest.wrPenalty).toBe(0);
+    expect(grinding.wrPenalty).toBe(T.wrPenaltyCap); // full, capped at 15 in the stats regime
+    expect(grinding.objectiveAdverse).toBe(true);
+    const r = computeReadiness(statsDip, ts(35, 20));
+    expect(r.subscores.performance.delta).toBeLessThan(0);
+    const note = r.signals.find((s) => s.key === 'winrate-dip');
+    expect(note?.label).not.toMatch(/stats are holding/);
   });
 
   it('a dip only slightly backed by form costs a sliver but is not an adverse family (review fix)', () => {
@@ -275,6 +295,20 @@ describe('T5 — promoted results (winrate) ceiling', () => {
     expect(p.form!).toBeLessThanOrEqual(-T.formDeadband);
     expect(p.wrPenalty).toBeGreaterThan(0);
     expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap); // ≤ 15
+  });
+
+  it('winrate evidence fades in over 1.5–2.5 standard errors — no on/off switch at the line', () => {
+    const se = 0.08;
+    expect(winrateEvidence(null, se)).toBe(0);
+    expect(winrateEvidence(0.09, 0.01)).toBe(0); // under the 10-point floor, however sure
+    expect(winrateEvidence(1.5 * se, se)).toBe(0); // 1.5 SE: still chance
+    expect(winrateEvidence(2 * se, se)).toBeCloseTo(0.5, 9); // the old hard line now counts half
+    expect(winrateEvidence(2.5 * se, se)).toBe(1);
+    // One game near the line nudges the dip by about half a point: the evidence moves a few percent.
+    expect(Math.abs(winrateEvidence(0.165, se) - winrateEvidence(0.16, se))).toBeLessThan(0.07);
+    for (let z = 1; z < 3; z += 0.01) {
+      expect(winrateEvidence((z + 0.01) * se, se)).toBeGreaterThanOrEqual(winrateEvidence(z * se, se));
+    }
   });
 
   it('AC13: a dip inside 2 standard errors is coin flips — no penalty and no note', () => {

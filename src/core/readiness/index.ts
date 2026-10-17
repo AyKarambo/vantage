@@ -90,29 +90,24 @@ function emptySubscores(): ReadinessSubscores {
   };
 }
 
-// The surfaced load numbers describe the last active day (their documented meaning — e.g.
-// consecutiveDays "ending at the last active day"); rest days are reported by restDays.
 function toLoad(state: StateAt): ReadinessLoad {
-  const load = state.last.load;
   return {
-    acutePerDay: load.acutePerDay,
-    chronicPerDay: load.chronicPerDay,
-    ratio: load.ratio,
-    consecutiveDays: load.consecutiveDays,
-    activeDaysPerWeek: load.activeDaysPerWeek,
+    acutePerDay: state.load.acutePerDay,
+    chronicPerDay: state.load.chronicPerDay,
+    ratio: state.load.ratio,
+    consecutiveDays: state.load.consecutiveDays,
+    activeDaysPerWeek: state.load.activeDaysPerWeek,
     restDays: state.restDays,
-    lastSessionGames: load.lastSessionGames,
-    lastSessionMinutes: load.lastSessionMinutes,
+    lastSessionGames: state.load.lastSessionGames,
+    lastSessionMinutes: state.load.lastSessionMinutes,
   };
 }
 
 function toSubscores(state: StateAt): ReadinessSubscores {
   return {
     load: { delta: round1(state.deltas.load), available: true, coverage: round2(state.blend) },
-    // Coverage is data quality, read from the same last-active-day frame as the confidence gates,
-    // so the subscore tiles and the confidence line never show two different numbers.
-    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.last.perf.statCoverage) },
-    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.last.mental.coverage },
+    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.perf.statCoverage) },
+    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.mental.coverage },
   };
 }
 
@@ -122,9 +117,8 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 /**
  * The four conditions `'high'` confidence needs, each with the player's own numbers —
  * the single source of truth for both the confidence tier and the readiness screen's
- * "why not high" explanation. Everything reads the LAST ACTIVE day's frame (the session
- * the read rests on) and only the recent 7/21-day windows: total history size never
- * enters, so a big history alone does not raise confidence.
+ * "why not high" explanation. Everything reads the recent 7/21-day windows as of the last
+ * active day: total history size never enters, so a big history alone does not raise confidence.
  *
  * The comparable-games gate also carries the manual-regime cap — high confidence is
  * something only live match stats can buy, whatever the mental-log coverage. Structurally
@@ -134,11 +128,10 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * account at the main's own level never counts as "mixed".
  */
 function confidenceGatesFor(state: StateAt): ReadinessConfidenceGate[] {
-  const { last } = state;
-  const activeDays = last.load.chronicActiveDays;
-  const coverage = last.perf.statCoverage;
-  const mainShare = last.perf.mainShare;
-  const wrSample = last.perf.wrDip !== null;
+  const activeDays = state.load.chronicActiveDays;
+  const coverage = state.perf.statCoverage;
+  const mainShare = state.perf.mainShare;
+  const wrSample = state.perf.wrDip !== null;
   return [
     {
       key: 'active-days',
@@ -173,9 +166,7 @@ function confidenceGatesFor(state: StateAt): ReadinessConfidenceGate[] {
  */
 function confidenceFor(state: StateAt, gates: ReadinessConfidenceGate[]): ReadinessConfidence {
   if (gates.every((g) => g.met)) return 'high';
-  // Data quality describes the session the read rests on: the last active day's frame.
-  const { last } = state;
-  if (last.perf.statCoverage < T.statCoverageLow && last.mental.coverage < T.mentalMinCoverage && last.subj.sliderDiff === null) {
+  if (state.perf.statCoverage < T.statCoverageLow && state.mental.coverage < T.mentalMinCoverage && state.subj.sliderDiff === null) {
     return 'low';
   }
   return 'medium';
@@ -355,9 +346,9 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   // real alt games in the window, so neither can claim a weighting that was not applied (with
   // altShare 0 the damper is exactly 1). A materially MIXED window — main-account share below the
   // bar — gets the confidence-lowering note; otherwise a quieter one names the main account. Read
-  // off the session the read rests on and the rank-weighted share the confidence gate uses (see
-  // `confidenceGatesFor`), so the note and the gate can never disagree.
-  const { mainAccount: main, altShare, mainShare } = state.last.perf;
+  // off the rank-weighted share the confidence gate uses (see `confidenceGatesFor`), so the note
+  // and the gate can never disagree.
+  const { mainAccount: main, altShare, mainShare } = perf;
   const weighted = loadCurrent && main !== null && altShare > 0;
   if (loadCurrent && mainShare < T.accountMixBar) {
     out.push({
@@ -375,8 +366,7 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
     });
   }
 
-  // A data-quality note, so it reads the session the read rests on (like confidence).
-  if (state.last.mental.coverage < T.mentalMinCoverage) {
+  if (mental.coverage < T.mentalMinCoverage) {
     out.push({ key: 'low-coverage', label: 'log your mental state to sharpen this read', severity: 'ok' });
   } else if (loadCurrent && mental.fatigued) {
     out.push({ key: 'tilt', label: `tilt on ${pct(mental.acuteTilt)} of your recent logged games`, severity: 'high' });
@@ -554,7 +544,7 @@ export function computeReadiness(
     driver: state.driver,
     regime: state.regime,
     trend,
-    mainAccount: state.last.perf.mainAccount,
+    mainAccount: state.perf.mainAccount,
   };
 }
 
