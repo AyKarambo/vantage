@@ -8,6 +8,7 @@
  */
 import { h } from '../dom';
 import type { ReadinessBand, ReadinessRegime, ReadinessSignal, ReadinessSubscore, ReadinessSummary } from '../../../src/shared/contract';
+import { READINESS_TUNING } from '../../../src/core/readiness';
 import type { WikiArticleId } from '../app/readinessWiki/types';
 import { PALETTE } from '../theme';
 import { badge, button, card, statBox, unlockHint } from '../components/primitives';
@@ -87,7 +88,7 @@ function unlockingCard(ctx: ViewContext, unlock: NonNullable<ReadinessSummary['u
       { have: unlock.days, need: unlock.minSpanDays, label: 'days' },
     ]),
     h('div', { class: 'hint', style: { marginTop: '10px' } },
-      'Logging your mental state (tilt, comms) alongside matches raises confidence in the read once it unlocks.'),
+      'Logging your mental state (tilt, comms) alongside matches sharpens the read once it unlocks.'),
   );
 }
 
@@ -197,6 +198,22 @@ function verdictCard(ctx: ViewContext): HTMLElement {
       : null,
     BREAK_REMINDER_BANDS.includes(r.band) ? breakReminderHint(ctx) : null,
     h('div', { class: 'hint', style: { marginTop: '10px' } }, `Confidence: ${r.confidence}`),
+    confidenceWhy(r),
+  );
+}
+
+/**
+ * Why the confidence isn't high: each unmet gate in the player's own numbers, plus the one
+ * caveat that confidence tracks the recent windows, so a big history alone never raises it.
+ * Nothing at all when the read is high or carries no gates (insufficient data, stale).
+ */
+function confidenceWhy(r: ReadinessSummary): HTMLElement | null {
+  const unmet = r.confidenceGates.filter((g) => !g.met);
+  if (r.confidence === 'high' || unmet.length === 0) return null;
+  return h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
+    h('div', null, `Not high yet: ${unmet.map((g) => g.label).join(' · ')}`),
+    h('div', { style: { marginTop: '2px' } },
+      `Confidence reflects your last ${READINESS_TUNING.acuteMentalDays}–${READINESS_TUNING.chronicDays} days of games, not your total history.`),
   );
 }
 

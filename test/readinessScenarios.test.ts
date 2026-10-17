@@ -85,7 +85,10 @@ const SCENARIOS: Scenario[] = [
   {
     id: "grinder-plus-one-rest-day",
     story: "Heavy grinder, one rest day in",
-    expect: {"score":60,"band":"recovering","regime":"manual","confidence":"low"},
+    // 60 → 62 (T1): the ratio and volume arms count the same surge once. 62 → 82 (T7): a rest day is now read
+    // as of today, with the rest day inside the 3-day load window, so the surge's threshold-based arms mostly
+    // clear after one day (was the frozen surge × 2/3). Still 'recovering' — that gate reads the last session.
+    expect: {"score":82,"band":"recovering","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(28, 20);
@@ -96,7 +99,9 @@ const SCENARIOS: Scenario[] = [
   {
     id: "grinder-supercompensation-peak",
     story: "Same grinder, three rest days: the peak",
-    expect: {"score":100,"band":"fresh","regime":"manual","confidence":"low"},
+    // 100 → 98 (T7): read as of today, the rest-scarcity arm (few rest days over 3 weeks) still shows
+    // through after three rest days; the frozen-frame fade used to zero it.
+    expect: {"score":98,"band":"fresh","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(30, 20);
@@ -179,7 +184,8 @@ const SCENARIOS: Scenario[] = [
   {
     id: "rest-day-1-recovering",
     story: "First rest day after a heavy stretch: bonus nearly cancels the residual load",
-    expect: {"score":74,"band":"recovering","regime":"manual","confidence":"low"},
+    // 74 → 82 (T7): read as of today the rest day sits inside the load windows; the band stays 'recovering'.
+    expect: {"score":82,"band":"recovering","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = span(0, 34, { perDay: 8 });
       const now = ts(35, 20);
@@ -190,7 +196,8 @@ const SCENARIOS: Scenario[] = [
   {
     id: "rest-day-3-supercompensation-peak",
     story: "Three rest days after the grind: the supercompensation peak (score 100)",
-    expect: {"score":100,"band":"fresh","regime":"manual","confidence":"low"},
+    // 100 → 98 (T7): the rest-scarcity arm still shows through after three rest days (see the grinder peak).
+    expect: {"score":98,"band":"fresh","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = span(0, 34, { perDay: 8 });
       const now = ts(37, 20);
@@ -243,8 +250,9 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "all-loss-week-outcome-cap",
-    story: "A week of pure losses costs exactly the 15-point outcome cap",
-    expect: {"score":60,"band":"loaded","regime":"stats","confidence":"high"},
+    story: "A week of pure losses while stats hold: a winrate note, no penalty",
+    // 60 loaded → 75 fresh (readiness-score-accuracy T5): at b = 1 a dip only costs points when form is down too.
+    expect: {"score":75,"band":"fresh","regime":"stats","confidence":"high"},
     fixture: () => {
       const games = [
         ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', result: 'Win', damage: 8000, deaths: 5, elims: 20 }),
@@ -286,7 +294,8 @@ const SCENARIOS: Scenario[] = [
   {
     id: "deaths-improve-output-holds",
     story: "Deaths down while output HOLDS: genuine positioning improvement keeps full credit",
-    expect: {"score":75,"band":"fresh","regime":"stats","confidence":"high"},
+    // 75 → 78 (readiness-score-accuracy T3): a held improvement is above the form dead-band and earns the bonus.
+    expect: {"score":78,"band":"fresh","regime":"stats","confidence":"high"},
     fixture: () => {
       const games = [
         ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 5, elims: 20 }),
@@ -354,8 +363,13 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "stats-marathon-decline-red",
-    story: "Stats-regime (b=1) red: marathon session + per-10 CUSUM decline + losses",
-    expect: {"score":16,"band":"in-the-hole","regime":"stats","confidence":"high"},
+    story: "Stats-regime (b=1) red: marathon session + a clear per-10 form decline",
+    // 16 → 28 (readiness-score-accuracy T3/T5): the marathon's slump is now clearer (7000/6/17, was
+    // 8100/5/20 — the current form read that milder one at only −17.6, red by a single point), and the
+    // 17-point loss dip on 30/56 decided games is within 2 SE, so it no longer costs points.
+    // 28 → 36 (T6): the 156-min marathon is only 6 min past the 2.5h floor, so the scaled long-session
+    // penalty is 0.64, not the old flat 8. The red gate's marathon arm (absolute ≥150 min / 10 games) is unchanged.
+    expect: {"score":36,"band":"in-the-hole","regime":"stats","confidence":"high"},
     fixture: () => {
       const BASE = { hero: 'Tracer', damage: 9000, deaths: 4, elims: 22 };
       const games = [
@@ -363,7 +377,7 @@ const SCENARIOS: Scenario[] = [
         ...statSpan(0, 25, { perDay: 2, result: 'Loss', hour: 15, ...BASE }),
         ...statSpan(27, 29, { perDay: 2, result: 'Win', ...BASE }),
         ...statSpan(27, 29, { perDay: 2, result: 'Loss', hour: 15, ...BASE }),
-        ...statSpan(30, 30, { perDay: 10, result: 'Loss', gapMin: 16, hero: 'Tracer', damage: 8100, deaths: 5, elims: 20 }),
+        ...statSpan(30, 30, { perDay: 10, result: 'Loss', gapMin: 16, hero: 'Tracer', damage: 7000, deaths: 6, elims: 17 }),
       ];
       const now = ts(30, 20);
       return { games, now, targets: [] };

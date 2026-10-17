@@ -22,8 +22,16 @@ export const READINESS_TUNING = {
   sessionGapMinutes: 90,
   /** Fallback minutes for a game with no recorded duration (END-only timestamps undercount session length). */
   defaultGameMinutes: 12,
-  /** A single session at/above this length (≈2.5h) is a fatigue signal (matches the cognitive-fatigue session length in the research). */
+  /** FLOOR of the personal long-session threshold (≈2.5h, the cognitive-fatigue session length in the research) — and still the absolute bar of the marathon red-gate arm. */
   sessionLongMinutes: 150,
+  /** Trailing window (days, ending the day before the reference day) whose sessions the personal long-session threshold is learned from. */
+  longSessionWindowDays: 30,
+  /** Fewer sessions than this in that window and the threshold stays at the sessionLongMinutes floor — too few to know what is "long" for this player. */
+  longSessionMinSessions: 10,
+  /** The threshold is this percentile of the player's own session lengths ("longer than 9 in 10 of your sessions") — a regular long-session player is not penalized for their normal. */
+  longSessionPercentile: 0.9,
+  /** The long-session penalty ramps from 0 at the threshold to full at threshold × (1 + this) — continuous, no cliff at the edge. */
+  longSessionRampShare: 0.5,
 
   /** Acute window (recent load) in days. */
   acuteDays: 3,
@@ -70,6 +78,12 @@ export const READINESS_TUNING = {
 
   /** Rest days needed to fully clear a heavy state (→ fresh). Below it → recovering. */
   restFullRecoverDays: 2,
+  /** A play day uses up its morning's rest bonus over this share of the player's usual games per active day (a heavy player keeps it through more games)... */
+  restCarryShare: 0.5,
+  /** ...but over no fewer games than this... */
+  restCarryMinGames: 3,
+  /** ...and no more than this (one game never drops the whole bonus; ten always have). */
+  restCarryMaxGames: 10,
   /** Active days (within the chronic window) needed for high confidence. */
   confidenceActiveDays: 12,
 
@@ -119,7 +133,7 @@ export const READINESS_TUNING = {
 
   // --- load-balance subscore (loadDelta ∈ [−40, +25]) ---
 
-  /** Cap on the summed overload penalty (ratio + volume + streak + long-session). */
+  /** Cap on the summed overload penalty (max(ratio, volume) + streak + long-session + absolute arm). */
   overloadPenCap: 40,
   /** Cap on the ratio arm of the overload penalty. */
   ratioPenCap: 22,
@@ -127,7 +141,7 @@ export const READINESS_TUNING = {
   volPenCap: 22,
   /** Cap on the consecutive-days arm (only fires during a genuine surge). */
   streakPenCap: 12,
-  /** Flat penalty for a recent ≥2.5h session. */
+  /** Cap of the scaled long-session penalty (full at threshold × (1 + longSessionRampShare), 0 at the personal threshold). */
   longSessionPen: 8,
   /** Volume only penalizes above max(absElevatedPerDay, habitFactor × own chronic norm) — habit is not risk. */
   habitFactor: 1.25,
@@ -168,6 +182,8 @@ export const READINESS_TUNING = {
 
   /** Games below this PLAYED time — minutes the player could actually fight, measured or estimated (see `../playedTime`) — are excluded from per-10 rates (a 4-minute stomp explodes the denominator). On the PLAYED basis, not the wall clock: 6 wall minutes used to be the bar, and the same match now reads ~4.5 played once hero select, the mode's setup locks and the scoreboard come off, so the bar moved with it rather than quietly dropping every short game out of the baselines. It is one bar over played time, so what it means in wall-clock terms varies by mode (~6 min on Control, ~7.5 on Escort/Hybrid, where the setup locks are longer) — that is the point: the same 4.5 minutes of fighting either way. A hand-logged duration is taken as typed, so it is compared as-is. */
   minPer10Minutes: 4.5,
+  /** A multi-hero match counts for its dominant hero when that hero holds at least this share of the played time — with per-hero minutes the hero's own stats over its own minutes are as clean as a one-hero game. */
+  dominantHeroShare: 0.6,
   /** A hero with fewer lifetime games — counted ACROSS ALL the player's accounts (experience is the player's, not the account's) — is "still learning" and excluded from decline detection. */
   heroLearnGames: 12,
   /** FALLBACK weight for an alt-account game when its rank can't be compared to the main's (no anchor on one side or the other — see `rankProximityWeight`). Rank-aware weighting is the normal path; this is what it degrades to without the data for it. */
@@ -200,17 +216,17 @@ export const READINESS_TUNING = {
   passivityRampZ: 0.5,
   /** The guard engages gradually over the DEATHS dimension too (0 → full as deaths-favorable z grows 0 → this): deaths exactly at baseline must keep full weight, or one-hundredth fewer deaths could flip a whole verdict (strictly better play must never score worse). */
   passivityDeathsRampZ: 0.25,
-  /** One-sided CUSUM slack: only game-scores worse than baseline by more than this accumulate. */
-  cusumSlack: 0.25,
-  /** CUSUM decision threshold (in cumulative z units). One winsorized game ≤ 2.25 < this by construction. */
-  cusumThreshold: 2.5,
-  /** Minimum qualifying acute games before the decline index may fire (independent AND-gate). */
+  /** Form-curve smoothing: each counted game moves the form (an EWMA of per-game scores, starting at the baseline 0) by this share of its distance — roughly the last 10–20 games carry the read. One winsorized game moves it at most this × zWinsor = 0.25 < formDeadband, so a single game can never fire. */
+  formLambda: 0.1,
+  /** Form within ±this of the baseline is ordinary variance: no penalty, no bonus. Calibrated (σ ≈ 0.7 per game) to ~3% false alarms per week of normal play at any volume, while a sustained −0.5 slump is caught in ~3 of 4 weeks of 15+ games. */
+  formDeadband: 0.3,
+  /** Penalty points per z unit of form below the dead-band (continuous — no cliff at the edge); a form of −0.9 reaches the cap. */
+  formPenaltySlope: 50,
+  /** Bonus points per z unit of form above the dead-band; a form of +0.62 reaches perfBonusCap. */
+  formBonusSlope: 25,
+  /** Minimum qualifying acute games before the form may penalize or reward (independent AND-gate). */
   evidenceMinGames: 8,
-  /** Penalty when the decline index fires, at the threshold... */
-  statPenaltyBase: 10,
-  /** ...plus this per cumulative z unit above the threshold... */
-  statPenaltySlope: 4,
-  /** ...capped here. */
+  /** Cap on the form penalty. */
   statPenaltyCap: 30,
   /** Minimum decided games in the acute window before an account's winrate dip is trusted. */
   wrMinDecidedAcute: 20,
@@ -218,15 +234,15 @@ export const READINESS_TUNING = {
   wrMinDecidedBase: 30,
   /** Winrate dips below this (in winrate fraction) are ordinary variance — no penalty. */
   wrDipMin: 0.1,
+  /** ...and a dip must also clear this many standard errors of the two-sample difference: at 20/30 decided games pure coin flips produce a 10-point dip in ~23% of weeks, a 2-SE dip in ~2%. */
+  wrSignificanceZ: 2,
   /** Penalty slope above the dip floor (dip 0.10 → 5, dip 0.20 → 15). */
   wrPenaltySlope: 100,
   /** Cap on the winrate penalty — the named "outcome cap": losses alone can never move the score more than this. */
   wrPenaltyCap: 15,
   /** Manual-regime extra winrate cap phased in by (1−b): 15 at b=1 (corroboration, bit-identical) → 30 at b=0 (promoted primary). Slope & wrDipMin stay regime-invariant so objectiveAdverse never flips with b. */
   wrManualCapBoost: 15,
-  /** Mean acute game-z above this (with a quiet CUSUM) earns a small "playing above your usual" bonus. */
-  perfBonusMinZ: 0.5,
-  /** Cap on that bonus. */
+  /** Cap on the form bonus ("playing above your own recent baseline"). */
   perfBonusCap: 8,
   /** Role-fallback comparisons need at least this acute-vs-baseline hero-mix overlap (a mix shift is not a decline). */
   mixOverlapMin: 0.5,

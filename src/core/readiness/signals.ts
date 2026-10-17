@@ -10,7 +10,8 @@ import { streak } from '../analytics';
 import { isPositiveComms } from '../comms';
 import { READINESS_TUNING as T } from './constants';
 import { dayOrdinal } from './day';
-import { detectSessions, gamesByDay } from './sessions';
+import { detectSessions, gamesByDay, type ReadinessSession } from './sessions';
+import { clamp } from './stats';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -40,6 +41,23 @@ function positiveFlagged(g: GameRecord): boolean {
   return isPositiveComms(g.mental) || isPositiveComms(g.review?.flags);
 }
 
+/**
+ * The player's personal "long session" bar, in minutes: the nearest-rank P90 of
+ * their own session lengths over the trailing `longSessionWindowDays` (sessions
+ * ending on the days BEFORE `refOrdinal`), never below the `sessionLongMinutes`
+ * floor. With fewer than `longSessionMinSessions` sessions in that window there is
+ * nothing to learn from, so the threshold is the floor.
+ */
+export function personalLongSessionMinutes(sessions: ReadinessSession[], refOrdinal: number): number {
+  const lengths = sessions
+    .filter((s) => s.endOrdinal >= refOrdinal - T.longSessionWindowDays && s.endOrdinal <= refOrdinal - 1)
+    .map((s) => s.minutes)
+    .sort((a, b) => a - b);
+  if (lengths.length < T.longSessionMinSessions) return T.sessionLongMinutes;
+  const p90 = lengths[Math.ceil(T.longSessionPercentile * lengths.length) - 1];
+  return Math.max(T.sessionLongMinutes, p90);
+}
+
 export interface LoadState {
   acutePerDay: number;
   chronicPerDay: number;
@@ -49,6 +67,9 @@ export interface LoadState {
   chronicActiveDays: number;
   /** Active days per week over the chronic window — the play-frequency read behind the undertraining nudge. */
   activeDaysPerWeek: number;
+  /** The longest session that ended on the reference day or the day before, against the player's personal long-session threshold; null when none did. `severity` ramps 0 → 1 from the threshold to threshold × (1 + longSessionRampShare), and is 0 at or below it. */
+  longSession: { minutes: number; threshold: number; severity: number } | null;
+  /** True when that session ran over the personal threshold (`longSession.severity > 0`) — feeds `highLoad`. */
   recentLongSession: boolean;
   lastSessionGames: number;
   lastSessionMinutes: number | null;
@@ -93,9 +114,27 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
 
   const sessions = detectSessions(games);
   const last = sessions[sessions.length - 1];
-  const recentLongSession = sessions.some(
-    (s) => s.endOrdinal >= refOrdinal - T.acuteMentalDays + 1 && s.minutes >= T.sessionLongMinutes,
-  );
+
+  // Long = long FOR THIS PLAYER, and only a session from the reference day or the day before counts —
+  // an old marathon no longer costs a whole week.
+  const threshold = personalLongSessionMinutes(sessions, refOrdinal);
+  let longest: ReadinessSession | null = null;
+  for (const s of sessions) {
+    if (s.endOrdinal < refOrdinal - 1 || s.endOrdinal > refOrdinal) continue;
+    if (longest === null || s.minutes > longest.minutes) longest = s;
+  }
+  const longSession = longest
+    ? {
+        minutes: longest.minutes,
+        threshold,
+        // Strict >: a session exactly at the threshold costs nothing.
+        severity:
+          longest.minutes > threshold
+            ? clamp((longest.minutes - threshold) / (T.longSessionRampShare * threshold), 0, 1)
+            : 0,
+      }
+    : null;
+  const recentLongSession = (longSession?.severity ?? 0) > 0;
 
   const highLoad = ratio >= T.ratioElevated || acutePerDay >= T.absElevatedPerDay || recentLongSession;
   const sustainedLoad =
@@ -109,6 +148,7 @@ export function loadState(games: GameRecord[], refOrdinal: number): LoadState {
     consecutiveDays,
     chronicActiveDays,
     activeDaysPerWeek: round2(chronicActiveDays / (observedDays / 7)),
+    longSession,
     recentLongSession,
     lastSessionGames: last?.games ?? 0,
     lastSessionMinutes: last ? last.minutes : null,

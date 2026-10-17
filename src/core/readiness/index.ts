@@ -19,6 +19,7 @@ import { EMPTY_CONTEXT, mainAccountOf, type ReadinessContext } from './performan
 import type {
   ReadinessBand,
   ReadinessConfidence,
+  ReadinessConfidenceGate,
   ReadinessDriver,
   ReadinessLoad,
   ReadinessRecommendation,
@@ -31,6 +32,7 @@ import type {
 export type {
   ReadinessBand,
   ReadinessConfidence,
+  ReadinessConfidenceGate,
   ReadinessDriver,
   ReadinessLoad,
   ReadinessRecommendation,
@@ -61,6 +63,12 @@ function pct(frac: number): string {
   return `${Math.round(frac * 100)}%`;
 }
 
+/** A gate label's share of the player's own numbers: an unmet one never rounds up to its own bar ("50% (needs 50%)"). */
+function gatePct(have: number, need: number): string {
+  const rounded = Math.round(have * 100);
+  return have >= need ? `${rounded}%` : `${Math.min(rounded, Math.round(need * 100) - 1)}%`;
+}
+
 function emptyLoad(restDays = 0): ReadinessLoad {
   return {
     acutePerDay: 0,
@@ -82,24 +90,29 @@ function emptySubscores(): ReadinessSubscores {
   };
 }
 
+// The surfaced load numbers describe the last active day (their documented meaning — e.g.
+// consecutiveDays "ending at the last active day"); rest days are reported by restDays.
 function toLoad(state: StateAt): ReadinessLoad {
+  const load = state.last.load;
   return {
-    acutePerDay: state.load.acutePerDay,
-    chronicPerDay: state.load.chronicPerDay,
-    ratio: state.load.ratio,
-    consecutiveDays: state.load.consecutiveDays,
-    activeDaysPerWeek: state.load.activeDaysPerWeek,
+    acutePerDay: load.acutePerDay,
+    chronicPerDay: load.chronicPerDay,
+    ratio: load.ratio,
+    consecutiveDays: load.consecutiveDays,
+    activeDaysPerWeek: load.activeDaysPerWeek,
     restDays: state.restDays,
-    lastSessionGames: state.load.lastSessionGames,
-    lastSessionMinutes: state.load.lastSessionMinutes,
+    lastSessionGames: load.lastSessionGames,
+    lastSessionMinutes: load.lastSessionMinutes,
   };
 }
 
 function toSubscores(state: StateAt): ReadinessSubscores {
   return {
     load: { delta: round1(state.deltas.load), available: true, coverage: round2(state.blend) },
-    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.perf.statCoverage) },
-    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.mental.coverage },
+    // Coverage is data quality, read from the same last-active-day frame as the confidence gates,
+    // so the subscore tiles and the confidence line never show two different numbers.
+    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.last.perf.statCoverage) },
+    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.last.mental.coverage },
   };
 }
 
@@ -107,28 +120,62 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
- * Confidence now reflects the coverage of the OBJECTIVE inputs first — a
- * stats-rich GEP history reaches high confidence without any mental logging;
- * a heavily account-mixed acute window caps it at medium. `maxAccountShare` is
- * the RAW acute share on purpose — how mixed the window is does not depend on
- * what each game is worth. `statCoverage` is the weighted comparability ratio,
- * so an alt whose buckets are thin still lowers confidence, as it should.
+ * The four conditions `'high'` confidence needs, each with the player's own numbers —
+ * the single source of truth for both the confidence tier and the readiness screen's
+ * "why not high" explanation. Everything reads the LAST ACTIVE day's frame (the session
+ * the read rests on) and only the recent 7/21-day windows: total history size never
+ * enters, so a big history alone does not raise confidence.
+ *
+ * The comparable-games gate also carries the manual-regime cap — high confidence is
+ * something only live match stats can buy, whatever the mental-log coverage. Structurally
+ * redundant today (statCoverage ≥ statCoverageHigh ⇒ b = 1, never 'manual'), but a pinned
+ * invariant that survives any future retuning where the other gates alone might lift a
+ * stats-free read. The account-mix gate reads the rank-weighted `mainShare`, so a second
+ * account at the main's own level never counts as "mixed".
  */
-function confidenceFor(state: StateAt): ReadinessConfidence {
-  const statCoverage = state.perf.statCoverage;
-  const high =
-    state.load.chronicActiveDays >= T.confidenceActiveDays &&
-    statCoverage >= T.statCoverageHigh &&
-    state.perf.wrDip !== null &&
-    state.perf.maxAccountShare >= T.accountMixBar;
-  // Manual regime caps confidence at medium, whatever the mental-log coverage — high confidence is
-  // something only live match stats can buy. Structurally redundant today ('high' already requires
-  // statCoverage ≥ statCoverageHigh ⇒ b = 1, never 'manual'), but a pinned invariant that survives any
-  // future confidence retuning where wr-sample adequacy alone might otherwise lift a stats-free read.
-  if (high && state.regime !== 'manual') {
-    return 'high';
-  }
-  if (statCoverage < T.statCoverageLow && state.mental.coverage < T.mentalMinCoverage && state.subj.sliderDiff === null) {
+function confidenceGatesFor(state: StateAt): ReadinessConfidenceGate[] {
+  const { last } = state;
+  const activeDays = last.load.chronicActiveDays;
+  const coverage = last.perf.statCoverage;
+  const mainShare = last.perf.mainShare;
+  const wrSample = last.perf.wrDip !== null;
+  return [
+    {
+      key: 'active-days',
+      met: activeDays >= T.confidenceActiveDays,
+      label: `played on ${activeDays} of the last ${T.chronicDays} days (needs ${T.confidenceActiveDays})`,
+    },
+    {
+      key: 'comparable-games',
+      met: coverage >= T.statCoverageHigh && state.regime !== 'manual',
+      label: `${gatePct(coverage, T.statCoverageHigh)} of your recent games have comparable live stats (needs ${pct(T.statCoverageHigh)})`,
+    },
+    {
+      key: 'winrate-sample',
+      met: wrSample,
+      label: wrSample
+        ? 'enough decided games on one account to compare your winrate'
+        : `not enough decided games on one account to compare your winrate (needs ${T.wrMinDecidedAcute} this week and ${T.wrMinDecidedBase} in the two weeks before)`,
+    },
+    {
+      key: 'account-mix',
+      met: mainShare >= T.accountMixBar,
+      label: `${gatePct(mainShare, T.accountMixBar)} of this week's read comes from your main account (needs ${pct(T.accountMixBar)})`,
+    },
+  ];
+}
+
+/**
+ * Confidence reflects the data quality of the OBJECTIVE inputs first — a stats-rich GEP
+ * history reaches high confidence without any mental logging; any unmet gate caps it at
+ * medium. `'low'` is the thin-data floor: almost no comparable stats and no self-report to
+ * lean on.
+ */
+function confidenceFor(state: StateAt, gates: ReadinessConfidenceGate[]): ReadinessConfidence {
+  if (gates.every((g) => g.met)) return 'high';
+  // Data quality describes the session the read rests on: the last active day's frame.
+  const { last } = state;
+  if (last.perf.statCoverage < T.statCoverageLow && last.mental.coverage < T.mentalMinCoverage && last.subj.sliderDiff === null) {
     return 'low';
   }
   return 'medium';
@@ -207,6 +254,32 @@ function declineLabel(state: StateAt): string {
   return `${what} vs your own baseline — sustained across your recent games`;
 }
 
+/** The mirror of {@link declineLabel}: which metrics carry a form above the player's own baseline. */
+function goodFormLabel(state: StateAt): string {
+  const names: Record<string, string> = {
+    deaths: 'deaths down',
+    damage: 'damage up',
+    eliminations: 'elims up',
+    healing: 'healing up',
+  };
+  const parts = Object.entries(state.perf.metricMeans)
+    .filter(([, mean]) => (mean as number) >= 0.3)
+    .sort((a, b) => (b[1] as number) - (a[1] as number))
+    .slice(0, 2)
+    .map(([m]) => names[m]);
+  const what = parts.length ? ` — ${parts.join(', ')}` : '';
+  return `playing above your own recent baseline${what}`;
+}
+
+/** Hours to one decimal ('5.0h') — the long-session signal names both the session and the bar it crossed. */
+const hoursLabel = (minutes: number): string => `${(minutes / 60).toFixed(1)}h`;
+
+function longSessionLabel(ls: { minutes: number; threshold: number }): string {
+  return ls.threshold > T.sessionLongMinutes
+    ? `a ${hoursLabel(ls.minutes)} session — longer than ${Math.round(T.longSessionPercentile * 10)} in 10 of your sessions (~${hoursLabel(ls.threshold)})`
+    : `a ${hoursLabel(ls.minutes)} session — over ${hoursLabel(T.sessionLongMinutes)}`;
+}
+
 function buildSignals(state: StateAt): ReadinessSignal[] {
   const { load, mental, outcome, perf, subj } = state;
   const out: ReadinessSignal[] = [];
@@ -239,18 +312,23 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
       severity: load.ratio >= T.ratioHigh ? 'high' : 'watch',
     });
   }
-  if (loadCurrent && load.recentLongSession) {
-    out.push({ key: 'long-session', label: 'a session over 2.5h recently', severity: 'watch' });
+  if (loadCurrent && load.longSession && load.longSession.severity > 0) {
+    out.push({ key: 'long-session', label: longSessionLabel(load.longSession), severity: 'watch' });
   }
 
   // Objective performance vs the player's own baselines (the new primary family).
   if (loadCurrent && perf.declineFired) {
     out.push({ key: 'perf-decline', label: declineLabel(state), severity: 'high' });
   }
-  if (loadCurrent && perf.wrPenalty > 0 && perf.wrDip !== null) {
+  // A significant dip is always named; whether it costs points depends on whether the player's
+  // own stats back it up (see the corroboration note in performance.ts), and the label says which.
+  if (loadCurrent && perf.wrSignificant && perf.wrDip !== null) {
+    const points = Math.round(perf.wrDip * 100);
     out.push({
       key: 'winrate-dip',
-      label: `winrate ${Math.round(perf.wrDip * 100)} points below your usual recently`,
+      label: perf.wrPenalty > 0
+        ? `winrate ${points} points below your usual recently`
+        : `winrate ${points} points below your usual recently — your stats are holding, so it doesn't count against you`,
       severity: 'watch',
     });
   }
@@ -261,6 +339,11 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
       severity: 'ok',
     });
   }
+  // Pushed after target-focus on purpose: both are 'ok' notes and the list keeps
+  // only the top five, so the newer note must never displace the dampener's.
+  if (loadCurrent && perf.bonus > 0) {
+    out.push({ key: 'good-form', label: goodFormLabel(state), severity: 'ok' });
+  }
   if (loadCurrent && perf.stillLearning.length > 0) {
     out.push({
       key: 'still-learning',
@@ -270,11 +353,13 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   }
   // Several accounts, one player. Both notes are gated on there being a real main account AND
   // real alt games in the window, so neither can claim a weighting that was not applied (with
-  // altShare 0 the damper is exactly 1). A materially MIXED window — raw share below the bar —
-  // gets the confidence-lowering note; otherwise a quieter one names the main account.
-  const main = perf.mainAccount;
-  const weighted = loadCurrent && main !== null && perf.altShare > 0;
-  if (loadCurrent && perf.maxAccountShare < T.accountMixBar) {
+  // altShare 0 the damper is exactly 1). A materially MIXED window — main-account share below the
+  // bar — gets the confidence-lowering note; otherwise a quieter one names the main account. Read
+  // off the session the read rests on and the rank-weighted share the confidence gate uses (see
+  // `confidenceGatesFor`), so the note and the gate can never disagree.
+  const { mainAccount: main, altShare, mainShare } = state.last.perf;
+  const weighted = loadCurrent && main !== null && altShare > 0;
+  if (loadCurrent && mainShare < T.accountMixBar) {
     out.push({
       key: 'mixed-accounts',
       label: weighted
@@ -290,7 +375,8 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
     });
   }
 
-  if (mental.coverage < T.mentalMinCoverage) {
+  // A data-quality note, so it reads the session the read rests on (like confidence).
+  if (state.last.mental.coverage < T.mentalMinCoverage) {
     out.push({ key: 'low-coverage', label: 'log your mental state to sharpen this read', severity: 'ok' });
   } else if (loadCurrent && mental.fatigued) {
     out.push({ key: 'tilt', label: `tilt on ${pct(mental.acuteTilt)} of your recent logged games`, severity: 'high' });
@@ -361,6 +447,7 @@ function insufficientSummary(
     band: 'insufficient-data',
     score: null,
     confidence: 'low',
+    confidenceGates: [],
     headline,
     recommendation: 'none',
     recommendationText: '',
@@ -384,6 +471,7 @@ function staleSummary(restDays: number, trend: ReadinessTrendPoint[], mainAccoun
     band: 'rusty',
     score: null,
     confidence: 'low',
+    confidenceGates: [],
     headline: `No games in ${restDays} days — fully rested, but expect rust.`,
     recommendation: 'ramp-back-up',
     recommendationText:
@@ -450,10 +538,13 @@ export function computeReadiness(
   const band = bandForState(state);
   const advice = adviceFor(band, state);
 
+  const confidenceGates = confidenceGatesFor(state);
+
   return {
     band,
     score: scoreFromState(state),
-    confidence: confidenceFor(state),
+    confidence: confidenceFor(state, confidenceGates),
+    confidenceGates,
     headline: advice.headline,
     recommendation: advice.recommendation,
     recommendationText: advice.recommendationText,
@@ -463,7 +554,7 @@ export function computeReadiness(
     driver: state.driver,
     regime: state.regime,
     trend,
-    mainAccount: state.perf.mainAccount,
+    mainAccount: state.last.perf.mainAccount,
   };
 }
 

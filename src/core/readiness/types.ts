@@ -16,8 +16,16 @@ export type ReadinessBand =
 /** What the coach suggests. `rest-1-2-days` is the only strong ask; `ramp-back-up` is the undertraining nudge. */
 export type ReadinessRecommendation = 'none' | 'ease-up' | 'rest-1-2-days' | 'ramp-back-up';
 
-/** How much the model trusts its own read (driven by history density + mental coverage). */
+/** How much the model trusts its own read (driven by the data quality of the last ~7–21 days, never total history size). */
 export type ReadinessConfidence = 'low' | 'medium' | 'high';
+
+/** One of the four conditions `'high'` confidence needs — exposed so the UI can say which ones are holding it back. */
+export interface ReadinessConfidenceGate {
+  key: 'active-days' | 'comparable-games' | 'winrate-sample' | 'account-mix';
+  met: boolean;
+  /** Plain-language state of this gate with the player's numbers. */
+  label: string;
+}
 
 /** A single human-readable contributing reason. Severity drives colour, capped for outcome signals. */
 export interface ReadinessSignal {
@@ -87,6 +95,12 @@ export interface ReadinessSummary {
   /** 0..100 (higher = fresher). Null when the band is insufficient-data or stale. */
   score: number | null;
   confidence: ReadinessConfidence;
+  /**
+   * The four gates `'high'` confidence needs, read from the last active day (confidence is
+   * `'high'` exactly when every one is met). Empty when there is no read (insufficient data or
+   * a stale history).
+   */
+  confidenceGates: ReadinessConfidenceGate[];
   /** One-line verdict, e.g. "You're grinding into the hole". */
   headline: string;
   recommendation: ReadinessRecommendation;

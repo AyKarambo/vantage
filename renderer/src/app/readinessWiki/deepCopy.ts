@@ -31,11 +31,15 @@ export const deepCopy = {
     );
   },
 
-  /** Performance deep tier: sustained-decline (CUSUM) detection. */
+  /** Performance deep tier: the form curve (sustained slumps and good stretches). */
   declineDetection(): string {
     return (
-      `A dip only counts when it is SUSTAINED, not one bad game. A one-sided tally adds up how far each game falls below your baseline ` +
-      `(ignoring the first ${dc.cusumSlack} of noise) and only fires once it crosses ${dc.cusumThreshold} across at least ${dc.evidenceMinGames} recent games. ` +
+      `A dip only counts when it is SUSTAINED, not one bad game. Your form is a running average of how each game compares with your baseline, ` +
+      `where every new game moves it ${dc.formLambda} of the way — so one game can never tip it. Inside ±${dc.formDeadband} it is ordinary variance; ` +
+      `below that it costs points, above it it earns a small bonus, and both need at least ${dc.evidenceMinGames} recent games. ` +
+      `It reads your CURRENT form, so the cost goes away as soon as your games are back at your usual. ` +
+      `A game where you swapped heroes still counts, for the hero you mostly played: that hero needs at least ${dc.dominantHeroSharePct}% of your time in the game, and it is scored on its own stats over its own minutes. ` +
+      `Games that don't record time per hero are left out, so nothing is guessed. ` +
       `Heroes inside their first ${dc.heroLearnGames} games are exempt — counted across ALL your accounts, because hero experience is yours, not the account's — ` +
       `so early games learning something new never count against you.`
     );
@@ -63,19 +67,48 @@ export const deepCopy = {
     );
   },
 
-  /** Guardrails deep tier: the deliberate-practice dampener + the outcome cap. */
+  /** Guardrails deep tier: the deliberate-practice dampener + the winrate significance/corroboration rules + the outcome cap. */
   dampenerAndOutcomeCap(): string {
     return (
       `Two guardrails keep the score fair. When you're actively hitting improvement targets, a results dip is halved (×${dc.dampFactor}) — ` +
-      `you're worse because you're practising. And losing alone is capped at ${dc.wrPenaltyCap} points: you can play your best and lose a pile of coin flips.`
+      `you're worse because you're practising. And a losing stretch has to prove itself: your winrate must sit at least ${dc.wrDipMinPoints} points under your usual ` +
+      `and at least ${dc.wrSignificanceZ} standard errors away (the swing luck alone makes at your sample size), so a few coin-flip losses never count. ` +
+      `Even then, with live stats it only costs points to the extent your own form is down too — matchmaking pulls every winrate toward 50%, ` +
+      `so losses while your stats hold are a note, not a penalty. ` +
+      `With live stats, losing alone can never move the score more than ${dc.wrPenaltyCap} points. ` +
+      `On manual logs there are no stats to check it against, so a real dip counts on its own, up to ${dc.wrPenaltyCapManual}.`
     );
   },
 
-  /** Trend / supercompensation deep tier: rest bonus, rust decay + floor. */
+  /** Training-load deep tier: the personal long-session bar and its ramp. */
+  longSessions(): string {
+    return (
+      `Session length is judged against your own habits. A session is long once it runs longer than ${dc.longSessionPercentile}% of your own sessions from the last ${dc.longSessionWindowDays} days, ` +
+      `and never below ${dc.longSessionFloorHours} hours — that is also the bar until you have ${dc.longSessionMinSessions} sessions in that window to learn from. ` +
+      `Only a session from today or yesterday counts. The cost ramps up from 0 at that bar to ${dc.longSessionPen} points at ${dc.longSessionRampMultiple}× it, ` +
+      `so there is no cliff, and someone who regularly plays long isn't penalised for their normal.`
+    );
+  },
+
+  /** Verdict deep tier: the four gates behind 'high' confidence. */
+  confidenceGates(): string {
+    return (
+      `High confidence needs all four of these, judged on your recent games only: you played on at least ${dc.confidenceActiveDays} of the last ${dc.confidenceWindowDays} days; ` +
+      `at least ${dc.statCoverageHighPct}% of your last week's games have live stats to compare; ` +
+      `enough decided games on one account to compare your winrate (${dc.wrMinDecidedAcute}+ this week and ${dc.wrMinDecidedBase}+ in the two weeks before); ` +
+      `and at least ${dc.accountMixBarPct}% of this week's read comes from your main account — an alt at your main's level counts as your main. ` +
+      `Miss any one and it stays at medium (or low, with almost no comparable stats). ` +
+      `How much history you have in total doesn't count, so a long history alone never raises it. The Readiness screen lists whichever gates you're missing.`
+    );
+  },
+
+  /** Trend / supercompensation deep tier: rest bonus (used up over the first games), rust decay + floor. */
   restAndRust(): string {
     return (
       `Rest follows a curve, not a line. A few days off build a bonus up to +${dc.restRecoveryCap} (the supercompensation peak), ` +
-      `then sharpness decays about ${dc.rustDecayPerDay} points a day, treated as rusty from day ${dc.rustDays}, and floored at ${dc.rustFloor} — a long break reads dull, never wrecked.`
+      `then sharpness decays about ${dc.rustDecayPerDay} points a day, treated as rusty from day ${dc.rustDays}, and floored at ${dc.rustFloor} — a long break reads dull, never wrecked. ` +
+      `That bonus is waiting on the morning of a play day, and it is used up over your first games, not by the first one: ` +
+      `it fades across about ${dc.restCarryPct}% of the games you usually play in a day, never fewer than ${dc.restCarryMinGames} or more than ${dc.restCarryMaxGames}.`
     );
   },
 

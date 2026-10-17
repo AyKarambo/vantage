@@ -1,11 +1,13 @@
 /**
  * Objective-performance subscore: winrate vs the player's own per-account
- * baseline + per-10 stat decline vs per-hero (fallback per-role) baselines,
- * accumulated by a one-sided CUSUM so only sustained evidence — one long
- * marathon session, or several sessions — ever fires. Includes the
- * target-focus dampener (the deliberate-practice "learning dip" exemption).
+ * baseline + per-10 stat form vs per-hero (fallback per-role) baselines,
+ * smoothed into a FORM curve (an EWMA of per-game scores) so only sustained
+ * evidence moves it, in either direction. The penalty and the bonus both read
+ * the CURRENT form — it recovers as soon as the games do, instead of holding
+ * the week's worst moment. Includes the target-focus dampener (the
+ * deliberate-practice "learning dip" exemption).
  *
- * Several accounts, one player. Every detector below — the CUSUM, its gates,
+ * Several accounts, one player. Every detector below — the form curve, its gates,
  * the coverage sums, the regime blend, the pooled winrate dip — is computed
  * ACCOUNT-BLIND: one game is one game, on the main or an alt alike, so none of
  * these anti-false-alarm guarantees ever depend on which account played them.
@@ -24,10 +26,11 @@
  * unweighted engine.
  *
  * Anti-false-alarm guarantees (by construction, see constants):
- * - a single winsorized game contributes at most zWinsor − cusumSlack < cusumThreshold, on any
- *   account (the CUSUM is account-blind);
- * - the decline index needs ≥ evidenceMinGames counted games regardless of C — an unweighted,
- *   account-blind count;
+ * - a single winsorized game moves the form by at most formLambda × zWinsor < formDeadband, on any
+ *   account (the form is account-blind), so one game can never penalize or reward on its own;
+ * - penalty and bonus need ≥ evidenceMinGames counted games regardless of the form — an
+ *   unweighted, account-blind count;
+ * - both are continuous in the form (no cliff at the dead-band edge);
  * - buckets below statMinGames are inert; trust ramps in with no cliff;
  * - a hero-mix change never reads as decline (per-hero buckets + mix-overlap guard);
  * - the alt damper can only pull the finished delta TOWARD neutral (0 ≤ altDamp ≤ 1), never past it.
@@ -81,11 +84,18 @@ export interface PerfState {
   /** Weighted share of acute evidence qualifying for per-10 stats (feeds confidence). */
   statCoverage: number;
   /**
-   * Largest single account's RAW share of the acute window (1 = single-account). A confidence
-   * input, deliberately unweighted: alt down-weighting changes how much alt games MOVE the
-   * read, not how sure the read is.
+   * Largest single account's RAW share of the acute window (1 = single-account). Unweighted on
+   * purpose — it is the "no clear main" fallback of `mainShare`; the account-mix confidence gate
+   * reads `mainShare`, which is rank-weighted.
    */
   maxAccountShare: number;
+  /**
+   * Share of the acute window's read carried by the main account, rank-weighted: `altDamp` when
+   * there is a main account (the main and rank-close alts count fully), else the raw
+   * `maxAccountShare` (with no clear main a mixed window is genuinely mixed). The account-mix
+   * confidence gate and the mixed-accounts note both read it, so they never disagree.
+   */
+  mainShare: number;
   /** The main account (most games, among those played recently; tie: most recent game, then lexical). Null with no acute games. */
   mainAccount: string | null;
   /** RAW share of the acute window played on a different, resolved account. 0 for a single account, for unresolved captures, and when there is no main. Just "is there alt activity at all" — see `altDamp` for how much it actually costs. */
@@ -93,13 +103,15 @@ export interface PerfState {
   /** The actual multiplier applied to the subscore (1 = untouched): the mean per-game weight over the acute window, where a main-account game is always 1 and an alt game is full weight when rank-close to the main's usual rank, tapering to `altAccountWeight` for a genuine gap. */
   altDamp: number;
   declineFired: boolean;
-  /** Peak of the one-sided CUSUM accumulator over the acute window. */
-  cusumMax: number;
+  /** Current form: EWMA of per-game scores over the counted acute games in play order, from the baseline (0). Negative = below your usual. Null with no counted game. */
+  form: number | null;
   /** Counted (trusted, non-learning) qualifying acute games — WEIGHTED: an alt-account game counts altAccountWeight. */
   countedGames: number;
   statPenalty: number;
-  /** Pooled per-account winrate dip (baseline − acute), null when under-sampled. */
+  /** Pooled per-account winrate dip (baseline − acute), null when under-sampled. Stays set when the dip isn't significant — the confidence gate reads the sample, not the verdict. */
   wrDip: number | null;
+  /** The dip clears both wrDipMin and wrSignificanceZ standard errors of the two-sample difference — real signal, not coin flips. */
+  wrSignificant: boolean;
   wrPenalty: number;
   bonus: number;
   /** Positive evidence of hitting active targets (regardless of tilt). */
@@ -121,14 +133,34 @@ export interface PerfState {
 }
 
 export const EMPTY_PERF: PerfState = {
-  available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, cusumMax: 0,
-  countedGames: 0, statPenalty: 0, wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false,
+  available: false, statCoverage: 0, maxAccountShare: 1, mainShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, form: null,
+  countedGames: 0, statPenalty: 0, wrDip: null, wrSignificant: false, wrPenalty: 0, bonus: 0, targetEvidence: false,
   dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
 
 const GRADE_CREDIT: Record<TargetGrade, number> = { hit: 1, partial: 0.5, missed: 0 };
 
 const trustFor = (n: number): number => clamp((n - T.statMinGames) / T.statTrustRamp, 0, 1);
+
+/**
+ * The form after a run of per-game scores (oldest first): an EWMA that starts
+ * at the baseline (0) and moves `formLambda` of the way toward each game.
+ */
+export function formOf(gameScores: readonly number[]): number {
+  let form = 0;
+  for (const g of gameScores) form += T.formLambda * (g - form);
+  return form;
+}
+
+/** Penalty for a form below the dead-band — 0 inside it, continuous past its edge, capped. */
+export function formPenalty(form: number): number {
+  return Math.min(T.statPenaltyCap, T.formPenaltySlope * Math.max(0, -form - T.formDeadband));
+}
+
+/** Bonus for a form above the dead-band — the mirror of {@link formPenalty}, capped at perfBonusCap. */
+export function formBonus(form: number): number {
+  return Math.min(T.perfBonusCap, T.formBonusSlope * Math.max(0, form - T.formDeadband));
+}
 
 /**
  * The player's MAIN account: the one they play most, whose games carry the
@@ -230,16 +262,16 @@ export function perfState(
   });
   if (acuteGames.length === 0) return EMPTY_PERF;
 
-  // Account concentration of the acute window (confidence input) — RAW counts on purpose: how
-  // SURE the read is does not change with the weighting below, only how much each game moves it.
+  // Raw account concentration of the acute window — the fallback of `mainShare` below (the
+  // confidence input), which weighs each game by the same rank-aware weights the damper uses.
   const perAccount = new Map<string, number>();
   for (const g of acuteGames) perAccount.set(g.account, (perAccount.get(g.account) ?? 0) + 1);
   const maxAccountShare = Math.max(...perAccount.values()) / acuteGames.length;
 
   // MAIN-ACCOUNT WEIGHTING lives at the very end of this function, as one damper on the finished
   // subscore — deliberately NOT as a per-game weight inside the accumulators below. A weight
-  // inside a one-sided CUSUM scales its recovery steps as well as its adverse ones, so playing
-  // WELL on an alt between two poor main games would push the accumulator up and fire a decline
+  // inside the form curve scales its recovery steps as well as its adverse ones, so playing
+  // WELL on an alt between two poor main games would barely lift the form and leave a decline
   // the unweighted engine never saw; weights inside the coverage sums likewise drag the regime
   // blend toward 'manual' and switch on the very caps this is meant to avoid. Damping the result
   // instead keeps every anti-false-alarm guarantee below bit-identical for everyone, and can only
@@ -298,12 +330,10 @@ export function perfState(
     roleOverlap.set(rk, heroMixOverlap(acuteRole, baselineWindow));
   }
 
-  // --- per-10 decline: winsorized z per metric → weighted game score → one-sided CUSUM ---
-  let cusum = 0;
-  let cusumMax = 0;
+  // --- per-10 form: winsorized z per metric → weighted game score → EWMA form curve ---
+  const gameScores: number[] = [];
   let countedGames = 0;
   let blendCoverage = 0;
-  let gameScoreSum = 0;
   const stillLearning = new Set<string>();
   const metricSums: Partial<Record<MetricKey, { sum: number; n: number }>> = {};
 
@@ -388,9 +418,7 @@ export function perfState(
     // at once — keeps b continuous in the day index (R1). At full coverage trust=1 ⇒ this equals
     // countedGames ⇒ b is unchanged, preserving the b=1 bit-identity.
     blendCoverage += trust;
-    gameScoreSum += g;
-    cusum = Math.max(0, cusum + (-g - T.cusumSlack));
-    cusumMax = Math.max(cusumMax, cusum);
+    gameScores.push(g);
   }
 
   // Coverage = games that were actually COMPARABLE (trusted bucket, past the
@@ -401,21 +429,20 @@ export function perfState(
   const statCoverage = countedGames / acuteGames.length;
   const blend = blendFor(blendCoverage, acuteGames.length);
 
-  const declineFired = cusumMax >= T.cusumThreshold && countedGames >= T.evidenceMinGames;
-  const statPenalty = declineFired
-    ? Math.min(T.statPenaltyCap, T.statPenaltyBase + T.statPenaltySlope * (cusumMax - T.cusumThreshold))
-    : 0;
-
-  const meanGameScore = countedGames > 0 ? gameScoreSum / countedGames : 0;
-  const bonus =
-    cusumMax === 0 && countedGames >= T.evidenceMinGames && meanGameScore > T.perfBonusMinZ
-      ? Math.min(T.perfBonusCap, T.perfBonusCap * (meanGameScore - T.perfBonusMinZ))
-      : 0;
+  // The CURRENT form drives both directions: a slump costs points while it lasts
+  // and stops costing them once the games are back at baseline; a stretch above
+  // your own baseline earns the mirror-image bonus.
+  const form = countedGames > 0 ? formOf(gameScores) : null;
+  const enoughEvidence = form !== null && countedGames >= T.evidenceMinGames;
+  const statPenalty = enoughEvidence ? formPenalty(form) : 0;
+  const declineFired = statPenalty > 0;
+  const bonus = enoughEvidence ? formBonus(form) : 0;
 
   // --- winrate vs own baseline, per account, pooled by acute sample size ---
   const baseStart = refOrdinal - T.chronicDays + 1;
   let dipWeighted = 0;
   let dipWeight = 0;
+  let dipVarWeighted = 0; // Σ (acuteDecided² · SE²) — the pooled dip's sampling variance, same weights as the dip
   for (const account of perAccount.keys()) {
     const acuteWl = winLoss(acuteGames.filter((g) => g.account === account));
     const acuteDecided = acuteWl.wins + acuteWl.losses;
@@ -426,20 +453,37 @@ export function perfState(
       return ord >= baseStart && ord < acuteStart; // uncoupled: baseline excludes the acute window
     });
     const baseWl = winLoss(baseGames);
-    if (baseWl.wins + baseWl.losses < T.wrMinDecidedBase) continue;
+    const baseDecided = baseWl.wins + baseWl.losses;
+    if (baseDecided < T.wrMinDecidedBase) continue;
+    // Two-sample standard error of the dip under "nothing changed" (one pooled winrate for both
+    // windows): how big a dip pure coin flips produce at these sample sizes.
+    const pooled = (acuteWl.wins + baseWl.wins) / (acuteDecided + baseDecided);
+    const se2 = pooled * (1 - pooled) * (1 / acuteDecided + 1 / baseDecided);
     dipWeighted += (baseWl.winrate - acuteWl.winrate) * acuteDecided;
     dipWeight += acuteDecided;
+    dipVarWeighted += acuteDecided * acuteDecided * se2;
   }
   const wrDip = dipWeight > 0 ? dipWeighted / dipWeight : null;
+  const wrSe = dipWeight > 0 ? Math.sqrt(dipVarWeighted) / dipWeight : 0;
+  const wrSignificant = wrDip !== null && wrDip >= Math.max(T.wrDipMin, T.wrSignificanceZ * wrSe);
   // Manual regime PROMOTES the results arm — cap only. The ceiling lerps 15 → 30 by (1−b); the
   // firing threshold (wrDipMin) and slope (wrPenaltySlope) stay regime-invariant, so `objectiveAdverse`
   // never flips with b and ordinary winrate noise never reddens (only a genuinely deep, sustained dip
   // reaches the promoted ceiling). At b=1: cap = wrPenaltyCap exactly ⇒ bit-identical.
   const wrCap = T.wrPenaltyCap + T.wrManualCapBoost * (1 - blend);
-  const wrPenalty =
-    wrDip !== null && wrDip >= T.wrDipMin
-      ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope)
-      : 0;
+  const wrRaw = wrSignificant && wrDip !== null ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope) : 0;
+  // Corroboration: Overwatch matchmaking pulls every winrate toward 50% (a climb's high baseline
+  // regresses on the new rank), so where the stats can see the games, a winrate dip only costs points
+  // to the extent the player's own form is down too — 0 at baseline or better, full from the form
+  // dead-band edge. The share that needs that backing grows with the regime blend b: at b = 0
+  // (manual) the dip stands alone as before; at b = 1 with form holding it is a note, not a penalty.
+  // Without enough counted games the stats can't vouch, so the dip stands alone there too.
+  const formAdverse = enoughEvidence && form !== null ? clamp(-form / T.formDeadband, 0, 1) : 1;
+  const wrBacking = 1 - blend + blend * formAdverse;
+  const wrPenalty = wrRaw * wrBacking;
+  // The dip only counts as an objective ADVERSE family (red gate, subjective agree-gating) when at
+  // least half of it stands — a sliver of corroboration from a form a hair below baseline must not.
+  const wrAdverse = wrPenalty > 0 && wrBacking >= 0.5;
 
   // --- target-focus dampener (deliberate-practice exemption) ---
   // Day-gated on BOTH ends: a target only counts from its creation day, and an
@@ -496,25 +540,32 @@ export function perfState(
     if (slot && slot.n > 0) metricMeans[m] = slot.sum / slot.n;
   }
 
+  // The same weights that size the damper say how much of the read the main account carries: a
+  // rank-close alt is "your own level" and counts fully, a smurf-gap alt counts little. With no
+  // clear main there is nobody to weigh against, so a mixed window is judged by its raw split.
+  const mainShare = mainAccount !== null ? altDamp : maxAccountShare;
+
   return {
     available: countedGames > 0 || wrDip !== null,
     statCoverage,
     maxAccountShare,
+    mainShare,
     mainAccount,
     altShare,
     altDamp,
     declineFired,
-    cusumMax,
+    form,
     countedGames,
     statPenalty,
     wrDip,
+    wrSignificant,
     wrPenalty,
     bonus,
     targetEvidence,
     dampened,
     stillLearning: [...stillLearning],
     metricMeans,
-    objectiveAdverse: declineFired || wrPenalty > 0,
+    objectiveAdverse: declineFired || wrAdverse,
     blend,
     blendCoverage,
     delta,

@@ -90,8 +90,20 @@ export const HELP_FIXTURES: Record<string, HelpFixture> = {
     expect: { band: 'in-the-hole', regime: 'manual', confidence: 'medium' },
   },
 
+  'stats-form-slump': {
+    story: 'A sustained per-10 slip below your own baseline (stats regime, no load): the form costs points',
+    curatedId: 'stats-form-slump',
+    games: [
+      ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 5, elims: 20 }),
+      ...statSpan(28, 34, { perDay: 3, hero: 'Tracer', damage: 7000, deaths: 6, elims: 18 }),
+    ],
+    now: ts(34, 20),
+    ctx: { targets: [] },
+    expect: { band: 'loaded', regime: 'stats', confidence: 'high' },
+  },
+
   'all-loss-week-outcome-cap': {
-    story: 'A week of pure losses — the 15-point outcome cap',
+    story: 'A week of pure losses while stats hold — a winrate note, no penalty',
     curatedId: 'all-loss-week-outcome-cap',
     games: [
       ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', result: 'Win', damage: 8000, deaths: 5, elims: 20 }),
@@ -99,7 +111,8 @@ export const HELP_FIXTURES: Record<string, HelpFixture> = {
     ],
     now: ts(34, 20),
     ctx: { targets: [] },
-    expect: { band: 'loaded', regime: 'stats', confidence: 'high' },
+    // readiness-score-accuracy T5: with stats holding, losses are a note, not a penalty (was loaded).
+    expect: { band: 'fresh', regime: 'stats', confidence: 'high' },
   },
 
   'grind-wr-slump-dampened': {

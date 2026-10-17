@@ -75,6 +75,21 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   window widths). The Activity heatmap fits its card instead of running into the Mental card, and
   the Mental subtitle, long target names, hero names and the Top-priority map names wrap instead of
   being squeezed or clipped.
+- **Readiness reads your form more fairly.** The score now follows how you're playing right
+  now, not the worst moment of your week. The boost from days off wears off over your first games
+  of the day, so there's no drop after your first game. Games where you switched heroes count, for
+  the hero you played most. A bad stretch stops costing points once your games are back at your
+  usual, and a good stretch can raise the score a little. Long sessions are measured against your
+  own habits: longer than most of yours, never under 2.5 hours, and only for that day and the
+  next. A losing stretch only counts when it's clearly more than bad luck and, with live stats,
+  your own play slipped too; otherwise it's just a note. Help's example stories now include one
+  for a dip in your own play. **Your score and its trend chart will shift once** when you update,
+  because past days are re-read the same way.
+- **Readiness confidence now says what's missing.** When it isn't "high", the Readiness screen
+  lists what's holding it back: days played, games with comparable stats, enough decided games on
+  one account, or too much of the week on another account. It only looks at your recent games,
+  never how long your history is, and a second account at your main's level no longer counts as
+  "mixed", so "high" is reachable when you play on both.
 
 ### Fixed
 
