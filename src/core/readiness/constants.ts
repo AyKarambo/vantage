@@ -119,7 +119,7 @@ export const READINESS_TUNING = {
 
   // --- load-balance subscore (loadDelta ∈ [−40, +25]) ---
 
-  /** Cap on the summed overload penalty (ratio + volume + streak + long-session). */
+  /** Cap on the summed overload penalty (max(ratio, volume) + streak + long-session + absolute arm). */
   overloadPenCap: 40,
   /** Cap on the ratio arm of the overload penalty. */
   ratioPenCap: 22,

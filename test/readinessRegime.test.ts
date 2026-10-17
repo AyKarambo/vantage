@@ -8,6 +8,7 @@ import { computeReadiness } from '../src/core/readiness';
 import { dayOrdinal } from '../src/core/readiness/day';
 import { ts, statSpan, span, graded, target, CALM, TILT } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
+import type { LoadState } from '../src/core/readiness/signals';
 
 /** A rest-punctuated history: `perDay` games Mon–Fri each week, weekends off. */
 function restPunctuated(weeks: number, perDay: number, lastDay: number): GameRecord[] {
@@ -190,6 +191,30 @@ describe('T4 — absolute-load arm (the core manual-regime lever)', () => {
       Math.min(1, Math.max(0, (load.chronicActiveDays - T.minChronicActiveDays) / T.absTrustRampDays)) *
       Math.min(1, Math.max(0, (load.historySpanDays - T.minSpanDays) / T.absTenureRampDays));
     expect(atManual.delta).toBeCloseTo(-(absTrust * absRaw), 6);
+  });
+
+  it('AC16: ratio and volume arms count the same surge once (the larger wins)', () => {
+    // ratio 1.8 ⇒ ratioPen (1.8−1.3)·30 = 15. acute 12/day over habit bar max(6, 1.25·6) = 7.5 ⇒ volPen 4.5·3 = 13.5.
+    // Summed would be 28.5; the larger arm alone is 15. Other arms are silent: no streak (1 day), no long
+    // session, 4 active days/week (no scarcity), blend 1 (no absolute arm).
+    const load: LoadState = {
+      acutePerDay: 12,
+      chronicPerDay: 6,
+      ratio: 1.8,
+      ratioTrusted: true,
+      consecutiveDays: 1,
+      chronicActiveDays: 21,
+      activeDaysPerWeek: 4,
+      recentLongSession: false,
+      lastSessionGames: 12,
+      lastSessionMinutes: null,
+      highLoad: false,
+      sustainedLoad: false,
+      historySpanDays: 60,
+    };
+    const lp = loadParts(load, 0, 1);
+    expect(lp.overloadPen).toBe(15);
+    expect(lp.delta).toBe(-15);
   });
 });
 

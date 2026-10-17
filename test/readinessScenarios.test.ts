@@ -85,7 +85,8 @@ const SCENARIOS: Scenario[] = [
   {
     id: "grinder-plus-one-rest-day",
     story: "Heavy grinder, one rest day in",
-    expect: {"score":60,"band":"recovering","regime":"manual","confidence":"low"},
+    // 60 → 62 (readiness-score-accuracy T1): the ratio and volume arms now count the same surge once.
+    expect: {"score":62,"band":"recovering","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(28, 20);

@@ -143,7 +143,8 @@ export function loadParts(
   const absRaw = Math.min(T.absArmCap, restlessPen + absVolPen + scarcityPen);
   const absArm = blend >= 1 ? 0 : (1 - blend) * absTrust * absRaw; // exact 0 at b=1 (bit-identity)
 
-  const overloadPen = Math.min(T.overloadPenCap, ratioPen + volPen + streakPen + longPen + absArm) * trust * fade;
+  // Ratio and volume measure the same surge, so only the larger arm counts (summing double-counts it).
+  const overloadPen = Math.min(T.overloadPenCap, Math.max(ratioPen, volPen) + streakPen + longPen + absArm) * trust * fade;
   // The low-frequency nudge fires only on PROVEN rank stagnation (spec §7b): with the trend
   // unknown (no rank data) or climbing, both the penalty and its signal stay silent — the app
   // never encourages volume on zero evidence, and low-volume climbing is the healthy pattern.
