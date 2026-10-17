@@ -101,8 +101,10 @@ export interface PerfState {
   /** Counted (trusted, non-learning) qualifying acute games — WEIGHTED: an alt-account game counts altAccountWeight. */
   countedGames: number;
   statPenalty: number;
-  /** Pooled per-account winrate dip (baseline − acute), null when under-sampled. */
+  /** Pooled per-account winrate dip (baseline − acute), null when under-sampled. Stays set when the dip isn't significant — the confidence gate reads the sample, not the verdict. */
   wrDip: number | null;
+  /** The dip clears both wrDipMin and wrSignificanceZ standard errors of the two-sample difference — real signal, not coin flips. */
+  wrSignificant: boolean;
   wrPenalty: number;
   bonus: number;
   /** Positive evidence of hitting active targets (regardless of tilt). */
@@ -125,7 +127,7 @@ export interface PerfState {
 
 export const EMPTY_PERF: PerfState = {
   available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, form: null,
-  countedGames: 0, statPenalty: 0, wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false,
+  countedGames: 0, statPenalty: 0, wrDip: null, wrSignificant: false, wrPenalty: 0, bonus: 0, targetEvidence: false,
   dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
 
@@ -433,6 +435,7 @@ export function perfState(
   const baseStart = refOrdinal - T.chronicDays + 1;
   let dipWeighted = 0;
   let dipWeight = 0;
+  let dipVarWeighted = 0; // Σ (acuteDecided² · SE²) — the pooled dip's sampling variance, same weights as the dip
   for (const account of perAccount.keys()) {
     const acuteWl = winLoss(acuteGames.filter((g) => g.account === account));
     const acuteDecided = acuteWl.wins + acuteWl.losses;
@@ -443,20 +446,33 @@ export function perfState(
       return ord >= baseStart && ord < acuteStart; // uncoupled: baseline excludes the acute window
     });
     const baseWl = winLoss(baseGames);
-    if (baseWl.wins + baseWl.losses < T.wrMinDecidedBase) continue;
+    const baseDecided = baseWl.wins + baseWl.losses;
+    if (baseDecided < T.wrMinDecidedBase) continue;
+    // Two-sample standard error of the dip under "nothing changed" (one pooled winrate for both
+    // windows): how big a dip pure coin flips produce at these sample sizes.
+    const pooled = (acuteWl.wins + baseWl.wins) / (acuteDecided + baseDecided);
+    const se2 = pooled * (1 - pooled) * (1 / acuteDecided + 1 / baseDecided);
     dipWeighted += (baseWl.winrate - acuteWl.winrate) * acuteDecided;
     dipWeight += acuteDecided;
+    dipVarWeighted += acuteDecided * acuteDecided * se2;
   }
   const wrDip = dipWeight > 0 ? dipWeighted / dipWeight : null;
+  const wrSe = dipWeight > 0 ? Math.sqrt(dipVarWeighted) / dipWeight : 0;
+  const wrSignificant = wrDip !== null && wrDip >= Math.max(T.wrDipMin, T.wrSignificanceZ * wrSe);
   // Manual regime PROMOTES the results arm — cap only. The ceiling lerps 15 → 30 by (1−b); the
   // firing threshold (wrDipMin) and slope (wrPenaltySlope) stay regime-invariant, so `objectiveAdverse`
   // never flips with b and ordinary winrate noise never reddens (only a genuinely deep, sustained dip
   // reaches the promoted ceiling). At b=1: cap = wrPenaltyCap exactly ⇒ bit-identical.
   const wrCap = T.wrPenaltyCap + T.wrManualCapBoost * (1 - blend);
-  const wrPenalty =
-    wrDip !== null && wrDip >= T.wrDipMin
-      ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope)
-      : 0;
+  const wrRaw = wrSignificant && wrDip !== null ? Math.min(wrCap, (wrDip - 0.05) * T.wrPenaltySlope) : 0;
+  // Corroboration: Overwatch matchmaking pulls every winrate toward 50% (a climb's high baseline
+  // regresses on the new rank), so where the stats can see the games, a winrate dip only costs points
+  // to the extent the player's own form is down too — 0 at baseline or better, full from the form
+  // dead-band edge. The share that needs that backing grows with the regime blend b: at b = 0
+  // (manual) the dip stands alone as before; at b = 1 with form holding it is a note, not a penalty.
+  // Without enough counted games the stats can't vouch, so the dip stands alone there too.
+  const formAdverse = enoughEvidence && form !== null ? clamp(-form / T.formDeadband, 0, 1) : 1;
+  const wrPenalty = wrRaw * (1 - blend + blend * formAdverse);
 
   // --- target-focus dampener (deliberate-practice exemption) ---
   // Day-gated on BOTH ends: a target only counts from its creation day, and an
@@ -525,6 +541,7 @@ export function perfState(
     countedGames,
     statPenalty,
     wrDip,
+    wrSignificant,
     wrPenalty,
     bonus,
     targetEvidence,

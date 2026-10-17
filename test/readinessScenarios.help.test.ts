@@ -1,6 +1,6 @@
 /**
  * T1 — curated scenario library: shape + drift guard. The library is trimmed
- * (9, not 29) and grouped, and every archetype's declared match signature must
+ * (10, not 29) and grouped, and every archetype's declared match signature must
  * still agree with the engine (band-group, regime, and matchable-vs-suppressed
  * confidence), so it can't silently rot as the model retunes.
  */
@@ -10,10 +10,12 @@ import type { ScenarioGroup } from '../src/core/readiness';
 import { HELP_FIXTURES } from './readinessHelpFixtures';
 
 describe('curated scenario library (readiness-help-docs)', () => {
-  it('is trimmed to exactly 9 archetypes with unique ids', () => {
-    expect(CURATED_SCENARIOS.length).toBe(9);
+  // 9 → 10 (readiness-score-accuracy T5): the losing-week archetype moved to green (losses with stats
+  // holding are a note now), so 'Your own play dipped' keeps the loaded group at two matchable stories.
+  it('is trimmed to exactly 10 archetypes with unique ids', () => {
+    expect(CURATED_SCENARIOS.length).toBe(10);
     const ids = CURATED_SCENARIOS.map((s) => s.id);
-    expect(new Set(ids).size).toBe(9);
+    expect(new Set(ids).size).toBe(10);
   });
 
   it('populates all four plain-language groups', () => {

@@ -1,6 +1,6 @@
 /**
  * Curated scenario library for the readiness help wiki — a deliberately TRIMMED
- * set of archetype "player stories" (9, not the full 29-scenario catalog) that
+ * set of archetype "player stories" (10, not the full 29-scenario catalog) that
  * teach how the model behaves without overloading a casual reader. Single source
  * of truth for the renderer (browsable library + "you're closest to…"), the
  * nearest-scenario matcher, and the drift-guard test.
@@ -145,12 +145,20 @@ export const CURATED_SCENARIOS: readonly CuratedScenario[] = [
 
   // --- guardrails ---
   {
+    id: 'stats-form-slump',
+    group: 'guardrail',
+    title: 'Your own play dipped',
+    plain: 'Your damage and deaths slipped below your usual for a stretch — the score dips until your games are back at your level.',
+    teaches: 'The score reads your current form against your own baseline: one bad game never counts, a sustained slip does, and the cost goes away as soon as you are back to your usual.',
+    match: { bandGroup: 'loaded', regime: 'stats', centroid: { load: 0, perf: -0.62, subj: 0 } },
+  },
+  {
     id: 'all-loss-week-outcome-cap',
     group: 'guardrail',
     title: 'A brutal losing week',
-    plain: 'A week of losses with your stats holding steady — the score dips, but only so far.',
-    teaches: 'Losing alone is capped: you can play your best and lose a pile of coin flips, so results never sink the score by themselves.',
-    match: { bandGroup: 'loaded', regime: 'stats', centroid: { load: 0, perf: -0.333, subj: 0 } },
+    plain: 'A week of losses while your own stats hold steady — you get a note, not a lower score.',
+    teaches: 'Matchmaking pulls every winrate toward 50%, so losses with your play holding read as coin flips, not decline. Losing only costs points when your own stats drop too, or when there are no stats to check it against.',
+    match: { bandGroup: 'green', regime: 'stats', centroid: { load: 0, perf: 0, subj: 0 }, requiresSignal: 'winrate-dip' },
   },
   {
     id: 'grind-wr-slump-dampened',

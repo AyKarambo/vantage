@@ -658,7 +658,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
       available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       // readiness-score-accuracy: the CUSUM peak became the current form (EWMA of 12 games at g ≈ −2.30).
       declineFired: true, form: -1.6532260679114212, countedGames: 12, statPenalty: 30,
-      wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
+      wrDip: null, wrSignificant: false, wrPenalty: 0, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: { eliminations: -2.333333333333333, deaths: -2.5, damage: -2.083333333333333 },
       objectiveAdverse: true, blend: 1, blendCoverage: 12, delta: -30,
     });
@@ -669,7 +669,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
     expect(p).toEqual({
       available: true, statCoverage: 0, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       declineFired: false, form: null, countedGames: 0, statPenalty: 0,
-      wrDip: 1, wrPenalty: 30, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
+      wrDip: 1, wrSignificant: true, wrPenalty: 30, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: {}, objectiveAdverse: true, blend: 0, blendCoverage: 0, delta: -30,
     });
   });
@@ -686,7 +686,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
       available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       // readiness-score-accuracy: form after 35 games at g = −1 (still past the cap: 50 × (0.975 − 0.3) > 30).
       declineFired: true, form: -0.9749684449500675, countedGames: 35, statPenalty: 30,
-      wrDip: 0.7142857142857143, wrPenalty: 15, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
+      wrDip: 0.7142857142857143, wrSignificant: true, wrPenalty: 15, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: { eliminations: -1, deaths: -1, damage: -1 },
       objectiveAdverse: true, blend: 1, blendCoverage: 35, delta: -45,
     });

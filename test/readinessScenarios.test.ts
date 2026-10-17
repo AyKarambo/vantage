@@ -244,8 +244,9 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "all-loss-week-outcome-cap",
-    story: "A week of pure losses costs exactly the 15-point outcome cap",
-    expect: {"score":60,"band":"loaded","regime":"stats","confidence":"high"},
+    story: "A week of pure losses while stats hold: a winrate note, no penalty",
+    // 60 loaded → 75 fresh (readiness-score-accuracy T5): at b = 1 a dip only costs points when form is down too.
+    expect: {"score":75,"band":"fresh","regime":"stats","confidence":"high"},
     fixture: () => {
       const games = [
         ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', result: 'Win', damage: 8000, deaths: 5, elims: 20 }),
@@ -356,9 +357,11 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "stats-marathon-decline-red",
-    story: "Stats-regime (b=1) red: marathon session + per-10 form decline + losses",
-    // 16 → 29 (readiness-score-accuracy T3): 10 weak games after 20 normal ones read as form −0.65 (−17.6), not the CUSUM cap (−30).
-    expect: {"score":29,"band":"in-the-hole","regime":"stats","confidence":"high"},
+    story: "Stats-regime (b=1) red: marathon session + a clear per-10 form decline",
+    // 16 → 28 (readiness-score-accuracy T3/T5): the marathon's slump is now clearer (7000/6/17, was
+    // 8100/5/20 — the current form read that milder one at only −17.6, red by a single point), and the
+    // 17-point loss dip on 30/56 decided games is within 2 SE, so it no longer costs points.
+    expect: {"score":28,"band":"in-the-hole","regime":"stats","confidence":"high"},
     fixture: () => {
       const BASE = { hero: 'Tracer', damage: 9000, deaths: 4, elims: 22 };
       const games = [
@@ -366,7 +369,7 @@ const SCENARIOS: Scenario[] = [
         ...statSpan(0, 25, { perDay: 2, result: 'Loss', hour: 15, ...BASE }),
         ...statSpan(27, 29, { perDay: 2, result: 'Win', ...BASE }),
         ...statSpan(27, 29, { perDay: 2, result: 'Loss', hour: 15, ...BASE }),
-        ...statSpan(30, 30, { perDay: 10, result: 'Loss', gapMin: 16, hero: 'Tracer', damage: 8100, deaths: 5, elims: 20 }),
+        ...statSpan(30, 30, { perDay: 10, result: 'Loss', gapMin: 16, hero: 'Tracer', damage: 7000, deaths: 6, elims: 17 }),
       ];
       const now = ts(30, 20);
       return { games, now, targets: [] };

@@ -264,10 +264,15 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
   if (loadCurrent && perf.declineFired) {
     out.push({ key: 'perf-decline', label: declineLabel(state), severity: 'high' });
   }
-  if (loadCurrent && perf.wrPenalty > 0 && perf.wrDip !== null) {
+  // A significant dip is always named; whether it costs points depends on whether the player's
+  // own stats back it up (see the corroboration note in performance.ts), and the label says which.
+  if (loadCurrent && perf.wrSignificant && perf.wrDip !== null) {
+    const points = Math.round(perf.wrDip * 100);
     out.push({
       key: 'winrate-dip',
-      label: `winrate ${Math.round(perf.wrDip * 100)} points below your usual recently`,
+      label: perf.wrPenalty > 0
+        ? `winrate ${points} points below your usual recently`
+        : `winrate ${points} points below your usual recently — your stats are holding, so it doesn't count against you`,
       severity: 'watch',
     });
   }

@@ -229,7 +229,7 @@ describe('T5 — promoted results (winrate) ceiling', () => {
     ...statSpan(29, 35, { perDay: 12, result: 'Loss', mental: CALM }),
   ];
 
-  it('manual regime lifts the winrate penalty above the shipped cap (up to 30)', () => {
+  it('AC15: manual regime — a significant dip still costs points on its own, above the shipped cap (up to 30)', () => {
     const p = perfState(manualDip, refOf(manualDip), EMPTY_CONTEXT, false);
     expect(p.blend).toBe(0);
     expect(p.wrPenalty).toBeGreaterThan(T.wrPenaltyCap); // promoted beyond 15
@@ -237,11 +237,52 @@ describe('T5 — promoted results (winrate) ceiling', () => {
     expect(p.objectiveAdverse).toBe(true);
   });
 
-  it('b=1: the same dip stays capped at the shipped 15 (bit-identical corroboration role)', () => {
+  // readiness-score-accuracy AC14: at b = 1 the stats can see the games, so a winrate dip only
+  // costs points when the player's own form is down too (matchmaking pulls every winrate to 50%).
+  it('AC14: b=1 with stats holding — a significant dip is a watch note, not a penalty', () => {
     const p = perfState(statsDip, refOf(statsDip), EMPTY_CONTEXT, false);
     expect(p.blend).toBe(1);
+    expect(p.wrSignificant).toBe(true);
+    expect(p.wrDip).not.toBeNull(); // the sample still counts for confidence
+    expect(p.wrPenalty).toBe(0);
+    const r = computeReadiness(statsDip, ts(35, 20));
+    const note = r.signals.find((s) => s.key === 'winrate-dip');
+    expect(note?.severity).toBe('watch');
+    expect(note?.label).toMatch(/stats are holding/);
+  });
+
+  it('AC14: b=1 with form down too — the same dip costs points, capped at the shipped 15', () => {
+    const slumping = [
+      ...statSpan(0, 28, { perDay: 12, result: 'Win', mental: CALM }),
+      ...statSpan(29, 35, { perDay: 12, result: 'Loss', mental: CALM, damage: 5500, deaths: 8, elims: 13 }),
+    ];
+    const p = perfState(slumping, refOf(slumping), EMPTY_CONTEXT, false);
+    expect(p.blend).toBe(1);
+    expect(p.form!).toBeLessThanOrEqual(-T.formDeadband);
+    expect(p.wrPenalty).toBeGreaterThan(0);
     expect(p.wrPenalty).toBeLessThanOrEqual(T.wrPenaltyCap); // ≤ 15
-    expect(p.wrPenalty).toBeGreaterThan(0); // the dip still fired
+  });
+
+  it('AC13: a dip inside 2 standard errors is coin flips — no penalty and no note', () => {
+    // One account: 19W/11L in the two baseline weeks (63%), 10W/10L this week (50%) — a 13-point
+    // dip, but at 20/30 decided games 2 SE ≈ 28 points, so it is ordinary variance.
+    // Reference day 26 ⇒ acute window = days 20–26, baseline = days 6–19.
+    const games = [
+      ...span(6, 14, { perDay: 2, result: 'Win' }),
+      ...span(15, 15, { perDay: 1, result: 'Win', hour: 19 }),
+      ...span(15, 19, { perDay: 2, result: 'Loss' }),
+      ...span(19, 19, { perDay: 1, result: 'Loss', hour: 19 }),
+      ...span(20, 26, { perDay: 1, result: 'Win' }),
+      ...span(20, 26, { perDay: 1, result: 'Loss', hour: 18 }),
+      ...span(20, 22, { perDay: 1, result: 'Win', hour: 20 }),
+      ...span(20, 22, { perDay: 1, result: 'Loss', hour: 21 }),
+    ];
+    const p = perfState(games, refOf(games), EMPTY_CONTEXT, false);
+    expect(p.wrDip!).toBeGreaterThan(T.wrDipMin); // past the old 10-point bar...
+    expect(p.wrSignificant).toBe(false); // ...but not past 2 SE
+    expect(p.wrPenalty).toBe(0);
+    const r = computeReadiness(games, ts(26, 20));
+    expect(r.signals.some((s) => s.key === 'winrate-dip')).toBe(false);
   });
 
   it('two adverse families (sustained load + results dip) ⇒ red reachable in the manual regime', () => {

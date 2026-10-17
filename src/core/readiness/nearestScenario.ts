@@ -30,6 +30,14 @@ export interface ScenarioMatchResult {
 const REGIME_PENALTY = 0.25;
 
 /**
+ * Ranking preference for an archetype whose `requiresSignal` is live: it tells the more specific
+ * story, so it wins a near-tie against a signal-free archetype with the same centroid (a losing week
+ * with stats holding sits at the same (0, 0, 0) as a calm stats grind — the winrate note is what
+ * tells them apart). Smaller than REGIME_PENALTY, and it only orders: the reported distance is real.
+ */
+const SIGNAL_PREFERENCE = 0.05;
+
+/**
  * Normalize each family delta by its stats-regime cap magnitude so the three axes
  * are comparable. Divisors are derived from READINESS_TUNING (40/45/15 today); the
  * curated `centroid` values in scenarios.ts are authored on this SAME normalized
@@ -71,7 +79,7 @@ export function matchScenarios(summary: ReadinessSummary): ScenarioMatchResult |
   const inBand = pool
     .filter((s) => s.match.bandGroup === bandGroup)
     .map((scenario) => ({ id: scenario.id, scenario, distance: distanceTo(scenario, point, summary.regime) }))
-    .sort((a, b) => a.distance - b.distance);
+    .sort((a, b) => rankOf(a) - rankOf(b));
 
   // No archetype in the SAME qualitative state → nothing honest to compare
   // against, so personalization stays OFF (return null) rather than cross-matching
@@ -83,4 +91,8 @@ export function matchScenarios(summary: ReadinessSummary): ScenarioMatchResult |
 
   const [primary, ...rest] = inBand;
   return { primary, alternates: rest.slice(0, 2) };
+}
+
+function rankOf(m: ScenarioMatch): number {
+  return m.distance - (m.scenario.match.requiresSignal ? SIGNAL_PREFERENCE : 0);
 }
