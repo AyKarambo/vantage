@@ -78,6 +78,12 @@ export const READINESS_TUNING = {
 
   /** Rest days needed to fully clear a heavy state (→ fresh). Below it → recovering. */
   restFullRecoverDays: 2,
+  /** A play day uses up its morning's rest bonus over this share of the player's usual games per active day (a heavy player keeps it through more games)... */
+  restCarryShare: 0.5,
+  /** ...but over no fewer games than this... */
+  restCarryMinGames: 3,
+  /** ...and no more than this (one game never drops the whole bonus; ten always have). */
+  restCarryMaxGames: 10,
   /** Active days (within the chronic window) needed for high confidence. */
   confidenceActiveDays: 12,
 

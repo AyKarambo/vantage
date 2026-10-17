@@ -82,16 +82,19 @@ function emptySubscores(): ReadinessSubscores {
   };
 }
 
+// The surfaced load numbers describe the last active day (their documented meaning — e.g.
+// consecutiveDays "ending at the last active day"); rest days are reported by restDays.
 function toLoad(state: StateAt): ReadinessLoad {
+  const load = state.last.load;
   return {
-    acutePerDay: state.load.acutePerDay,
-    chronicPerDay: state.load.chronicPerDay,
-    ratio: state.load.ratio,
-    consecutiveDays: state.load.consecutiveDays,
-    activeDaysPerWeek: state.load.activeDaysPerWeek,
+    acutePerDay: load.acutePerDay,
+    chronicPerDay: load.chronicPerDay,
+    ratio: load.ratio,
+    consecutiveDays: load.consecutiveDays,
+    activeDaysPerWeek: load.activeDaysPerWeek,
     restDays: state.restDays,
-    lastSessionGames: state.load.lastSessionGames,
-    lastSessionMinutes: state.load.lastSessionMinutes,
+    lastSessionGames: load.lastSessionGames,
+    lastSessionMinutes: load.lastSessionMinutes,
   };
 }
 
@@ -115,12 +118,14 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * so an alt whose buckets are thin still lowers confidence, as it should.
  */
 function confidenceFor(state: StateAt): ReadinessConfidence {
-  const statCoverage = state.perf.statCoverage;
+  // Data quality describes the session the read rests on: the last active day's frame.
+  const { last } = state;
+  const statCoverage = last.perf.statCoverage;
   const high =
-    state.load.chronicActiveDays >= T.confidenceActiveDays &&
+    last.load.chronicActiveDays >= T.confidenceActiveDays &&
     statCoverage >= T.statCoverageHigh &&
-    state.perf.wrDip !== null &&
-    state.perf.maxAccountShare >= T.accountMixBar;
+    last.perf.wrDip !== null &&
+    last.perf.maxAccountShare >= T.accountMixBar;
   // Manual regime caps confidence at medium, whatever the mental-log coverage — high confidence is
   // something only live match stats can buy. Structurally redundant today ('high' already requires
   // statCoverage ≥ statCoverageHigh ⇒ b = 1, never 'manual'), but a pinned invariant that survives any
@@ -128,7 +133,7 @@ function confidenceFor(state: StateAt): ReadinessConfidence {
   if (high && state.regime !== 'manual') {
     return 'high';
   }
-  if (statCoverage < T.statCoverageLow && state.mental.coverage < T.mentalMinCoverage && state.subj.sliderDiff === null) {
+  if (statCoverage < T.statCoverageLow && last.mental.coverage < T.mentalMinCoverage && last.subj.sliderDiff === null) {
     return 'low';
   }
   return 'medium';
@@ -326,7 +331,8 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
     });
   }
 
-  if (mental.coverage < T.mentalMinCoverage) {
+  // A data-quality note, so it reads the session the read rests on (like confidence).
+  if (state.last.mental.coverage < T.mentalMinCoverage) {
     out.push({ key: 'low-coverage', label: 'log your mental state to sharpen this read', severity: 'ok' });
   } else if (loadCurrent && mental.fatigued) {
     out.push({ key: 'tilt', label: `tilt on ${pct(mental.acuteTilt)} of your recent logged games`, severity: 'high' });
@@ -499,7 +505,7 @@ export function computeReadiness(
     driver: state.driver,
     regime: state.regime,
     trend,
-    mainAccount: state.perf.mainAccount,
+    mainAccount: state.last.perf.mainAccount,
   };
 }
 
