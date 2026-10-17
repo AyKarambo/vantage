@@ -1,11 +1,13 @@
 /**
  * Objective-performance subscore: winrate vs the player's own per-account
- * baseline + per-10 stat decline vs per-hero (fallback per-role) baselines,
- * accumulated by a one-sided CUSUM so only sustained evidence — one long
- * marathon session, or several sessions — ever fires. Includes the
- * target-focus dampener (the deliberate-practice "learning dip" exemption).
+ * baseline + per-10 stat form vs per-hero (fallback per-role) baselines,
+ * smoothed into a FORM curve (an EWMA of per-game scores) so only sustained
+ * evidence moves it, in either direction. The penalty and the bonus both read
+ * the CURRENT form — it recovers as soon as the games do, instead of holding
+ * the week's worst moment. Includes the target-focus dampener (the
+ * deliberate-practice "learning dip" exemption).
  *
- * Several accounts, one player. Every detector below — the CUSUM, its gates,
+ * Several accounts, one player. Every detector below — the form curve, its gates,
  * the coverage sums, the regime blend, the pooled winrate dip — is computed
  * ACCOUNT-BLIND: one game is one game, on the main or an alt alike, so none of
  * these anti-false-alarm guarantees ever depend on which account played them.
@@ -24,10 +26,11 @@
  * unweighted engine.
  *
  * Anti-false-alarm guarantees (by construction, see constants):
- * - a single winsorized game contributes at most zWinsor − cusumSlack < cusumThreshold, on any
- *   account (the CUSUM is account-blind);
- * - the decline index needs ≥ evidenceMinGames counted games regardless of C — an unweighted,
- *   account-blind count;
+ * - a single winsorized game moves the form by at most formLambda × zWinsor < formDeadband, on any
+ *   account (the form is account-blind), so one game can never penalize or reward on its own;
+ * - penalty and bonus need ≥ evidenceMinGames counted games regardless of the form — an
+ *   unweighted, account-blind count;
+ * - both are continuous in the form (no cliff at the dead-band edge);
  * - buckets below statMinGames are inert; trust ramps in with no cliff;
  * - a hero-mix change never reads as decline (per-hero buckets + mix-overlap guard);
  * - the alt damper can only pull the finished delta TOWARD neutral (0 ≤ altDamp ≤ 1), never past it.
@@ -93,8 +96,8 @@ export interface PerfState {
   /** The actual multiplier applied to the subscore (1 = untouched): the mean per-game weight over the acute window, where a main-account game is always 1 and an alt game is full weight when rank-close to the main's usual rank, tapering to `altAccountWeight` for a genuine gap. */
   altDamp: number;
   declineFired: boolean;
-  /** Peak of the one-sided CUSUM accumulator over the acute window. */
-  cusumMax: number;
+  /** Current form: EWMA of per-game scores over the counted acute games in play order, from the baseline (0). Negative = below your usual. Null with no counted game. */
+  form: number | null;
   /** Counted (trusted, non-learning) qualifying acute games — WEIGHTED: an alt-account game counts altAccountWeight. */
   countedGames: number;
   statPenalty: number;
@@ -121,7 +124,7 @@ export interface PerfState {
 }
 
 export const EMPTY_PERF: PerfState = {
-  available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, cusumMax: 0,
+  available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, form: null,
   countedGames: 0, statPenalty: 0, wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false,
   dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
@@ -129,6 +132,26 @@ export const EMPTY_PERF: PerfState = {
 const GRADE_CREDIT: Record<TargetGrade, number> = { hit: 1, partial: 0.5, missed: 0 };
 
 const trustFor = (n: number): number => clamp((n - T.statMinGames) / T.statTrustRamp, 0, 1);
+
+/**
+ * The form after a run of per-game scores (oldest first): an EWMA that starts
+ * at the baseline (0) and moves `formLambda` of the way toward each game.
+ */
+export function formOf(gameScores: readonly number[]): number {
+  let form = 0;
+  for (const g of gameScores) form += T.formLambda * (g - form);
+  return form;
+}
+
+/** Penalty for a form below the dead-band — 0 inside it, continuous past its edge, capped. */
+export function formPenalty(form: number): number {
+  return Math.min(T.statPenaltyCap, T.formPenaltySlope * Math.max(0, -form - T.formDeadband));
+}
+
+/** Bonus for a form above the dead-band — the mirror of {@link formPenalty}, capped at perfBonusCap. */
+export function formBonus(form: number): number {
+  return Math.min(T.perfBonusCap, T.formBonusSlope * Math.max(0, form - T.formDeadband));
+}
 
 /**
  * The player's MAIN account: the one they play most, whose games carry the
@@ -238,8 +261,8 @@ export function perfState(
 
   // MAIN-ACCOUNT WEIGHTING lives at the very end of this function, as one damper on the finished
   // subscore — deliberately NOT as a per-game weight inside the accumulators below. A weight
-  // inside a one-sided CUSUM scales its recovery steps as well as its adverse ones, so playing
-  // WELL on an alt between two poor main games would push the accumulator up and fire a decline
+  // inside the form curve scales its recovery steps as well as its adverse ones, so playing
+  // WELL on an alt between two poor main games would barely lift the form and leave a decline
   // the unweighted engine never saw; weights inside the coverage sums likewise drag the regime
   // blend toward 'manual' and switch on the very caps this is meant to avoid. Damping the result
   // instead keeps every anti-false-alarm guarantee below bit-identical for everyone, and can only
@@ -298,12 +321,10 @@ export function perfState(
     roleOverlap.set(rk, heroMixOverlap(acuteRole, baselineWindow));
   }
 
-  // --- per-10 decline: winsorized z per metric → weighted game score → one-sided CUSUM ---
-  let cusum = 0;
-  let cusumMax = 0;
+  // --- per-10 form: winsorized z per metric → weighted game score → EWMA form curve ---
+  const gameScores: number[] = [];
   let countedGames = 0;
   let blendCoverage = 0;
-  let gameScoreSum = 0;
   const stillLearning = new Set<string>();
   const metricSums: Partial<Record<MetricKey, { sum: number; n: number }>> = {};
 
@@ -388,9 +409,7 @@ export function perfState(
     // at once — keeps b continuous in the day index (R1). At full coverage trust=1 ⇒ this equals
     // countedGames ⇒ b is unchanged, preserving the b=1 bit-identity.
     blendCoverage += trust;
-    gameScoreSum += g;
-    cusum = Math.max(0, cusum + (-g - T.cusumSlack));
-    cusumMax = Math.max(cusumMax, cusum);
+    gameScores.push(g);
   }
 
   // Coverage = games that were actually COMPARABLE (trusted bucket, past the
@@ -401,16 +420,14 @@ export function perfState(
   const statCoverage = countedGames / acuteGames.length;
   const blend = blendFor(blendCoverage, acuteGames.length);
 
-  const declineFired = cusumMax >= T.cusumThreshold && countedGames >= T.evidenceMinGames;
-  const statPenalty = declineFired
-    ? Math.min(T.statPenaltyCap, T.statPenaltyBase + T.statPenaltySlope * (cusumMax - T.cusumThreshold))
-    : 0;
-
-  const meanGameScore = countedGames > 0 ? gameScoreSum / countedGames : 0;
-  const bonus =
-    cusumMax === 0 && countedGames >= T.evidenceMinGames && meanGameScore > T.perfBonusMinZ
-      ? Math.min(T.perfBonusCap, T.perfBonusCap * (meanGameScore - T.perfBonusMinZ))
-      : 0;
+  // The CURRENT form drives both directions: a slump costs points while it lasts
+  // and stops costing them once the games are back at baseline; a stretch above
+  // your own baseline earns the mirror-image bonus.
+  const form = countedGames > 0 ? formOf(gameScores) : null;
+  const enoughEvidence = form !== null && countedGames >= T.evidenceMinGames;
+  const statPenalty = enoughEvidence ? formPenalty(form) : 0;
+  const declineFired = statPenalty > 0;
+  const bonus = enoughEvidence ? formBonus(form) : 0;
 
   // --- winrate vs own baseline, per account, pooled by acute sample size ---
   const baseStart = refOrdinal - T.chronicDays + 1;
@@ -504,7 +521,7 @@ export function perfState(
     altShare,
     altDamp,
     declineFired,
-    cusumMax,
+    form,
     countedGames,
     statPenalty,
     wrDip,

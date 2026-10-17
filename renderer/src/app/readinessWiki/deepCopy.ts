@@ -31,11 +31,13 @@ export const deepCopy = {
     );
   },
 
-  /** Performance deep tier: sustained-decline (CUSUM) detection. */
+  /** Performance deep tier: the form curve (sustained slumps and good stretches). */
   declineDetection(): string {
     return (
-      `A dip only counts when it is SUSTAINED, not one bad game. A one-sided tally adds up how far each game falls below your baseline ` +
-      `(ignoring the first ${dc.cusumSlack} of noise) and only fires once it crosses ${dc.cusumThreshold} across at least ${dc.evidenceMinGames} recent games. ` +
+      `A dip only counts when it is SUSTAINED, not one bad game. Your form is a running average of how each game compares with your baseline, ` +
+      `where every new game moves it ${dc.formLambda} of the way — so one game can never tip it. Inside ±${dc.formDeadband} it is ordinary variance; ` +
+      `below that it costs points, above it it earns a small bonus, and both need at least ${dc.evidenceMinGames} recent games. ` +
+      `It reads your CURRENT form, so the cost goes away as soon as your games are back at your usual. ` +
       `Heroes inside their first ${dc.heroLearnGames} games are exempt — counted across ALL your accounts, because hero experience is yours, not the account's — ` +
       `so early games learning something new never count against you.`
     );

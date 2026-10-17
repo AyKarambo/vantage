@@ -287,7 +287,8 @@ const SCENARIOS: Scenario[] = [
   {
     id: "deaths-improve-output-holds",
     story: "Deaths down while output HOLDS: genuine positioning improvement keeps full credit",
-    expect: {"score":75,"band":"fresh","regime":"stats","confidence":"high"},
+    // 75 → 78 (readiness-score-accuracy T3): a held improvement is above the form dead-band and earns the bonus.
+    expect: {"score":78,"band":"fresh","regime":"stats","confidence":"high"},
     fixture: () => {
       const games = [
         ...statSpan(0, 27, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 5, elims: 20 }),
@@ -355,8 +356,9 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "stats-marathon-decline-red",
-    story: "Stats-regime (b=1) red: marathon session + per-10 CUSUM decline + losses",
-    expect: {"score":16,"band":"in-the-hole","regime":"stats","confidence":"high"},
+    story: "Stats-regime (b=1) red: marathon session + per-10 form decline + losses",
+    // 16 → 29 (readiness-score-accuracy T3): 10 weak games after 20 normal ones read as form −0.65 (−17.6), not the CUSUM cap (−30).
+    expect: {"score":29,"band":"in-the-hole","regime":"stats","confidence":"high"},
     fixture: () => {
       const BASE = { hero: 'Tracer', damage: 9000, deaths: 4, elims: 22 };
       const games = [

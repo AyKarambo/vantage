@@ -24,8 +24,8 @@ describe('deep-tier constants — numeric-literal pins (AC4a)', () => {
     ratioElevated: 1.3,
     ratioHigh: 1.5,
     ratioFreshMax: 1.15,
-    cusumThreshold: 2.5,
-    cusumSlack: 0.25,
+    formLambda: 0.1,
+    formDeadband: 0.3,
     evidenceMinGames: 8,
     heroLearnGames: 12,
     altRankCloseGapDivisions: 2.5,
@@ -66,7 +66,8 @@ describe('deep-tier constants — still derived from READINESS_TUNING (AC4b)', (
     expect(dc.tiltPenCapManual).toBe(T.tiltPenCapManual);
     expect(dc.dampFactor).toBe(T.dampFactor);
     expect(dc.wrPenaltyCap).toBe(T.wrPenaltyCap);
-    expect(dc.cusumThreshold).toBe(T.cusumThreshold);
+    expect(dc.formLambda).toBe(T.formLambda);
+    expect(dc.formDeadband).toBe(T.formDeadband);
     expect(dc.heroLearnGames).toBe(T.heroLearnGames);
     expect(dc.altRankCloseGapDivisions).toBe(T.altRankCloseGap / 100);
     expect(dc.altRankSmurfGapDivisions).toBe(T.altRankSmurfGap / 100);
@@ -83,7 +84,7 @@ describe('deep-tier copy — prose contains the interpolated constants (AC4c)', 
   const cases: Array<[string, () => string, Array<keyof typeof dc>]> = [
     ['anchorAndCaps', deepCopy.anchorAndCaps, ['anchor', 'loadCapDown', 'loadCapUp', 'perfCapDown', 'perfCapUp', 'subjCapDown', 'subjCapUp', 'subjCapDownManual']],
     ['loadRatio', deepCopy.loadRatio, ['ratioFreshMax', 'ratioElevated', 'ratioHigh']],
-    ['declineDetection', deepCopy.declineDetection, ['cusumSlack', 'cusumThreshold', 'evidenceMinGames', 'heroLearnGames']],
+    ['declineDetection', deepCopy.declineDetection, ['formLambda', 'formDeadband', 'evidenceMinGames', 'heroLearnGames']],
     ['accountWeighting', deepCopy.accountWeighting, ['altRankCloseGapDivisions', 'altRankSmurfGapDivisions', 'altRankFloorWeight', 'mainRankWindowDays', 'altAccountWeight']],
     ['tiltCaps', deepCopy.tiltCaps, ['tiltPenCap', 'tiltPenCapManual']],
     ['dampenerAndOutcomeCap', deepCopy.dampenerAndOutcomeCap, ['dampFactor', 'wrPenaltyCap']],

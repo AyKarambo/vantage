@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { perfState, EMPTY_CONTEXT, mainAccountOf } from '../src/core/readiness/performance';
+import { perfState, EMPTY_CONTEXT, mainAccountOf, formOf, formPenalty, formBonus } from '../src/core/readiness/performance';
 import { computeReadiness, READINESS_TUNING as T, dayOrdinal } from '../src/core/readiness';
 import type { GameRecord } from '../src/core/analytics';
 import type { RankPosition } from '../src/core/rank/types';
@@ -13,11 +13,11 @@ const perfAt = (games: GameRecord[], day: number) =>
 const HEALTHY = { damage: 8000, deaths: 5, elims: 20 };
 const COLLAPSED = { damage: 5500, deaths: 8, elims: 13 };
 
-describe('CUSUM decline detector — anti-false-alarm arithmetic', () => {
+describe('form-curve decline detector — anti-false-alarm arithmetic', () => {
   // 24 days × 2/day = 48 baseline games, full bucket trust.
   const baseline = statSpan(5, 28, { perDay: 2, ...HEALTHY });
 
-  it('a single terrible game can NEVER fire (winsorized 2.5 − slack 0.25 < threshold 2.5)', () => {
+  it('a single terrible game can NEVER fire (it moves the form at most formLambda × zWinsor = 0.25 < formDeadband 0.3)', () => {
     const one = statSpan(35, 35, { perDay: 1, damage: 100, deaths: 20, elims: 1 });
     const p = perfAt([...baseline, ...one], 35);
     expect(p.declineFired).toBe(false);
@@ -30,10 +30,10 @@ describe('CUSUM decline detector — anti-false-alarm arithmetic', () => {
     expect(p.declineFired).toBe(false);
   });
 
-  it('evidenceMinGames is an independent gate: 5 catastrophic games cross C but do NOT fire', () => {
+  it('evidenceMinGames is an independent gate: 5 catastrophic games push the form past the dead-band but do NOT fire', () => {
     const five = statSpan(35, 35, { perDay: 5, damage: 100, deaths: 20, elims: 1 });
     const p = perfAt([...baseline, ...five], 35);
-    expect(p.cusumMax).toBeGreaterThanOrEqual(T.cusumThreshold); // C alone would fire...
+    expect(p.form!).toBeLessThanOrEqual(-T.formDeadband); // the form alone would fire...
     expect(p.countedGames).toBeLessThan(T.evidenceMinGames);
     expect(p.declineFired).toBe(false); // ...but the game-count gate holds
   });
@@ -42,7 +42,7 @@ describe('CUSUM decline detector — anti-false-alarm arithmetic', () => {
     const marathon = statSpan(35, 35, { perDay: 12, ...COLLAPSED });
     const p = perfAt([...baseline, ...marathon], 35);
     expect(p.declineFired).toBe(true);
-    expect(p.statPenalty).toBeGreaterThanOrEqual(T.statPenaltyBase);
+    expect(p.statPenalty).toBeGreaterThan(0);
     expect(p.statPenalty).toBeLessThanOrEqual(T.statPenaltyCap);
   });
 
@@ -61,15 +61,15 @@ describe('CUSUM decline detector — anti-false-alarm arithmetic', () => {
 });
 
 describe('bucket trust ramp (graduated, no cliff)', () => {
-  it('cusumMax grows monotonically with baseline size across the 15→20 ramp', () => {
+  it('the form deficit grows monotonically with baseline size across the 15→20 ramp', () => {
     // Same 10-game acute collapse against baselines of increasing size.
     let prev = -1;
     for (let n = 14; n <= 21; n += 1) {
       const baseline = statSpan(5, 5 + n - 1, { perDay: 1, ...HEALTHY });
       const collapse = statSpan(35, 35, { perDay: 10, ...COLLAPSED });
       const p = perfAt([...baseline, ...collapse], 35);
-      expect(p.cusumMax).toBeGreaterThanOrEqual(prev - 1e-9);
-      prev = p.cusumMax;
+      expect(-(p.form ?? 0)).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = -(p.form ?? 0);
     }
   });
 
@@ -226,7 +226,7 @@ describe('passivity guard — output-gated deaths credit (owner revision 2026-07
   it('"playing scared" (damage down 30%, deaths down, elims held) now FIRES the decline index', () => {
     // Pre-revision this cancelled out (deaths credit offset the damage drop → weighted −0.24 < slack).
     // With output below baseline the deaths credit is gated to zero, so the game score IS the pure
-    // damage decline and the CUSUM accrues.
+    // damage decline and the form drops.
     const scared = statSpan(29, 35, { perDay: 3, damage: 5600, deaths: 4, elims: 20 });
     const p = perfAt([...baseline, ...scared], 35);
     expect(p.declineFired).toBe(true);
@@ -238,7 +238,9 @@ describe('passivity guard — output-gated deaths credit (owner revision 2026-07
     const better = statSpan(29, 35, { perDay: 3, damage: 8000, deaths: 4, elims: 20 });
     const p = perfAt([...baseline, ...better], 35);
     expect(p.declineFired).toBe(false);
-    expect(p.cusumMax).toBe(0);
+    expect(p.form!).toBeGreaterThan(0);
+    // A genuine improvement held over 21 games is above the dead-band: it earns the form bonus (AC6).
+    expect(p.bonus).toBeGreaterThan(0);
   });
 
   it('aggression (damage up, slightly more deaths) still nets fine — no rule change', () => {
@@ -255,11 +257,12 @@ describe('passivity guard — output-gated deaths credit (owner revision 2026-07
   });
 
   it('the gate is graduated: deeper output decline ⇒ monotonically more accrual (no cliff)', () => {
-    const mk = (damage: number) => perfAt([...baseline, ...statSpan(29, 35, { perDay: 3, damage, deaths: 4, elims: 20 })], 35).cusumMax;
+    // Form deficit (−form): larger = further below baseline.
+    const mk = (damage: number) => -(perfAt([...baseline, ...statSpan(29, 35, { perDay: 3, damage, deaths: 4, elims: 20 })], 35).form ?? 0);
     const shallow = mk(7450); // output z ≈ −0.25 → deaths credit half-applies → game score still ≥ 0-ish
     const deep = mk(5600); // output z ≈ −1.09 → credit fully gated → accrues hard
     expect(deep).toBeGreaterThan(shallow);
-    expect(shallow).toBeGreaterThanOrEqual(0);
+    expect(deep).toBeGreaterThan(T.formDeadband);
   });
 
   it('metricMeans keeps the RAW deaths direction even when the credit is gated (label truthfulness)', () => {
@@ -281,7 +284,7 @@ describe('passivity guard — review hardening (2026-07-08)', () => {
     const atBaseline = at(5);
     const hairBetter = at(4.99);
     expect(hairBetter.declineFired).toBe(atBaseline.declineFired);
-    expect(Math.abs(hairBetter.cusumMax - atBaseline.cusumMax)).toBeLessThan(0.35);
+    expect(Math.abs(hairBetter.form! - atBaseline.form!)).toBeLessThan(0.02);
     // And clearly-fewer deaths with output down still engages the guard fully (scared fires).
     expect(at(4).declineFired).toBe(true);
   });
@@ -397,10 +400,10 @@ describe('main-account damper — an alt week moves the verdict less, both ways'
     const onMain = perfAt([...mainBase, ...smurfBase, ...statSpan(33, 35, { perDay: 3, ...COLLAPSED, account: 'Main' })], 35);
     expect(onAlt.altShare).toBe(1); // the acute window is alt-only
     expect(onMain.altShare).toBe(0);
-    // Identical baselines and identical stats ⇒ identical evidence. Weighting a CUSUM would have
-    // scaled its recovery steps too and could fire a decline the unweighted engine never saw;
+    // Identical baselines and identical stats ⇒ identical evidence. Weighting the form curve would
+    // have scaled its recovery steps too and could hold a decline the unweighted engine never saw;
     // the damper cannot, because it never touches the accumulators.
-    expect(onAlt.cusumMax).toBeCloseTo(onMain.cusumMax, 9);
+    expect(onAlt.form!).toBeCloseTo(onMain.form!, 9);
     expect(onAlt.countedGames).toBe(onMain.countedGames);
     expect(onAlt.statPenalty).toBeCloseTo(onMain.statPenalty, 9);
     expect(onAlt.blend).toBeCloseTo(onMain.blend, 9);
@@ -411,8 +414,8 @@ describe('main-account damper — an alt week moves the verdict less, both ways'
   });
 
   it('playing WELL on the alt between poor main games can never CREATE a decline', () => {
-    // The asymmetry a per-game CUSUM weight introduces: good alt games stop cancelling bad main
-    // ones, so the accumulator drifts up. Here the favourable alt games must still clear it.
+    // The asymmetry a per-game form weight introduces: good alt games stop cancelling bad main
+    // ones, so the form drifts down. Here the favourable alt games must still hold it up.
     const mixed = [
       ...statSpan(5, 28, { perDay: 4, ...HEALTHY, account: 'Main' }),
       ...statSpan(5, 28, { perDay: 2, ...HEALTHY, account: 'Smurf', hour: 19 }),
@@ -420,7 +423,7 @@ describe('main-account damper — an alt week moves the verdict less, both ways'
       ...statSpan(31, 35, { perDay: 2, damage: 9200, deaths: 4, elims: 24, account: 'Smurf', hour: 19 }), // above
     ];
     const p = perfAt(mixed, 35);
-    expect(p.cusumMax).toBeLessThan(T.cusumThreshold);
+    expect(p.form!).toBeGreaterThan(-T.formDeadband);
     expect(p.declineFired).toBe(false);
   });
 
@@ -653,7 +656,8 @@ describe('single-account bit-identity — weighting is invisible with one accoun
     const p = perfAt([...statSpan(5, 28, { perDay: 2, ...HEALTHY }), ...statSpan(35, 35, { perDay: 12, ...COLLAPSED })], 35);
     expect(p).toEqual({
       available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
-      declineFired: true, cusumMax: 24.647058823529417, countedGames: 12, statPenalty: 30,
+      // readiness-score-accuracy: the CUSUM peak became the current form (EWMA of 12 games at g ≈ −2.30).
+      declineFired: true, form: -1.6532260679114212, countedGames: 12, statPenalty: 30,
       wrDip: null, wrPenalty: 0, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: { eliminations: -2.333333333333333, deaths: -2.5, damage: -2.083333333333333 },
       objectiveAdverse: true, blend: 1, blendCoverage: 12, delta: -30,
@@ -664,7 +668,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
     const p = perfAt([...span(5, 28, { perDay: 3 }), ...span(29, 35, { perDay: 4, result: 'Loss' })], 35);
     expect(p).toEqual({
       available: true, statCoverage: 0, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
-      declineFired: false, cusumMax: 0, countedGames: 0, statPenalty: 0,
+      declineFired: false, form: null, countedGames: 0, statPenalty: 0,
       wrDip: 1, wrPenalty: 30, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: {}, objectiveAdverse: true, blend: 0, blendCoverage: 0, delta: -30,
     });
@@ -680,7 +684,8 @@ describe('single-account bit-identity — weighting is invisible with one accoun
     );
     expect(p).toEqual({
       available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
-      declineFired: true, cusumMax: 26.25, countedGames: 35, statPenalty: 30,
+      // readiness-score-accuracy: form after 35 games at g = −1 (still past the cap: 50 × (0.975 − 0.3) > 30).
+      declineFired: true, form: -0.9749684449500675, countedGames: 35, statPenalty: 30,
       wrDip: 0.7142857142857143, wrPenalty: 15, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: { eliminations: -1, deaths: -1, damage: -1 },
       objectiveAdverse: true, blend: 1, blendCoverage: 35, delta: -45,
@@ -733,5 +738,60 @@ describe('account signals — mixed-accounts names the main; alt-weighted is the
     // A mixed window with nothing to damp still says it is mixed — it just makes no claim about weight.
     const mixedNote = r.signals.find((s) => s.key === 'mixed-accounts');
     if (mixedNote) expect(mixedNote.label).toBe('recent games span multiple accounts — the read is less precise');
+  });
+});
+
+describe('form curve — recovery, continuity, symmetric bonus (readiness-score-accuracy AC4–AC6)', () => {
+  const baseline = statSpan(5, 28, { perDay: 2, ...HEALTHY });
+  const upTo = (games: GameRecord[], day: number) => games.filter((g) => g.timestamp <= ts(day, 23));
+
+  it('AC4: the penalty reads the CURRENT form — it shrinks as games return to baseline and ends at 0', () => {
+    const games = [
+      ...baseline,
+      ...statSpan(29, 31, { perDay: 2, ...HEALTHY }), // 6 normal games: evidence for the gate
+      ...statSpan(32, 32, { perDay: 2, ...COLLAPSED }), // two clearly weak games
+      ...statSpan(33, 35, { perDay: 2, ...HEALTHY }), // six games back at baseline
+    ];
+    const afterWeak = perfAt(upTo(games, 32), 32);
+    const recovered = perfAt(upTo(games, 35), 35);
+    expect(afterWeak.statPenalty).toBeGreaterThan(0);
+    expect(recovered.statPenalty).toBeLessThan(afterWeak.statPenalty);
+    expect(Math.abs(recovered.form!)).toBeLessThan(T.formDeadband); // back inside the dead-band...
+    expect(recovered.statPenalty).toBe(0); // ...so it costs nothing
+    expect(recovered.declineFired).toBe(false);
+  });
+
+  it('AC5: penalty and bonus are continuous at the dead-band edges (no cliff)', () => {
+    const eps = 1e-6;
+    expect(formPenalty(-T.formDeadband + eps)).toBe(0);
+    expect(formPenalty(-T.formDeadband - eps)).toBeLessThan(1e-3);
+    expect(formBonus(T.formDeadband - eps)).toBe(0);
+    expect(formBonus(T.formDeadband + eps)).toBeLessThan(1e-3);
+    // Monotone and capped on both sides.
+    for (let f = -2; f < 2; f += 0.01) {
+      expect(formPenalty(f)).toBeGreaterThanOrEqual(formPenalty(f + 0.01));
+      expect(formBonus(f + 0.01)).toBeGreaterThanOrEqual(formBonus(f));
+    }
+    expect(formPenalty(-3)).toBe(T.statPenaltyCap);
+    expect(formBonus(3)).toBe(T.perfBonusCap);
+  });
+
+  it('formOf is an EWMA from the baseline: one winsorized game can never leave the dead-band', () => {
+    expect(formOf([])).toBe(0);
+    expect(Math.abs(formOf([-T.zWinsor]))).toBeLessThan(T.formDeadband);
+    expect(Math.abs(formOf([0, 0, 0, T.zWinsor]))).toBeLessThan(T.formDeadband);
+  });
+
+  it('AC6: a sustained stretch above your own baseline raises the score and an ok note names it', () => {
+    const improved = statSpan(29, 35, { perDay: 3, damage: 10400, deaths: 4, elims: 25 });
+    const p = perfAt([...baseline, ...improved], 35);
+    expect(p.bonus).toBeGreaterThan(0);
+    expect(p.bonus).toBeLessThanOrEqual(T.perfBonusCap);
+    expect(p.delta).toBeGreaterThan(0);
+    const r = computeReadiness([...baseline, ...improved], ts(35, 20));
+    expect(r.subscores.performance.delta).toBeGreaterThan(0);
+    const note = r.signals.find((s) => s.key === 'good-form');
+    expect(note?.severity).toBe('ok');
+    expect(note?.label).toMatch(/above your own recent baseline/);
   });
 });

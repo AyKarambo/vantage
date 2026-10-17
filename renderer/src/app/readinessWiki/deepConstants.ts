@@ -28,9 +28,9 @@ export const deepConstants = {
   ratioHigh: T.ratioHigh, // 1.5
   ratioFreshMax: T.ratioFreshMax, // 1.15
 
-  // Sustained-decline (one-sided CUSUM) detection.
-  cusumThreshold: T.cusumThreshold, // 2.5
-  cusumSlack: T.cusumSlack, // 0.25
+  // Form curve (EWMA of per-game scores) — sustained slumps and good stretches alike.
+  formLambda: T.formLambda, // 0.1
+  formDeadband: T.formDeadband, // 0.3
   evidenceMinGames: T.evidenceMinGames, // 8
   heroLearnGames: T.heroLearnGames, // 12
 

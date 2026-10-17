@@ -207,6 +207,23 @@ function declineLabel(state: StateAt): string {
   return `${what} vs your own baseline — sustained across your recent games`;
 }
 
+/** The mirror of {@link declineLabel}: which metrics carry a form above the player's own baseline. */
+function goodFormLabel(state: StateAt): string {
+  const names: Record<string, string> = {
+    deaths: 'deaths down',
+    damage: 'damage up',
+    eliminations: 'elims up',
+    healing: 'healing up',
+  };
+  const parts = Object.entries(state.perf.metricMeans)
+    .filter(([, mean]) => (mean as number) >= 0.3)
+    .sort((a, b) => (b[1] as number) - (a[1] as number))
+    .slice(0, 2)
+    .map(([m]) => names[m]);
+  const what = parts.length ? ` — ${parts.join(', ')}` : '';
+  return `playing above your own recent baseline${what}`;
+}
+
 function buildSignals(state: StateAt): ReadinessSignal[] {
   const { load, mental, outcome, perf, subj } = state;
   const out: ReadinessSignal[] = [];
@@ -260,6 +277,11 @@ function buildSignals(state: StateAt): ReadinessSignal[] {
       label: "dip softened — you're hitting your active improvement targets",
       severity: 'ok',
     });
+  }
+  // Pushed after target-focus on purpose: both are 'ok' notes and the list keeps
+  // only the top five, so the newer note must never displace the dampener's.
+  if (loadCurrent && perf.bonus > 0) {
+    out.push({ key: 'good-form', label: goodFormLabel(state), severity: 'ok' });
   }
   if (loadCurrent && perf.stillLearning.length > 0) {
     out.push({

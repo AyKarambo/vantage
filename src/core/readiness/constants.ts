@@ -202,17 +202,17 @@ export const READINESS_TUNING = {
   passivityRampZ: 0.5,
   /** The guard engages gradually over the DEATHS dimension too (0 → full as deaths-favorable z grows 0 → this): deaths exactly at baseline must keep full weight, or one-hundredth fewer deaths could flip a whole verdict (strictly better play must never score worse). */
   passivityDeathsRampZ: 0.25,
-  /** One-sided CUSUM slack: only game-scores worse than baseline by more than this accumulate. */
-  cusumSlack: 0.25,
-  /** CUSUM decision threshold (in cumulative z units). One winsorized game ≤ 2.25 < this by construction. */
-  cusumThreshold: 2.5,
-  /** Minimum qualifying acute games before the decline index may fire (independent AND-gate). */
+  /** Form-curve smoothing: each counted game moves the form (an EWMA of per-game scores, starting at the baseline 0) by this share of its distance — roughly the last 10–20 games carry the read. One winsorized game moves it at most this × zWinsor = 0.25 < formDeadband, so a single game can never fire. */
+  formLambda: 0.1,
+  /** Form within ±this of the baseline is ordinary variance: no penalty, no bonus. Calibrated (σ ≈ 0.7 per game) to ~3% false alarms per week of normal play at any volume, while a sustained −0.5 slump is caught in ~3 of 4 weeks of 15+ games. */
+  formDeadband: 0.3,
+  /** Penalty points per z unit of form below the dead-band (continuous — no cliff at the edge); a form of −0.9 reaches the cap. */
+  formPenaltySlope: 50,
+  /** Bonus points per z unit of form above the dead-band; a form of +0.62 reaches perfBonusCap. */
+  formBonusSlope: 25,
+  /** Minimum qualifying acute games before the form may penalize or reward (independent AND-gate). */
   evidenceMinGames: 8,
-  /** Penalty when the decline index fires, at the threshold... */
-  statPenaltyBase: 10,
-  /** ...plus this per cumulative z unit above the threshold... */
-  statPenaltySlope: 4,
-  /** ...capped here. */
+  /** Cap on the form penalty. */
   statPenaltyCap: 30,
   /** Minimum decided games in the acute window before an account's winrate dip is trusted. */
   wrMinDecidedAcute: 20,
@@ -226,9 +226,7 @@ export const READINESS_TUNING = {
   wrPenaltyCap: 15,
   /** Manual-regime extra winrate cap phased in by (1−b): 15 at b=1 (corroboration, bit-identical) → 30 at b=0 (promoted primary). Slope & wrDipMin stay regime-invariant so objectiveAdverse never flips with b. */
   wrManualCapBoost: 15,
-  /** Mean acute game-z above this (with a quiet CUSUM) earns a small "playing above your usual" bonus. */
-  perfBonusMinZ: 0.5,
-  /** Cap on that bonus. */
+  /** Cap on the form bonus ("playing above your own recent baseline"). */
   perfBonusCap: 8,
   /** Role-fallback comparisons need at least this acute-vs-baseline hero-mix overlap (a mix shift is not a decline). */
   mixOverlapMin: 0.5,
