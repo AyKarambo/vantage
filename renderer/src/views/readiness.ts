@@ -88,7 +88,7 @@ function unlockingCard(ctx: ViewContext, unlock: NonNullable<ReadinessSummary['u
       { have: unlock.days, need: unlock.minSpanDays, label: 'days' },
     ]),
     h('div', { class: 'hint', style: { marginTop: '10px' } },
-      'Logging your mental state (tilt, comms) alongside matches raises confidence in the read once it unlocks.'),
+      'Logging your mental state (tilt, comms) alongside matches sharpens the read once it unlocks.'),
   );
 }
 

@@ -322,7 +322,10 @@ account's per-role lines beneath it.
 - **Readiness** — a **training-load & recovery** read borrowed from the sports-science idea
   of *supercompensation*, detecting **over- and undertraining**. One **score-first composite**
   (0–100, the band derives from it — score and verdict can't disagree) built from three
-  families: **behavioral load** (volume vs *your own* norm — habit is not risk), **objective
+  families: **behavioral load** (volume vs *your own* norm — habit is not risk; a session only
+  counts as long when it runs longer than 90% of *your own* sessions from the last 30 days, never
+  under 2.5 h, and its cost ramps in rather than cliffing; the rest bonus from days off is used
+  up over your first games of the day, not by the first one), **objective
   performance vs your own baselines** (winrate and elims/deaths/damage/healing per 10 minutes
   **played** — fight time, not the wall clock — per hero *and per account*, so an alt's lobbies
   never skew your main; the account you've played most lately is your **main** and carries the
@@ -330,9 +333,15 @@ account's per-role lines beneath it.
   main's usual rank — a second account near your own level isn't smurfing. Only a real rank gap
   costs anything, tapering down to **×0.15** for one that's clearly lower; the older flat **×0.35**
   now only applies as a fallback when a rank can't be compared at all. Credit is weighed the same
-  as blame — a great or an awful week on a mismatched alt says less either way; a decline only
-  counts once it's sustained — one
-  long marathon session qualifies, a single bad game never does), and
+  as blame — a great or an awful week on a mismatched alt says less either way. Your **form** is
+  a running average of how each game compares with your own baseline, so one game can never move
+  it: a sustained slump costs points while it lasts and stops costing them as soon as your games
+  are back at your usual, and a good stretch earns a small bonus. A game where you swapped heroes
+  counts for the hero you mostly played (60%+ of the time), on that hero's own stats and minutes.
+  A winrate dip only counts when it is 10+ points *and* beyond what luck explains (2 standard
+  errors), and with live stats it only costs points to the extent your own form is down too —
+  matchmaking pulls every winrate toward 50%, so losses while your stats hold are a note, not a
+  penalty), and
   down-weighted **self-report** (tilt + your performance rating, hard-capped so a feeling
   never outweighs the evidence). Working on your **improvement targets** softens a results dip
   (deliberate practice makes you temporarily worse — that's normal) unless your tilt is clearly
@@ -351,7 +360,13 @@ account's per-role lines beneath it.
   missing stats are never counted against you). On manual logs alone (today's norm, pending Overwolf
   approval) results-vs-your-own-baseline are promoted and a norm-free absolute training-load read
   (consecutive days, daily volume, marathon sessions) fills in for unmeasurable outcomes, with
-  confidence capped at medium; **load alone still never reads red in any regime**. A simultaneous
+  confidence capped at medium; **load alone still never reads red in any regime**. **Confidence**
+  reads *high* only when four checks on your recent games all pass: you played on 12 of the last
+  21 days, at least half of your last week's games have comparable live stats, there are enough
+  decided games on one account to compare your winrate (20 this week, 30 before), and at least 70%
+  of the week's read comes from your main account (rank-weighted, so an alt at your main's level
+  doesn't count as mixed). Total history size never counts, and the screen lists whichever checks
+  you're missing. A simultaneous
   drop in output *and* deaths reads as playing scared, not as improvement (deaths only earn credit
   while output holds). A week-plus layoff reads as **Rusty** (ramp-back-up nudge,
   not an alarm); a thin weekly rhythm gets a consistency nudge **only on proven rank stagnation**
@@ -890,8 +905,13 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   threshold, re-fire cadence, re-arm on a win), driven by the main process after every
   recorded game.
 - `core/readiness/` — the pure readiness / training-load model: gap-based sessions, a local
-  4am-day boundary, EWMA acute-vs-chronic load, per-account/per-hero stat **baselines** with a
-  one-sided-CUSUM decline detector (`baselines.ts`, `performance.ts` — the still-learning count
+  4am-day boundary, EWMA acute-vs-chronic load (`signals.ts` / `score.ts`: a personal
+  long-session bar — the player's own P90 session length, floored at 2.5 h — and a rest bonus
+  carried through the first games of a play day), per-account/per-hero stat **baselines** (a
+  hero-swap game counts for its dominant hero) read through a **form curve** — an EWMA of per-game
+  scores with a dead-band, a continuous penalty and a mirror-image bonus — and a winrate dip that
+  must be statistically significant and, with live stats, backed by that form
+  (`baselines.ts`, `performance.ts` — the still-learning count
   pools a hero's games across accounts, and `mainAccountOf` picks the main; the finished subscore
   is then damped per game by how far an alt's rank (`GameRecord.rankAtStart`) sits below the
   main's own MEDIAN rank over a trailing window — full weight when close, tapering to a floor
@@ -900,8 +920,10 @@ Electron/Overwolf/Notion plumbing kept at the edges:
   subjective read (`subjective.ts`), and the **score-first composite** — three bounded
   subscore deltas on a 75 anchor, with the band derived from (score, driver, hard gates)
   (`score.ts`), plus a continuous **stats↔manual blend** `b` (`regime.ts`, bit-identical to the
-  old engine at `b=1`) and the regime label. All thresholds are conservative, centrally tuned
-  constants; every gate is unit-tested. Surfaced on `DashboardData` like `mental`.
+  old engine at `b=1`) and the regime label. Confidence comes from four recent-data gates
+  (`index.ts`; the screen lists the unmet ones), never from history size. All thresholds are
+  conservative, centrally tuned constants; every gate is unit-tested. Surfaced on `DashboardData`
+  like `mental`.
 - `shared/contract/` — the single typed IPC contract shared by main **and** renderer
   (import path stays `shared/contract`), including the channel map that preload and the
   renderer bridge are generated from.

@@ -33,6 +33,8 @@ export const deepConstants = {
   formDeadband: T.formDeadband, // 0.3
   evidenceMinGames: T.evidenceMinGames, // 8
   heroLearnGames: T.heroLearnGames, // 12
+  // A hero-swap game counts for the hero that holds at least this share of its played time.
+  dominantHeroSharePct: T.dominantHeroShare * 100, // 60
 
   // Several accounts, one player: the main account (most games played recently) carries the
   // verdict; an alt game's weight depends on how close its rank was to the main's usual one.
@@ -46,15 +48,37 @@ export const deepConstants = {
   tiltPenCap: T.tiltPenCap, // 10
   tiltPenCapManual: T.tiltPenCapManual, // 16
 
-  // Deliberate-practice dampener + outcome cap.
+  // Deliberate-practice dampener + outcome cap + winrate significance (a dip must be big AND beyond luck).
   dampFactor: T.dampFactor, // 0.5
+  wrDipMinPoints: T.wrDipMin * 100, // 10
+  wrSignificanceZ: T.wrSignificanceZ, // 2
   wrPenaltyCap: T.wrPenaltyCap, // 15
+  wrPenaltyCapManual: T.wrPenaltyCap + T.wrManualCapBoost, // 30 (manual endpoint)
 
-  // Rest, supercompensation & rust.
+  // Rest, supercompensation & rust. The morning's rest bonus is used up over the first games of a play day.
   restRecoveryCap: T.restRecoveryCap, // 25
+  restCarryPct: T.restCarryShare * 100, // 50
+  restCarryMinGames: T.restCarryMinGames, // 3
+  restCarryMaxGames: T.restCarryMaxGames, // 10
   rustFloor: T.baseScore - T.rustPenaltyCap, // 40
   rustDecayPerDay: T.rustDecayPerDay, // 12
   rustDays: T.rustDays, // 7
+
+  // Long sessions: judged against the player's own habit, never below the floor.
+  longSessionFloorHours: T.sessionLongMinutes / 60, // 2.5
+  longSessionPercentile: T.longSessionPercentile * 100, // 90
+  longSessionWindowDays: T.longSessionWindowDays, // 30
+  longSessionMinSessions: T.longSessionMinSessions, // 10
+  longSessionRampMultiple: 1 + T.longSessionRampShare, // 1.5
+  longSessionPen: T.longSessionPen, // 8
+
+  // Confidence: 'high' needs all four gates, judged on the recent windows only.
+  confidenceActiveDays: T.confidenceActiveDays, // 12
+  confidenceWindowDays: T.chronicDays, // 21
+  statCoverageHighPct: T.statCoverageHigh * 100, // 50
+  wrMinDecidedAcute: T.wrMinDecidedAcute, // 20
+  wrMinDecidedBase: T.wrMinDecidedBase, // 30
+  accountMixBarPct: T.accountMixBar * 100, // 70
 
   // Rank-gated undertraining nudge.
   lowFrequencyDaysPerWeek: T.lowFrequencyDaysPerWeek, // 3

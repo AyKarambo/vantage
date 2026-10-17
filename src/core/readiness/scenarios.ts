@@ -74,7 +74,7 @@ export interface CuratedScenario {
 }
 
 /**
- * The curated 9. Live-matchable ones carry medium/high-confidence signatures; the
+ * The curated 10. Live-matchable ones carry medium/high-confidence signatures; the
  * two `libraryOnly` recovery archetypes read low-confidence in practice (nothing
  * to reconstruct), so they teach only through the browsable library.
  */
