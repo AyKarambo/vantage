@@ -479,7 +479,11 @@ export function perfState(
   // (manual) the dip stands alone as before; at b = 1 with form holding it is a note, not a penalty.
   // Without enough counted games the stats can't vouch, so the dip stands alone there too.
   const formAdverse = enoughEvidence && form !== null ? clamp(-form / T.formDeadband, 0, 1) : 1;
-  const wrPenalty = wrRaw * (1 - blend + blend * formAdverse);
+  const wrBacking = 1 - blend + blend * formAdverse;
+  const wrPenalty = wrRaw * wrBacking;
+  // The dip only counts as an objective ADVERSE family (red gate, subjective agree-gating) when at
+  // least half of it stands — a sliver of corroboration from a form a hair below baseline must not.
+  const wrAdverse = wrPenalty > 0 && wrBacking >= 0.5;
 
   // --- target-focus dampener (deliberate-practice exemption) ---
   // Day-gated on BOTH ends: a target only counts from its creation day, and an
@@ -561,7 +565,7 @@ export function perfState(
     dampened,
     stillLearning: [...stillLearning],
     metricMeans,
-    objectiveAdverse: declineFired || wrPenalty > 0,
+    objectiveAdverse: declineFired || wrAdverse,
     blend,
     blendCoverage,
     delta,

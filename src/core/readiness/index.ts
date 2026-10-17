@@ -109,8 +109,10 @@ function toLoad(state: StateAt): ReadinessLoad {
 function toSubscores(state: StateAt): ReadinessSubscores {
   return {
     load: { delta: round1(state.deltas.load), available: true, coverage: round2(state.blend) },
-    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.perf.statCoverage) },
-    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.mental.coverage },
+    // Coverage is data quality, read from the same last-active-day frame as the confidence gates,
+    // so the subscore tiles and the confidence line never show two different numbers.
+    performance: { delta: round1(state.deltas.perf), available: state.perf.available, coverage: round2(state.last.perf.statCoverage) },
+    subjective: { delta: round1(state.deltas.subj), available: state.subj.available, coverage: state.last.mental.coverage },
   };
 }
 

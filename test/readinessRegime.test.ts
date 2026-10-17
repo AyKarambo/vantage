@@ -252,6 +252,19 @@ describe('T5 — promoted results (winrate) ceiling', () => {
     expect(note?.label).toMatch(/stats are holding/);
   });
 
+  it('a dip only slightly backed by form costs a sliver but is not an adverse family (review fix)', () => {
+    const mild = [
+      ...statSpan(0, 28, { perDay: 12, result: 'Win', mental: CALM }),
+      ...statSpan(29, 35, { perDay: 12, result: 'Loss', mental: CALM, damage: 7600 }),
+    ];
+    const p = perfState(mild, refOf(mild), EMPTY_CONTEXT, false);
+    expect(p.blend).toBe(1);
+    expect(p.form!).toBeLessThan(0);
+    expect(p.form!).toBeGreaterThan(-T.formDeadband / 2); // backed by less than half
+    expect(p.wrPenalty).toBeGreaterThan(0);
+    expect(p.objectiveAdverse).toBe(false); // no red-gate eligibility, no subjective agree-shrink
+  });
+
   it('AC14: b=1 with form down too — the same dip costs points, capped at the shipped 15', () => {
     const slumping = [
       ...statSpan(0, 28, { perDay: 12, result: 'Win', mental: CALM }),
