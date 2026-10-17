@@ -101,8 +101,9 @@ account's per-role lines beneath it.
   match →**, and **Grade it on Review →** when it's still ungraded. A match GEP delivered
   with no result at all reads **"The game didn't report a win or loss for this one"** with
   a **Set result on Review →** link instead.
-  Above it, **kills, damage and healing totalled per team** — the side ahead on each line
-  (more of each) is the brighter one. All three are read off the game's own scoreboard, so
+  Above it, **kills, damage, healing and true damage totalled per team** — the side ahead on each line
+  (more of each) is the brighter one. **True damage** is a team's damage minus the other team's
+  healing (floored at 0): roughly how much of the damage wasn't healed away. All three are read off the game's own scoreboard, so
   a team's kills line is exactly the sum of the **other** team's **D** column below it and
   they remain when the kill feed is off. Rows are ordered the way the game orders them: your
   team first, then tank, both DPS, both supports (the same ordering the stored match detail uses).

@@ -19,6 +19,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **True damage on Live** — the team tally now shows each side's damage minus the other side's healing
+  (never below 0), so you can see at a glance whose damage is actually sticking instead of being healed away.
+  It's an approximation built from the scoreboard's running totals.
 - **Open Live on match start** — a new switch in **Settings → App behavior** (off by default).
   When it's on, Vantage switches to the **Live** screen the moment a match begins, so the scoreboard
   is already up when you alt-tab. It only changes the screen *inside* Vantage: it never brings the

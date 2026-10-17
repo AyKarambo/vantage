@@ -23,7 +23,7 @@
 import { h, render } from '../dom';
 import type { DashboardData, LiveMatchPayload, PlayerRecord, TargetSummary } from '../../../src/shared/contract';
 import { dayPartAt } from '../../../src/core/analytics';
-import { liveTeamKills } from '../../../src/core/liveMatch';
+import { liveTrueDamage, liveTeamKills } from '../../../src/core/liveMatch';
 import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getGepStatus, subscribeGepStatus } from '../gepStatus';
@@ -419,6 +419,8 @@ function priorityCard(items: DashboardData['focusMaps'], ctx: ViewContext): HTML
   );
 }
 
+interface TallyRow { label: string; yours: number; theirs: number; compact: boolean; title?: string }
+
 /**
  * The per-team tally. Deliberately NOT called a score anywhere: Overwatch's feed
  * reports no objective score, and this is a kill count. Everything here is read
@@ -432,7 +434,7 @@ function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (
   // None of these rows depend on the kill feed, so with it switched off they all
   // stay: they are TAB-screen numbers the game is showing, not anything derived
   // from kill events.
-  const rows: Array<{ label: string; yours: number; theirs: number; compact: boolean }> = [];
+  const rows: TallyRow[] = [];
   if (p.totals.deathsKnown) {
     const kills = liveTeamKills(p.totals);
     rows.push({ label: 'kills', yours: kills.yours, theirs: kills.theirs, compact: false });
@@ -440,6 +442,14 @@ function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (
   if (p.totals.known) {
     rows.push({ label: 'damage', yours: p.totals.yours.damage, theirs: p.totals.theirs.damage, compact: true });
     rows.push({ label: 'healing', yours: p.totals.yours.healing, theirs: p.totals.theirs.healing, compact: true });
+    const trueDmg = liveTrueDamage(p.totals);
+    rows.push({
+      label: 'true damage',
+      yours: trueDmg.yours,
+      theirs: trueDmg.theirs,
+      compact: true,
+      title: 'Damage dealt minus the other team’s healing — roughly how much of it wasn’t healed away. An approximation from the cumulative scoreboard totals.',
+    });
   }
   // The off-state hint (S5) keeps the card alive even with zero rows, so
   // switching the setting back on has somewhere to live instead of the
@@ -474,7 +484,7 @@ function tallyCard(p: LiveMatchPayload, killFeedEnabled: boolean, setKillFeed: (
  * reads without adding a second colour language on top of the team one. Ahead
  * always means MORE — kills, damage and healing all point the same way.
  */
-function tallyRow(r: { label: string; yours: number; theirs: number; compact: boolean }): Node[] {
+function tallyRow(r: TallyRow): Node[] {
   const text = (n: number): string => (r.compact ? fmt(n) : String(n));
   const value = (n: number, tone: string, leads: boolean): HTMLElement =>
     h('div', {
@@ -485,7 +495,7 @@ function tallyRow(r: { label: string; yours: number; theirs: number; compact: bo
   const theirsLeads = r.theirs >= r.yours;
   return [
     value(r.yours, 'var(--win-text)', yoursLeads),
-    h('div', { class: 'u-dim live-tally-label' }, r.label),
+    h('div', { class: 'u-dim live-tally-label', title: r.title }, r.label),
     value(r.theirs, 'var(--loss-text)', theirsLeads),
   ];
 }
