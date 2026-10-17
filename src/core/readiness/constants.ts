@@ -168,6 +168,8 @@ export const READINESS_TUNING = {
 
   /** Games below this PLAYED time — minutes the player could actually fight, measured or estimated (see `../playedTime`) — are excluded from per-10 rates (a 4-minute stomp explodes the denominator). On the PLAYED basis, not the wall clock: 6 wall minutes used to be the bar, and the same match now reads ~4.5 played once hero select, the mode's setup locks and the scoreboard come off, so the bar moved with it rather than quietly dropping every short game out of the baselines. It is one bar over played time, so what it means in wall-clock terms varies by mode (~6 min on Control, ~7.5 on Escort/Hybrid, where the setup locks are longer) — that is the point: the same 4.5 minutes of fighting either way. A hand-logged duration is taken as typed, so it is compared as-is. */
   minPer10Minutes: 4.5,
+  /** A multi-hero match counts for its dominant hero when that hero holds at least this share of the played time — with per-hero minutes the hero's own stats over its own minutes are as clean as a one-hero game. */
+  dominantHeroShare: 0.6,
   /** A hero with fewer lifetime games — counted ACROSS ALL the player's accounts (experience is the player's, not the account's) — is "still learning" and excluded from decline detection. */
   heroLearnGames: 12,
   /** FALLBACK weight for an alt-account game when its rank can't be compared to the main's (no anchor on one side or the other — see `rankProximityWeight`). Rank-aware weighting is the normal path; this is what it degrades to without the data for it. */

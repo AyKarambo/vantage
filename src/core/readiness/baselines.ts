@@ -2,24 +2,26 @@
  * Personal per-10-minute stat baselines for the objective-performance subscore.
  *
  * Buckets are PER ACCOUNT (a smurf's easy-lobby numbers must never inflate the
- * main account's baseline), keyed by hero with a per-role fallback. Only
- * single-hero games with real `perHero` stats and a usable PLAYED time qualify.
+ * main account's baseline), keyed by hero with a per-role fallback. Only games
+ * with real `perHero` stats and a usable PLAYED time qualify — single-hero
+ * games, and multi-hero games for their DOMINANT hero (see `per10SourceOf`).
  * The per-10 divisor is the time the player could actually fight — measured
  * from the round events on newer captures, estimated from the wall clock on
  * older ones (see `../playedTime`) — so a bucket built from both eras stays
- * comparable. Multi-hero games are still excluded: newer captures do record
- * per-hero minutes, but older ones don't, and mixing attributed with
- * unattributed rows inside one bucket would bias it (the display-side
- * `heroStats` accepts that bias for table completeness; a decline detector
- * must not).
+ * comparable. A multi-hero game counts for its dominant hero when per-hero
+ * minutes exist: newer captures record them, so that hero's own stats over its
+ * own minutes are as clean as a one-hero game. Games without per-hero minutes
+ * stay excluded: mixing attributed with unattributed rows inside one bucket
+ * would bias it (the display-side `heroStats` accepts that bias for table
+ * completeness; a decline detector must not).
  *
  * Hero EXPERIENCE (`heroLifetime`, the learning-window input) is the one map
  * that pools ACROSS accounts: how many games a player has on a hero is a
  * property of the player, not of the account they queued on.
  */
 
-import type { GameRecord } from '../analytics';
-import { playedMinutesOf } from '../playedTime';
+import type { GameRecord, HeroStat } from '../analytics';
+import { heroCredits, playedMinutesOf } from '../playedTime';
 import { READINESS_TUNING as T } from './constants';
 import { dayOrdinal } from './day';
 import { meanSd, type MeanSd } from './stats';
@@ -64,31 +66,70 @@ export interface Baselines {
 export const heroKey = (account: string, hero: string): string => `${account}|${hero}`;
 export const roleKey = (account: string, role: string): string => `${account}|${role}`;
 
+/** What feeds a game's per-10 rates: one hero, that hero's stat row, and the minutes it was played. */
+export interface Per10Source {
+  hero: string;
+  row: HeroStat;
+  /** The per-10 divisor: the game's played minutes (single hero) or the hero's share of them (dominant hero). */
+  minutes: number;
+}
+
 /**
- * The per-10 divisor for a game — its played minutes — or null when the game
- * cannot feed per-10 rates (strict hygiene, plan §2.2): single-hero games with
- * a real `perHero` row only, and at least `minPer10Minutes` of PLAYED time
- * (measured or estimated by `playedMinutesOf`; nothing is fabricated).
+ * The hero, stat row and played minutes a game contributes to per-10 rates, or
+ * null when it cannot feed them (strict hygiene, plan §2.2). Nothing is
+ * fabricated; two shapes qualify, each needing at least `minPer10Minutes` of
+ * PLAYED time (measured or estimated by `playedMinutesOf`) on the hero scored:
+ *  - SINGLE hero: one hero and one real `perHero` row, scored over the game's
+ *    played minutes.
+ *  - DOMINANT hero: a swap-heavy game whose rows ALL carry per-hero minutes and
+ *    whose top hero holds at least `dominantHeroShare` of them, scored on its
+ *    own stats over its own played minutes (the game's played time × its share).
+ *    Rows without minutes (older captures, or an edited record whose evenly
+ *    split rows are no longer the feed's) stay out — nothing is inferred.
+ */
+export function per10SourceOf(g: GameRecord): Per10Source | null {
+  if (!g.perHero?.length) return null;
+  const played = playedMinutesOf(g);
+  if (played === null) return null;
+
+  if (g.heroes.length === 1 && g.perHero.length === 1) {
+    return played >= T.minPer10Minutes ? { hero: g.heroes[0], row: g.perHero[0], minutes: played } : null;
+  }
+
+  // Same-hero swap segments merge into one credit, so a Tracer → Genji → Tracer
+  // game reads as the two heroes it was, not three.
+  const credits = heroCredits(g);
+  if (credits.length === 0 || !credits.every((c) => typeof c.stats.minutes === 'number')) return null;
+  // A listed hero with no stat row would leave its time unaccounted for and
+  // inflate the top hero's share, so the split must cover every hero played.
+  if (g.heroes.some((h) => !credits.some((c) => c.hero === h))) return null;
+  const top = credits.reduce((a, b) => (b.share > a.share ? b : a));
+  if (top.share < T.dominantHeroShare || !((top.stats.minutes ?? 0) > 0)) return null;
+  const minutes = played * top.share;
+  return minutes >= T.minPer10Minutes ? { hero: top.hero, row: top.stats, minutes } : null;
+}
+
+/**
+ * The per-10 divisor for a game — the played minutes of the hero it is scored
+ * on — or null when the game cannot feed per-10 rates (see {@link per10SourceOf}).
  */
 export function per10MinutesOf(g: GameRecord): number | null {
-  if (g.heroes.length !== 1 || g.perHero?.length !== 1) return null;
-  const played = playedMinutesOf(g);
-  return played !== null && played >= T.minPer10Minutes ? played : null;
+  return per10SourceOf(g)?.minutes ?? null;
 }
 
 /** Whether a game qualifies for the per-10 decline component. */
 export function qualifiesForPer10(g: GameRecord): boolean {
-  return per10MinutesOf(g) !== null;
+  return per10SourceOf(g) !== null;
 }
 
-function toQualifying(g: GameRecord, playedMinutes: number): QualifyingGame {
-  const row = g.perHero![0];
-  const scale = 10 / playedMinutes;
+function toQualifying(g: GameRecord, source: Per10Source): QualifyingGame {
+  const { row } = source;
+  const scale = 10 / source.minutes;
   return {
     ordinal: dayOrdinal(g.timestamp),
     timestamp: g.timestamp,
     account: g.account,
-    hero: g.heroes[0],
+    hero: source.hero,
     role: g.role,
     per10: {
       eliminations: row.eliminations * scale,
@@ -110,9 +151,9 @@ export function buildBaselines(games: GameRecord[]): Baselines {
     for (const hero of g.heroes) {
       heroLifetime.set(hero, (heroLifetime.get(hero) ?? 0) + 1);
     }
-    const played = per10MinutesOf(g);
-    if (played === null) continue;
-    const q = toQualifying(g, played);
+    const source = per10SourceOf(g);
+    if (source === null) continue;
+    const q = toQualifying(g, source);
     qualifying.push(q);
     const hk = heroKey(q.account, q.hero);
     const rk = roleKey(q.account, q.role);

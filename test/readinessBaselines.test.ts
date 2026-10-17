@@ -4,9 +4,12 @@ import {
   baselineFor,
   heroMixOverlap,
   heroKey,
+  per10MinutesOf,
+  per10SourceOf,
   qualifiesForPer10,
 } from '../src/core/readiness/baselines';
 import { dayOrdinal, READINESS_TUNING as T } from '../src/core/readiness';
+import type { GameRecord, HeroStat } from '../src/core/analytics';
 import { playedMinutesOf } from '../src/core/playedTime';
 import { ts, game, statSpan } from './readinessFixtures';
 
@@ -15,7 +18,7 @@ describe('qualifiesForPer10 (per-10 hygiene)', () => {
   it('accepts a single-hero game with perHero stats and a usable played time', () => {
     expect(qualifiesForPer10(base)).toBe(true);
   });
-  it('excludes multi-hero games (older captures record no per-hero playtime; one bucket must not mix eras)', () => {
+  it('excludes multi-hero games whose rows carry no per-hero minutes (older captures; one bucket must not mix attributed with unattributed rows)', () => {
     const multi = {
       ...base,
       heroes: ['Tracer', 'Sombra'],
@@ -37,6 +40,98 @@ describe('qualifiesForPer10 (per-10 hygiene)', () => {
   });
   it('excludes games without perHero stats (manual logs)', () => {
     expect(qualifiesForPer10(game({ timestamp: ts(10), durationMinutes: 10, playedMinutes: 10 }))).toBe(false);
+  });
+});
+
+describe('dominant-hero games (per-hero minutes) qualify for their dominant hero', () => {
+  const row = (hero: string, o: Partial<HeroStat> = {}): HeroStat => ({
+    hero, role: 'damage', eliminations: 20, deaths: 6, assists: 3, damage: 9000, healing: 0, mitigation: 0, ...o,
+  });
+  /** A GEP game with a measured played time and the given hero rows (heroes listed in row order). */
+  const swapGame = (playedMinutes: number, perHero: HeroStat[]): GameRecord =>
+    game({
+      timestamp: ts(10),
+      source: 'gep',
+      heroes: [...new Set(perHero.map((r) => r.hero))],
+      durationMinutes: playedMinutes + 2,
+      playedMinutes,
+      perHero,
+    });
+  const genji = (minutes: number | undefined) =>
+    row('Genji', { minutes, eliminations: 21, deaths: 7, assists: 3, damage: 10500 });
+  const tracer = (minutes: number | undefined) => row('Tracer', { minutes });
+
+  it('counts a 75% Genji match once, on Genji stats over Genji played minutes', () => {
+    const g = swapGame(14, [genji(10.5), tracer(3.5)]);
+    expect(qualifiesForPer10(g)).toBe(true);
+    expect(per10MinutesOf(g)).toBeCloseTo(10.5, 9); // 14 played × 0.75
+    expect(per10SourceOf(g)).toMatchObject({ hero: 'Genji', row: { hero: 'Genji' } });
+
+    const b = buildBaselines([g]);
+    expect(b.qualifying).toHaveLength(1);
+    expect(b.heroBuckets.get(heroKey('Main', 'Genji'))).toHaveLength(1);
+    expect(b.heroBuckets.has(heroKey('Main', 'Tracer'))).toBe(false);
+    const q = b.heroBuckets.get(heroKey('Main', 'Genji'))![0];
+    expect(q.hero).toBe('Genji');
+    expect(q.per10.damage).toBeCloseTo(10000, 9); // 10500 over 10.5 minutes
+    expect(q.per10.eliminations).toBeCloseTo(20, 9);
+    expect(q.per10.deaths).toBeCloseTo(20 / 3, 9);
+    // Experience still counts every hero the game lists.
+    expect(b.heroLifetime.get('Genji')).toBe(1);
+    expect(b.heroLifetime.get('Tracer')).toBe(1);
+  });
+
+  it('excludes a game listing a hero that has no stat row (its time would be unaccounted for)', () => {
+    const g = { ...swapGame(14, [genji(10.5)]), heroes: ['Genji', 'Tracer'] };
+    expect(qualifiesForPer10(g)).toBe(false);
+  });
+
+  it('qualifies at exactly the dominant share', () => {
+    expect(T.dominantHeroShare).toBe(0.6);
+    const g = swapGame(10, [genji(6), tracer(4)]);
+    expect(per10MinutesOf(g)).toBeCloseTo(6, 9);
+    expect(per10SourceOf(g)?.hero).toBe('Genji');
+  });
+
+  it('excludes a match where no hero reaches the dominant share (55/45)', () => {
+    const g = swapGame(14, [genji(7.7), tracer(6.3)]);
+    expect(qualifiesForPer10(g)).toBe(false);
+    expect(buildBaselines([g]).qualifying).toHaveLength(0);
+  });
+
+  it('excludes a dominant hero with fewer played minutes than the per-10 bar', () => {
+    // 4.0 of 6.0 played minutes is a 67% share, but 4.0 < minPer10Minutes (4.5).
+    const g = swapGame(6, [genji(4), tracer(2)]);
+    expect(qualifiesForPer10(g)).toBe(false);
+    expect(buildBaselines([g]).qualifying).toHaveLength(0);
+  });
+
+  it('excludes multi-hero rows without per-hero minutes — all or any missing', () => {
+    expect(qualifiesForPer10(swapGame(14, [genji(undefined), tracer(undefined)]))).toBe(false);
+    // One timed row beside an untimed one is still mixed attribution.
+    expect(qualifiesForPer10(swapGame(14, [genji(12), tracer(undefined)]))).toBe(false);
+  });
+
+  it('merges unmerged same-hero segments: one hero, summed stats, one qualifying game', () => {
+    const g = game({
+      timestamp: ts(10),
+      source: 'gep',
+      heroes: ['Genji'],
+      durationMinutes: 14,
+      playedMinutes: 12,
+      perHero: [
+        row('Genji', { minutes: 6, eliminations: 10, deaths: 3, damage: 5000 }),
+        row('Genji', { minutes: 6, eliminations: 8, deaths: 4, damage: 4000 }),
+      ],
+    });
+    expect(per10MinutesOf(g)).toBeCloseTo(12, 9);
+    const b = buildBaselines([g]);
+    expect(b.qualifying).toHaveLength(1);
+    expect(b.heroBuckets.get(heroKey('Main', 'Genji'))).toHaveLength(1);
+    const q = b.qualifying[0];
+    expect(q.per10.eliminations).toBeCloseTo(15, 9); // (10 + 8) over 12 minutes
+    expect(q.per10.deaths).toBeCloseTo(35 / 6, 9); // (3 + 4) over 12 minutes
+    expect(q.per10.damage).toBeCloseTo(7500, 9); // (5000 + 4000) over 12 minutes
   });
 });
 
