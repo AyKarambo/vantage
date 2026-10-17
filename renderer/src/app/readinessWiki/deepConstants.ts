@@ -52,6 +52,8 @@ export const deepConstants = {
   dampFactor: T.dampFactor, // 0.5
   wrDipMinPoints: T.wrDipMin * 100, // 10
   wrSignificanceZ: T.wrSignificanceZ, // 2
+  wrSignificanceFromZ: T.wrSignificanceZ - T.wrSignificanceRamp, // 1.5 (the dip starts to count)
+  wrSignificanceFullZ: T.wrSignificanceZ + T.wrSignificanceRamp, // 2.5 (it counts in full)
   wrPenaltyCap: T.wrPenaltyCap, // 15
   wrPenaltyCapManual: T.wrPenaltyCap + T.wrManualCapBoost, // 30 (manual endpoint)
 

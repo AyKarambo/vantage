@@ -85,10 +85,8 @@ const SCENARIOS: Scenario[] = [
   {
     id: "grinder-plus-one-rest-day",
     story: "Heavy grinder, one rest day in",
-    // 60 → 62 (T1): the ratio and volume arms count the same surge once. 62 → 82 (T7): a rest day is now read
-    // as of today, with the rest day inside the 3-day load window, so the surge's threshold-based arms mostly
-    // clear after one day (was the frozen surge × 2/3). Still 'recovering' — that gate reads the last session.
-    expect: {"score":82,"band":"recovering","regime":"manual","confidence":"low"},
+    // 60 → 62 (readiness-score-accuracy T1): the ratio and volume arms now count the same surge once.
+    expect: {"score":62,"band":"recovering","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(28, 20);
@@ -99,9 +97,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: "grinder-supercompensation-peak",
     story: "Same grinder, three rest days: the peak",
-    // 100 → 98 (T7): read as of today, the rest-scarcity arm (few rest days over 3 weeks) still shows
-    // through after three rest days; the frozen-frame fade used to zero it.
-    expect: {"score":98,"band":"fresh","regime":"manual","confidence":"low"},
+    expect: {"score":100,"band":"fresh","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(30, 20);
@@ -184,8 +180,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: "rest-day-1-recovering",
     story: "First rest day after a heavy stretch: bonus nearly cancels the residual load",
-    // 74 → 82 (T7): read as of today the rest day sits inside the load windows; the band stays 'recovering'.
-    expect: {"score":82,"band":"recovering","regime":"manual","confidence":"low"},
+    expect: {"score":74,"band":"recovering","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = span(0, 34, { perDay: 8 });
       const now = ts(35, 20);
@@ -196,8 +191,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: "rest-day-3-supercompensation-peak",
     story: "Three rest days after the grind: the supercompensation peak (score 100)",
-    // 100 → 98 (T7): the rest-scarcity arm still shows through after three rest days (see the grinder peak).
-    expect: {"score":98,"band":"fresh","regime":"manual","confidence":"low"},
+    expect: {"score":100,"band":"fresh","regime":"manual","confidence":"low"},
     fixture: () => {
       const games = span(0, 34, { perDay: 8 });
       const now = ts(37, 20);

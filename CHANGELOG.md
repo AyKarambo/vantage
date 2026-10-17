@@ -82,7 +82,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   usual, and a good stretch can raise the score a little. Long sessions are measured against your
   own habits: longer than most of yours, never under 2.5 hours, and only for that day and the
   next. A losing stretch only counts when it's clearly more than bad luck and, with live stats,
-  your own play slipped too; otherwise it's just a note. Help's example stories now include one
+  your own play slipped too; otherwise it's just a note. While you're grinding hard without a
+  break, a real losing stretch counts in full. Rest days keep their recovery curve: a heavy
+  stretch still takes a day or two of rest to wear off. Help's example stories now include one
   for a dip in your own play. **Your score and its trend chart will shift once** when you update,
   because past days are re-read the same way.
 - **Readiness confidence now says what's missing.** When it isn't "high", the Readiness screen

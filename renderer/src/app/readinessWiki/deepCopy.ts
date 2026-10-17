@@ -72,9 +72,11 @@ export const deepCopy = {
     return (
       `Two guardrails keep the score fair. When you're actively hitting improvement targets, a results dip is halved (×${dc.dampFactor}) — ` +
       `you're worse because you're practising. And a losing stretch has to prove itself: your winrate must sit at least ${dc.wrDipMinPoints} points under your usual ` +
-      `and at least ${dc.wrSignificanceZ} standard errors away (the swing luck alone makes at your sample size), so a few coin-flip losses never count. ` +
+      `and stand clearly beyond the swing luck alone makes at your sample size: it starts to count at ${dc.wrSignificanceFromZ} standard errors, ` +
+      `counts half at ${dc.wrSignificanceZ} and in full from ${dc.wrSignificanceFullZ}, so a few coin-flip losses never count and one game near the line never flips it on or off. ` +
       `Even then, with live stats it only costs points to the extent your own form is down too — matchmaking pulls every winrate toward 50%, ` +
-      `so losses while your stats hold are a note, not a penalty. ` +
+      `so losses while your stats hold are a note, not a penalty. The exception is heavy, uninterrupted play: losing while you grind ` +
+      `is exactly the overtraining read, so there it counts in full. ` +
       `With live stats, losing alone can never move the score more than ${dc.wrPenaltyCap} points. ` +
       `On manual logs there are no stats to check it against, so a real dip counts on its own, up to ${dc.wrPenaltyCapManual}.`
     );
