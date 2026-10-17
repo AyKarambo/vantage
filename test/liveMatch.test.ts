@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FRESH_MATCH_START_MS, INITIAL_LIVE_MATCH, LIVE_FEED_CAP, isMatchStart, reduceLiveMatch, liveMatchDetached,
-  liveRoster, liveOpponentNames, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
+  liveRoster, liveOpponentNames, liveTrueDamage, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
 } from '../src/core/liveMatch';
 import type { GepMessage } from '../src/core/model';
 
@@ -315,6 +315,22 @@ describe('liveTeamTotals', () => {
     it('is withheld when the feed gave no teams, whatever the rows say', () => {
       const roster = [p({ isLocal: true, deaths: 3 }), p({ deaths: 2 })];
       expect(liveTeamTotals(roster).deathsKnown).toBe(false);
+    });
+  });
+
+  describe('true damage', () => {
+    it('is each side\'s damage minus the other side\'s healing', () => {
+      expect(liveTrueDamage({
+        yours: { damage: 20000, healing: 8000 },
+        theirs: { damage: 18000, healing: 15000 },
+      })).toEqual({ yours: 5000, theirs: 10000 });
+    });
+
+    it('floors at zero when a side is out-healed', () => {
+      expect(liveTrueDamage({
+        yours: { damage: 3000, healing: 0 },
+        theirs: { damage: 0, healing: 9000 },
+      })).toEqual({ yours: 0, theirs: 0 });
     });
   });
 

@@ -393,6 +393,24 @@ export function liveTeamKills(totals: { yours: { deaths: number }; theirs: { dea
   return { yours: totals.theirs.deaths, theirs: totals.yours.deaths };
 }
 
+/**
+ * Each side's TRUE damage: the damage it dealt minus what the OTHER side healed —
+ * a rough read on how much of the output actually stuck rather than being
+ * healed away. Floored at 0 (a side that was out-healed has no "negative"
+ * damage), and higher is better, like every other live total. It is an
+ * approximation: healing also covers damage dealt earlier or to self-sustain,
+ * and the TAB numbers are cumulative, so treat it as a trend, not an exact ledger.
+ */
+export function liveTrueDamage(totals: { yours: { damage: number }; theirs: { damage: number } } & {
+  yours: { healing: number };
+  theirs: { healing: number };
+}): { yours: number; theirs: number } {
+  return {
+    yours: Math.max(0, totals.yours.damage - totals.theirs.healing),
+    theirs: Math.max(0, totals.theirs.damage - totals.yours.healing),
+  };
+}
+
 /** How recent a match's `startedAt` must be for a window's FIRST push to read as "a match just started" rather than "catching up on one already running". */
 export const FRESH_MATCH_START_MS = 30_000;
 
