@@ -84,11 +84,18 @@ export interface PerfState {
   /** Weighted share of acute evidence qualifying for per-10 stats (feeds confidence). */
   statCoverage: number;
   /**
-   * Largest single account's RAW share of the acute window (1 = single-account). A confidence
-   * input, deliberately unweighted: alt down-weighting changes how much alt games MOVE the
-   * read, not how sure the read is.
+   * Largest single account's RAW share of the acute window (1 = single-account). Unweighted on
+   * purpose — it is the "no clear main" fallback of `mainShare`; the account-mix confidence gate
+   * reads `mainShare`, which is rank-weighted.
    */
   maxAccountShare: number;
+  /**
+   * Share of the acute window's read carried by the main account, rank-weighted: `altDamp` when
+   * there is a main account (the main and rank-close alts count fully), else the raw
+   * `maxAccountShare` (with no clear main a mixed window is genuinely mixed). The account-mix
+   * confidence gate and the mixed-accounts note both read it, so they never disagree.
+   */
+  mainShare: number;
   /** The main account (most games, among those played recently; tie: most recent game, then lexical). Null with no acute games. */
   mainAccount: string | null;
   /** RAW share of the acute window played on a different, resolved account. 0 for a single account, for unresolved captures, and when there is no main. Just "is there alt activity at all" — see `altDamp` for how much it actually costs. */
@@ -126,7 +133,7 @@ export interface PerfState {
 }
 
 export const EMPTY_PERF: PerfState = {
-  available: false, statCoverage: 0, maxAccountShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, form: null,
+  available: false, statCoverage: 0, maxAccountShare: 1, mainShare: 1, mainAccount: null, altShare: 0, altDamp: 1, declineFired: false, form: null,
   countedGames: 0, statPenalty: 0, wrDip: null, wrSignificant: false, wrPenalty: 0, bonus: 0, targetEvidence: false,
   dampened: false, stillLearning: [], metricMeans: {}, objectiveAdverse: false, blend: 0, blendCoverage: 0, delta: 0,
 };
@@ -255,8 +262,8 @@ export function perfState(
   });
   if (acuteGames.length === 0) return EMPTY_PERF;
 
-  // Account concentration of the acute window (confidence input) — RAW counts on purpose: how
-  // SURE the read is does not change with the weighting below, only how much each game moves it.
+  // Raw account concentration of the acute window — the fallback of `mainShare` below (the
+  // confidence input), which weighs each game by the same rank-aware weights the damper uses.
   const perAccount = new Map<string, number>();
   for (const g of acuteGames) perAccount.set(g.account, (perAccount.get(g.account) ?? 0) + 1);
   const maxAccountShare = Math.max(...perAccount.values()) / acuteGames.length;
@@ -529,10 +536,16 @@ export function perfState(
     if (slot && slot.n > 0) metricMeans[m] = slot.sum / slot.n;
   }
 
+  // The same weights that size the damper say how much of the read the main account carries: a
+  // rank-close alt is "your own level" and counts fully, a smurf-gap alt counts little. With no
+  // clear main there is nobody to weigh against, so a mixed window is judged by its raw split.
+  const mainShare = mainAccount !== null ? altDamp : maxAccountShare;
+
   return {
     available: countedGames > 0 || wrDip !== null,
     statCoverage,
     maxAccountShare,
+    mainShare,
     mainAccount,
     altShare,
     altDamp,

@@ -655,7 +655,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
   it('collapse marathon (stats regime, decline fired) reproduces its pre-weighting golden', () => {
     const p = perfAt([...statSpan(5, 28, { perDay: 2, ...HEALTHY }), ...statSpan(35, 35, { perDay: 12, ...COLLAPSED })], 35);
     expect(p).toEqual({
-      available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
+      available: true, statCoverage: 1, maxAccountShare: 1, mainShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       // readiness-score-accuracy: the CUSUM peak became the current form (EWMA of 12 games at g ≈ −2.30).
       declineFired: true, form: -1.6532260679114212, countedGames: 12, statPenalty: 30,
       wrDip: null, wrSignificant: false, wrPenalty: 0, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
@@ -667,7 +667,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
   it('manual winrate dip (b=0) reproduces its pre-weighting golden', () => {
     const p = perfAt([...span(5, 28, { perDay: 3 }), ...span(29, 35, { perDay: 4, result: 'Loss' })], 35);
     expect(p).toEqual({
-      available: true, statCoverage: 0, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
+      available: true, statCoverage: 0, maxAccountShare: 1, mainShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       declineFired: false, form: null, countedGames: 0, statPenalty: 0,
       wrDip: 1, wrSignificant: true, wrPenalty: 30, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
       metricMeans: {}, objectiveAdverse: true, blend: 0, blendCoverage: 0, delta: -30,
@@ -683,7 +683,7 @@ describe('single-account bit-identity — weighting is invisible with one accoun
       35,
     );
     expect(p).toEqual({
-      available: true, statCoverage: 1, maxAccountShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
+      available: true, statCoverage: 1, maxAccountShare: 1, mainShare: 1, mainAccount: 'Main', altShare: 0, altDamp: 1,
       // readiness-score-accuracy: form after 35 games at g = −1 (still past the cap: 50 × (0.975 − 0.3) > 30).
       declineFired: true, form: -0.9749684449500675, countedGames: 35, statPenalty: 30,
       wrDip: 0.7142857142857143, wrSignificant: true, wrPenalty: 15, bonus: 0, targetEvidence: false, dampened: false, stillLearning: [],
@@ -704,14 +704,19 @@ describe('single-account bit-identity — weighting is invisible with one accoun
 
 describe('account signals — mixed-accounts names the main; alt-weighted is the quiet note', () => {
   it('a materially MIXED acute window names the main account and the alt weight', () => {
-    const main = statSpan(5, 35, { perDay: 3, account: 'Main' }); // acute share 0.6 < accountMixBar
-    const smurf = statSpan(5, 35, { perDay: 2, account: 'Smurf', hour: 18 });
+    // readiness-score-accuracy T8: the mix gate reads the RANK-WEIGHTED main share, so the alt needs a
+    // real rank gap to make the window mixed (unranked it weighs the 0.35 fallback: (21 + 14×0.35)/35 =
+    // 0.74 ≥ the bar). On Emerald against a GM5 main it weighs the 0.15 floor: (21 + 14×0.15)/35 = 0.66.
+    const GM5: RankPosition = { tier: 'Grandmaster', division: 5, progressPct: 0 };
+    const EMERALD: RankPosition = { tier: 'Emerald', division: 3, progressPct: 0 };
+    const main = withRank(statSpan(5, 35, { perDay: 3, account: 'Main' }), GM5); // raw share 0.6
+    const smurf = withRank(statSpan(5, 35, { perDay: 2, account: 'Smurf', hour: 18 }), EMERALD);
     const r = computeReadiness([...main, ...smurf], ts(35, 20));
     const sig = r.signals.find((s) => s.key === 'mixed-accounts');
     expect(sig?.severity).toBe('ok');
     expect(sig?.label).toBe('recent games span multiple accounts — Main carries the read, the rest count for less');
     expect(r.signals.some((s) => s.key === 'alt-weighted')).toBe(false); // one note or the other, never both
-    expect(r.confidence).not.toBe('high'); // the confidence cap is unchanged (raw share)
+    expect(r.confidence).not.toBe('high'); // the confidence gate reads the same weighted share
   });
 
   it('alt games BELOW the mixed bar surface the quieter alt-weighted note instead', () => {

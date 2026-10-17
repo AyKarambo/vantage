@@ -27,7 +27,7 @@ export type { CheckInMood, SessionCheckIn } from '../../core/checkIn';
 export { CHECK_IN_MOODS, CHECK_IN_LABELS, CHECK_IN_FRESH_MINUTES } from '../../core/checkIn';
 export type {
   ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,
-  ReadinessConfidence, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
+  ReadinessConfidence, ReadinessConfidenceGate, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
   ReadinessDriver, ReadinessRegime, ReadinessSubscore, ReadinessSubscores,
 } from '../../core/readiness';
 export type { DemoPreference } from '../../core/demoPreference';
