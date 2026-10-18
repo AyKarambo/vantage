@@ -17,6 +17,8 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+## 0.41.0 — 18 October 2026
+
 ### Added
 
 - **True damage on Live** — the team tally now shows each side's damage minus the other side's healing
