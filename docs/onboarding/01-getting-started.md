@@ -76,10 +76,16 @@ three in step when you bump them.
 patched versions of `builder-util-runtime` (`^9.7.0`: cross-origin redirects leaked
 credentials) and the upstream `app-builder-lib` (`~26.15.7`: an AppImage search-path issue)
 into `@overwolf/ow-electron-builder`'s tree, which pins the vulnerable versions exactly and
-has no release with the fixes yet. Both are dev-tooling only — neither ships in the app, and
-the Windows/NSIS build doesn't use the second one's code path. Drop each override once a
+has no release with the fixes yet. Both are dev-tooling only — neither ships in the app.
+
+`app-builder-lib` is also a direct devDependency, and that one is load-bearing: the
+`ow-electron-builder` CLI `require`s the *unscoped* `app-builder-lib` without declaring it, so
+it only resolves when the package sits at the top of `node_modules`. The override alone nests
+it, and a clean `npm ci` then fails `npm run release` with
+`Cannot find module 'app-builder-lib/out/electron/electronVersion'`. Drop each override once a
 `@overwolf/ow-electron-builder` release depends on a fixed version itself (`npm audit` stays
-clean without it), and run a real `npm run release` after changing them.
+clean without it), keep the devDependency until the CLI declares it, and run a real
+`npm run release` from a fresh `npm ci` after changing any of them.
 
 One-time setup:
 
