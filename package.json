@@ -102,6 +102,7 @@
     "@overwolf/ow-electron-builder": "26.9.3",
     "@overwolf/ow-electron-packages-types": "1.1.12",
     "@types/node": "^22.20.0",
+    "app-builder-lib": "~26.15.7",
     "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
