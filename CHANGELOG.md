@@ -17,12 +17,18 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Changed
+
+- **Time of day on Trends is back to simple bars.** The weekday × time-of-day grid was hard to read and
+  spread your games so thin that most slots said little. The card now shows one winrate bar per part of
+  the day (morning, afternoon, evening, night), like the other splits on Trends, and still names your
+  best window once two parts have 10+ decided games.
+
 ### Fixed
 
 - **Review starts from your current rank.** Grading a ranked game in **Review** no longer begins at a
   blanket Gold 3: the rank and placement pickers are pre-filled with the rank Vantage has on record for
   that account and role, like Log Match already does. Touch a picker and it stays as you set it.
-
 - **Card headers no longer squeeze.** On cards with a wide control next to the title (a row of hero
   tabs, say), the subtitle used to be squeezed into a narrow column, and the control could run past the
   card's edge. The subtitle now drops to its own line and the control wraps instead.

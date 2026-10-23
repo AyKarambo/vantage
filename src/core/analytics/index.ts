@@ -4,7 +4,7 @@
 export type {
   HeroStat, MatchMental, CommsTone, TargetGrade, MatchReview, GameRecord,
   WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry,
-  HeroSummary, HeroForm, Streak, TrendGroup, Momentum, WeekdayDayPartCell,
+  HeroSummary, HeroForm, Streak, TrendGroup, Momentum,
 } from './types';
 
 // Grouping + win/loss aggregation
@@ -35,7 +35,7 @@ export { streak, streakStats, currentSession, calendar, heroDetail, groupByDay, 
 export type { DayGroup, SessionDebrief, SessionSummary, StreakStats } from './session';
 
 // Temporal splits (time of day, session position, fade detection)
-export { byTimeOfDay, dayPartAt, byWeekdayDayPart, bySessionPosition, sessionPositionGroups, sessionFade } from './temporal';
+export { byTimeOfDay, dayPartAt, bySessionPosition, sessionPositionGroups, sessionFade } from './temporal';
 export type { SessionFade, SessionPositionOpts } from './temporal';
 
 // Collapse a match's several target grades into one (floor-of-average)

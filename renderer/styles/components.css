@@ -1169,31 +1169,6 @@ table.data tbody tr:focus-visible {
   align-items: center;
 }
 
-/* Trends' weekday × time-of-day grid (O5) — colour = winrate, opacity =
-   games, same encoding as the Activity heatmap above so the two read alike. */
-.week-grid {
-  display: grid;
-  grid-template-columns: 34px repeat(4, 1fr);
-  gap: 3px;
-  align-items: center;
-}
-.week-grid-col-label {
-  font-size: 9.5px;
-  color: var(--muted-2);
-  text-align: center;
-}
-.week-grid-row-label {
-  font-size: 9.5px;
-  color: var(--muted-2);
-  text-align: right;
-  padding-right: 4px;
-}
-.week-grid-cell {
-  height: 18px;
-  border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-}
-
 /* Filter bar ----------------------------------------------------------------- */
 .filter-bar {
   display: flex;
