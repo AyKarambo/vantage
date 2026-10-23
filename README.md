@@ -313,9 +313,8 @@ account's per-role lines beneath it.
   results, or your play? — gated on 8 rated games each side before it says so, a plain
   "N-point gap, needs 8 per side" below that instead (F6) — also click-through to that day's
   matches). Per-hero and per-map
-  average self-ratings also appear as **RTG** columns on the Heroes and Maps tables. Three more
-  splits answer questions the data already had but nothing showed (H9): **Solo vs grouped**
-  (party size GEP reported, when it did), **Close games** (win rate on a one-round margin vs a
+  average self-ratings also appear as **RTG** columns on the Heroes and Maps tables. Two more
+  splits answer questions the data already had but nothing showed (H9): **Close games** (win rate on a one-round margin vs a
   two-or-more-round blowout, Control/Clash/Flashpoint only — a clutch/mental read distinct from
   fundamentals), and **Game length** (Short/Typical/Long, tercile boundaries computed per mode
   so a Push-heavy sample doesn't read every Escort game as "long" for no reason but the format).
