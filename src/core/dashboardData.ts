@@ -4,7 +4,7 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, byWeekdayDayPart, calendar, currentSession, dayKey,
+  byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
@@ -265,7 +265,6 @@ export function computeDashboard(
     ...(previous ? { previous } : {}),
     bySeason,
     timeOfDay: byTimeOfDay(games),
-    weekGrid: byWeekdayDayPart(games),
     // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.
     sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
