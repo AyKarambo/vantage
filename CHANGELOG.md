@@ -17,6 +17,12 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Fixed
+
+- **Review starts from your current rank.** Grading a ranked game in **Review** no longer begins at a
+  blanket Gold 3: the rank and placement pickers are pre-filled with the rank Vantage has on record for
+  that account and role, like Log Match already does. Touch a picker and it stays as you set it.
+
 ## 0.41.0 — 18 October 2026
 
 ### Added
