@@ -23,6 +23,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   spread your games so thin that most slots said little. The card now shows one winrate bar per part of
   the day (morning, afternoon, evening, night), like the other splits on Trends, and still names your
   best window once two parts have 10+ decided games.
+- **Solo vs grouped is gone from Trends for now.** Vantage can't yet reliably tell whether you queued
+  alone or with friends, so most games ended up as "Unknown" and the card said little. A better version,
+  where you can mark who you played with, is planned.
 
 ### Fixed
 

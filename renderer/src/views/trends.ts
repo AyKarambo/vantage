@@ -51,14 +51,13 @@ export function trends(ctx: ViewContext): HTMLElement {
       card({ title: 'By account' }, breakdown(d.byAccount, d.overall.winrate)),
     ),
     h('div', { class: 'grid-2' },
-      soloVsGroupedCard(d.byGroupSize),
       closeGamesCard(d.scoreSplits),
+      gameLengthCard(d.byDuration),
     ),
     bySeasonCard(ctx),
-    h('div', { class: 'grid-3' },
+    h('div', { class: 'grid-2' },
       timeOfDayCard(d.timeOfDay, d.overall.winrate),
       sessionPositionCard(d.sessionPosition, d.overall.winrate),
-      gameLengthCard(d.byDuration),
     ),
     performanceCard(ctx, d.performance),
   );
@@ -352,17 +351,6 @@ function breakdown(groups: Group[], overallWinrate: number, label: (key: string)
 /** Pull `keys` out of `groups` in that fixed order (not winrate-sorted) — a story order, not a ranking. */
 function inOrder(groups: Group[], keys: string[]): Group[] {
   return keys.map((k) => groups.find((g) => g.key === k)).filter((g): g is Group => g != null);
-}
-
-/**
- * "Do I win more solo or with a group?" (H9) — party size was captured by GEP
- * and stored, but never surfaced anywhere. Solo → Duo → Trio+ → Unknown, the
- * order a player reasons about it in, not a winrate ranking.
- */
-function soloVsGroupedCard(groups: Group[]): HTMLElement | null {
-  const ordered = inOrder(groups, ['Solo', 'Duo', 'Trio+', 'Unknown']);
-  if (!ordered.length) return null;
-  return card({ title: 'Solo vs grouped' }, breakdownOrdered(ordered));
 }
 
 /**
