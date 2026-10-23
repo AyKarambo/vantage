@@ -35,16 +35,32 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   margin-bottom: 12px;
 }
+/* The title block wraps its subtitle onto its own line rather than squeezing
+   it into a narrow column beside a wide action (e.g. a row of hero tabs). */
 .card-title {
   font-family: var(--font-head);
   font-size: 14px;
   font-weight: 600;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Wide actions drop below the title and may wrap their own options, instead of
+   overflowing the card edge. */
+.card-actions {
+  max-width: 100%;
+  min-width: 0;
+}
+.card-actions .segmented {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 .card-sub,
 .hint {
