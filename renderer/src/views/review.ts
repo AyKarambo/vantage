@@ -633,6 +633,23 @@ function expanded(
   let predTier = run?.latestPrediction?.tier ?? 'Gold';
   let predDivision = run?.latestPrediction?.division ?? 3;
 
+  // Seed both pickers from the track's currently recorded rank instead of a
+  // blanket Gold 3 — mirrors log-match's predictionFor/seedAnchorFromRanks. An
+  // open run's own latest prediction still wins for the placement picker. Fetched
+  // (not read off ctx.data, a frozen snapshot) and applied only until the player
+  // touches a picker, so a late reply never overwrites their choice.
+  let rankTouched = false;
+  if (isComp) {
+    void bridge.getRanks().then((ranks) => {
+      const cur = ranks.find((x) => x.account === m.account && x.role === m.role);
+      if (!cur || rankTouched) return;
+      rankTier = cur.tier;
+      rankDivision = cur.division;
+      if (!run?.latestPrediction) { predTier = cur.tier; predDivision = cur.division; }
+      paintSr();
+    });
+  }
+
   // Self-rated targets are hand-graded here; measured targets are auto-graded
   // from stats and shown read-only (keyboard grading cycles the self-rated only).
   // Self-rated targets hide outright when the match is out of scope; measured
@@ -676,8 +693,8 @@ function expanded(
         placementPicker({
           tier: predTier,
           division: predDivision,
-          onTier: (v) => (predTier = v),
-          onDivision: (v) => (predDivision = v),
+          onTier: (v) => { rankTouched = true; predTier = v; },
+          onDivision: (v) => { rankTouched = true; predDivision = v; },
         }),
         h('div', { class: 'hint' },
           `Placements (${run.counted}/${run.target}) for ${roleLabel(m.role)} on ${m.account} — `
@@ -705,8 +722,8 @@ function expanded(
           tier: rankTier,
           division: rankDivision,
           pct: rankPct,
-          onTier: (v) => (rankTier = v),
-          onDivision: (v) => (rankDivision = v),
+          onTier: (v) => { rankTouched = true; rankTier = v; },
+          onDivision: (v) => { rankTouched = true; rankDivision = v; },
           onPct: (v) => (rankPct = v),
           onResolved: (p) => (rankPreview = p),
         }));
