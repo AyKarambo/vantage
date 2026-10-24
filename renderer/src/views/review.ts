@@ -31,6 +31,7 @@ import { performanceSlider } from '../components/performanceSlider';
 import { focusTargetChooser, type FocusChooser } from '../components/focusTargetChooser';
 import { breakChip } from '../components/breakChip';
 import { sittingRecapCard } from '../components/sittingRecap';
+import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { toast } from '../components/toast';
 import { openPopover } from '../components/popover';
 import { inlineLink } from '../components/inlineLink';
@@ -837,6 +838,7 @@ function expanded(
       ...(brk?.changed() ? { breakBefore: brk.value() } : {}),
       ...(performance != null ? { performance } : {}),
       ...(srDelta !== undefined ? { srDelta } : {}),
+      ...(party.value() !== undefined ? { party: party.value() } : {}),
     });
     // Only a REAL save (F3) is worth recording a placement prediction against —
     // a demo game is never on an actual track.
@@ -889,6 +891,9 @@ function expanded(
   };
 
   const flagsRow = mentalFlagsRow(flags);
+  // MatchRow carries no roster, so the teammates load from the match detail.
+  const party = partyPicker({ party: m.party });
+  loadPartyContext(party, { matchId: m.matchId, filters: ctx.data.filters });
 
   // The score/duration fold-in (R4) rides on the same meta line as the rest
   // of the auto-facts header — when GEP reported either, it's another free
@@ -930,6 +935,7 @@ function expanded(
           section('◎ How it felt', flagsRow.el),
           section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
         ]),
+    section('◎ Queued with', party.el),
     // Competitive only — GEP can't report SR, so the player enters what the game
     // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
     // The label names the account (R3) — with more than one tracked, "±%"

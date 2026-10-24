@@ -62,7 +62,7 @@ export type {
 // Match drill-down payloads
 export type { ScoreboardEntry, PlayerEncounter, PlayerSharedMatch, SharedMatchRank, PlayerMatchHistory, PlayerRecord, MatchDetail, UsualPer10, MatchDetailHeroStat } from './matchDetail';
 // Players screen (the filter-scoped player directory).
-export type { PlayerSortKey, PlayerListRow, PlayerListQuery, PlayerList, PlayerRelation } from './players';
+export type { PlayerSortKey, PlayerListRow, PlayerListQuery, PlayerList, PlayerRelation, FriendEntry, FriendInput } from './players';
 export type { LiveMatchPayload, LiveKillEntry } from './liveMatch';
 
 // Notion export/import payloads
@@ -74,7 +74,7 @@ export type {
 // Manual-entry inputs
 export type {
   ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput,
-  IgnorePendingReviewsInput, ThresholdSuggestionInput,
+  IgnorePendingReviewsInput, ThresholdSuggestionInput, PartyInput,
 } from './inputs';
 
 // Accounts + rank

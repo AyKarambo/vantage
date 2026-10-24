@@ -3,7 +3,7 @@
  * dashboard renderer draws for it. Electron-free so main, preload and the
  * renderer bundle can all share it.
  */
-import type { Role, Result } from '../../core/model';
+import type { Role, Result, MatchParty } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
@@ -78,8 +78,10 @@ export interface MatchRow {
   rankAtStart?: RankPosition;
   /** Final score as recorded (e.g. '3–1'), when known. */
   finalScore?: string;
-  /** Party size the player queued with (1 = solo), when GEP reported one. */
+  /** EFFECTIVE party size (1 = solo): recorded party members + 1, else the GEP-reported count. */
   groupSize?: number;
+  /** Who the player queued with, when recorded (manually or auto-labelled). */
+  party?: MatchParty;
   /** Match totals (summed across heroes played), when per-hero stats were recorded — the Live "Just finished" card's E/A/D line (S2). */
   eliminations?: number;
   assists?: number;

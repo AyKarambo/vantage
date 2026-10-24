@@ -89,7 +89,7 @@ function fakeHistory() {
 }
 
 /** Drive createMatchPipeline with plain-object fakes and record every side effect. */
-function harness(config: AppConfig = appConfig()) {
+function harness(config: AppConfig = appConfig(), over: Partial<MatchPipelineDeps> = {}) {
   const history = fakeHistory();
   const notifications: Array<{ title: string; body: string }> = [];
   const logged: Array<{ matchId: string; account: string; configured: boolean }> = [];
@@ -110,6 +110,7 @@ function harness(config: AppConfig = appConfig()) {
       pendingSignals++;
       pendingPayloads.push(payload);
     },
+    ...over,
   };
   return {
     pipeline: createMatchPipeline(deps),
@@ -420,5 +421,72 @@ describe('createMatchPipeline — uncertain matches held for Review', () => {
     // The real held match is untouched, and no extra signal fired.
     expect(history.pending.map((r) => r.matchId)).toEqual(['gep-keep']);
     expect(pendingSignals()).toBe(1);
+  });
+});
+
+describe('createMatchPipeline — party (#319)', () => {
+  const roster = (...mates: Array<[string, number]>): MatchRecord['roster'] => [
+    { battleTag: 'Player#1234', team: 0, isLocal: true },
+    ...mates.map(([battleTag, team]) => ({ battleTag, team })),
+  ];
+  const withParty = (matchId: string, groupSize: number, r: MatchRecord['roster']): MatchRecord =>
+    ({ ...capturedMatch(matchId), groupSize, roster: r });
+  const friends = (...names: string[]) => () => new Set(names.map((n) => n.toLowerCase()));
+
+  it('auto-labels a capture when own-team friends account for the whole party', () => {
+    const { pipeline, history } = harness(appConfig(), { friendKeys: friends('Alice', 'Bob') });
+    pipeline.addMatch(withParty('gep-p1', 3, roster(['Alice#1', 0], ['Bob#2', 0], ['Carol#3', 0], ['Eve#9', 1])));
+    expect(history.games[0].party).toEqual({ members: ['Alice#1', 'Bob#2'], source: 'auto' });
+  });
+
+  it.each([
+    ['no friend on the team', 2, roster(['Carol#3', 0])],
+    ['fewer friends than the party', 3, roster(['Alice#1', 0], ['Carol#3', 0])],
+    ['more friends than the party', 2, roster(['Alice#1', 0], ['Bob#2', 0])],
+    ['a friend only on the enemy team', 2, roster(['Alice#1', 1], ['Carol#3', 0])],
+  ])('leaves the party unset with %s', (_label, size, r) => {
+    const { pipeline, history } = harness(appConfig(), { friendKeys: friends('Alice', 'Bob') });
+    pipeline.addMatch(withParty('gep-p2', size, r));
+    expect(history.games[0]).not.toHaveProperty('party');
+    expect(history.games[0].groupSize).toBe(size);
+  });
+
+  it('probes getInfo at match_start only when no party count is held, and seeds it', async () => {
+    const seeded: Array<number | undefined> = [];
+    let held = false;
+    let probes = 0;
+    const { pipeline } = harness(appConfig(), {
+      aggregator: {
+        handle: () => null,
+        hasPartyCount: () => held,
+        seedPartyCount: (n) => { seeded.push(n); },
+      },
+      probeInfo: async () => { probes++; return { res: { game_info: { party_player_count: '2' } } }; },
+    });
+    const start = { kind: 'event' as const, feature: 'match_info', key: 'match_start', value: null };
+
+    pipeline.feed(start);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(probes).toBe(1);
+    expect(seeded).toEqual([2]);
+
+    held = true;
+    pipeline.feed(start);
+    pipeline.feed({ kind: 'info', feature: 'game_info', key: 'party_player_count', value: 3 });
+    await Promise.resolve();
+    expect(probes).toBe(1);
+  });
+
+  it('logs and survives a failed probe', async () => {
+    const logs: unknown[][] = [];
+    const { pipeline } = harness(appConfig(), {
+      aggregator: { handle: () => null, hasPartyCount: () => false, seedPartyCount: () => {} },
+      probeInfo: () => Promise.reject(new Error('gone')),
+      log: (...args) => { logs.push(args); },
+    });
+    pipeline.feed({ kind: 'event', feature: 'match_info', key: 'match_start', value: null });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(logs.some((l) => String(l[0]).includes('party count probe failed'))).toBe(true);
   });
 });

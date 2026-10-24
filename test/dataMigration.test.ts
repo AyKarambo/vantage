@@ -31,6 +31,7 @@ function presence(overrides: Partial<DataArtifactPresence> = {}): DataArtifactPr
     rankAnchors: false,
     placements: false,
     checkIns: false,
+    friends: false,
     masterData: false,
     legacyHistoryJson: false,
     ...overrides,

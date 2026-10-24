@@ -28,6 +28,7 @@ import { resolveAccount } from '../core/resolvers/account';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { resolveResult } from '../core/resolvers/result';
 import type { Role, Result, MatchRecord } from '../core/model';
+import { partyFromInput } from '../core/party';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -37,6 +38,7 @@ import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import type { CheckInStore } from '../store/checkIns';
 import { normalizeCheckIn } from '../core/checkIn';
+import type { FriendStore } from '../store/friends';
 import {
   PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, trackMatches, hasDrifted, isAwaitingRank,
   runProgress, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, resetBoundaries,
@@ -85,6 +87,8 @@ export interface DataProviderDeps {
   >;
   /** Pre-session mood check-ins (S10 phase 2). */
   checkIns: Pick<CheckInStore, 'all' | 'add'>;
+  /** Players tagged as friends (local-only; never reaches the Notion export). */
+  friends: Pick<FriendStore, 'list' | 'set'>;
   /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
   masterDataStore: Pick<MasterDataStore, 'all' | 'replace'>;
   /** The online-catalog fetch edge (main-process `net.fetch` of OverFast); injected so this stays Electron-free. */
@@ -243,6 +247,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       });
       if (!saved) return { saved };
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
+      const party = partyFromInput(input.party);
+      if (party !== undefined) deps.history.editManual(input.matchId, { party });
       // GEP can't report SR, so the player may set it here (competitive only);
       // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
       if (input.srDelta !== undefined) {
@@ -276,6 +282,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // A log with "Nothing specific" chosen (`focusTargetIds: []`) or a break
       // mark is still a deliberate read, so it makes a review even with no grades.
       const makeReview = !!grades || focus !== undefined || breakBefore !== undefined;
+      const party = partyFromInput(input.party);
       deps.recordGame({
         matchId,
         timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
@@ -289,6 +296,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         mental: input.mental,
         ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
         ...(input.performance != null ? { performance: input.performance } : {}),
+        ...(party ? { party } : {}),
         // Inline target grades captured while logging are stored as a review, the
         // same shape the Review screen writes — so they score identically.
         ...(makeReview ? {
@@ -350,6 +358,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // saving, so there is no absolute-rank branch to maintain here.
       if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
       if (input.performance !== undefined) patch.performance = input.performance;
+      // Who the player queued with. Deliberately NOT a "fact" for `factsEditedAt`:
+      // it is the player's own annotation layer (like mental / srDelta), not
+      // something the game feed reported, so correcting it never marks a GEP
+      // match "edited". A hand edit always stores `source: 'manual'`, so the
+      // auto-labeller (which only runs on new captures) can never overwrite it.
+      const party = partyFromInput(input.party);
+      if (party !== undefined) patch.party = party;
       // Played time is honoured for a hand-logged match only — a GEP capture's
       // timestamp is the instant the game itself ended, not something a player
       // can honestly correct after the fact. Clamped to the past like the log
@@ -787,6 +802,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (!entry) throw new Error('Invalid check-in');
       return deps.checkIns.add(entry);
     },
+    friends: () => deps.friends.list(),
+    // Defensive at the edge: the IPC arg is untyped at runtime, so a non-string
+    // name or non-boolean flag is ignored rather than persisted.
+    setFriend: (input) =>
+      typeof input?.name === 'string' && typeof input.friend === 'boolean'
+        ? deps.friends.set(input.name, input.friend)
+        : deps.friends.list(),
     getReadiness: () => deps.getConfig().readiness,
     setReadiness: (input) => {
       const config = deps.getConfig();

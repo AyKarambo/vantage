@@ -522,7 +522,10 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext, mode: Mat
     case 'flags':
       return flagPills(m);
     case 'party':
-      return m.groupSize != null ? document.createTextNode(partyLabel(m.groupSize)) : null;
+      // groupSize is already the effective size (members + 1 when recorded).
+      return m.groupSize != null
+        ? h('span', { title: partyTitle(m) }, partyLabel(m.groupSize))
+        : null;
     default:
       return null;
   }
@@ -533,6 +536,14 @@ function partyLabel(size: number): string {
   if (size <= 1) return 'Solo';
   if (size === 2) return 'Duo';
   return `${size}-stack`;
+}
+
+/** Hover text for the Party field: who it was, and where that came from. */
+function partyTitle(m: MatchRow): string {
+  if (!m.party) return 'Party size from the game';
+  if (!m.party.members.length) return 'Marked solo';
+  const who = `With ${m.party.members.join(', ')}`;
+  return m.party.source === 'auto' ? `${who} (auto-filled from your friends)` : who;
 }
 
 /** Hit/Partial/Missed pill vocabulary — the Review card's grade tones (spec F1 extension, #68). */

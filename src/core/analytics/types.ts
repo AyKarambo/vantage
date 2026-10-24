@@ -4,7 +4,7 @@
  * insights are built from. Pure and I/O-free so it is fully unit-testable and
  * reusable in the renderer.
  */
-import type { Result, Role, HeroStat, RosterPlayer, RoundSpan } from '../model';
+import type { Result, Role, HeroStat, RosterPlayer, RoundSpan, MatchParty } from '../model';
 // From `rank/types` rather than the `rank` barrel: that module imports only
 // `../model`, so this stays a leaf type import with no cycle back through the
 // rank engine (which itself reads `GameRecord` from here).
@@ -141,8 +141,14 @@ export interface GameRecord {
   perHero?: HeroStat[];
   /** Round score, e.g. "2–1", when the feed reported one. */
   finalScore?: string;
-  /** Party size the player queued with (1 = solo), when GEP reported one. Absent on older captures and manual logs. */
+  /** Raw party size GEP reported (1 = solo). Absent on older captures and manual logs. See `party` for the effective size. */
   groupSize?: number;
+  /**
+   * Who the player queued with, entered by hand or auto-labelled from
+   * remembered friends. Empty `members` = explicit solo. When set it overrides
+   * {@link groupSize} for the effective party size (members + 1).
+   */
+  party?: MatchParty;
   /** Latest roster snapshot per slot — whatever teams GEP reported (may be
    *  local team only). Absent on older records and manual logs. */
   roster?: RosterPlayer[];

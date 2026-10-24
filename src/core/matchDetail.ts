@@ -12,6 +12,7 @@ import { playerHistory } from './playerIndex';
 import { mergeHeroStats } from './perHero';
 import { heroCredits, heroPlayedMinutes, playedTimeOf } from './playedTime';
 import { heroStats } from './analytics';
+import { effectiveGroupSize, ownTeammates } from './party';
 import { measuredGradesForMatch, type AuthoredTarget } from './targets';
 
 /**
@@ -83,6 +84,8 @@ export function matchDetail(
   // records, a rescale of wall-clock swap minutes on older ones — so the
   // renderer only divides and formats.
   const played = playedTimeOf(game, mapModeOf);
+  const groupSize = effectiveGroupSize(game);
+  const teammates = ownTeammates(game.roster);
   const perHero: MatchDetailHeroStat[] = heroCredits(game).map(({ stats, share }) => {
     const usual = usualForHero(all, game.account, stats.hero, game.timestamp, mapModeOf);
     if (stats.minutes == null) return { ...stats, usual }; // no timed swaps → the panel equal-splits the played time
@@ -108,6 +111,9 @@ export function matchDetail(
     performance: game.performance,
     finalScore: game.finalScore,
     heroes: game.heroes,
+    ...(game.party ? { party: game.party } : {}),
+    ...(groupSize !== undefined ? { groupSize } : {}),
+    ...(teammates.length ? { teammates } : {}),
     perHero,
     mental: game.mental,
     review: game.review,

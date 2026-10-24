@@ -4,6 +4,7 @@
  * chart. Pure and I/O-free — consumed by both main and the browser preview.
  */
 import type { GameRecord, WinLoss, Group, FocusItem, TrendGroup, Momentum } from './types';
+import { effectiveGroupSize } from '../party';
 import { heroTimeShares, parseScore, ROUND_TALLY_MODES, type MapModeResolver } from '../playedTime';
 
 // --- core aggregation -------------------------------------------------------
@@ -232,7 +233,7 @@ export function trend(games: GameRecord[], bucket: 'day' | 'week' = 'day'): Grou
 /** Winrate per game type (Competitive, Quick Play, …). */
 export const byMode = (g: GameRecord[]): Group[] => groupBy(g, (x) => x.gameType);
 
-/** "Solo" / "Duo" / "Trio+" bucket for a queued party size; "Unknown" when GEP never reported one. */
+/** "Solo" / "Duo" / "Trio+" bucket for an effective party size; "Unknown" when neither party members nor a GEP count is known. */
 function groupSizeLabel(size: number | undefined): string {
   if (size == null) return 'Unknown';
   if (size <= 1) return 'Solo';
@@ -241,7 +242,7 @@ function groupSizeLabel(size: number | undefined): string {
 }
 
 /** Winrate split by the party size the player queued with (H9). */
-export const byGroupSize = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => groupSizeLabel(x.groupSize), opts);
+export const byGroupSize = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => groupSizeLabel(effectiveGroupSize(x)), opts);
 
 /** The `[lo, hi]` tercile boundaries of a sorted duration list; `[0, 0]` for an empty one. */
 function durationTerciles(sorted: number[]): [number, number] {

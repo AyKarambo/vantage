@@ -19,6 +19,7 @@ import { GRADES, targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsTone
 import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
 import { dialogHeader } from '../components/dialogHeader';
 import { performanceSlider } from '../components/performanceSlider';
+import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { paintHeroChips } from '../components/heroPicker';
 import { mapPicker, resolveMapName, notKnownMapHint, type MapPickerEntry } from '../components/mapPicker';
 import { field, optionalLabel } from '../components/formField';
@@ -656,6 +657,9 @@ function buildMatchEditor(
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
   const isComp = classifyGameType(d.gameType) === 'competitive';
   const state = { result: d.result, role: d.role, map: d.map };
+  // The detail already carries the roster's teammates; only friends load late.
+  const party = partyPicker({ party: d.party, teammates: d.teammates });
+  loadPartyContext(party);
   // Full hero set (a hand-logged match can have several) — a role-filtered chip
   // grid, so editing never collapses the list to just the first hero.
   const heroes = new Set<string>(d.heroes);
@@ -952,6 +956,8 @@ function buildMatchEditor(
           : {}),
         // number sets, null clears — performance applies to any match, comp or not.
         performance: performance ?? null,
+        // Untouched picker → key omitted, so the stored party is left alone.
+        ...(party.value() !== undefined ? { party: party.value() } : {}),
         grades,
         // Manual only (isManual gates the field's very existence); main also
         // re-gates it, so this can never move a GEP capture's locked instant.
@@ -1054,6 +1060,7 @@ function buildMatchEditor(
               performanceSlider(performance, (v) => (performance = v))),
             field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
             field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
+            field(optionalLabel('Queued with', '— who was in your group?'), party.el),
             field(optionalLabel('Targets', '— grade now or later on Review'),
               h('div', { class: 'stack', style: { gap: '11px' } },
                 ...(rows.length

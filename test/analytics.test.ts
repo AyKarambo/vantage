@@ -158,6 +158,18 @@ describe('byGroupSize (H9)', () => {
     expect(g['Trio+']).toMatchObject({ games: 1, wins: 1 });
     expect(g.Unknown).toMatchObject({ games: 1, losses: 1 });
   });
+
+  it('uses the recorded party over the GEP count, and counts an explicit solo as Solo', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', groupSize: 1, party: { members: ['Pal#1'], source: 'manual' } }),
+      game({ result: 'Win', map: 'A', role: 'damage', groupSize: 5, party: { members: [], source: 'manual' } }),
+      game({ result: 'Loss', map: 'A', role: 'damage', party: { members: ['A', 'B'], source: 'auto' } }),
+    ];
+    const g = Object.fromEntries(byGroupSize(games).map((x) => [x.key, x]));
+    expect(g.Duo).toMatchObject({ games: 1, wins: 1 });
+    expect(g.Solo).toMatchObject({ games: 1, wins: 1 });
+    expect(g['Trio+']).toMatchObject({ games: 1, losses: 1 });
+  });
 });
 
 describe('byDuration (H9)', () => {

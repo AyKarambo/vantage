@@ -210,7 +210,10 @@ account's per-role lines beneath it.
   not move there.
   A **Customize view** popover lets you set role, heroes, account, SR delta, rank at start, duration,
   final score, performance rating, target grades, leaver/mental flags and **party size** (Solo /
-  Duo / *N*-stack, when GEP reported one, H9) each to hidden,
+  Duo / *N*-stack — the people you recorded as queued with plus you when set, else the size
+  GEP reported; hover it to see who. GEP only sends the party size when it changes, usually in
+  the lobby, so Vantage carries it into every match until it changes, and a reported 0 counts
+  as solo) each to hidden,
   inline (folded into the row's meta line), or its own aligned column — the choice
   persists across sessions. The grades-oriented fields start hidden and render compactly
   when enabled: the 0-100 self-rating as a small tinted stat, **target grades** as a
@@ -231,8 +234,11 @@ account's per-role lines beneath it.
   **who they are** (M6) — top 3 heroes by game count and a last-10 W/L dot strip —
   then **filter chips** (All / With you / Against you / Side unknown) that narrow
   the record itself, updating the W/L line to match, over a **sortable** shared-match
-  table (Map, Mode, Side, Account, When). Local, GEP-only, never
-  exported. Players are matched on the name before the `#`, so two BattleTags
+  table (Map, Mode, Side, Account, When). A **★ Mark as friend** toggle on a player's page
+  tags them as a friend (they get a ★ on the list and in the "Queued with" picker; a new
+  tracked match whose own team holds exactly the friends that make up the GEP-reported party
+  size is filled in automatically — new games only, never older history). Local, GEP-only,
+  never exported. Players are matched on the name before the `#`, so two BattleTags
   sharing a name fold into one row, flagged with a ⚠.
 - **Maps** — winrate by game mode, then every map ranked best → worst; a **±SR** column/figure
   (a mode card's value line, and the ranking table) beside the net wins wherever you've logged
@@ -385,7 +391,9 @@ account's per-role lines beneath it.
   (doesn't replace) the Mental break reminder. It's the one screen that ignores the filter bar
   and account switcher entirely — readiness is about the person, not a slice of their history.
 - **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
-  how each tracked game felt, and rate your own **performance** on a 0-100 slider; **measured
+  how each tracked game felt, rate your own **performance** on a 0-100 slider, and
+  record who you **queued with** (Solo, your own-team teammates from that match's roster with
+  friends starred, or any name typed in); **measured
   (⚡) targets are auto-graded from that match's stats and shown read-only**. In practice focus,
   you first pick **what you worked on that game** (chips per target, plus a break mark) — only the
   chosen targets are graded, so an unchosen one is never a miss — and a **sitting recap** sums up a
@@ -503,7 +511,9 @@ account's per-role lines beneath it.
   red→green scale as winrate elsewhere; also editable later from Review or a match's detail page), and
   grade active improvement targets inline — `↑`/`↓` moves the focus outline across them and `H`/`P`/`M`
   grades whichever one is focused (L5, the same keyboard model Review itself uses, now shared with
-  the match editor too). Saving shows a toast naming what was actually stored —
+  the match editor too). A **Queued with** field takes Solo or typed names (friends
+  suggested), since a hand-logged match has no roster. Saving shows a toast naming what was
+  actually stored —
   "Match logged — Loss · Oasis · Climb Damage · −25%" — with an **Undo** (omitted when the save also
   anchored a first rank or wrote a placement prediction, since undo only unwinds the match record
   itself); no OS notification fires for a hand-logged match, since you're already looking at the toast

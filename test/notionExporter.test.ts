@@ -1153,6 +1153,12 @@ describe('gameToMatchRecord — carried scalar fields', () => {
     expect(rec.srDelta).toBe(22);
     expect(rec.finalScore).toBe('2-1');
   });
+
+  it('exports the effective group size, never the member names', () => {
+    const rec = gameToMatchRecord({ ...game('m1'), groupSize: 1, party: { members: ['Pal#1', 'Pal2'], source: 'manual' } } as GameRecord);
+    expect(rec.groupSize).toBe(3);
+    expect(JSON.stringify(rec)).not.toContain('Pal');
+  });
 });
 
 describe('NotionExporter — captures the first per-game failure reason (no silent "0 synced, N failed")', () => {

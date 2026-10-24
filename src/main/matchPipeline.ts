@@ -1,5 +1,5 @@
 import type { HistoryStore } from '../store/history';
-import type { MatchAggregator } from '../core/matchAggregator';
+import { isMatchStartMessage, partyCountFromInfo, type MatchAggregator } from '../core/matchAggregator';
 import type { AppConfig } from './config';
 import type { GepMessage, MatchRecord, Result } from '../core/model';
 import { matchToGame } from '../core/gameRecord';
@@ -7,6 +7,7 @@ import { streak, type GameRecord } from '../core/analytics';
 import { classifyGameType, isCompetitive } from '../core/matchFilter';
 import { isConfiguredAccount } from '../core/accountsManage';
 import { sourceOf } from '../core/source';
+import { autoParty } from '../core/party';
 import type { GameLoggedPayload, PendingChangedPayload } from '../shared/contract';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
@@ -24,8 +25,11 @@ export interface MatchPipelineDeps {
   /** Durable game history: dedupe-add, full read for streak evaluation, plus the
    *  "needs review" holding store (hold on uncertainty / take on resolve / remove on dismiss). */
   history: Pick<HistoryStore, 'add' | 'all' | 'addPending' | 'takePending' | 'removePending'>;
-  /** Folds the GEP message stream into one finished MatchRecord per match. */
-  aggregator: Pick<MatchAggregator, 'handle'>;
+  /**
+   * Folds the GEP message stream into one finished MatchRecord per match. The
+   * party-count methods are optional so tests can inject a bare `handle`.
+   */
+  aggregator: Pick<MatchAggregator, 'handle'> & Partial<Pick<MatchAggregator, 'hasPartyCount' | 'seedPartyCount'>>;
   /** Live app config — re-read on every use (breakReminder, accounts), never cached. */
   getConfig(): AppConfig;
   /** Surface a user-facing notification (the tray balloon in production). */
@@ -46,6 +50,18 @@ export interface MatchPipelineDeps {
    * fires it with no payload.
    */
   onPendingChanged?(payload?: PendingChangedPayload): void;
+  /**
+   * Read GEP's current info state (`getInfo()`). Probed at `match_start` only
+   * when no party count is held yet — the lobby's `party_player_count` update
+   * stays the source of truth; this just fills the gap when it was missed.
+   */
+  probeInfo?(): Promise<unknown>;
+  /**
+   * Party keys of the players tagged as friends. A new capture whose own-team
+   * friends account for the whole GEP-reported party is labelled with them
+   * (see {@link autoParty}).
+   */
+  friendKeys?(): ReadonlySet<string>;
 }
 
 /**
@@ -129,6 +145,9 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   /** Persist a finished match into the analyzable history, or hold it for Review. */
   function addMatch(record: MatchRecord): void {
     const game = matchToGame(record, deps.getConfig().accounts);
+    // Only fresh captures pass through here, so older history is never relabelled.
+    const party = game && deps.friendKeys ? autoParty(game, deps.friendKeys()) : undefined;
+    if (game && party) game.party = party;
     // Happy path: clearly competitive AND has a resolvable result → auto-log it.
     // A manual log never reaches this branch.
     if (game && isCompetitive(record.gameType)) {
@@ -192,8 +211,18 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   // dev simulation so both exercise the same pipeline.
   const feed = (msg: GepMessage): void => {
     const record = deps.aggregator.handle(msg);
+    if (isMatchStartMessage(msg)) probePartyCount();
     if (record) addMatch(record);
   };
+
+  /** Seed the party count from `getInfo()` when the lobby update was missed. */
+  function probePartyCount(): void {
+    const { aggregator, probeInfo } = deps;
+    if (!probeInfo || !aggregator.seedPartyCount || aggregator.hasPartyCount?.() !== false) return;
+    probeInfo()
+      .then((info) => aggregator.seedPartyCount?.(partyCountFromInfo(info)))
+      .catch((err) => deps.log('party count probe failed', String(err)));
+  }
 
   return { recordGame, addMatch, resolvePending, dismissPending, feed };
 }

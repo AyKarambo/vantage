@@ -1,6 +1,7 @@
 import { APIResponseError, APIErrorCode, Client } from '@notionhq/client';
 import { emptyMatch, type MatchRecord, type Result } from '../core/model';
 import type { GameRecord, MatchMental } from '../core/analytics';
+import { effectiveGroupSize } from '../core/party';
 import { leaverFlags, mergeLeaver } from '../core/leaver';
 import { commsTone } from '../core/comms';
 import { aggregateImprovementGrade, matchExportSignature, effectiveImprovementGrade, DEFAULT_PARTIAL_MARGIN, type AuthoredTarget } from '../core/targets';
@@ -428,6 +429,8 @@ export function gameToMatchRecord(game: GameRecord): MatchRecord {
     // importer readers, so they round-trip (finalScore was silently dropped before).
     finalScore: game.finalScore,
     srDelta: game.srDelta,
+    // Size only — member names never leave the device.
+    groupSize: effectiveGroupSize(game),
     eliminations: hasStats ? totals.eliminations : undefined,
     deaths: hasStats ? totals.deaths : undefined,
     assists: hasStats ? totals.assists : undefined,

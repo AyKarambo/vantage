@@ -5,4 +5,4 @@ export { MatchAggregator, isMatchStartMessage, isMatchEndMessage, isRoundStartMe
 export type { MatchAggregatorOptions } from './aggregator';
 
 // Pure GEP value coercion (parseRoster is also exercised directly by tests)
-export { parseRoster, asObject, asString, asNumber } from './gepValues';
+export { parseRoster, asObject, asString, asNumber, partyCountFromInfo } from './gepValues';
