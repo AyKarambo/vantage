@@ -7,11 +7,20 @@
  * it, so Mental can eventually say whether queuing tilted actually costs you.
  * Shown on the idle Live screen and the Overview head — the two places a
  * player looks right before queuing.
+ *
+ * Issue #321 adds optional questions — sleep, energy, whether you ate — each
+ * switched on in Settings › Coaching, plus "today's focus" while practice
+ * mode is on and targets are active. With none of those in play the prompt
+ * stays exactly the one click it always was; otherwise mood is picked first
+ * and "Log check-in" saves whatever was answered (mood alone is enough).
  */
-import { h } from '../dom';
+import { h, render } from '../dom';
 import { button } from './primitives';
 import { bridge } from '../bridge';
-import { CHECK_IN_FRESH_MINUTES, CHECK_IN_LABELS, CHECK_IN_MOODS, type CheckInMood } from '../../../src/shared/contract';
+import {
+  CHECK_IN_ENERGY, CHECK_IN_ENERGY_LABELS, CHECK_IN_FRESH_MINUTES, CHECK_IN_LABELS, CHECK_IN_MOODS, CHECK_IN_SLEEP,
+  CHECK_IN_SLEEP_LABELS, type CheckInInput, type CheckInMood,
+} from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
 export function checkInPrompt(ctx: ViewContext): HTMLElement | null {
@@ -29,16 +38,70 @@ export function checkInPrompt(ctx: ViewContext): HTMLElement | null {
     );
   }
 
-  const record = (mood: CheckInMood): void => {
-    void bridge.recordCheckIn({ mood }).then(() => ctx.refresh());
-  };
+  const q = ctx.data.coachingSettings.checkInQuestions;
+  const focusTargets = ctx.data.practice.on
+    ? ctx.data.targets.filter((t) => t.isActive && !t.archivedAt && t.mode !== 'measured')
+    : [];
+  const extended = q.sleep || q.energy || q.ate || focusTargets.length > 0;
 
-  return h('div', null,
-    h('div', { class: 'hint', style: { marginBottom: '6px' } }, 'How are you feeling right now?'),
-    h('div', { style: { display: 'flex', gap: '6px' } },
-      ...CHECK_IN_MOODS.map((mood) =>
-        button(CHECK_IN_LABELS[mood], { variant: 'soft', onClick: () => record(mood) }),
+  if (!extended) {
+    const record = (mood: CheckInMood): void => {
+      void bridge.recordCheckIn({ mood }).then(() => ctx.refresh());
+    };
+    return h('div', null,
+      h('div', { class: 'hint', style: { marginBottom: '6px' } }, 'How are you feeling right now?'),
+      h('div', { style: { display: 'flex', gap: '6px' } },
+        ...CHECK_IN_MOODS.map((mood) =>
+          button(CHECK_IN_LABELS[mood], { variant: 'soft', onClick: () => record(mood) }),
+        ),
       ),
-    ),
-  );
+    );
+  }
+
+  const answer: Partial<CheckInInput> = {};
+  const host = h('div', { class: 'stack', style: { gap: '9px' } });
+
+  /** One labelled single-choice row; clicking the chosen option again clears it (every extra is optional). */
+  const choiceRow = <T extends string>(label: string, options: readonly T[], labels: Record<T, string>, get: () => T | undefined, set: (v: T | undefined) => void): HTMLElement =>
+    h('div', { class: 'check-in-row' },
+      h('span', { class: 'hint' }, label),
+      h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+        ...options.map((v) => {
+          const b = h('button', { class: `chip${get() === v ? ' is-on' : ''}` }, labels[v]);
+          b.addEventListener('click', () => { set(get() === v ? undefined : v); paint(); });
+          return b;
+        }),
+      ),
+    );
+
+  const paint = (): void => {
+    const logBtn = button('Log check-in', {
+      variant: 'primary',
+      disabled: !answer.mood,
+      title: answer.mood ? undefined : 'Pick how you feel first — the rest is optional',
+      onClick: () => {
+        if (!answer.mood) return;
+        void bridge.recordCheckIn({ ...answer, mood: answer.mood }).then(() => ctx.refresh());
+      },
+    });
+    render(host,
+      h('div', { class: 'hint' }, 'How are you feeling right now? Mood is enough — the rest is optional.'),
+      choiceRow('Mood', CHECK_IN_MOODS, CHECK_IN_LABELS, () => answer.mood, (v) => { answer.mood = v; }),
+      q.sleep ? choiceRow('Sleep', CHECK_IN_SLEEP, CHECK_IN_SLEEP_LABELS, () => answer.sleep, (v) => { answer.sleep = v; }) : null,
+      q.energy ? choiceRow('Energy', CHECK_IN_ENERGY, CHECK_IN_ENERGY_LABELS, () => answer.energy, (v) => { answer.energy = v; }) : null,
+      q.ate
+        ? choiceRow('Ate properly', ['yes', 'no'] as const, { yes: 'Yes', no: 'No' },
+            () => (answer.ate === undefined ? undefined : answer.ate ? 'yes' : 'no'),
+            (v) => { if (v === undefined) delete answer.ate; else answer.ate = v === 'yes'; })
+        : null,
+      focusTargets.length
+        ? choiceRow('Today’s focus', focusTargets.map((t) => t.id), Object.fromEntries(focusTargets.map((t) => [t.id, t.name])),
+            () => answer.focusTargetIds?.[0],
+            (v) => { if (v === undefined) delete answer.focusTargetIds; else answer.focusTargetIds = [v]; })
+        : null,
+      h('div', null, logBtn),
+    );
+  };
+  paint();
+  return host;
 }

@@ -1378,3 +1378,11 @@
   padding: 6px 10px;
   gap: 10px;
 }
+
+/* Extended pre-session check-in (#321): label column + one row of chips per question. */
+.check-in-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: center;
+}
