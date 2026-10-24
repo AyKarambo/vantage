@@ -98,3 +98,31 @@ export function asBool(value: unknown): boolean | undefined {
   }
   return undefined;
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Read `game_info.party_player_count` out of an Overwolf GEP `getInfo()` result.
+ * The result's exact shape isn't typed locally and has varied (`{ res: { game_info } }`,
+ * `{ info: { game_info } }`, or a flat `{ game_info }`), so each wrapper is tried in
+ * turn; the count itself may be a number, a numeric string, or nested as
+ * `{ party_player_count }`. Returns the RAW number — solo normalization (0/1 → 1)
+ * is the aggregator's job — or undefined when nothing usable is present.
+ */
+export function partyCountFromInfo(info: unknown): number | undefined {
+  if (!isRecord(info)) return undefined;
+  const candidates = [
+    isRecord(info.res) ? info.res.game_info : undefined,
+    isRecord(info.info) ? info.info.game_info : undefined,
+    info.game_info,
+  ];
+  for (const gameInfo of candidates) {
+    if (!isRecord(gameInfo)) continue;
+    const raw = gameInfo.party_player_count;
+    const n = asNumber(isRecord(raw) ? raw.party_player_count : raw);
+    if (n !== undefined) return n;
+  }
+  return undefined;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MatchAggregator, isRoundEndMessage, isRoundStartMessage, parseRoster } from '../src/core/matchAggregator';
+import { MatchAggregator, isRoundEndMessage, isRoundStartMessage, parseRoster, partyCountFromInfo } from '../src/core/matchAggregator';
 import type { GepMessage } from '../src/core/model';
 import { resolveRole } from '../src/core/resolvers/role';
 import { resolveResult } from '../src/core/resolvers/result';
@@ -673,5 +673,97 @@ describe('parseRoster', () => {
   it('returns undefined for non-roster values', () => {
     expect(parseRoster('not json')).toBeUndefined();
     expect(parseRoster(42)).toBeUndefined();
+  });
+});
+
+describe('MatchAggregator party count', () => {
+  const party = (n: unknown) => info('game_info', 'party_player_count', n);
+  const play = (agg: MatchAggregator, id: string) => {
+    agg.handle(event('match_start'));
+    agg.handle(info('match_info', 'pseudo_match_id', id));
+    return agg.handle(event('match_end'));
+  };
+
+  it('keeps a lobby party size reported before match_start', () => {
+    const agg = new MatchAggregator();
+    agg.handle(party(2));
+    expect(play(agg, 'm1')?.groupSize).toBe(2);
+  });
+
+  it('carries the held count into the next match with no new update', () => {
+    const agg = new MatchAggregator();
+    agg.handle(party(3));
+    expect(play(agg, 'm1')?.groupSize).toBe(3);
+    expect(play(agg, 'm2')?.groupSize).toBe(3);
+  });
+
+  it.each([0, 1])('treats a reported %i as solo for the current and next match', (n) => {
+    const agg = new MatchAggregator();
+    agg.handle(party(2));
+    agg.handle(event('match_start'));
+    agg.handle(party(n));
+    expect(agg.handle(event('match_end'))?.groupSize).toBe(1);
+    expect(play(agg, 'm2')?.groupSize).toBe(1);
+  });
+
+  it('seedPartyCount fills the gap when nothing is held', () => {
+    const agg = new MatchAggregator();
+    expect(agg.hasPartyCount()).toBe(false);
+    agg.seedPartyCount(undefined);
+    expect(agg.hasPartyCount()).toBe(false);
+    agg.handle(event('match_start'));
+    agg.seedPartyCount(4);
+    expect(agg.hasPartyCount()).toBe(true);
+    expect(agg.handle(event('match_end'))?.groupSize).toBe(4);
+    expect(play(agg, 'm2')?.groupSize).toBe(4);
+  });
+
+  it('seedPartyCount normalizes 0 to solo', () => {
+    const agg = new MatchAggregator();
+    agg.seedPartyCount(0);
+    expect(play(agg, 'm1')?.groupSize).toBe(1);
+  });
+
+  it('seedPartyCount never overrides a pushed count', () => {
+    const agg = new MatchAggregator();
+    agg.handle(party(2));
+    agg.seedPartyCount(5);
+    expect(play(agg, 'm1')?.groupSize).toBe(2);
+  });
+
+  it('seedPartyCount mid-match does not override the in-progress record groupSize', () => {
+    const agg = new MatchAggregator();
+    agg.handle(event('match_start'));
+    agg.handle(party(3));
+    agg.seedPartyCount(6);
+    expect(agg.handle(event('match_end'))?.groupSize).toBe(3);
+  });
+
+  it('reset() clears the held count', () => {
+    const agg = new MatchAggregator();
+    agg.handle(party(3));
+    expect(agg.hasPartyCount()).toBe(true);
+    agg.reset();
+    expect(agg.hasPartyCount()).toBe(false);
+    expect(play(agg, 'm1')?.groupSize).toBeUndefined();
+  });
+});
+
+describe('partyCountFromInfo', () => {
+  it('reads the res, info and flat shapes', () => {
+    expect(partyCountFromInfo({ res: { game_info: { party_player_count: 2 } } })).toBe(2);
+    expect(partyCountFromInfo({ info: { game_info: { party_player_count: 3 } } })).toBe(3);
+    expect(partyCountFromInfo({ game_info: { party_player_count: 4 } })).toBe(4);
+  });
+  it('accepts numeric strings, nested values and returns raw 0', () => {
+    expect(partyCountFromInfo({ game_info: { party_player_count: '3' } })).toBe(3);
+    expect(partyCountFromInfo({ game_info: { party_player_count: { party_player_count: 5 } } })).toBe(5);
+    expect(partyCountFromInfo({ game_info: { party_player_count: 0 } })).toBe(0);
+  });
+  it('returns undefined when missing or not an object', () => {
+    expect(partyCountFromInfo({ game_info: {} })).toBeUndefined();
+    expect(partyCountFromInfo({ res: {} })).toBeUndefined();
+    expect(partyCountFromInfo({ game_info: { party_player_count: 'x' } })).toBeUndefined();
+    for (const v of [undefined, null, 'x', 3, []]) expect(partyCountFromInfo(v)).toBeUndefined();
   });
 });
