@@ -9,6 +9,7 @@ import type { RankSeriesPoint } from '../../core/rank/series';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
+import type { PracticeSummary } from '../../core/practice';
 import type { SessionCheckIn } from '../../core/checkIn';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
@@ -16,6 +17,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { CoachingSettings } from '../../core/coachingSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
@@ -117,6 +119,18 @@ export interface MatchRow {
    * one — this is what tells the two apart (R4).
    */
   reviewed: boolean;
+  /**
+   * Review inbox rows only (issue #321): the self-rated targets the focus
+   * chooser pre-selects for this game, by the player's stickiness setting
+   * (falling back to the preceding check-in's "today's focus").
+   */
+  suggestedFocus?: string[];
+  /**
+   * Review inbox rows only (issue #321): automatic break detection read the
+   * gap before this game as a break — the seed for the "Took a break before
+   * this game" chip. Absent = no auto-detected break.
+   */
+  autoBreak?: boolean;
 }
 
 /**
@@ -335,6 +349,21 @@ export interface DashboardData {
    */
   tiltByCheckIn: TiltBucket[];
   /**
+   * Tilt rate by the check-in's optional sleep answer (issue #321), over every
+   * game of the sittings a check-in preceded — keys 'good' | 'ok' | 'poor'.
+   * Empty when no check-in carried a sleep answer.
+   */
+  tiltBySleep: TiltBucket[];
+  /** Same as {@link tiltBySleep}, by the energy answer — keys 'sharp' | 'ok' | 'foggy'. */
+  tiltByEnergy: TiltBucket[];
+  /**
+   * The practice layer of Mental and Review (issue #321): whether practice
+   * mode is on, target execution, per-sitting execution, the soft-factor
+   * table, the weakest days and the newest fully reviewed sitting. On demo
+   * data it reads a deterministic sample overlay, never the real check-in store.
+   */
+  practice: PracticeSummary;
+  /**
    * Every stored pre-session check-in, oldest first — ALWAYS unfiltered (a
    * mood log, not Overwatch data). The idle Live screen and Overview head
    * read the most recent one to decide whether a fresh prompt is due.
@@ -375,6 +404,8 @@ export interface DashboardData {
   readinessSettings: ReadinessSettings;
   /** The effective "Current session" gap threshold, so the Settings editor renders synchronously. */
   sessionSettings: SessionSettings;
+  /** Effective coaching settings (practice focus, check-in questions, break detection), so views render synchronously. */
+  coachingSettings: CoachingSettings;
   /** Effective measured-grade settings (partial-credit margin), so the Settings editor renders synchronously. */
   gradingSettings: GradingSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */

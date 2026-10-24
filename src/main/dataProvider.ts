@@ -8,6 +8,7 @@ import { normalizeBreakReminder, type BreakReminderSettings } from '../core/brea
 import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
 import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { normalizeSessionSettings, type SessionSettings } from '../core/sessionSettings';
+import { normalizeCoachingSettings, type CoachingSettings } from '../core/coachingSettings';
 import { normalizeGradingSettings, type GradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
@@ -36,6 +37,7 @@ import {
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import type { CheckInStore } from '../store/checkIns';
+import { normalizeCheckIn } from '../core/checkIn';
 import type { FriendStore } from '../store/friends';
 import {
   PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, trackMatches, hasDrifted, isAwaitingRank,
@@ -118,6 +120,7 @@ export interface DataProviderDeps {
   persistReadiness(s: ReadinessSettings): void;
   /** Persist a new session-gap threshold into the user's local config file. */
   persistSessionSettings(s: SessionSettings): void;
+  persistCoaching(s: CoachingSettings): void;
   /** Persist the measured-grade settings (partial-credit margin) into the user's local config file. */
   persistGrading(s: GradingSettings): void;
   /** Persist the master-data check settings (incl. `lastCheckedAt`) into the user's local config file (W1). */
@@ -234,7 +237,14 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     saveReview: (input) => {
       // A demo match (F3) is never in real history — `setReview` reports that
       // honestly instead of the write silently vanishing on the next refetch.
-      const saved = deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
+      // `focusTargetIds` / `breakBefore` arrive over untrusted IPC: keep only a
+      // string array / a boolean, and never add the key when absent.
+      const focus = Array.isArray(input.focusTargetIds) ? input.focusTargetIds.filter((id) => typeof id === 'string') : undefined;
+      const saved = deps.history.setReview(input.matchId, {
+        at: Date.now(), grades: input.grades, flags: input.flags,
+        ...(focus ? { focusTargetIds: focus } : {}),
+        ...(typeof input.breakBefore === 'boolean' ? { breakBefore: input.breakBefore } : {}),
+      });
       if (!saved) return { saved };
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
       const party = partyFromInput(input.party);
@@ -267,6 +277,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     logMatch: (input) => {
       const matchId = `manual-${Date.now()}`;
       const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
+      const focus = Array.isArray(input.focusTargetIds) ? input.focusTargetIds.filter((id) => typeof id === 'string') : undefined;
+      const breakBefore = typeof input.breakBefore === 'boolean' ? input.breakBefore : undefined;
+      // A log with "Nothing specific" chosen (`focusTargetIds: []`) or a break
+      // mark is still a deliberate read, so it makes a review even with no grades.
+      const makeReview = !!grades || focus !== undefined || breakBefore !== undefined;
       const party = partyFromInput(input.party);
       deps.recordGame({
         matchId,
@@ -284,7 +299,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         ...(party ? { party } : {}),
         // Inline target grades captured while logging are stored as a review, the
         // same shape the Review screen writes — so they score identically.
-        ...(grades ? { review: { at: Date.now(), grades, flags: input.mental ?? {} } } : {}),
+        ...(makeReview ? {
+          review: {
+            at: Date.now(), grades: grades ?? {}, flags: input.mental ?? {},
+            ...(focus ? { focusTargetIds: focus } : {}),
+            ...(breakBefore !== undefined ? { breakBefore } : {}),
+          },
+        } : {}),
       });
       // Logged WITH a ±% (the quick-log card's usual case) — snapshot where the
       // track stood going in, straight away. Logged without one, there is
@@ -358,6 +379,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const hasGrades = !!(input.grades && Object.keys(input.grades).length);
       if (hasGrades || game.review) {
         patch.review = {
+          // Keep the focus / break mark a prior Review or Log Match saved.
+          ...game.review,
           at: Date.now(),
           grades: hasGrades ? input.grades! : game.review?.grades ?? {},
           flags: input.mental ?? game.mental ?? {},
@@ -774,7 +797,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return config.breakReminder;
     },
     getCheckIns: () => deps.checkIns.all(),
-    recordCheckIn: (mood) => deps.checkIns.add({ at: Date.now(), mood }),
+    recordCheckIn: (input) => {
+      const entry = normalizeCheckIn(input, Date.now());
+      if (!entry) throw new Error('Invalid check-in');
+      return deps.checkIns.add(entry);
+    },
     friends: () => deps.friends.list(),
     // Defensive at the edge: the IPC arg is untyped at runtime, so a non-string
     // name or non-boolean flag is ignored rather than persisted.
@@ -795,6 +822,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       config.sessionSettings = normalizeSessionSettings(input);
       deps.persistSessionSettings(config.sessionSettings);
       return config.sessionSettings;
+    },
+    getCoaching: () => deps.getConfig().coaching,
+    setCoaching: (input) => {
+      const config = deps.getConfig();
+      config.coaching = normalizeCoachingSettings(input);
+      deps.persistCoaching(config.coaching);
+      return config.coaching;
     },
     getGrading: () => deps.getConfig().grading,
     setGrading: (input) => {

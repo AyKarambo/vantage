@@ -5,10 +5,11 @@
  * share it.
  */
 import type { BreakReminderSettings } from '../../core/breakReminder';
-import type { CheckInMood, SessionCheckIn } from '../../core/checkIn';
+import type { CheckInInput, SessionCheckIn } from '../../core/checkIn';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { CoachingSettings } from '../../core/coachingSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { ThresholdSuggestion } from '../../core/targets';
 import type { DashboardFilters, DashboardData, HeroDetail, MatchRow, PendingChangedPayload } from './dashboard';
@@ -226,7 +227,7 @@ export interface OwStatsApi {
   /** Persist new break-reminder settings; returns the persisted (clamped) value. */
   setBreakReminder(input: BreakReminderSettings): Promise<BreakReminderSettings>;
   /** Record a pre-session mood check-in (S10 phase 2) at the current instant. */
-  recordCheckIn(mood: CheckInMood): Promise<SessionCheckIn>;
+  recordCheckIn(input: CheckInInput): Promise<SessionCheckIn>;
   /** The currently persisted readiness feature settings. */
   getReadiness(): Promise<ReadinessSettings>;
   /** Persist new readiness feature settings; returns the persisted value. */
@@ -235,6 +236,10 @@ export interface OwStatsApi {
   getSessionSettings(): Promise<SessionSettings>;
   /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
   setSessionSettings(input: SessionSettings): Promise<SessionSettings>;
+  /** The currently persisted coaching (practice focus / check-in / break) settings. */
+  getCoaching(): Promise<CoachingSettings>;
+  /** Persist new coaching settings; returns the persisted (normalized) value. */
+  setCoaching(input: CoachingSettings): Promise<CoachingSettings>;
   /** The currently persisted measured-grade settings (partial-credit margin). */
   getGrading(): Promise<GradingSettings>;
   /** Persist new measured-grade settings; returns the persisted (clamped) value. */
@@ -454,6 +459,8 @@ export const IPC_CHANNELS = {
   setReadiness: 'settings:set-readiness',
   getSessionSettings: 'settings:get-session',
   setSessionSettings: 'settings:set-session',
+  getCoaching: 'settings:get-coaching',
+  setCoaching: 'settings:set-coaching',
   getGrading: 'settings:get-grading',
   setGrading: 'settings:set-grading',
   listNotionDatabases: 'notion:list-databases',

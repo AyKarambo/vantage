@@ -19,6 +19,8 @@ import { targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsToneSwitch }
 import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
+import { focusTargetChooser } from '../components/focusTargetChooser';
+import { breakChip } from '../components/breakChip';
 import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
@@ -90,6 +92,8 @@ interface LogState {
 /** Fields carried into the next form by "Save & next" (same sitting, so heroes usually hold). */
 export interface LogCarry {
   heroes?: string[];
+  /** The just-saved match's focus choice (#321) — Save & next pre-selects it, since the refetch that would recompute `practice.nextFocus` hasn't landed yet. */
+  focusTargetIds?: string[];
   /**
    * The just-saved match's own `playedAt` (L5) — backfilling a whole missed
    * SESSION used to mean re-clicking the same relative-offset chip on every
@@ -303,6 +307,7 @@ function buildForm(
         : setCurrent
           ? (state.rankPreview?.anchored ? state.rankPreview.srDelta : undefined)
           : (state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined);
+      const focusTargetIds = chooser?.focusIds();
       const { matchId } = await bridge.logMatch({
         result: state.result,
         role: state.role,
@@ -314,6 +319,8 @@ function buildForm(
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
         ...(state.performance != null ? { performance: state.performance } : {}),
         ...(Object.keys(grades).length ? { grades } : {}),
+        ...(focusTargetIds !== undefined ? { focusTargetIds } : {}),
+        ...(brk?.changed() ? { breakBefore: brk.value() } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
         ...(party.value() ? { party: party.value() } : {}),
       });
@@ -628,13 +635,37 @@ function buildForm(
   // L5: kept as a stable field (a "No active targets" hint, matching the
   // editor's own copy) rather than dropped outright when there are none —
   // the form no longer reflows around whether targets happen to exist.
-  const targetRows = activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
+  // Practice mode (#321): the same "What did you work on this game?" chooser
+  // Review uses — only the chosen self-rated targets get graded (measured
+  // ones grade themselves from stats), plus the break mark.
+  const practice = ctx.data.practice.on;
+  const selfTargets = activeTargets.filter((t) => t.mode !== 'measured');
+  const chooser = practice && selfTargets.length
+    ? focusTargetChooser({
+        targets: selfTargets,
+        initial: carry?.focusTargetIds ?? ctx.data.practice.nextFocus,
+        grades,
+        stickiness: ctx.data.coachingSettings.focusStickiness,
+        onStickiness: (focusStickiness) => {
+          ctx.data.coachingSettings.focusStickiness = focusStickiness;
+          void bridge.setCoaching({ ...ctx.data.coachingSettings, focusStickiness });
+        },
+      })
+    : null;
+  // Only when breaks are marked by hand: a freshly logged game has no
+  // previous-game gap to seed the chip from, so in automatic mode the
+  // detection itself decides (and the chip would just contradict it).
+  const brk = practice && ctx.data.coachingSettings.breakDetection === 'manual' ? breakChip(false) : null;
+  const targetRows = chooser ? [] : activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
   const targetsBlock = field(
-    optionalLabel('Targets', '— grade now or later on Review'),
+    optionalLabel(practice ? 'What did you work on?' : 'Targets', '— grade now or later on Review'),
     h('div', { class: 'stack', style: { gap: '10px' } },
-      ...(targetRows.length
-        ? targetRows.map((r) => r.el)
-        : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+      ...(chooser
+        ? [chooser.el]
+        : targetRows.length
+          ? targetRows.map((r) => r.el)
+          : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+      brk ? brk.el : null,
     ),
   );
 
@@ -660,8 +691,10 @@ function buildForm(
       // re-clicking the same relative chip, each measured from an ever-later
       // "now", on every single form; "Just now" (null) carries nothing, since
       // there's no backfill happening to preselect a starting point for.
+      const focus = chooser?.focusIds();
       const openNext = (): void => openLogMatch(ctx, {
         heroes: [...state.heroes],
+        ...(focus && ctx.data.coachingSettings.focusStickiness !== 'game' ? { focusTargetIds: focus } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
       // A completing match gets the reveal-rank confirmation first rather
@@ -740,7 +773,7 @@ function buildForm(
   // editor, L5 — see bindSaveKeys).
   bindResultKeys(form, resultRow);
   bindSaveKeys(form, { save: saveAndClose, saveAndNext });
-  bindTargetGradeKeys(form, targetRows);
+  bindTargetGradeKeys(form, chooser ? () => chooser.rows() : targetRows);
 
   // Nothing moves focus into the dialog by default, which leaves W/L/D dead and
   // (worse) leaves focus on the opener button, so a stray Enter re-clicks it and

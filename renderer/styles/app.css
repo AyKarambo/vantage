@@ -921,6 +921,22 @@
   color: var(--muted);
   margin-bottom: 11px;
 }
+/* Sitting recap (#321): practice tiles first, the result tile last and quietest. */
+.recap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.recap-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 10px);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.recap-tile--accent {
+  border-color: rgba(124, 108, 245, 0.4);
+}
 .review-target {
   display: flex;
   align-items: center;
@@ -1361,4 +1377,166 @@
 :root[data-density='compact'] .match-row {
   padding: 6px 10px;
   gap: 10px;
+}
+
+/* Extended pre-session check-in (#321): label column + one row of chips per question. */
+.check-in-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ---- Mental practice mode (#321) ------------------------------------------ */
+.grade-bar {
+  display: flex;
+  height: 9px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-3);
+  margin-top: 12px;
+}
+.grade-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.grade-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  vertical-align: baseline;
+}
+.grade-dot--lg {
+  width: 13px;
+  height: 13px;
+}
+.grade-dots {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.practice-secondary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.sitting-bars {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  min-height: 140px;
+  margin-top: 6px;
+}
+.sitting-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--muted);
+}
+.sitting-bar-fill {
+  width: 100%;
+  max-width: 36px;
+  border-radius: 5px 5px 2px 2px;
+  background: var(--accent);
+}
+.practice-target-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(120px, 1.4fr) minmax(110px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-1);
+}
+.practice-target-row .statbar-label {
+  display: none;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table.factor-table {
+  min-width: 620px;
+}
+table.factor-table .statbar-label {
+  display: none;
+}
+table.factor-table .factor-head td {
+  color: var(--muted);
+  font-size: 11.5px;
+  padding-top: 12px;
+}
+table.factor-table tr.is-thin td {
+  opacity: 0.5;
+}
+table.factor-table .num {
+  text-align: right;
+}
+.weak-day {
+  padding: 10px 0;
+  border-top: 1px solid var(--line-1);
+}
+.weak-day:first-child {
+  border-top: 0;
+}
+.practice-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 15px;
+  border: 1px solid rgba(124, 108, 245, 0.3);
+  background: var(--accent-soft-2);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.mental-more > summary {
+  cursor: pointer;
+  padding: 12px 2px;
+  font-size: 13.5px;
+  list-style: none;
+}
+.mental-more > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+}
+.mental-more[open] > summary::before {
+  content: '▾ ';
+}
+.mental-more[open] > summary {
+  margin-bottom: 8px;
+}
+table.factor-table th,
+table.factor-table td {
+  text-align: left;
+}
+table.factor-table th {
+  cursor: default;
+}
+table.factor-table th.num,
+table.factor-table td.num {
+  text-align: right;
+}
+.practice-target-exec {
+  display: grid;
+  grid-template-columns: 1fr 40px;
+  gap: 8px;
+  align-items: center;
+}
+.practice-target-exec .grade-bar {
+  margin-top: 0;
 }

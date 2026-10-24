@@ -17,8 +17,25 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Added
+
+- **Practice focus for Mental and Review.** While you're working on targets, Mental and Review lead with
+  how well you executed them, and win/loss moves to second place. Set it in **Settings → Coaching**: Auto
+  (on while any target is active, the default), Always on, or Off.
+- **Say what you worked on, per game.** Review and Log Match ask "What did you work on this game?" Only the
+  targets you pick get graded, so a target you didn't work on is never counted as a miss. You can also mark
+  a break before a game, and once every game in a sitting is reviewed, a **Sitting recap** sums it up.
+- **Optional check-in questions and what shapes your performance.** Sleep, energy and whether you ate
+  properly can be added to the pre-game check-in in **Settings → Coaching** (all off by default). Mental then
+  shows how those, breaks and game number in a sitting line up with how you played, plus your weakest days.
+  These are patterns in your own history, not proof of cause.
+
 ### Changed
 
+- **Self-rating moved from Trends to Mental.** Trends now shows objective facts only. "How you played over
+  time" on Mental carries the self-rating chart.
+- **Target staleness counts only games you worked on.** A self-rated target goes stale based on the games
+  where you chose it or graded it. Measured targets still count every match.
 - **Time of day on Trends is back to simple bars.** The weekday × time-of-day grid was hard to read and
   spread your games so thin that most slots said little. The card now shows one winrate bar per part of
   the day (morning, afternoon, evening, night), like the other splits on Trends, and still names your

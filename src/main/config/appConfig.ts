@@ -5,6 +5,7 @@ import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from '../../core/b
 import { DEFAULT_STALENESS, type StalenessSettings } from '../../core/staleness';
 import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from '../../core/sessionSettings';
+import { DEFAULT_COACHING, normalizeCoachingSettings, type CoachingSettings } from '../../core/coachingSettings';
 import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 
@@ -123,6 +124,8 @@ export interface AppConfig {
   sessionSettings: SessionSettings;
   /** Measured-target grading settings (the partial-credit margin). */
   grading: GradingSettings;
+  /** Practice-focus / check-in / break-detection settings (issue #321). */
+  coaching: CoachingSettings;
   /** Editable-master-data source config (the Update action's endpoint). */
   masterData: MasterDataConfig;
   /**
@@ -154,6 +157,7 @@ const DEFAULTS: AppConfig = {
   readiness: { ...DEFAULT_READINESS },
   sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
   grading: { ...DEFAULT_GRADING_SETTINGS },
+  coaching: { ...DEFAULT_COACHING, checkInQuestions: { ...DEFAULT_COACHING.checkInQuestions } },
   masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ui: {
     closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true,
@@ -199,6 +203,7 @@ export function loadConfig(): AppConfig {
     readiness: { ...DEFAULTS.readiness, ...(bundled.readiness ?? {}), ...(local.readiness ?? {}) },
     sessionSettings: { ...DEFAULTS.sessionSettings, ...(bundled.sessionSettings ?? {}), ...(local.sessionSettings ?? {}) },
     grading: { ...DEFAULTS.grading, ...(bundled.grading ?? {}), ...(local.grading ?? {}) },
+    coaching: normalizeCoachingSettings({ ...DEFAULTS.coaching, ...(bundled.coaching ?? {}), ...(local.coaching ?? {}) }),
     masterData: { ...DEFAULTS.masterData, ...(bundled.masterData ?? {}), ...(local.masterData ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };

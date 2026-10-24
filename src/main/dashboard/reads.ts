@@ -144,6 +144,7 @@ export function dashboardRead(
       readiness: provider.getReadiness(),
       readinessSummary: memoizedReadiness(all, provider),
       sessionSettings: provider.getSessionSettings(),
+      coaching: provider.getCoaching(),
       grading: provider.getGrading(),
       rankAnchors: provider.rankAnchorMap(),
       placementRuns: provider.placementRuns(),

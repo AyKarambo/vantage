@@ -23,8 +23,11 @@ export type { TargetSummary, TargetMode, OrderedAttempt } from '../../core/targe
 export type { TargetLearningCurve, LearningCurvePoint, LearningPhase } from '../../core/targets';
 export type { StalenessSettings } from '../../core/staleness';
 export type { BreakReminderSettings } from '../../core/breakReminder';
-export type { CheckInMood, SessionCheckIn } from '../../core/checkIn';
-export { CHECK_IN_MOODS, CHECK_IN_LABELS, CHECK_IN_FRESH_MINUTES } from '../../core/checkIn';
+export type { CheckInMood, SessionCheckIn, CheckInSleep, CheckInEnergy, CheckInInput } from '../../core/checkIn';
+export {
+  CHECK_IN_MOODS, CHECK_IN_LABELS, CHECK_IN_FRESH_MINUTES,
+  CHECK_IN_SLEEP, CHECK_IN_ENERGY, CHECK_IN_SLEEP_LABELS, CHECK_IN_ENERGY_LABELS, normalizeCheckIn,
+} from '../../core/checkIn';
 export type {
   ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,
   ReadinessConfidence, ReadinessConfidenceGate, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
@@ -33,7 +36,16 @@ export type {
 export type { DemoPreference } from '../../core/demoPreference';
 export type { RankSeriesPoint } from '../../core/rank/series';
 export type { SessionSettings } from '../../core/sessionSettings';
+export type {
+  CoachingSettings, CheckInQuestions, PracticeFocusMode, FocusStickiness, BreakDetection,
+} from '../../core/coachingSettings';
 export type { GradingSettings } from '../../core/gradingSettings';
+
+// Practice layer (issue #321)
+export type {
+  PracticeSummary, ExecutionTally, SittingExecution, FactorKey, FactorRow, FactorEntry, FactorHeadline, WeakDay, SittingRecap,
+} from '../../core/practice';
+export { FACTOR_LEVELS, FACTOR_LABELS } from '../../core/practice';
 
 // Dashboard payloads
 export type {

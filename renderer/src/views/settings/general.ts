@@ -5,6 +5,7 @@ import { breakReminderEditor } from '../../components/breakReminderEditor';
 import { readinessSettingsEditor } from '../../components/readinessSettingsEditor';
 import { stalenessEditor } from '../../components/stalenessEditor';
 import { sessionSettingsEditor } from '../../components/sessionSettingsEditor';
+import { coachingSettingsEditor } from '../../components/coachingSettingsEditor';
 import { gradingSettingsEditor } from '../../components/gradingSettingsEditor';
 import { getWinrateScheme, setWinrateScheme } from '../../theme';
 import { WINRATE_SCHEME_OPTIONS, type WinrateScheme } from '../../winrateScheme';
@@ -83,6 +84,11 @@ export function generalTab(ctx: ViewContext): HTMLElement {
     h('div', { class: 'grid-2' },
       section(card({ title: 'Coaching', sub: 'nudges and thresholds used across the app' },
         quickLogBlock(ctx),
+        coachingBlock(ctx, {
+          title: 'Practice focus',
+          hint: 'Lead Mental and Review with your targets, the optional check-in questions, and how breaks are read.',
+          jump: { label: 'See it on Mental →', view: 'mental' },
+        }, coachingSettingsEditor(ctx)),
         coachingBlock(ctx, {
           title: 'Break reminder',
           hint: 'A tray nudge after N losses in a row, so a tilt spiral does not run unnoticed.',

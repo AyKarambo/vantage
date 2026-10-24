@@ -104,6 +104,8 @@ interface PrefsShape {
    * from one earlier dismissal.
    */
   firstRealGameBannerDismissed: boolean;
+  /** Dismissed Mental's stats-mode "Practising something specific? Track a target" banner (#321). */
+  practiceBannerDismissed: boolean;
   /**
    * List density (W7) — `comfortable` (default) or `compact`, tightening
    * table-row and card padding for more on screen at once. Applied via the

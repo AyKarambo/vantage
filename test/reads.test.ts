@@ -12,6 +12,7 @@ import { DEFAULT_BREAK_REMINDER } from '../src/core/breakReminder';
 import { DEFAULT_STALENESS } from '../src/core/staleness';
 import { DEFAULT_READINESS } from '../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS } from '../src/core/sessionSettings';
+import { DEFAULT_COACHING } from '../src/core/coachingSettings';
 import { DEFAULT_GRADING_SETTINGS } from '../src/core/gradingSettings';
 import { PLAYER_ROW_CAP } from '../src/core/playerIndex';
 
@@ -53,6 +54,7 @@ function fakeProvider(
     getStaleness: () => DEFAULT_STALENESS,
     getReadiness: () => DEFAULT_READINESS,
     getSessionSettings: () => DEFAULT_SESSION_SETTINGS,
+    getCoaching: () => DEFAULT_COACHING,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
     placementRuns: () => [],

@@ -13,6 +13,9 @@ import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
 import type { ViewContext } from '../view';
 
+/** More active targets than this gets the soft "1–2 work best" hint (#321). */
+const MAX_RECOMMENDED_ACTIVE = 2;
+
 export function activeSetCard(ctx: ViewContext): HTMLElement | null {
   if (ctx.data.isSample) return null;
   const live = ctx.data.targets.filter((t) => !t.archivedAt);
@@ -62,6 +65,12 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
   return card(
     { variant: 'raised', title: 'Active focus', sub: "what you're grading now — rotate it when it goes stale" },
     h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '7px' } }, ...activeChips),
+    // A soft nudge, never a limit (#321): on Review you pick what you worked on
+    // per game anyway, but a focus spread over many targets rarely sticks.
+    active.length > MAX_RECOMMENDED_ACTIVE
+      ? h('div', { class: 'hint', style: { marginTop: '8px' } },
+          `${active.length} active targets — 1–${MAX_RECOMMENDED_ACTIVE} work best. You choose per game on Review which one you practised.`)
+      : null,
     controls,
   );
 }

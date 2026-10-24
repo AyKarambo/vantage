@@ -44,6 +44,17 @@ export interface ManualMatchInput {
    * receiver so a skewed clock can never produce future-stamped history.
    */
   playedAt?: number;
+  /**
+   * The self-rated targets the player chose to work on this game (#321). `[]`
+   * = "Nothing specific" deliberately chosen; absent = not asked.
+   */
+  focusTargetIds?: string[];
+  /**
+   * The player's own break mark for the gap before this game: `true` = marked
+   * a break, `false` = removed an auto-detected one; absent = follow break
+   * detection.
+   */
+  breakBefore?: boolean;
   /** Who the player queued with; omitted/`null` records no party (GEP count, or Unknown). */
   party?: PartyInput;
 }
@@ -134,6 +145,17 @@ export interface ReviewInput {
    * {@link MatchEditInput.srDelta}.
    */
   srDelta?: number | null;
+  /**
+   * The self-rated targets the player chose to work on this game (#321). `[]`
+   * = "Nothing specific" deliberately chosen; absent = not asked.
+   */
+  focusTargetIds?: string[];
+  /**
+   * The player's own break mark for the gap before this game: `true` = marked
+   * a break, `false` = removed an auto-detected one; absent = follow break
+   * detection.
+   */
+  breakBefore?: boolean;
   /** New party, or `null` to clear it; `undefined` leaves it unchanged. */
   party?: PartyInput;
 }

@@ -282,7 +282,9 @@ account's per-role lines beneath it.
   popover explaining what it creates before pre-filling the builder's hero/role/map scope, not
   just the name — and links back to a target scoped that way directly, not just by matching
   its name.
-- **Mental** — calm/tilt state, a **"What it costs you"** card (the tilt tax generalized:
+- **Mental** — in **practice focus** (Settings › Coaching: Auto, Always on or Off), it leads with
+  **target execution** and a **"What shapes your performance"** table (sleep, energy, mood and food from
+  your check-ins, breaks and game number in a sitting); with it off, the stats view leads with calm/tilt state and a **"What it costs you"** card (the tilt tax generalized:
   winrate deltas for tilt, comms tone, toxic teammates, a my-team/enemy **leaver swing**,
   and the performance drop when tilted — each sample-gated), a **tilt-rate line chart**
   (rolling average included, same chart Trends uses for winrate) with an improving/worsening
@@ -389,10 +391,13 @@ account's per-role lines beneath it.
   (doesn't replace) the Mental break reminder. It's the one screen that ignores the filter bar
   and account switcher entirely — readiness is about the person, not a slice of their history.
 - **Review** — grade your active **self-rated** (◎) targets (Hit / Partial / Missed), flag
-  how each tracked game felt, and rate your own **performance** on a 0-100 slider, and
+  how each tracked game felt, rate your own **performance** on a 0-100 slider, and
   record who you **queued with** (Solo, your own-team teammates from that match's roster with
   friends starred, or any name typed in); **measured
-  (⚡) targets are auto-graded from that match's stats and shown read-only**. An
+  (⚡) targets are auto-graded from that match's stats and shown read-only**. In practice focus,
+  you first pick **what you worked on that game** (chips per target, plus a break mark) — only the
+  chosen targets are graded, so an unchosen one is never a miss — and a **sitting recap** sums up a
+  session once every game in it is reviewed. An
   always-visible inbox of ungraded games, independent of the global filters, **grouped by day**
   ("Yesterday · 2 games · 1-1") — today's games stay open by default, older days collapse to a
   one-line header you expand when you're ready for them, and each header carries its own
@@ -620,7 +625,8 @@ row's **Manage ranks…** button; the active account filter **auto-switches** wh
 different logged-in account), a **Master data**
 editor (see below), and a **Coaching** card whose six editors — Quick Log (how many most-played
 heroes the log-match hero picker suggests, folded in as the first row), break reminder, readiness
-coach, target rotation, current session, and grading margin — each get their own heading, a
+coach, target rotation, current session, and grading margin — plus practice focus (Auto / Always on /
+Off), break detection and the optional check-in questions — each get their own heading, a
 one-line hint naming what they actually affect, and a "See it on X →" link to the screen they
 govern, plus close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, and rank anchors — to any folder,

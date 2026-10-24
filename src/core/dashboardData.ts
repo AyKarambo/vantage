@@ -24,6 +24,12 @@ import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type ReadinessSummary } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
+import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
+import {
+  autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
+  sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
+} from './practice';
+import { samplePracticeLayer } from './sampleData';
 import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
@@ -42,6 +48,8 @@ export interface ManualData {
   readiness?: ReadinessSettings;
   /** Effective "Current session" gap threshold; defaults when absent. */
   sessionSettings?: SessionSettings;
+  /** Effective practice-focus / check-in / break-detection settings; defaults when absent. */
+  coaching?: CoachingSettings;
   /** Effective measured-grade settings (partial-credit margin); defaults when absent. */
   grading?: GradingSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
@@ -163,6 +171,14 @@ export function computeDashboard(
     ? all.filter((g) => g.account === filters.account)
     : all;
   const sessionSettings = manual?.sessionSettings ?? DEFAULT_SESSION_SETTINGS;
+  const coaching = manual?.coaching ?? DEFAULT_COACHING;
+  const checkIns = manual?.checkIns ?? [];
+  const targets = withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all);
+  // The practice reads (issue #321) run over a deterministic sample overlay on
+  // demo data — focus choices, grades and extended check-ins the generated
+  // season doesn't carry — and over the real history + check-ins otherwise.
+  const practiceSrc = demo.active ? samplePracticeLayer(all) : { games: all, checkIns };
+  const inRange = new Set(games.map((g) => g.matchId));
 
   // The comparison window immediately before the active one (C3) — same
   // account/role scope as `games`, a shifted date range. `undefined` on
@@ -182,6 +198,13 @@ export function computeDashboard(
         heroStats: heroStats(prevGames, { mapModeOf, suppressed }),
       };
     })()
+    : undefined;
+  const prevIds = previousRange
+    ? new Set(all
+      .filter((g) => g.timestamp >= previousRange.start && g.timestamp < previousRange.end)
+      .filter((g) => !filters.account || filters.account === 'all' || g.account === filters.account)
+      .filter((g) => !filters.role || filters.role === 'all' || g.role === filters.role)
+      .map((g) => g.matchId))
     : undefined;
   // C5: account/role-scoped but NOT date-scoped (see bySeasonOf) — a real
   // "how did each season go" read, computed once here rather than the
@@ -315,10 +338,14 @@ export function computeDashboard(
     tiltAfterResult: tiltAfterResult(all, { include: new Set(games.map((g) => g.matchId)) }),
     tiltByMap: tiltByMap(games),
     tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: new Set(games.map((g) => g.matchId)) }),
-    checkIns: manual?.checkIns ?? [],
+    tiltBySleep: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'sleep'),
+    tiltByEnergy: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'energy'),
+    practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching),
+    checkIns,
     performance: performanceStats(games),
-    targets: withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all),
-    reviewInbox: pending.slice(0, ROW_CAP).map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)),
+    targets,
+    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets))
+      .map(({ g, extra }) => ({ ...toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed), ...extra })),
     pendingReviews: pending.length,
     pendingReviewsRecent: pendingReviewsRecent(pending),
     pendingMatches,
@@ -340,6 +367,7 @@ export function computeDashboard(
     }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     sessionSettings,
+    coachingSettings: coaching,
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
@@ -683,6 +711,76 @@ function matchStatTotals(g: GameRecord): Pick<MatchRow, 'eliminations' | 'assist
 }
 
 /**
+ * The practice layer's payload (issue #321). Only self-rated grades count —
+ * archived targets included, so history keeps its meaning after a rotation.
+ * Sittings, factors and days are cut over the full history; `inRange` /
+ * `prevIds` scope which games aggregate.
+ */
+function practiceOf(
+  src: { games: GameRecord[]; checkIns: NonNullable<ManualData['checkIns']> },
+  inRange: ReadonlySet<string>,
+  prevIds: ReadonlySet<string> | undefined,
+  targets: TargetSummary[],
+  coaching: CoachingSettings,
+): PracticeSummary {
+  const selfIds = new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id));
+  const rangeGames = src.games.filter((g) => inRange.has(g.matchId));
+  const execution = executionOf(rangeGames, selfIds);
+  const prevExecution = prevIds ? executionOf(src.games.filter((g) => prevIds.has(g.matchId)), selfIds) : undefined;
+  const factors = factorTable(src.games, inRange, src.checkIns, coaching, selfIds);
+  const headline = factorHeadline(factors);
+  const recap = sittingRecap(src.games, src.checkIns, selfIds);
+  const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
+  // A game logged right now: the same pre-selection an inbox row gets.
+  const now: GameRecord = {
+    matchId: '__next__', timestamp: Date.now(), account: '', role: 'damage', map: '', result: 'Draw', gameType: 'Competitive', heroes: [],
+  };
+  const nextFocus = selectable.size
+    ? focusPreselection([...src.games, now], now, coaching.focusStickiness, src.checkIns, selectable)
+    : [];
+  return {
+    on: practiceFocusOn(coaching, targets),
+    execution,
+    ...(prevExecution?.attempts ? { prevExecution } : {}),
+    sittings: sittingExecution(src.games, inRange, selfIds),
+    factors,
+    ...(headline ? { headline } : {}),
+    weakestDays: weakestDays(src.games, inRange, src.checkIns, coaching, selfIds),
+    ...(recap ? { recap } : {}),
+    byTarget: executionByTarget(rangeGames, selfIds),
+    nextFocus,
+  };
+}
+
+/**
+ * The Review inbox's practice extras (issue #321) per row: which focus
+ * targets the chooser pre-selects (by the player's stickiness setting, with
+ * the preceding check-in's "today's focus" as fallback) and whether automatic
+ * break detection read the gap before the game as a break. Both read the
+ * unfiltered history — sittings are a per-person fact.
+ */
+function inboxRows(
+  rows: GameRecord[],
+  all: GameRecord[],
+  targets: TargetSummary[],
+  coaching: CoachingSettings,
+  checkIns: NonNullable<ManualData['checkIns']>,
+  practiceOn: boolean,
+): Array<{ g: GameRecord; extra: Pick<MatchRow, 'suggestedFocus' | 'autoBreak'> }> {
+  // Stats mode reads neither — keep every row exactly as before (and skip the work).
+  if (!practiceOn) return rows.map((g) => ({ g, extra: {} }));
+  const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
+  const prevOf = new Map<string, GameRecord>();
+  for (const s of sittingsOf(all)) s.forEach((g, i) => { if (i) prevOf.set(g.matchId, s[i - 1]); });
+  const preselect = selectable.size ? focusPreselector(all, coaching.focusStickiness, checkIns, selectable) : null;
+  return rows.map((g) => {
+    const suggested = preselect ? preselect(g) : [];
+    const autoBreak = autoBreakBefore(g, prevOf.get(g.matchId) ?? null, coaching);
+    return { g, extra: { ...(suggested.length ? { suggestedFocus: suggested } : {}), ...(autoBreak ? { autoBreak } : {}) } };
+  });
+}
+
+/**
  * Enrich active, non-archived authored targets with the staleness inputs the
  * renderer needs: when they became active (`activatedAt`, defaulting to
  * `createdAt`) and how many matches have been played since — counted over
@@ -700,7 +798,12 @@ function withStaleness(
     const t = byId.get(s.id);
     if (!t || !s.isActive || s.archivedAt) return s;
     const activatedAt = t.activatedAt ?? t.createdAt;
-    const matchesSinceActive = all.reduce((n, g) => (g.timestamp >= activatedAt ? n + 1 : n), 0);
+    // A self-rated target ages only on the games it was actually worked on
+    // (issue #321) — parked while you practise another one, it doesn't go
+    // stale. Measured targets grade every game, so every game counts for them.
+    const matchesSinceActive = t.mode === 'measured'
+      ? all.reduce((n, g) => (g.timestamp >= activatedAt ? n + 1 : n), 0)
+      : focusGamesSince(all, t.id, activatedAt);
     return { ...s, activatedAt, matchesSinceActive };
   });
 }

@@ -28,6 +28,9 @@ import { badge, button, card, chip, confirmButton, emptyState, resultPill } from
 import { targetGradeRow, mentalFlagsRow, quickGradeChip, type BoolFlagKey } from '../components/reviewControls';
 import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { performanceSlider } from '../components/performanceSlider';
+import { focusTargetChooser, type FocusChooser } from '../components/focusTargetChooser';
+import { breakChip } from '../components/breakChip';
+import { sittingRecapCard } from '../components/sittingRecap';
 import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { toast } from '../components/toast';
 import { openPopover } from '../components/popover';
@@ -55,6 +58,8 @@ let kbHook: {
   save: () => void;
   skip: () => void;
   toggleFlag: (key: BoolFlagKey) => void;
+  /** Practice mode (#321): toggle the n-th focus-target chip (keys 1–9). */
+  toggleFocus?: (index: number) => void;
 } | null = null;
 const kbActive = (): boolean =>
   store.get().view === 'review' && kbHook !== null && kbHook.el.isConnected;
@@ -66,6 +71,18 @@ registerShortcut({ combo: 's', description: 'Save the open review & advance', gr
 registerShortcut({ combo: 'n', description: 'Skip — leave for later, open the next game', group: 'Review', when: kbActive, run: () => kbHook?.skip() });
 registerShortcut({ combo: 't', description: 'Toggle Tilt on the open game', group: 'Review', when: kbActive, run: () => kbHook?.toggleFlag('tilt') });
 registerShortcut({ combo: 'x', description: 'Toggle Toxic mates on the open game', group: 'Review', when: kbActive, run: () => kbHook?.toggleFlag('toxicMates') });
+// Practice mode (#321): 1–9 pick which target you worked on this game.
+for (let i = 1; i <= 9; i++) {
+  registerShortcut({
+    combo: String(i),
+    description: 'Practice mode: toggle focus target 1–9',
+    // One cheatsheet row stands for all nine digits.
+    hidden: i !== 1,
+    group: 'Review',
+    when: () => kbActive() && kbHook?.toggleFocus !== undefined,
+    run: () => kbHook?.toggleFocus?.(i - 1),
+  });
+}
 
 export function review(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
@@ -97,11 +114,19 @@ export function review(ctx: ViewContext): HTMLElement {
   // say so up front instead of letting the "Review saved" toast be the first
   // place a returning player learns that.
   const demoNotice = d.isSample ? demoNoticeCard() : null;
+  // The sitting recap (#321): practice mode only, and only once you've just
+  // finished reading that sitting here — not an old sitting on every visit.
+  const recap = d.practice.on && d.practice.recap
+    && d.practice.recap.matchIds.some((id) => gradedThisSession.has(id))
+    && !dismissedRecaps.has(d.practice.recap.startedAt)
+    ? sittingRecapCard(d.practice.recap, () => { dismissedRecaps.add(d.practice.recap!.startedAt); store.rerender(); })
+    : null;
 
   if (!pending.length) {
     return h('div', { class: 'view view--narrow' },
       head,
       demoNotice,
+      recap,
       activeStrip(active),
       needsResultSection,
       card({ variant: 'raised' }, emptyState('All caught up — every tracked game has your read. 🎯', true)),
@@ -141,6 +166,7 @@ export function review(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view view--narrow' },
     head,
     demoNotice,
+    recap,
     activeStrip(active),
     needsResultSection,
     h('div', { class: 'stack', style: { gap: '10px' } },
@@ -186,6 +212,9 @@ function demoNoticeCard(): HTMLElement {
  * before the pending-store refetch arrives (mirrors {@link gradedThisSession}).
  */
 const resolvedThisSession = new Set<string>();
+
+/** Sitting recaps (#321) dismissed this session, keyed by the sitting's start — survives re-renders like {@link resolvedThisSession}. */
+const dismissedRecaps = new Set<number>();
 
 /**
  * Day-group keys (R3) the player has expanded — every `review()` call
@@ -476,8 +505,10 @@ function selfTargetsFor(m: MatchRow, active: TargetSummary[]): TargetSummary[] {
  * save, but no placement-confirm/offer follow-up: quick-grade never touches
  * rank data, so there is nothing new for either of those to react to.
  */
-function quickSave(m: MatchRow, grades: Record<string, TargetGrade>, flags: MatchMental, onDone: () => void): void {
-  void bridge.saveReview({ matchId: m.matchId, grades, flags }).then(({ saved }) => {
+function quickSave(
+  m: MatchRow, grades: Record<string, TargetGrade>, flags: MatchMental, onDone: () => void, focusTargetIds?: string[],
+): void {
+  void bridge.saveReview({ matchId: m.matchId, grades, flags, ...(focusTargetIds ? { focusTargetIds } : {}) }).then(({ saved }) => {
     if (saved) gradedThisSession.add(m.matchId);
     onDone();
     reviewSaveToast(saved, m.map, () => void bridge.clearReview(m.matchId).then(() => {
@@ -534,7 +565,7 @@ function item(
   const draw = (): void => {
     render(host, open
       ? expanded(ctx, m, active, onSaved, skipToNext, placements)
-      : collapsed(m, active, () => { open = true; draw(); }, onSaved));
+      : collapsed(ctx, m, active, () => { open = true; draw(); }, onSaved));
   };
   draw();
   // Deferred: `host` isn't attached to the document yet at this point —
@@ -544,8 +575,14 @@ function item(
   return controller;
 }
 
-function collapsed(m: MatchRow, active: TargetSummary[], onOpen: () => void, onGraded: () => void): HTMLElement {
-  const selfTargets = selfTargetsFor(m, active);
+function collapsed(ctx: ViewContext, m: MatchRow, active: TargetSummary[], onOpen: () => void, onGraded: () => void): HTMLElement {
+  const inScope = selfTargetsFor(m, active);
+  // Practice mode (#321): the row's quick-grade chips cover only the targets
+  // pre-selected as this game's focus — grading every active target would
+  // count the parked ones as attempts. With no pre-selection, the choice
+  // belongs to the full card ("Grade").
+  const practice = ctx.data.practice.on;
+  const selfTargets = practice ? inScope.filter((t) => m.suggestedFocus?.includes(t.id)) : inScope;
   const grades: Record<string, TargetGrade> = {};
   const flags: MatchMental = {};
   let saved = false;
@@ -554,16 +591,22 @@ function collapsed(m: MatchRow, active: TargetSummary[], onOpen: () => void, onG
   // there is, so that becomes the trigger instead.
   const maybeSave = (): void => {
     if (saved) return;
+    if (practice && inScope.length && !selfTargets.length) return;
     if (selfTargets.length ? Object.keys(grades).length < selfTargets.length : !flags.tilt) return;
     saved = true;
-    quickSave(m, grades, flags, onGraded);
+    quickSave(m, grades, flags, onGraded, practice && selfTargets.length ? selfTargets.map((t) => t.id) : undefined);
   };
-  const grid = selfTargets.length
-    ? h('div', { class: 'review-quick-grade' },
-        ...selfTargets.map((t) => quickGradeChip(t, (g) => { grades[t.id] = g; maybeSave(); })),
-        tiltToggle(flags, maybeSave),
-      )
-    : h('div', { class: 'review-quick-grade' }, tiltToggle(flags, maybeSave));
+  // Practice mode with targets in scope but none pre-selected: the focus
+  // choice belongs to the full card, so the row offers only "Grade" — a lone
+  // Tilt chip here could never save.
+  const grid = practice && inScope.length && !selfTargets.length
+    ? null
+    : selfTargets.length
+      ? h('div', { class: 'review-quick-grade' },
+          ...selfTargets.map((t) => quickGradeChip(t, (g) => { grades[t.id] = g; maybeSave(); })),
+          tiltToggle(flags, maybeSave),
+        )
+      : h('div', { class: 'review-quick-grade' }, tiltToggle(flags, maybeSave));
   return h('div', { class: 'review-row' },
     h('span', { class: 'review-auto', title: 'auto-detected' }, '⚡'),
     resultPill(m.result),
@@ -657,7 +700,27 @@ function expanded(
   // targets stay visible with their read-only "no stat this match" row.
   const selfTargets = active.filter((t) => t.mode !== 'measured' && matchInTargetScope(m, t));
   const measuredTargets = active.filter((t) => t.mode === 'measured');
-  const rows = selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }, scopeBadge(t)));
+  // Practice mode (#321): "What did you work on this game?" replaces the
+  // grade-every-active-target list — only the chosen targets get a row.
+  const practice = ctx.data.practice.on;
+  let onRowsChanged = (): void => {};
+  const chooser: FocusChooser | null = practice && selfTargets.length
+    ? focusTargetChooser({
+        targets: selfTargets,
+        initial: m.suggestedFocus ?? [],
+        grades,
+        stickiness: ctx.data.coachingSettings.focusStickiness,
+        onStickiness: (focusStickiness) => {
+          ctx.data.coachingSettings.focusStickiness = focusStickiness;
+          void bridge.setCoaching({ ...ctx.data.coachingSettings, focusStickiness });
+        },
+        onRowsChanged: () => onRowsChanged(),
+        scopeBadge,
+      })
+    : null;
+  const rows = chooser ? [] : selfTargets.map((t) => targetGradeRow(t, undefined, (g) => { grades[t.id] = g; }, scopeBadge(t)));
+  const gradeRows = (): Array<{ el: HTMLElement; set: (g: TargetGrade) => void }> => (chooser ? chooser.rows() : rows);
+  const brk = practice ? breakChip(Boolean(m.autoBreak), { autoDetected: Boolean(m.autoBreak) }) : null;
   // Self targets hidden by scope (R8) — without this, a target with a role
   // or hero restriction just silently never showed up on an out-of-scope
   // match, with nothing on the card explaining why.
@@ -673,16 +736,17 @@ function expanded(
   const measuredWithStat = measuredTargets.filter(measuredHasStat);
   const measuredNoStat = measuredTargets.filter((t) => !measuredHasStat(t));
   const targetEls = [
-    ...rows.map((r) => r.el),
+    ...(chooser ? [chooser.el] : rows.map((r) => r.el)),
     ...measuredWithStat.map((t) => measuredResultRow(t, m.measuredGrades?.[t.id])),
     ...(measuredNoStat.length ? [measuredNoStatHint(measuredNoStat)] : []),
     ...(skippedByScope.length ? [scopeSkipHint(skippedByScope)] : []),
   ];
   let focusIdx = 0;
   const markFocus = (): void => {
-    rows.forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
+    gradeRows().forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
   };
   markFocus();
+  onRowsChanged = () => { focusIdx = 0; markFocus(); };
 
   // Repaints in place on a mode switch, so the card keeps its scroll position
   // and the keyboard grading focus — the same host-plus-paint idiom the log card
@@ -767,8 +831,11 @@ function expanded(
           tier: rankTier, division: rankDivision, progressPct: Number(rankPct) || 0,
         })
       : Promise.resolve();
+    const focusTargetIds = chooser?.focusIds();
     const reviewed = bridge.saveReview({
       matchId: m.matchId, grades, flags,
+      ...(focusTargetIds !== undefined ? { focusTargetIds } : {}),
+      ...(brk?.changed() ? { breakBefore: brk.value() } : {}),
       ...(performance != null ? { performance } : {}),
       ...(srDelta !== undefined ? { srDelta } : {}),
       ...(party.value() !== undefined ? { party: party.value() } : {}),
@@ -852,13 +919,22 @@ function expanded(
         onClick: () => ctx.navigate('matchDetail', { matchId: m.matchId }),
       }),
     ),
-    section('Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
+    section(practice ? 'What did you work on this game?' : 'Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
       ...(targetEls.length
         ? targetEls
         : [h('div', { class: 'hint' }, 'No active targets yet — add some on the Targets page to grade them here.')]),
     )),
-    section('◎ How it felt', flagsRow.el),
-    section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
+    // Practice mode (#321) reads how you played before how it felt — the
+    // practice block and your own rating first, the feel flags after.
+    ...(practice
+      ? [
+          section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
+          section('◎ How it felt', h('div', { class: 'stack', style: { gap: '10px' } }, flagsRow.el, brk!.el)),
+        ]
+      : [
+          section('◎ How it felt', flagsRow.el),
+          section('◎ How you played', performanceSlider(performance, (v) => { performance = v; })),
+        ]),
     section('◎ Queued with', party.el),
     // Competitive only — GEP can't report SR, so the player enters what the game
     // showed. Blank = leave unchanged (mirrors the W/L/D backfill just above).
@@ -894,15 +970,17 @@ function expanded(
   kbHook = {
     el,
     grade: (g) => {
-      const row = rows[focusIdx];
+      const list = gradeRows();
+      const row = list[focusIdx];
       if (!row) return;
       row.set(g);
-      if (focusIdx < rows.length - 1) focusIdx++;
+      if (focusIdx < list.length - 1) focusIdx++;
       markFocus();
     },
     save: doSave,
     skip: onSkip,
     toggleFlag: flagsRow.toggleFlag,
+    ...(chooser ? { toggleFocus: (i: number) => chooser.toggle(i) } : {}),
   };
   return el;
 }
