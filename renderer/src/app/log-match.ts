@@ -91,6 +91,8 @@ interface LogState {
 /** Fields carried into the next form by "Save & next" (same sitting, so heroes usually hold). */
 export interface LogCarry {
   heroes?: string[];
+  /** The just-saved match's focus choice (#321) — Save & next pre-selects it, since the refetch that would recompute `practice.nextFocus` hasn't landed yet. */
+  focusTargetIds?: string[];
   /**
    * The just-saved match's own `playedAt` (L5) — backfilling a whole missed
    * SESSION used to mean re-clicking the same relative-offset chip on every
@@ -639,7 +641,7 @@ function buildForm(
   const chooser = practice && selfTargets.length
     ? focusTargetChooser({
         targets: selfTargets,
-        initial: ctx.data.practice.nextFocus,
+        initial: carry?.focusTargetIds ?? ctx.data.practice.nextFocus,
         grades,
         stickiness: ctx.data.coachingSettings.focusStickiness,
         onStickiness: (focusStickiness) => {
@@ -648,7 +650,10 @@ function buildForm(
         },
       })
     : null;
-  const brk = practice ? breakChip(false) : null;
+  // Only when breaks are marked by hand: a freshly logged game has no
+  // previous-game gap to seed the chip from, so in automatic mode the
+  // detection itself decides (and the chip would just contradict it).
+  const brk = practice && ctx.data.coachingSettings.breakDetection === 'manual' ? breakChip(false) : null;
   const targetRows = chooser ? [] : activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
   const targetsBlock = field(
     optionalLabel(practice ? 'What did you work on?' : 'Targets', '— grade now or later on Review'),
@@ -684,8 +689,10 @@ function buildForm(
       // re-clicking the same relative chip, each measured from an ever-later
       // "now", on every single form; "Just now" (null) carries nothing, since
       // there's no backfill happening to preselect a starting point for.
+      const focus = chooser?.focusIds();
       const openNext = (): void => openLogMatch(ctx, {
         heroes: [...state.heroes],
+        ...(focus && ctx.data.coachingSettings.focusStickiness !== 'game' ? { focusTargetIds: focus } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
       // A completing match gets the reveal-rank confirmation first rather

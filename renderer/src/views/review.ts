@@ -595,12 +595,17 @@ function collapsed(ctx: ViewContext, m: MatchRow, active: TargetSummary[], onOpe
     saved = true;
     quickSave(m, grades, flags, onGraded, practice && selfTargets.length ? selfTargets.map((t) => t.id) : undefined);
   };
-  const grid = selfTargets.length
-    ? h('div', { class: 'review-quick-grade' },
-        ...selfTargets.map((t) => quickGradeChip(t, (g) => { grades[t.id] = g; maybeSave(); })),
-        tiltToggle(flags, maybeSave),
-      )
-    : h('div', { class: 'review-quick-grade' }, tiltToggle(flags, maybeSave));
+  // Practice mode with targets in scope but none pre-selected: the focus
+  // choice belongs to the full card, so the row offers only "Grade" — a lone
+  // Tilt chip here could never save.
+  const grid = practice && inScope.length && !selfTargets.length
+    ? null
+    : selfTargets.length
+      ? h('div', { class: 'review-quick-grade' },
+          ...selfTargets.map((t) => quickGradeChip(t, (g) => { grades[t.id] = g; maybeSave(); })),
+          tiltToggle(flags, maybeSave),
+        )
+      : h('div', { class: 'review-quick-grade' }, tiltToggle(flags, maybeSave));
   return h('div', { class: 'review-row' },
     h('span', { class: 'review-auto', title: 'auto-detected' }, '⚡'),
     resultPill(m.result),

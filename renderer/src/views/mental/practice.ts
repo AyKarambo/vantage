@@ -93,11 +93,11 @@ export function activeTargetsCard(ctx: ViewContext): HTMLElement {
       emptyState('No active targets — practice focus is on, so pick one on the Targets page.'));
   }
   return card({ title: 'Your active targets', sub: 'how often you actually did what you planned', actions: manage },
-    h('div', { class: 'stack', style: { gap: '4px' } }, ...active.map(targetRow)),
+    h('div', { class: 'stack', style: { gap: '4px' } }, ...active.map((t) => targetRow(t, ctx.data.practice.byTarget[t.id]))),
   );
 }
 
-function targetRow(t: TargetSummary): HTMLElement {
+function targetRow(t: TargetSummary, exec: ExecutionTally | undefined): HTMLElement {
   const last = t.recentAttempts.slice(0, 6).reverse();
   const trend = t.learning?.execRising
     ? h('span', { class: 'is-win' }, '↑ landing more often')
@@ -107,7 +107,11 @@ function targetRow(t: TargetSummary): HTMLElement {
       h('div', { style: { fontSize: '13px' } }, t.name, ' ', badge(t.mode === 'measured' ? '⚡ auto' : '◎ self', t.mode === 'measured' ? 'auto' : 'manual')),
       h('div', { class: 'mono u-dim', style: { fontSize: '10.5px', marginTop: '2px' } }, t.rule),
     ),
-    statBar({ label: '', frac: t.hitRate, color: PALETTE.win, valueText: t.attempts ? pct(t.hitRate) : '—', slim: true, title: 'Hit rate' }),
+    // Self-rated: the execution score (partial = ½) over the range, on the
+    // Hit/Partial/Missed bar. Measured targets grade themselves — hit rate.
+    exec?.score != null
+      ? h('div', { class: 'practice-target-exec' }, gradeBar(exec), h('span', { class: 'mono' }, pct(exec.score)))
+      : statBar({ label: '', frac: t.hitRate, color: PALETTE.win, valueText: t.attempts ? pct(t.hitRate) : '—', slim: true, title: 'Hit rate' }),
     h('div', { style: { fontSize: '12px' } }, trend),
     h('div', { class: 'grade-dots', 'aria-label': 'last graded games, oldest first' },
       ...last.map((a) => h('span', { class: 'grade-dot grade-dot--lg', title: `${a.map} · ${a.grade ?? 'not graded'}`, style: { background: gradeColor(a.grade) } }))),

@@ -1531,3 +1531,12 @@ table.factor-table th.num,
 table.factor-table td.num {
   text-align: right;
 }
+.practice-target-exec {
+  display: grid;
+  grid-template-columns: 1fr 40px;
+  gap: 8px;
+  align-items: center;
+}
+.practice-target-exec .grade-bar {
+  margin-top: 0;
+}

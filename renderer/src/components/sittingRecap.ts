@@ -35,7 +35,7 @@ export function sittingRecapCard(r: SittingRecap, onDismiss: () => void): HTMLEl
 
   return card({
     variant: 'raised',
-    title: 'Sitting recap',
+    title: r.closed ? 'Sitting recap' : 'Sitting so far',
     sub: `${r.games} game${r.games === 1 ? '' : 's'} · ${minutes} min · how the practice went`,
     actions: button('Dismiss', { variant: 'ghost', onClick: onDismiss }),
   },
