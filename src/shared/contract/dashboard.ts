@@ -116,6 +116,18 @@ export interface MatchRow {
    * one — this is what tells the two apart (R4).
    */
   reviewed: boolean;
+  /**
+   * Review inbox rows only (issue #321): the self-rated targets the focus
+   * chooser pre-selects for this game, by the player's stickiness setting
+   * (falling back to the preceding check-in's "today's focus").
+   */
+  suggestedFocus?: string[];
+  /**
+   * Review inbox rows only (issue #321): automatic break detection read the
+   * gap before this game as a break — the seed for the "Took a break before
+   * this game" chip. Absent = no auto-detected break.
+   */
+  autoBreak?: boolean;
 }
 
 /**
