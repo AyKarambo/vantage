@@ -1,7 +1,15 @@
-/** Mental — the manual (◎) side: tilt, comms, and what it costs your winrate. */
+/**
+ * Mental — the manual (◎) side. Two layouts (issue #321), picked by
+ * `practice.on` (Settings › Coaching, Auto = while targets are active):
+ * - practice: target execution leads — per sitting, per target, and how the
+ *   way you went in (sleep, energy, mood, food, breaks) lines up with how you
+ *   played; tilt, costs and flags fold into collapsed sections below;
+ * - stats: tilt, comms and what they cost your winrate, as before, plus your
+ *   self-rating (moved here from Trends).
+ */
 import { h } from '../dom';
 import type { CheckInMood, MatchFlagKey, RatedSide, TiltBucket, WinrateSide } from '../../../src/shared/contract';
-import { CHECK_IN_LABELS } from '../../../src/shared/contract';
+import { CHECK_IN_ENERGY_LABELS, CHECK_IN_LABELS, CHECK_IN_SLEEP_LABELS } from '../../../src/shared/contract';
 import { COST_MIN_SAMPLE, tiltTrendDirection, type TiltTrendDirection } from '../../../src/core/mentalAnalytics';
 import { confidenceTier } from '../../../src/core/confidence';
 import { pct } from '../format';
@@ -12,6 +20,10 @@ import { chartCard } from '../components/chartCard';
 import { inlineLink } from '../components/inlineLink';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { breakReminderEditor } from '../components/breakReminderEditor';
+import { performanceCard } from '../components/performanceCard';
+import { button } from '../components/primitives';
+import { prefs } from '../prefs';
+import { activeTargetsCard, executionCard, factorCard, sessionQualityCard, weakestDaysCard } from './mental/practice';
 import { viewHead, type ViewContext } from './view';
 
 /** Human labels matching the drill-down chip on Matches. */
@@ -24,36 +36,107 @@ const FLAG_LABELS: Record<MatchFlagKey, string> = {
 };
 
 export function mental(ctx: ViewContext): HTMLElement {
-  const m = ctx.data.mental;
+  return ctx.data.practice.on ? practiceLayout(ctx) : statsLayout(ctx);
+}
 
+/** Practice mode (#321, sketch A): did you do what you set out to do — then what shaped it. */
+function practiceLayout(ctx: ViewContext): HTMLElement {
+  const mode = ctx.data.coachingSettings.practiceFocus;
+  const more = (title: string, hint: string, ...body: HTMLElement[]): HTMLElement =>
+    h('details', { class: 'mental-more' },
+      h('summary', null, title, ' ', h('span', { class: 'hint' }, hint)),
+      h('div', { class: 'stack', style: { gap: '14px' } }, ...body));
+  return h('div', { class: 'view' },
+    viewHead('Mental', 'How well you practised — and what gets in the way · ◎ manual',
+      button(`Practice focus · ${mode === 'auto' ? 'Auto' : 'On'}`, {
+        variant: 'ghost',
+        title: 'Practice focus leads Mental and Review with your targets — change it in Settings › Coaching',
+        onClick: () => ctx.navigate('settings', { section: 'coaching' }),
+      })),
+    h('div', { class: 'grid-2', style: { alignItems: 'start' } },
+      executionCard(ctx),
+      sessionQualityCard(ctx),
+    ),
+    activeTargetsCard(ctx),
+    factorCard(ctx),
+    h('div', { class: 'grid-2', style: { alignItems: 'start' } },
+      weakestDaysCard(ctx),
+      stateCard(ctx),
+    ),
+    performanceCard(ctx, ctx.data.performance, 'How you played over time'),
+    card({},
+      more('Tilt & triggers', 'tilt by game #, time of day, after a loss, by map, check-in', trendsCard(ctx), sessionCard(ctx)),
+      more('What it costs you', 'tilt tax, comms tax, toxic mates, leaver swing — in winrate points', costsCard(ctx)),
+      more('Flags this range', 'how often each came up', flagsCard(ctx)),
+    ),
+  );
+}
+
+/** Stats mode — today's Mental, plus the self-rating card and a one-line nudge toward targets. */
+function statsLayout(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'view' },
     viewHead('Mental', 'The signals the game never reports — logged by you, ◎ manual'),
+    practiceBanner(ctx),
     // Pair the two compact cards (State, Trends) in the top row and the two
     // taller ones (costs, session) below, each at its natural height
     // (align-items: start) — so no card is stretched to a row's height and left
     // half-empty.
     h('div', { class: 'grid-2', style: { alignItems: 'start' } },
-      card({ title: 'State', sub: 'two independent 0–100 reads, not a split', actions: badge('◎ manual', 'manual') },
-        h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
-          statBar({
-            label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: `${m.calm}%`,
-            title: 'Calm — blends not-tilted games with positive-comms games',
-          }),
-          statBar({
-            label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss,
-            valueText: inlineLink(`${m.tilted}%`, {
-              title: `Tilted — ${m.flags.tilt} of ${ctx.data.overall.games} games flagged tilted`,
-              onClick: () => ctx.navigate('matches', { flag: 'tilt' }),
-            }),
-          }),
-        ),
-        breakReminderEditor(ctx),
-      ),
+      stateCard(ctx),
       trendsCard(ctx),
       costsCard(ctx),
       sessionCard(ctx),
     ),
-    card({ title: 'Flags this range', sub: 'how often each came up' },
+    performanceCard(ctx, ctx.data.performance),
+    flagsCard(ctx),
+  );
+}
+
+/**
+ * The stats-mode nudge (#321): one dismissible line pointing at targets, for a
+ * player who might want practice focus but hasn't found it. Gone for good once
+ * dismissed, and never shown while practice focus is switched off on purpose.
+ */
+function practiceBanner(ctx: ViewContext): HTMLElement | null {
+  if (prefs.get('practiceBannerDismissed') || ctx.data.coachingSettings.practiceFocus === 'off') return null;
+  const el = h('div', { class: 'practice-banner' },
+    h('span', null, 'Practising something specific? Track a target and this page shows how often you actually pulled it off.'),
+    h('span', { style: { display: 'flex', gap: '10px', alignItems: 'center' } },
+      inlineLink('Create a target ›', { onClick: () => ctx.navigate('targets') }),
+      button('Dismiss', {
+        variant: 'ghost',
+        onClick: () => { prefs.set('practiceBannerDismissed', true); el.remove(); },
+      }),
+    ),
+  );
+  return el;
+}
+
+/** Calm / Tilted composites plus the break-reminder editor — shared by both layouts. */
+function stateCard(ctx: ViewContext): HTMLElement {
+  const m = ctx.data.mental;
+  return card({ title: 'State', sub: 'two independent 0–100 reads, not a split', actions: badge('◎ manual', 'manual') },
+    h('div', { class: 'stack', style: { gap: '11px', marginTop: '4px' } },
+      statBar({
+        label: 'Calm', frac: m.calm / 100, color: PALETTE.win, valueText: `${m.calm}%`,
+        title: 'Calm — blends not-tilted games with positive-comms games',
+      }),
+      statBar({
+        label: 'Tilted', frac: m.tilted / 100, color: PALETTE.loss,
+        valueText: inlineLink(`${m.tilted}%`, {
+          title: `Tilted — ${m.flags.tilt} of ${ctx.data.overall.games} games flagged tilted`,
+          onClick: () => ctx.navigate('matches', { flag: 'tilt' }),
+        }),
+      }),
+    ),
+    breakReminderEditor(ctx),
+  );
+}
+
+/** The six "Flags this range" drill-down boxes — shared by both layouts. */
+function flagsCard(ctx: ViewContext): HTMLElement {
+  const m = ctx.data.mental;
+  return card({ title: 'Flags this range', sub: 'how often each came up' },
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' } },
         flagBox(ctx, m.flags.tilt, 'Tilt', 'tilt'),
         flagBox(ctx, m.flags.toxicMates, 'Toxic mates', 'toxicMates'),
@@ -65,7 +148,6 @@ export function mental(ctx: ViewContext): HTMLElement {
         flagBox(ctx, m.flags.positiveComms, 'Positive comms', 'positiveComms', 'is-accent'),
         flagBox(ctx, m.flags.abusive, 'Abusive comms', 'abusive', 'is-loss'),
       ),
-    ),
   );
 }
 
@@ -206,7 +288,7 @@ const TILT_TREND_FLAGGED_MIN = 3;
 function trendsCard(ctx: ViewContext): HTMLElement {
   const points = ctx.data.tiltTrend;
   if (points.length < 2) {
-    return card({ title: 'Trends', sub: 'share of games flagged tilted, per day' },
+    return card({ title: 'Tilt trend', sub: 'share of games flagged tilted, per day' },
       h('div', { class: 'hint', style: { marginTop: '4px', lineHeight: '1.5' } },
         'Not enough days with games in this range to draw a tilt-rate trend yet — keep flagging games.'));
   }
@@ -214,7 +296,7 @@ function trendsCard(ctx: ViewContext): HTMLElement {
   const wrPoints: WrPoint[] = points.map((p) => ({ label: p.date, winrate: p.rate, games: p.games }));
   const byDate = new Map(points.map((p) => [p.date, p]));
   return chartCard({
-    title: 'Trends',
+    title: 'Tilt trend',
     sub: 'share of games flagged tilted, per day',
     columns: [
       { key: 'label', label: 'Day' },
@@ -342,6 +424,19 @@ function checkInTrigger(buckets: TiltBucket[]): HTMLElement | null {
 }
 
 /**
+ * "Sleep / Energy (check-in)" trigger blocks (#321) — tilt rate over every game
+ * of the sittings a check-in with that answer preceded. Only once a check-in
+ * actually carried the answer; rows under the floor dim like every tiltRow.
+ */
+function checkInFieldTrigger(title: string, buckets: TiltBucket[], labels: Record<string, string>): HTMLElement | null {
+  if (!buckets.length) return null;
+  return h('div', null,
+    h('div', { class: 'u-muted', style: { fontSize: '11px', marginBottom: '5px' } }, title),
+    h('div', { class: 'stack', style: { gap: '5px' } }, ...buckets.map((b) => tiltRow(labels[b.key] ?? b.key, b))),
+  );
+}
+
+/**
  * Tilt rate by game # within a sitting — the "stop after game N" read (issue
  * #70 C) — plus the "when do I tilt" triggers (S9): time of day, right after
  * a loss, and by map. `byTimeOfDay`/`bySessionPosition`/`byMap` all already
@@ -355,6 +450,8 @@ function sessionCard(ctx: ViewContext): HTMLElement {
     afterResultTrigger(d.tiltAfterResult),
     byMapTrigger(d.tiltByMap),
     checkInTrigger(d.tiltByCheckIn),
+    checkInFieldTrigger('Sleep (check-in)', d.tiltBySleep, CHECK_IN_SLEEP_LABELS),
+    checkInFieldTrigger('Energy (check-in)', d.tiltByEnergy, CHECK_IN_ENERGY_LABELS),
   ].filter((n): n is HTMLElement => n != null);
   if (!buckets.length) {
     return card({ title: 'Session & triggers', sub: 'tilt rate by game # in a sitting, time of day, after a loss, and by map' },
