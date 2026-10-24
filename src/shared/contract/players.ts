@@ -39,6 +39,23 @@ export interface PlayerListRow {
   ambiguous: boolean;
 }
 
+/**
+ * A player the user tagged as a friend. `key` is the same normalized identity
+ * as {@link PlayerListRow.key}, so a friend row joins to the list by key.
+ * Local-only — never exported to Notion.
+ */
+export interface FriendEntry {
+  key: string;
+  /** Display spelling (prefers a `#`-tagged form). */
+  name: string;
+}
+
+/** Mark (`friend: true`) or unmark a player; `name` may be a BattleTag or a bare name. */
+export interface FriendInput {
+  name: string;
+  friend: boolean;
+}
+
 /** Which team-relation games to include (M6) — mirrors the Players screen's own chip row. */
 export type PlayerRelation = 'any' | 'with' | 'vs';
 

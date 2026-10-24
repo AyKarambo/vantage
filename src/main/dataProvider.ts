@@ -35,6 +35,7 @@ import {
 import type { RankAnchorStore } from '../store/rankAnchors';
 import type { PlacementStore } from '../store/placements';
 import type { CheckInStore } from '../store/checkIns';
+import type { FriendStore } from '../store/friends';
 import {
   PLACEMENT_RUN_LENGTH, countedMatches, trackMatchesFrom, trackMatches, hasDrifted, isAwaitingRank,
   runProgress, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, resetBoundaries,
@@ -83,6 +84,8 @@ export interface DataProviderDeps {
   >;
   /** Pre-session mood check-ins (S10 phase 2). */
   checkIns: Pick<CheckInStore, 'all' | 'add'>;
+  /** Players tagged as friends (local-only; never reaches the Notion export). */
+  friends: Pick<FriendStore, 'list' | 'set'>;
   /** Persisted master-data override deltas (heroes/maps/seasons add/edit/remove). */
   masterDataStore: Pick<MasterDataStore, 'all' | 'replace'>;
   /** The online-catalog fetch edge (main-process `net.fetch` of OverFast); injected so this stays Electron-free. */
@@ -760,6 +763,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     getCheckIns: () => deps.checkIns.all(),
     recordCheckIn: (mood) => deps.checkIns.add({ at: Date.now(), mood }),
+    friends: () => deps.friends.list(),
+    // Defensive at the edge: the IPC arg is untyped at runtime, so a non-string
+    // name or non-boolean flag is ignored rather than persisted.
+    setFriend: (input) =>
+      typeof input?.name === 'string' && typeof input.friend === 'boolean'
+        ? deps.friends.set(input.name, input.friend)
+        : deps.friends.list(),
     getReadiness: () => deps.getConfig().readiness,
     setReadiness: (input) => {
       const config = deps.getConfig();

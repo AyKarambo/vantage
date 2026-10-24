@@ -13,11 +13,11 @@ import type {
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
   PlacementOffer, LiveMatchPayload, PendingChangedPayload, PendingMatch,
-  GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
+  FriendEntry, FriendInput, GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } from '../../src/core/targets';
-import type { Result, Role } from '../../src/core/model';
+import { battleTagName, type Result, type Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
@@ -68,6 +68,7 @@ const MASTER_DATA_CHECK_KEY = 'vantagePreviewMasterDataCheck';
 const PLACEMENTS_KEY = 'vantagePreviewPlacements';
 const DECLINED_KEY = 'vantagePreviewPlacementsDeclined';
 const CHECK_INS_KEY = 'vantagePreviewCheckIns';
+const FRIENDS_KEY = 'vantagePreviewFriends';
 
 /** Preview-side master-data overrides, persisted to localStorage like other writes. */
 function loadOverrides(): MasterDataOverrides {
@@ -114,6 +115,12 @@ const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
   .map((t) => ({ ...t, isActive: t.isActive ?? true, activatedAt: t.activatedAt ?? t.createdAt }));
 const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
 const previewCheckIns: SessionCheckIn[] = load<SessionCheckIn>(CHECK_INS_KEY);
+// Friends (name key → display spelling), mirroring FriendStore's keying.
+const previewFriends: Record<string, string> = loadMap<string>(FRIENDS_KEY);
+const friendList = (): FriendEntry[] =>
+  Object.entries(previewFriends)
+    .map(([key, name]) => ({ key, name }))
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 // Manual-layer edits from the Matches drill-down, overlaid onto any match.
 const previewEdits: Record<string, Partial<GameRecord>> = loadMap<Partial<GameRecord>>(EDITS_KEY);
 // Hard-deleted matches. The app drops the row from SQLite outright; the preview
@@ -493,6 +500,17 @@ const mock: OwStatsApi = {
       }));
   },
   playerRecords: async (names: string[]) => playerRecords(dataset(), names),
+  friends: async () => friendList(),
+  setFriend: async (input: FriendInput) => {
+    const key = battleTagName(input?.name ?? '');
+    if (key) {
+      const existing = previewFriends[key];
+      if (!input.friend) delete previewFriends[key];
+      else if (!existing || (input.name.includes('#') && !existing.includes('#'))) previewFriends[key] = input.name.trim();
+      save(FRIENDS_KEY, previewFriends);
+    }
+    return friendList();
+  },
   playerList: async (query: PlayerListQuery) => {
     const sel = normalizePlayerSelection(query);
     const scope = { account: query?.filters?.account ?? 'all', role: query?.filters?.role ?? 'all', days: query?.filters?.days ?? 30 };
