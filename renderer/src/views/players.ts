@@ -88,6 +88,9 @@ const wl = (w: { wins: number; losses: number }): HTMLElement => {
   );
 };
 
+/** Keys of the players tagged as friends — refreshed each time the view is built. */
+let friendKeys: ReadonlySet<string> = new Set();
+
 function columns(): Array<Column<PlayerListRow>> {
   // `get` is inert here — `onSort` bypasses dataTable's local sorting entirely —
   // but it returns the same quantity `selectPlayers` ranks by (a winrate for the
@@ -99,6 +102,9 @@ function columns(): Array<Column<PlayerListRow>> {
     {
       key: 'name', label: 'Player', get: (r) => r.name,
       render: (r) => h('span', null,
+        friendKeys.has(r.key)
+          ? h('span', { class: 'friend-star', title: 'Tagged as a friend', style: { marginRight: '5px' } }, '★')
+          : null,
         r.name,
         r.ambiguous
           ? h('span', {
@@ -209,6 +215,12 @@ export function players(ctx: ViewContext): HTMLElement {
   const scopeNote = h('div', { class: 'hint', style: { margin: '0 0 12px' } });
 
   render(host, head, scopeNote, card({ class: 'card--flush', style: { padding: '4px 10px 10px' } }, tableHost, footNote));
+
+  // Friend stars are decoration on rows main already ranked: repaint, never refetch.
+  void bridge.friends().then((f) => {
+    friendKeys = new Set(f.map((x) => x.key));
+    if (payload && host.isConnected) paint(payload);
+  });
 
   /**
    * Everything that changes what the list should contain. `generatedAt` is in

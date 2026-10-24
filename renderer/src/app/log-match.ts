@@ -19,6 +19,7 @@ import { targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsToneSwitch }
 import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
+import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
@@ -314,6 +315,7 @@ function buildForm(
         ...(state.performance != null ? { performance: state.performance } : {}),
         ...(Object.keys(grades).length ? { grades } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
+        ...(party.value() ? { party: party.value() } : {}),
       });
       // Anchoring only happens for a track that has none yet — the first rank
       // you enter defines where tracking starts (a negative % is preserved as a
@@ -702,6 +704,11 @@ function buildForm(
     },
   }, saveBtn, saveNextBtn);
 
+  // A hand-logged match has no roster: names are typed (friends suggest) or Solo.
+  const party = partyPicker();
+  loadPartyContext(party);
+  const partyBlock = field(optionalLabel('Queued with', '— who was in your group?'), party.el);
+
   const performanceBlock = field(
     optionalLabel('Performance', '— how did you play?'),
     performanceSlider(state.performance, (v) => { state.performance = v; }),
@@ -722,7 +729,7 @@ function buildForm(
         h('div', { class: 'log-col' },
           field('Result', resultRow), mapField, roleField, heroField, rankHost),
         h('div', { class: 'log-col' },
-          performanceBlock, commsBlock, flagsBlock, targetsBlock, playedField),
+          performanceBlock, commsBlock, flagsBlock, partyBlock, targetsBlock, playedField),
       ),
     ),
     actions,
