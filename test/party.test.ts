@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { autoParty, effectiveGroupSize, normalizeMembers, ownTeammates, partyKey } from '../src/core/party';
+import { autoParty, effectiveGroupSize, normalizeMembers, ownTeammates, partyFromInput, partyKey } from '../src/core/party';
 import type { RosterPlayer } from '../src/core/model';
 
 const me: RosterPlayer = { battleTag: 'Me#1111', isLocal: true, team: 0 };
@@ -74,5 +74,31 @@ describe('autoParty', () => {
   });
   it('never overrides an existing party', () => {
     expect(autoParty({ groupSize: 2, roster, party: { members: [], source: 'manual' } }, friends)).toBeUndefined();
+  });
+});
+
+describe('autoParty — team safety (review fix)', () => {
+  it('records nothing when the local team is unknown but the roster tells teams apart', () => {
+    const roster = [
+      { battleTag: 'Me#1', isLocal: true },
+      { battleTag: 'Alice#2', team: 1 },
+      { battleTag: 'Carol#3', team: 0 },
+    ];
+    expect(autoParty({ groupSize: 2, roster }, new Set(['alice']))).toBeUndefined();
+  });
+
+  it('still labels when no roster entry carries a team (local-team-only feed)', () => {
+    const roster = [{ battleTag: 'Me#1', isLocal: true }, { battleTag: 'Alice#2' }];
+    expect(autoParty({ groupSize: 2, roster }, new Set(['alice']))).toEqual({ members: ['Alice#2'], source: 'auto' });
+  });
+});
+
+describe('partyFromInput', () => {
+  it('maps null, members, Solo and malformed input', () => {
+    expect(partyFromInput(null)).toBeNull();
+    expect(partyFromInput({ members: [' Alice#1 ', 'alice', 3] })).toEqual({ members: ['Alice#1'], source: 'manual' });
+    expect(partyFromInput({ members: [] })).toEqual({ members: [], source: 'manual' });
+    expect(partyFromInput(undefined)).toBeUndefined();
+    expect(partyFromInput({ members: 'x' })).toBeUndefined();
   });
 });

@@ -50,6 +50,14 @@ export class MatchAggregator {
     this.partyCount = undefined;
   }
 
+  /**
+   * Forget the held party size without touching the match in progress — for
+   * the game exiting, after which a relaunch starts a fresh (party-less) session.
+   */
+  clearPartyCount(): void {
+    this.partyCount = undefined;
+  }
+
   /** True once a party size is held (pushed by GEP or seeded from a probe). */
   hasPartyCount(): boolean {
     return this.partyCount !== undefined;

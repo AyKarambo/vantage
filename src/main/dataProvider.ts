@@ -26,8 +26,8 @@ import { resolveRole } from '../core/resolvers/role';
 import { resolveAccount } from '../core/resolvers/account';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { resolveResult } from '../core/resolvers/result';
-import type { Role, Result, MatchRecord, MatchParty } from '../core/model';
-import { normalizeMembers } from '../core/party';
+import type { Role, Result, MatchRecord } from '../core/model';
+import { partyFromInput } from '../core/party';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -60,21 +60,6 @@ function sameHeroes(a: string[], b: string[]): boolean {
   const sa = [...a].sort();
   const sb = [...b].sort();
   return sa.every((h, i) => h === sb[i]);
-}
-
-/**
- * Map an untyped IPC party onto the stored shape: `null` clears (`null`),
- * `{ members }` becomes a hand-authored party (`source: 'manual'`, names trimmed
- * and deduped; an empty list is an explicit Solo), anything absent or malformed
- * is `undefined` = leave the stored party alone. Non-string members are dropped
- * rather than rejecting the whole save.
- */
-function partyFromInput(raw: unknown): MatchParty | null | undefined {
-  if (raw === null) return null;
-  if (typeof raw !== 'object') return undefined;
-  const members = (raw as { members?: unknown }).members;
-  if (!Array.isArray(members)) return undefined;
-  return { members: normalizeMembers(members.filter((m): m is string => typeof m === 'string')), source: 'manual' };
 }
 
 /**

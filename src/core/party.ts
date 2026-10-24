@@ -59,7 +59,27 @@ export function autoParty(
   friendKeys: ReadonlySet<string>,
 ): MatchParty | undefined {
   if (game.party || game.groupSize === undefined || game.groupSize < 2) return undefined;
+  // ownTeammates falls back to the whole roster when the local team is unknown,
+  // which is fine for offering picker candidates but not for recording a party:
+  // if the roster tells teams apart at all, a friend could be on the other side.
+  const local = game.roster?.find((p) => p.isLocal);
+  if (local?.team === undefined && game.roster?.some((p) => p.team !== undefined)) return undefined;
   const friends = ownTeammates(game.roster).filter((n) => friendKeys.has(partyKey(n)));
   if (friends.length !== game.groupSize - 1) return undefined;
   return { members: friends, source: 'auto' };
+}
+
+/**
+ * Map an untyped party input (IPC / preview) onto the stored shape: `null`
+ * clears, `{ members }` becomes a hand-authored party (`source: 'manual'`, names
+ * trimmed and deduped; an empty list is an explicit Solo), anything absent or
+ * malformed is `undefined` = leave the stored party alone. Non-string members
+ * are dropped rather than rejecting the whole save.
+ */
+export function partyFromInput(raw: unknown): MatchParty | null | undefined {
+  if (raw === null) return null;
+  if (typeof raw !== 'object') return undefined;
+  const members = (raw as { members?: unknown }).members;
+  if (!Array.isArray(members)) return undefined;
+  return { members: normalizeMembers(members.filter((m): m is string => typeof m === 'string')), source: 'manual' };
 }

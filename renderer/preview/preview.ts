@@ -38,7 +38,7 @@ import {
   type MasterDataOverrides, type FetchedCatalog,
 } from '../../src/core/masterData';
 import { sourceOf } from '../../src/core/source';
-import { normalizeMembers } from '../../src/core/party';
+import { partyFromInput } from '../../src/core/party';
 import { currentRank, enteringRanks, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
@@ -266,15 +266,6 @@ const dataset = (): GameRecord[] =>
     if (previewReviews[g.matchId]) out = { ...out, review: previewReviews[g.matchId] };
     return out;
   });
-
-// Mirrors dataProvider's partyFromInput: null clears, `{ members }` is a hand-authored
-// party (empty = explicit Solo), absent/malformed leaves the stored party alone.
-const partyFromInput = (raw: unknown): MatchParty | null | undefined => {
-  if (raw === null) return null;
-  const members = typeof raw === 'object' ? (raw as { members?: unknown }).members : undefined;
-  if (!Array.isArray(members)) return undefined;
-  return { members: normalizeMembers(members.filter((m): m is string => typeof m === 'string')), source: 'manual' };
-};
 
 // Party lives on the logged record itself (the real store keeps it on the row), so
 // a clear is a true delete — an overlay spread could not remove a logged value.

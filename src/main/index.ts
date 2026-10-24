@@ -745,6 +745,10 @@ function main(): void {
       // crashes or is alt-F4'd emits no match_end, so without this the board
       // would keep presenting a finished match as current.
       liveMatchMonitor.setAttached(s.gameRunning && s.enabled);
+      // A held party size belongs to one game session: after Overwatch exits,
+      // the next launch starts outside any party, and GEP only re-sends the
+      // count when it changes — so a stale duo must not carry into it.
+      if (!s.gameRunning) aggregator.clearPartyCount();
     });
     gep.on('log', log.adapter('gep'));
 

@@ -767,3 +767,17 @@ describe('partyCountFromInfo', () => {
     for (const v of [undefined, null, 'x', 3, []]) expect(partyCountFromInfo(v)).toBeUndefined();
   });
 });
+
+describe('MatchAggregator.clearPartyCount (review fix)', () => {
+  it('forgets the held count so the next match starts unknown', () => {
+    const agg = new MatchAggregator(() => 1_000);
+    agg.handle({ kind: 'info', feature: 'game_info', key: 'party_player_count', value: 2 });
+    expect(agg.hasPartyCount()).toBe(true);
+    agg.clearPartyCount();
+    expect(agg.hasPartyCount()).toBe(false);
+    agg.handle({ kind: 'event', feature: 'match_info', key: 'match_start', value: null });
+    agg.handle({ kind: 'info', feature: 'match_info', key: 'match_outcome', value: 'victory' });
+    const rec = agg.handle({ kind: 'event', feature: 'match_info', key: 'match_end', value: null });
+    expect(rec?.groupSize).toBeUndefined();
+  });
+});

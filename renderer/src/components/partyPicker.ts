@@ -91,7 +91,8 @@ export function partyPicker(opts: PartyPickerOpts = {}): PartyPicker {
   // The typeahead swallows Enter while its list is open (that Enter picks a
   // suggestion into the box), so this only fires to commit what is in the box.
   box.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !input) return;
+    // An empty box lets Enter through, so the form's Enter-to-save still works here.
+    if (e.key !== 'Enter' || !input || !typed.trim()) return;
     e.preventDefault();
     e.stopPropagation(); // adding a name must not reach a surrounding Enter-to-save handler
     add(typed);

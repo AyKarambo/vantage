@@ -219,7 +219,9 @@ export function players(ctx: ViewContext): HTMLElement {
   // Friend stars are decoration on rows main already ranked: repaint, never refetch.
   void bridge.friends().then((f) => {
     friendKeys = new Set(f.map((x) => x.key));
-    if (payload && host.isConnected) paint(payload);
+    // Only a payload that already answers THIS view's request — repainting a
+    // cached list from another filter scope would undo load()'s dimming.
+    if (payload && payloadKey === requestKey() && host.isConnected) paint(payload);
   });
 
   /**
