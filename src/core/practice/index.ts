@@ -5,7 +5,7 @@ export {
   PRACTICE_SITTING_GAP_MINUTES, sittingsOf, checkInForSitting, autoBreakBefore, breakBefore, gameContexts,
   type GameContext,
 } from './sittings';
-export { focusOf, hasFocusChoice, practiceFocusOn, focusPreselection, focusGamesSince } from './focus';
+export { focusOf, hasFocusChoice, practiceFocusOn, focusPreselection, focusPreselector, focusGamesSince } from './focus';
 export {
   executionOf, sittingExecution, factorTable, factorHeadline, weakestDays, sittingRecap, tiltByCheckInField,
   FACTOR_LEVELS, FACTOR_LABELS, HEADLINE_MIN_GAP, WEAK_DAY_MIN_RATED,

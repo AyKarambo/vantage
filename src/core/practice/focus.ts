@@ -62,21 +62,42 @@ export function focusPreselection(
   selectable: ReadonlySet<string>,
   gapMinutes = PRACTICE_SITTING_GAP_MINUTES,
 ): string[] {
+  return focusPreselector(all, stickiness, checkIns, selectable, gapMinutes)(game);
+}
+
+/**
+ * {@link focusPreselection} for many games at once: sittings, the saved
+ * choices and the sorted check-ins are prepared once, so the Review inbox
+ * (up to 150 rows over thousands of games) doesn't re-walk the history per row.
+ */
+export function focusPreselector(
+  all: readonly GameRecord[],
+  stickiness: FocusStickiness,
+  checkIns: readonly SessionCheckIn[],
+  selectable: ReadonlySet<string>,
+  gapMinutes = PRACTICE_SITTING_GAP_MINUTES,
+): (game: GameRecord) => string[] {
   const narrow = (ids: readonly string[]): string[] => ids.filter((id) => selectable.has(id));
-  const sitting = sittingsOf(all, gapMinutes).find((s) => s.some((g) => g.matchId === game.matchId)) ?? [game];
-  if (stickiness === 'sitting') {
-    const nearest = sitting
-      .filter((g) => g.matchId !== game.matchId && hasFocusChoice(g.review))
-      .sort((a, b) => Math.abs(a.timestamp - game.timestamp) - Math.abs(b.timestamp - game.timestamp))[0];
-    if (nearest) return narrow(focusOf(nearest.review));
-  } else if (stickiness === 'sticky') {
-    const latest = all
-      .filter((g) => g.matchId !== game.matchId && hasFocusChoice(g.review))
-      .sort((a, b) => b.review!.at - a.review!.at)[0];
-    if (latest) return narrow(focusOf(latest.review));
-  }
+  const sittingOf = new Map<string, GameRecord[]>();
+  for (const s of sittingsOf(all, gapMinutes)) for (const g of s) sittingOf.set(g.matchId, s);
+  // Newest saved choice first — only needed for 'sticky'.
+  const chosen = stickiness === 'sticky'
+    ? all.filter((g) => hasFocusChoice(g.review)).sort((a, b) => b.review!.at - a.review!.at)
+    : [];
   const sorted = [...checkIns].sort((a, b) => a.at - b.at);
-  return narrow(checkInForSitting(sitting[0], sorted, gapMinutes)?.focusTargetIds ?? []);
+  return (game) => {
+    const sitting = sittingOf.get(game.matchId) ?? [game];
+    if (stickiness === 'sitting') {
+      const nearest = sitting
+        .filter((g) => g.matchId !== game.matchId && hasFocusChoice(g.review))
+        .sort((a, b) => Math.abs(a.timestamp - game.timestamp) - Math.abs(b.timestamp - game.timestamp))[0];
+      if (nearest) return narrow(focusOf(nearest.review));
+    } else if (stickiness === 'sticky') {
+      const latest = chosen.find((g) => g.matchId !== game.matchId);
+      if (latest) return narrow(focusOf(latest.review));
+    }
+    return narrow(checkInForSitting(sitting[0], sorted, gapMinutes)?.focusTargetIds ?? []);
+  };
 }
 
 /**

@@ -25,7 +25,7 @@ import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type Readines
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import {
-  autoBreakBefore, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, practiceFocusOn,
+  autoBreakBefore, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
@@ -764,8 +764,9 @@ function inboxRows(
   const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
   const prevOf = new Map<string, GameRecord>();
   for (const s of sittingsOf(all)) s.forEach((g, i) => { if (i) prevOf.set(g.matchId, s[i - 1]); });
+  const preselect = selectable.size ? focusPreselector(all, coaching.focusStickiness, checkIns, selectable) : null;
   return rows.map((g) => {
-    const suggested = selectable.size ? focusPreselection(all, g, coaching.focusStickiness, checkIns, selectable) : [];
+    const suggested = preselect ? preselect(g) : [];
     const autoBreak = autoBreakBefore(g, prevOf.get(g.matchId) ?? null, coaching);
     return { g, extra: { ...(suggested.length ? { suggestedFocus: suggested } : {}), ...(autoBreak ? { autoBreak } : {}) } };
   });
