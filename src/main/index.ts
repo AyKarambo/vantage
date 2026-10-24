@@ -368,6 +368,9 @@ function main(): void {
   // anchor, a placement run, an import) — including writes the MCP server makes
   // on the user's behalf, which reach no renderer callback of their own.
   let pushDataChanged: () => void = () => {};
+  // GEP's getInfo(), bound once the GEP service exists (gep sensor only) — the
+  // pipeline probes it at match_start when the lobby's party count was missed.
+  let probeGepInfo: () => Promise<unknown> = () => Promise.resolve(null);
   const pipeline = createMatchPipeline({
     history,
     aggregator,
@@ -378,6 +381,9 @@ function main(): void {
     // — drives the live dashboard refresh and the F4 account auto-switch.
     onGameLogged: (payload) => pushGameLogged(payload),
     onPendingChanged: (payload) => pushPendingChanged(payload),
+    probeInfo: () => probeGepInfo(),
+    // Read per match so a friend tagged mid-session labels the very next game.
+    friendKeys: () => friends.keys(),
   });
 
   // The in-progress match: the same GEP stream the pipeline consumes, folded
@@ -724,6 +730,7 @@ function main(): void {
 
   if (config.sensor === 'gep') {
     const gep = new GepService(config.overwatchGameId);
+    probeGepInfo = () => gep.getActiveInfo();
     gep.on('message', pipeline.feed);
     gep.on('message', (msg: GepMessage) => statusMonitor.message(msg));
     gep.on('message', (msg: GepMessage) => liveMatchMonitor.message(msg));
