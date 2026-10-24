@@ -24,7 +24,11 @@ import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakRemin
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type ReadinessSummary } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
-import { autoBreakBefore, focusGamesSince, focusPreselection, sittingsOf } from './practice';
+import {
+  autoBreakBefore, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, practiceFocusOn,
+  sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
+} from './practice';
+import { samplePracticeLayer } from './sampleData';
 import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
@@ -169,6 +173,11 @@ export function computeDashboard(
   const coaching = manual?.coaching ?? DEFAULT_COACHING;
   const checkIns = manual?.checkIns ?? [];
   const targets = withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all);
+  // The practice reads (issue #321) run over a deterministic sample overlay on
+  // demo data — focus choices, grades and extended check-ins the generated
+  // season doesn't carry — and over the real history + check-ins otherwise.
+  const practiceSrc = demo.active ? samplePracticeLayer(all) : { games: all, checkIns };
+  const inRange = new Set(games.map((g) => g.matchId));
 
   // The comparison window immediately before the active one (C3) — same
   // account/role scope as `games`, a shifted date range. `undefined` on
@@ -188,6 +197,13 @@ export function computeDashboard(
         heroStats: heroStats(prevGames, { mapModeOf, suppressed }),
       };
     })()
+    : undefined;
+  const prevIds = previousRange
+    ? new Set(all
+      .filter((g) => g.timestamp >= previousRange.start && g.timestamp < previousRange.end)
+      .filter((g) => !filters.account || filters.account === 'all' || g.account === filters.account)
+      .filter((g) => !filters.role || filters.role === 'all' || g.role === filters.role)
+      .map((g) => g.matchId))
     : undefined;
   // C5: account/role-scoped but NOT date-scoped (see bySeasonOf) — a real
   // "how did each season go" read, computed once here rather than the
@@ -321,6 +337,9 @@ export function computeDashboard(
     tiltAfterResult: tiltAfterResult(all, { include: new Set(games.map((g) => g.matchId)) }),
     tiltByMap: tiltByMap(games),
     tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: new Set(games.map((g) => g.matchId)) }),
+    tiltBySleep: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'sleep'),
+    tiltByEnergy: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'energy'),
+    practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching),
     checkIns,
     performance: performanceStats(games),
     targets,
@@ -686,6 +705,37 @@ function matchStatTotals(g: GameRecord): Pick<MatchRow, 'eliminations' | 'assist
     }),
     { eliminations: 0, assists: 0, deaths: 0 },
   );
+}
+
+/**
+ * The practice layer's payload (issue #321). Only self-rated grades count —
+ * archived targets included, so history keeps its meaning after a rotation.
+ * Sittings, factors and days are cut over the full history; `inRange` /
+ * `prevIds` scope which games aggregate.
+ */
+function practiceOf(
+  src: { games: GameRecord[]; checkIns: NonNullable<ManualData['checkIns']> },
+  inRange: ReadonlySet<string>,
+  prevIds: ReadonlySet<string> | undefined,
+  targets: TargetSummary[],
+  coaching: CoachingSettings,
+): PracticeSummary {
+  const selfIds = new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id));
+  const execution = executionOf(src.games.filter((g) => inRange.has(g.matchId)), selfIds);
+  const prevExecution = prevIds ? executionOf(src.games.filter((g) => prevIds.has(g.matchId)), selfIds) : undefined;
+  const factors = factorTable(src.games, inRange, src.checkIns, coaching, selfIds);
+  const headline = factorHeadline(factors);
+  const recap = sittingRecap(src.games, src.checkIns, selfIds);
+  return {
+    on: practiceFocusOn(coaching, targets),
+    execution,
+    ...(prevExecution?.attempts ? { prevExecution } : {}),
+    sittings: sittingExecution(src.games, inRange, selfIds),
+    factors,
+    ...(headline ? { headline } : {}),
+    weakestDays: weakestDays(src.games, inRange, src.checkIns, coaching, selfIds),
+    ...(recap ? { recap } : {}),
+  };
 }
 
 /**

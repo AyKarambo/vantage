@@ -28,7 +28,7 @@ function authored(id: string, p: Partial<AuthoredTarget> = {}): AuthoredTarget {
   return { id, name: id, mode: 'self', rule: 'You grade it', createdAt: 0, activatedAt: 0, isActive: true, ...p };
 }
 
-const demo = { active: false, preference: 'real' as const, hasRealHistory: true };
+const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
 
 describe('computeDashboard — practice focus wiring (#321)', () => {
   it('a self-rated target ages only on the games it was worked on (AC11)', () => {

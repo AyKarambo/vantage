@@ -9,7 +9,7 @@ import { ACCOUNT_WR, ACCOUNTS, HEROES, MAPS, PLAYER_POOL, ROLE_WR, ROLES, ROSTER
  */
 
 /** Seeded PRNG (mulberry32) so the generated season is reproducible. */
-function mulberry32(seed: number) {
+export function mulberry32(seed: number) {
   return () => {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;

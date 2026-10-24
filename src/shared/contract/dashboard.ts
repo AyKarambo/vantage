@@ -9,6 +9,7 @@ import type { RankSeriesPoint } from '../../core/rank/series';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
+import type { PracticeSummary } from '../../core/practice';
 import type { SessionCheckIn } from '../../core/checkIn';
 import type { Progression } from '../../core/progression';
 import type { TargetSummary } from '../../core/targets';
@@ -345,6 +346,21 @@ export interface DashboardData {
    * as {@link tiltBySession}).
    */
   tiltByCheckIn: TiltBucket[];
+  /**
+   * Tilt rate by the check-in's optional sleep answer (issue #321), over every
+   * game of the sittings a check-in preceded — keys 'good' | 'ok' | 'poor'.
+   * Empty when no check-in carried a sleep answer.
+   */
+  tiltBySleep: TiltBucket[];
+  /** Same as {@link tiltBySleep}, by the energy answer — keys 'sharp' | 'ok' | 'foggy'. */
+  tiltByEnergy: TiltBucket[];
+  /**
+   * The practice layer of Mental and Review (issue #321): whether practice
+   * mode is on, target execution, per-sitting execution, the soft-factor
+   * table, the weakest days and the newest fully reviewed sitting. On demo
+   * data it reads a deterministic sample overlay, never the real check-in store.
+   */
+  practice: PracticeSummary;
   /**
    * Every stored pre-session check-in, oldest first — ALWAYS unfiltered (a
    * mood log, not Overwatch data). The idle Live screen and Overview head

@@ -41,6 +41,12 @@ export type {
 } from '../../core/coachingSettings';
 export type { GradingSettings } from '../../core/gradingSettings';
 
+// Practice layer (issue #321)
+export type {
+  PracticeSummary, ExecutionTally, SittingExecution, FactorKey, FactorRow, FactorEntry, FactorHeadline, WeakDay, SittingRecap,
+} from '../../core/practice';
+export { FACTOR_LEVELS, FACTOR_LABELS } from '../../core/practice';
+
 // Dashboard payloads
 export type {
   DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
