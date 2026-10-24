@@ -615,6 +615,20 @@ describe('computeDashboard', () => {
     expect(d.matches.find((m) => m.matchId === withoutGroup.matchId)).not.toHaveProperty('groupSize');
   });
 
+  it('toMatchRow reports the effective party size and carries the party', () => {
+    const party = { members: ['Pal#1'], source: 'manual' as const };
+    const partied = game({ result: 'Win', map: 'Ilios', role: 'damage', groupSize: 1, party });
+    const solo = game({ result: 'Win', map: 'Ilios', role: 'damage', groupSize: 3, party: { members: [], source: 'manual' } });
+    const plain = game({ result: 'Loss', map: 'Ilios', role: 'damage', groupSize: 2 });
+    const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
+    const d = computeDashboard([partied, solo, plain], { days: 'all' }, demo);
+    const row = (id: string) => d.matches.find((m) => m.matchId === id);
+    expect(row(partied.matchId)).toMatchObject({ groupSize: 2, party });
+    expect(row(solo.matchId)).toMatchObject({ groupSize: 1, party: { members: [], source: 'manual' } });
+    expect(row(plain.matchId)?.groupSize).toBe(2);
+    expect(row(plain.matchId)).not.toHaveProperty('party');
+  });
+
   it('toMatchRow sums E/A/D across heroes played, and omits them with no hero stats at all (S2)', () => {
     const withStats = game({
       result: 'Win', map: 'Ilios', role: 'damage', heroes: ['Tracer', 'Genji'],

@@ -9,6 +9,7 @@ import {
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   type GameRecord,
 } from './analytics';
+import { effectiveGroupSize } from './party';
 import { isCompetitive } from './matchFilter';
 import { heroCredits } from './playedTime';
 import { playerDirectory } from './playerIndex';
@@ -644,7 +645,8 @@ export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeas
     ...(g.rankAtStart !== undefined && !suppressed?.has(g.matchId) ? { rankAtStart: g.rankAtStart } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
-    ...(g.groupSize !== undefined ? { groupSize: g.groupSize } : {}),
+    ...(effectiveGroupSize(g) !== undefined ? { groupSize: effectiveGroupSize(g) } : {}),
+    ...(g.party ? { party: g.party } : {}),
     ...(matchStatTotals(g) ?? {}),
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),

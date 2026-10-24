@@ -17,3 +17,6 @@ export { emptyMatch } from './match';
 
 // BattleTag identity
 export { battleTagName } from './battleTag';
+
+// Party
+export type { MatchParty } from './party';
