@@ -17,7 +17,7 @@ import type {
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } from '../../src/core/targets';
-import { battleTagName, type Result, type Role } from '../../src/core/model';
+import { battleTagName, type MatchParty, type Result, type Role } from '../../src/core/model';
 import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
@@ -38,6 +38,7 @@ import {
   type MasterDataOverrides, type FetchedCatalog,
 } from '../../src/core/masterData';
 import { sourceOf } from '../../src/core/source';
+import { normalizeMembers } from '../../src/core/party';
 import { currentRank, enteringRanks, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
 import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
@@ -265,6 +266,25 @@ const dataset = (): GameRecord[] =>
     if (previewReviews[g.matchId]) out = { ...out, review: previewReviews[g.matchId] };
     return out;
   });
+
+// Mirrors dataProvider's partyFromInput: null clears, `{ members }` is a hand-authored
+// party (empty = explicit Solo), absent/malformed leaves the stored party alone.
+const partyFromInput = (raw: unknown): MatchParty | null | undefined => {
+  if (raw === null) return null;
+  const members = typeof raw === 'object' ? (raw as { members?: unknown }).members : undefined;
+  if (!Array.isArray(members)) return undefined;
+  return { members: normalizeMembers(members.filter((m): m is string => typeof m === 'string')), source: 'manual' };
+};
+
+// Party lives on the logged record itself (the real store keeps it on the row), so
+// a clear is a true delete — an overlay spread could not remove a logged value.
+const writeParty = (matchId: string, party: MatchParty | null): void => {
+  const game = logged.find((g) => g.matchId === matchId);
+  if (!game) return;
+  if (party) game.party = party;
+  else delete game.party;
+  save(LOGGED_KEY, logged);
+};
 
 const findTarget = (id: string): AuthoredTarget | undefined => targets.find((t) => t.id === id);
 
@@ -660,6 +680,7 @@ const mock: OwStatsApi = {
     const matchId = `manual-${Date.now()}`;
     const account = input.account || Object.values(previewAccounts)[0] || 'You';
     const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
+    const party = partyFromInput(input.party);
     logged.push({
       matchId,
       timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
@@ -673,6 +694,7 @@ const mock: OwStatsApi = {
       mental: input.mental,
       ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
       ...(input.performance != null ? { performance: input.performance } : {}),
+      ...(party ? { party } : {}),
     });
     save(LOGGED_KEY, logged);
     // Same snapshot the real provider takes on a log that carries its own ±%.
@@ -746,6 +768,8 @@ const mock: OwStatsApi = {
     }
     previewEdits[input.matchId] = patch;
     save(EDITS_KEY, previewEdits);
+    const party = partyFromInput(input.party);
+    if (party !== undefined) writeParty(input.matchId, party);
     if (input.grades && Object.keys(input.grades).length) {
       previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
       save(REVIEWS_KEY, previewReviews);
@@ -1064,6 +1088,8 @@ const mock: OwStatsApi = {
       previewEdits[input.matchId] = { ...previewEdits[input.matchId], performance: input.performance };
       save(EDITS_KEY, previewEdits);
     }
+    const party = partyFromInput(input.party);
+    if (party !== undefined) writeParty(input.matchId, party);
     // The ±%, and with it the `rankAtStart` snapshot — mirroring what
     // `syncRankAtStart` does in the real provider, so the harness can actually
     // show the feature rather than only ever rendering its empty state.

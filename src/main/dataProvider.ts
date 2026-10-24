@@ -26,7 +26,8 @@ import { resolveRole } from '../core/resolvers/role';
 import { resolveAccount } from '../core/resolvers/account';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { resolveResult } from '../core/resolvers/result';
-import type { Role, Result, MatchRecord } from '../core/model';
+import type { Role, Result, MatchRecord, MatchParty } from '../core/model';
+import { normalizeMembers } from '../core/party';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -59,6 +60,21 @@ function sameHeroes(a: string[], b: string[]): boolean {
   const sa = [...a].sort();
   const sb = [...b].sort();
   return sa.every((h, i) => h === sb[i]);
+}
+
+/**
+ * Map an untyped IPC party onto the stored shape: `null` clears (`null`),
+ * `{ members }` becomes a hand-authored party (`source: 'manual'`, names trimmed
+ * and deduped; an empty list is an explicit Solo), anything absent or malformed
+ * is `undefined` = leave the stored party alone. Non-string members are dropped
+ * rather than rejecting the whole save.
+ */
+function partyFromInput(raw: unknown): MatchParty | null | undefined {
+  if (raw === null) return null;
+  if (typeof raw !== 'object') return undefined;
+  const members = (raw as { members?: unknown }).members;
+  if (!Array.isArray(members)) return undefined;
+  return { members: normalizeMembers(members.filter((m): m is string => typeof m === 'string')), source: 'manual' };
 }
 
 /**
@@ -236,6 +252,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       const saved = deps.history.setReview(input.matchId, { at: Date.now(), grades: input.grades, flags: input.flags });
       if (!saved) return { saved };
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
+      const party = partyFromInput(input.party);
+      if (party !== undefined) deps.history.editManual(input.matchId, { party });
       // GEP can't report SR, so the player may set it here (competitive only);
       // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
       if (input.srDelta !== undefined) {
@@ -264,6 +282,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     logMatch: (input) => {
       const matchId = `manual-${Date.now()}`;
       const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
+      const party = partyFromInput(input.party);
       deps.recordGame({
         matchId,
         timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
@@ -277,6 +296,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         mental: input.mental,
         ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
         ...(input.performance != null ? { performance: input.performance } : {}),
+        ...(party ? { party } : {}),
         // Inline target grades captured while logging are stored as a review, the
         // same shape the Review screen writes — so they score identically.
         ...(grades ? { review: { at: Date.now(), grades, flags: input.mental ?? {} } } : {}),
@@ -332,6 +352,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // saving, so there is no absolute-rank branch to maintain here.
       if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
       if (input.performance !== undefined) patch.performance = input.performance;
+      // Who the player queued with. Deliberately NOT a "fact" for `factsEditedAt`:
+      // it is the player's own annotation layer (like mental / srDelta), not
+      // something the game feed reported, so correcting it never marks a GEP
+      // match "edited". A hand edit always stores `source: 'manual'`, so the
+      // auto-labeller (which only runs on new captures) can never overwrite it.
+      const party = partyFromInput(input.party);
+      if (party !== undefined) patch.party = party;
       // Played time is honoured for a hand-logged match only — a GEP capture's
       // timestamp is the instant the game itself ended, not something a player
       // can honestly correct after the fact. Clamped to the past like the log

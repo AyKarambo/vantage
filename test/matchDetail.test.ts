@@ -393,3 +393,29 @@ describe('sample dataset detail tiers', () => {
     expect(withEncounters.length).toBeGreaterThan(0);
   });
 });
+
+describe('matchDetail — party and teammates', () => {
+  it('lists own-team players other than me, never enemies or the local row', () => {
+    const d = matchDetail([full()], 'full-1');
+    expect(d?.teammates).toEqual(['Nova#11214']);
+  });
+
+  it('omits teammates without a roster', () => {
+    const d = matchDetail([minimal()], 'legacy-1');
+    expect(d).not.toHaveProperty('teammates');
+  });
+
+  it('copies a recorded party and exposes the effective group size', () => {
+    const party = { members: ['Nova#11214', 'Ann'], source: 'manual' as const };
+    const d = matchDetail([{ ...full(), groupSize: 2, party }], 'full-1');
+    expect(d?.party).toEqual(party);
+    expect(d?.groupSize).toBe(3);
+  });
+
+  it('falls back to the raw GEP count, and omits both when nothing is known', () => {
+    expect(matchDetail([minimal({ groupSize: 2 })], 'legacy-1')?.groupSize).toBe(2);
+    const d = matchDetail([minimal()], 'legacy-1');
+    expect(d).not.toHaveProperty('party');
+    expect(d).not.toHaveProperty('groupSize');
+  });
+});

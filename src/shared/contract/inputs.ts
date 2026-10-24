@@ -9,6 +9,15 @@ import type { MatchMental, TargetGrade } from '../../core/analytics';
 import type { TargetMode } from '../../core/targets';
 import type { DashboardFilters } from './dashboard';
 
+/**
+ * The party the player queued with, as authored by hand (Review, Log Match, match
+ * edit). `{ members }` records those players (`members: []` = explicit Solo);
+ * `null` clears the recorded party so the match falls back to the raw GEP count.
+ * As a field on an input, omitted/`undefined` leaves the stored party unchanged.
+ * The receiver stamps `source: 'manual'` and normalizes the names.
+ */
+export type PartyInput = { members: string[] } | null;
+
 /** A manually-logged match, captured in the Log Match card. */
 export interface ManualMatchInput {
   result: Result;
@@ -35,6 +44,8 @@ export interface ManualMatchInput {
    * receiver so a skewed clock can never produce future-stamped history.
    */
   playedAt?: number;
+  /** Who the player queued with; omitted/`null` records no party (GEP count, or Unknown). */
+  party?: PartyInput;
 }
 
 /**
@@ -73,6 +84,8 @@ export interface MatchEditInput {
    * receiver. There is no "clear" — every match keeps SOME timestamp.
    */
   playedAt?: number;
+  /** New party, or `null` to clear it; `undefined` leaves it unchanged. Applies to any match. */
+  party?: PartyInput;
 }
 
 /** A new improvement target authored in the Targets builder. */
@@ -121,6 +134,8 @@ export interface ReviewInput {
    * {@link MatchEditInput.srDelta}.
    */
   srDelta?: number | null;
+  /** New party, or `null` to clear it; `undefined` leaves it unchanged. */
+  party?: PartyInput;
 }
 
 /**

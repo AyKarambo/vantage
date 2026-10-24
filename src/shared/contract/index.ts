@@ -62,7 +62,7 @@ export type {
 // Manual-entry inputs
 export type {
   ManualMatchInput, MatchEditInput, AuthoredTargetInput, TargetEditInput, ReviewInput,
-  IgnorePendingReviewsInput, ThresholdSuggestionInput,
+  IgnorePendingReviewsInput, ThresholdSuggestionInput, PartyInput,
 } from './inputs';
 
 // Accounts + rank
