@@ -276,6 +276,11 @@
   color: var(--warn-text);
 }
 
+/* An "add one more" chip (focus chooser, #321) — an action, not a choice. */
+.chip--dashed {
+  border-style: dashed;
+}
+
 /* A labelled boolean setting (K3, toggleRow) — the label never rewrites
    itself; the switch track alone shows on/off, matching a native
    role="switch" so it's actually announced as one. */

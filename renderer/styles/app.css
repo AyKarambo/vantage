@@ -921,6 +921,22 @@
   color: var(--muted);
   margin-bottom: 11px;
 }
+/* Sitting recap (#321): practice tiles first, the result tile last and quietest. */
+.recap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.recap-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 10px);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.recap-tile--accent {
+  border-color: rgba(124, 108, 245, 0.4);
+}
 .review-target {
   display: flex;
   align-items: center;

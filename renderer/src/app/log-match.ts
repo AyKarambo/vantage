@@ -19,6 +19,8 @@ import { targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsToneSwitch }
 import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
+import { focusTargetChooser } from '../components/focusTargetChooser';
+import { breakChip } from '../components/breakChip';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
@@ -302,6 +304,7 @@ function buildForm(
         : setCurrent
           ? (state.rankPreview?.anchored ? state.rankPreview.srDelta : undefined)
           : (state.srDelta.trim() !== '' ? Number(state.srDelta) : undefined);
+      const focusTargetIds = chooser?.focusIds();
       const { matchId } = await bridge.logMatch({
         result: state.result,
         role: state.role,
@@ -313,6 +316,8 @@ function buildForm(
         ...(srDelta != null && Number.isFinite(srDelta) ? { srDelta } : {}),
         ...(state.performance != null ? { performance: state.performance } : {}),
         ...(Object.keys(grades).length ? { grades } : {}),
+        ...(focusTargetIds !== undefined ? { focusTargetIds } : {}),
+        ...(brk?.changed() ? { breakBefore: brk.value() } : {}),
         ...(state.playedAt != null ? { playedAt: state.playedAt } : {}),
       });
       // Anchoring only happens for a track that has none yet — the first rank
@@ -626,13 +631,34 @@ function buildForm(
   // L5: kept as a stable field (a "No active targets" hint, matching the
   // editor's own copy) rather than dropped outright when there are none —
   // the form no longer reflows around whether targets happen to exist.
-  const targetRows = activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
+  // Practice mode (#321): the same "What did you work on this game?" chooser
+  // Review uses — only the chosen self-rated targets get graded (measured
+  // ones grade themselves from stats), plus the break mark.
+  const practice = ctx.data.practice.on;
+  const selfTargets = activeTargets.filter((t) => t.mode !== 'measured');
+  const chooser = practice && selfTargets.length
+    ? focusTargetChooser({
+        targets: selfTargets,
+        initial: ctx.data.practice.nextFocus,
+        grades,
+        stickiness: ctx.data.coachingSettings.focusStickiness,
+        onStickiness: (focusStickiness) => {
+          ctx.data.coachingSettings.focusStickiness = focusStickiness;
+          void bridge.setCoaching({ ...ctx.data.coachingSettings, focusStickiness });
+        },
+      })
+    : null;
+  const brk = practice ? breakChip(false) : null;
+  const targetRows = chooser ? [] : activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
   const targetsBlock = field(
-    optionalLabel('Targets', '— grade now or later on Review'),
+    optionalLabel(practice ? 'What did you work on?' : 'Targets', '— grade now or later on Review'),
     h('div', { class: 'stack', style: { gap: '10px' } },
-      ...(targetRows.length
-        ? targetRows.map((r) => r.el)
-        : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+      ...(chooser
+        ? [chooser.el]
+        : targetRows.length
+          ? targetRows.map((r) => r.el)
+          : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
+      brk ? brk.el : null,
     ),
   );
 
@@ -733,7 +759,7 @@ function buildForm(
   // editor, L5 — see bindSaveKeys).
   bindResultKeys(form, resultRow);
   bindSaveKeys(form, { save: saveAndClose, saveAndNext });
-  bindTargetGradeKeys(form, targetRows);
+  bindTargetGradeKeys(form, chooser ? () => chooser.rows() : targetRows);
 
   // Nothing moves focus into the dialog by default, which leaves W/L/D dead and
   // (worse) leaves focus on the opener button, so a stray Enter re-clicks it and

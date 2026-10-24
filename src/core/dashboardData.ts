@@ -726,6 +726,14 @@ function practiceOf(
   const factors = factorTable(src.games, inRange, src.checkIns, coaching, selfIds);
   const headline = factorHeadline(factors);
   const recap = sittingRecap(src.games, src.checkIns, selfIds);
+  const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
+  // A game logged right now: the same pre-selection an inbox row gets.
+  const now: GameRecord = {
+    matchId: '__next__', timestamp: Date.now(), account: '', role: 'damage', map: '', result: 'Draw', gameType: 'Competitive', heroes: [],
+  };
+  const nextFocus = selectable.size
+    ? focusPreselection([...src.games, now], now, coaching.focusStickiness, src.checkIns, selectable)
+    : [];
   return {
     on: practiceFocusOn(coaching, targets),
     execution,
@@ -735,6 +743,7 @@ function practiceOf(
     ...(headline ? { headline } : {}),
     weakestDays: weakestDays(src.games, inRange, src.checkIns, coaching, selfIds),
     ...(recap ? { recap } : {}),
+    nextFocus,
   };
 }
 

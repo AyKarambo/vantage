@@ -392,6 +392,8 @@ export interface PracticeSummary {
   weakestDays: WeakDay[];
   /** The newest fully reviewed sitting; Review shows it once one of its games was graded this session. */
   recap?: SittingRecap;
+  /** What Log Match pre-selects for a game logged right now (stickiness + check-in, like an inbox row's `suggestedFocus`). */
+  nextFocus: string[];
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;

@@ -105,17 +105,24 @@ function gradeControl(onChange: (g: TargetGrade) => void): { el: HTMLElement; se
  * last row) — Review's own keyboard grading model (R2), shared here so the
  * quick-log card and the match-detail editor (L5) get it too, instead of
  * click-only rows. `scope` must be focusable so the keydown actually reaches
- * it; a no-op when there are no rows (nothing active to grade).
+ * it; a no-op when there are no rows (nothing active to grade). A getter
+ * instead of an array tracks a row set that changes after binding (the
+ * practice-mode focus chooser, #321) — focus clamps to whatever is there now.
  */
 export function bindTargetGradeKeys(
   scope: HTMLElement,
-  rows: Array<{ el: HTMLElement; set: (g: TargetGrade) => void }>,
+  rowsOrGetter: Array<{ el: HTMLElement; set: (g: TargetGrade) => void }> | (() => Array<{ el: HTMLElement; set: (g: TargetGrade) => void }>),
 ): void {
-  if (!rows.length) return;
+  const live = typeof rowsOrGetter === 'function';
+  const current = (): Array<{ el: HTMLElement; set: (g: TargetGrade) => void }> => (live ? rowsOrGetter() : rowsOrGetter);
+  if (!live && !current().length) return;
   let focusIdx = 0;
-  const markFocus = (): void => rows.forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
+  const markFocus = (): void => current().forEach((r, i) => r.el.classList.toggle('is-focused', i === focusIdx));
   markFocus();
   scope.addEventListener('keydown', (e) => {
+    const rows = current();
+    if (!rows.length) return;
+    if (focusIdx >= rows.length) focusIdx = 0;
     const t = e.target as HTMLElement;
     if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
