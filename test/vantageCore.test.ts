@@ -606,13 +606,13 @@ describe('computeDashboard', () => {
     expect(rowWithNeither).not.toHaveProperty('performance');
   });
 
-  it('toMatchRow carries groupSize when present and omits it when absent (H9)', () => {
+  it('toMatchRow carries groupSize when present and Solo when nothing is known (H9)', () => {
     const withGroup = game({ result: 'Win', map: 'Ilios', role: 'damage', groupSize: 4 });
     const withoutGroup = game({ result: 'Loss', map: 'Ilios', role: 'damage' });
     const demo = { active: false, preference: 'off' as const, hasRealHistory: true };
     const d = computeDashboard([withGroup, withoutGroup], { days: 'all' }, demo);
     expect(d.matches.find((m) => m.matchId === withGroup.matchId)?.groupSize).toBe(4);
-    expect(d.matches.find((m) => m.matchId === withoutGroup.matchId)).not.toHaveProperty('groupSize');
+    expect(d.matches.find((m) => m.matchId === withoutGroup.matchId)?.groupSize).toBe(1);
   });
 
   it('toMatchRow reports the effective party size and carries the party', () => {

@@ -19,6 +19,12 @@ export interface PartyPickerOpts {
   teammates?: readonly string[];
   /** Display names of the players tagged as friends — starred and offered as suggestions. */
   friends?: readonly string[];
+  /**
+   * The group size the game itself reported, when no party is recorded. Above 1
+   * the Solo chip is the correction ("I was alone after all"); otherwise the
+   * match already counts as Solo and the chip shows that default.
+   */
+  detectedGroupSize?: number;
 }
 
 export interface PartyPicker {
@@ -33,7 +39,10 @@ export function partyPicker(opts: PartyPickerOpts = {}): PartyPicker {
   let teammates = [...(opts.teammates ?? [])];
   let friends = [...(opts.friends ?? [])];
   let friendKeys = new Set(friends.map(battleTagName));
-  let solo = Boolean(opts.party && opts.party.members.length === 0);
+  const detectedGroup = !opts.party && (opts.detectedGroupSize ?? 1) > 1;
+  // Lit for an explicit Solo AND for the default one: nothing recorded and no
+  // group detected already counts as Solo, so the chip says so up front.
+  let solo = opts.party ? opts.party.members.length === 0 : !detectedGroup;
   let members = [...(opts.party?.members ?? [])];
   let touched = false;
 
@@ -62,7 +71,9 @@ export function partyPicker(opts: PartyPickerOpts = {}): PartyPicker {
     const extras = members.filter((m) => !teamKeys.has(battleTagName(m)));
     const soloChip = h('button', {
       class: `chip${solo ? ' is-on' : ''}`,
-      title: 'Queued alone',
+      title: detectedGroup
+        ? `The game saw a group of ${opts.detectedGroupSize} — click if you actually queued alone`
+        : 'Queued alone — the default when no group is detected',
       on: { click: () => { solo = !solo; if (solo) members = []; changed(); } },
     }, 'Solo');
     render(chips,
@@ -102,7 +113,10 @@ export function partyPicker(opts: PartyPickerOpts = {}): PartyPicker {
 
   paint();
   return {
-    el: h('div', { class: 'party-picker stack', style: { gap: '8px' } }, chips, box),
+    el: h('div', { class: 'party-picker stack', style: { gap: '8px' } }, chips, box,
+      detectedGroup && !touched
+        ? h('div', { class: 'hint' }, `The game saw a group of ${opts.detectedGroupSize}. Pick who it was, or Solo if you were alone.`)
+        : null),
     value: () => {
       if (!touched) return undefined;
       if (solo) return { members: [] };

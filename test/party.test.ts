@@ -23,7 +23,8 @@ describe('effectiveGroupSize', () => {
   });
   it('falls back to the GEP count, or undefined', () => {
     expect(effectiveGroupSize({ groupSize: 2 })).toBe(2);
-    expect(effectiveGroupSize({})).toBeUndefined();
+    // Nothing recorded and nothing detected: Solo is the default.
+    expect(effectiveGroupSize({})).toBe(1);
   });
 });
 

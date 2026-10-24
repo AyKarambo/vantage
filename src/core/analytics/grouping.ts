@@ -234,8 +234,7 @@ export function trend(games: GameRecord[], bucket: 'day' | 'week' = 'day'): Grou
 export const byMode = (g: GameRecord[]): Group[] => groupBy(g, (x) => x.gameType);
 
 /** "Solo" / "Duo" / "Trio+" bucket for an effective party size; "Unknown" when neither party members nor a GEP count is known. */
-function groupSizeLabel(size: number | undefined): string {
-  if (size == null) return 'Unknown';
+function groupSizeLabel(size: number): string {
   if (size <= 1) return 'Solo';
   if (size === 2) return 'Duo';
   return 'Trio+';
