@@ -25,7 +25,7 @@ import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type Readines
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import {
-  autoBreakBefore, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
+  autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
@@ -343,7 +343,7 @@ export function computeDashboard(
     checkIns,
     performance: performanceStats(games),
     targets,
-    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns)
+    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets))
       .map(({ g, extra }) => ({ ...toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed), ...extra })),
     pendingReviews: pending.length,
     pendingReviewsRecent: pendingReviewsRecent(pending),
@@ -721,7 +721,8 @@ function practiceOf(
   coaching: CoachingSettings,
 ): PracticeSummary {
   const selfIds = new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id));
-  const execution = executionOf(src.games.filter((g) => inRange.has(g.matchId)), selfIds);
+  const rangeGames = src.games.filter((g) => inRange.has(g.matchId));
+  const execution = executionOf(rangeGames, selfIds);
   const prevExecution = prevIds ? executionOf(src.games.filter((g) => prevIds.has(g.matchId)), selfIds) : undefined;
   const factors = factorTable(src.games, inRange, src.checkIns, coaching, selfIds);
   const headline = factorHeadline(factors);
@@ -743,6 +744,7 @@ function practiceOf(
     ...(headline ? { headline } : {}),
     weakestDays: weakestDays(src.games, inRange, src.checkIns, coaching, selfIds),
     ...(recap ? { recap } : {}),
+    byTarget: executionByTarget(rangeGames, selfIds),
     nextFocus,
   };
 }
@@ -760,7 +762,10 @@ function inboxRows(
   targets: TargetSummary[],
   coaching: CoachingSettings,
   checkIns: NonNullable<ManualData['checkIns']>,
+  practiceOn: boolean,
 ): Array<{ g: GameRecord; extra: Pick<MatchRow, 'suggestedFocus' | 'autoBreak'> }> {
+  // Stats mode reads neither — keep every row exactly as before (and skip the work).
+  if (!practiceOn) return rows.map((g) => ({ g, extra: {} }));
   const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
   const prevOf = new Map<string, GameRecord>();
   for (const s of sittingsOf(all)) s.forEach((g, i) => { if (i) prevOf.set(g.matchId, s[i - 1]); });

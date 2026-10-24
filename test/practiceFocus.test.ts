@@ -161,3 +161,19 @@ describe('sittingsOf / focusGamesSince', () => {
     expect(focusGamesSince(gs, 'b', T0)).toBe(28);
   });
 });
+
+// ---- review fixes ------------------------------------------------------------------
+
+describe('review fixes (#321)', () => {
+  it('a Notion-import-only review is not a focus choice', () => {
+    const notion = game(0, { grades: { [NOTION_IMPROVEMENT_TARGET_ID]: 'hit' } });
+    const g = game(15);
+    const checkIns: SessionCheckIn[] = [{ at: T0 - MIN, mood: 'calm', focusTargetIds: ['b'] }];
+    expect(focusPreselection([notion, g], g, 'sitting', checkIns, new Set(['a', 'b']))).toEqual(['b']);
+  });
+
+  it('auto practice focus ignores measured-only target sets', () => {
+    expect(practiceFocusOn({ practiceFocus: 'auto' }, [{ isActive: true, mode: 'measured' }])).toBe(false);
+    expect(practiceFocusOn({ practiceFocus: 'auto' }, [{ isActive: true, mode: 'self' }])).toBe(true);
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  executionOf, factorHeadline, factorTable, sittingExecution, sittingRecap, tiltByCheckInField, weakestDays,
+  executionOf, executionByTarget, factorHeadline, factorTable, sittingExecution, sittingRecap, tiltByCheckInField, weakestDays,
   type FactorEntry, type FactorRow,
 } from '../src/core/practice';
 import { DEFAULT_COACHING } from '../src/core/coachingSettings';
@@ -144,7 +144,7 @@ describe('weakestDays', () => {
     const checkIns: SessionCheckIn[] = [{ at: T0 + DAY * MIN - MIN, mood: 'calm', sleep: 'poor' }];
     const days = weakestDays(gs, ids(gs), checkIns, DEFAULT_COACHING, self);
     expect(days.map((d) => d.avgRating)).toEqual([40, 55, 65]);
-    expect(days[0].tags).toEqual(expect.arrayContaining(['slept poorly', 'calm check-in', 'no break in 6 games']));
+    expect(days[0].tags).toEqual(expect.arrayContaining(['slept poor', 'calm check-in', 'no break in 6 games']));
   });
 
   it('skips days with fewer than 3 rated games', () => {
@@ -205,5 +205,20 @@ describe('readiness', () => {
     expect(r2.score).toBe(r1.score);
     expect(r2.band).toBe(r1.band);
     expect(r2.signals).toEqual(r1.signals);
+  });
+});
+
+describe('review fixes (#321)', () => {
+  it('a recap of a sitting still in progress is marked open', () => {
+    const gs = [game(0, { grade: 'hit' })];
+    expect(sittingRecap(gs, [], self, T0 + 30 * MIN)!.closed).toBe(false);
+    expect(sittingRecap(gs, [], self, T0 + 200 * MIN)!.closed).toBe(true);
+  });
+
+  it('tallies execution per target', () => {
+    const gs = [game(0, { grade: 'hit' }), game(12, { grade: 'partial' }), game(24, { grade: 'missed', target: 'b' })];
+    const by = executionByTarget(gs, self);
+    expect(by.a.score).toBe(0.75);
+    expect(by.b.score).toBe(0);
   });
 });

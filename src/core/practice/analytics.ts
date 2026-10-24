@@ -48,6 +48,18 @@ export function executionOf(games: readonly GameRecord[], selfIds: ReadonlySet<s
   return finish(t);
 }
 
+/** The execution tally per self-rated target over `games` — the "Your active targets" rows. */
+export function executionByTarget(games: readonly GameRecord[], selfIds: ReadonlySet<string>): Record<string, ExecutionTally> {
+  const out: Record<string, ExecutionTally> = {};
+  for (const g of games) {
+    for (const [id, grade] of Object.entries(g.review?.grades ?? {})) {
+      if (selfIds.has(id)) addGrade(out[id] ??= { ...EMPTY_TALLY }, grade);
+    }
+  }
+  for (const id of Object.keys(out)) out[id] = finish(out[id]);
+  return out;
+}
+
 /** One sitting's execution, for the Session quality bars. */
 export interface SittingExecution {
   startedAt: number;
@@ -230,7 +242,7 @@ export interface WeakDay {
 /** Rated games a day needs before it can be one of the weakest. */
 export const WEAK_DAY_MIN_RATED = 3;
 
-const SLEEP_TAG: Record<string, string> = { poor: 'slept poorly', ok: 'slept OK', good: 'slept well' };
+const SLEEP_TAG: Record<string, string> = { poor: 'slept poor', ok: 'slept OK', good: 'slept well' };
 const ENERGY_TAG: Record<string, string> = { foggy: 'foggy', ok: 'energy OK', sharp: 'sharp' };
 const MOOD_TAG: Record<string, string> = { calm: 'calm check-in', edgy: 'edgy check-in', tilted: 'tilted check-in' };
 
@@ -298,6 +310,8 @@ function dayTags(games: readonly GameRecord[], ctxs: ReadonlyMap<string, GameCon
 /** The Review screen's recap of a fully reviewed sitting. */
 export interface SittingRecap {
   matchIds: string[];
+  /** The sitting is over (no game within the gap since its last one); while false the recap reads "so far". */
+  closed: boolean;
   startedAt: number;
   endedAt: number;
   games: number;
@@ -323,6 +337,7 @@ export function sittingRecap(
   all: readonly GameRecord[],
   checkIns: readonly SessionCheckIn[],
   selfIds: ReadonlySet<string>,
+  now: number = Date.now(),
 ): SittingRecap | null {
   const sittings = sittingsOf(all);
   const sortedCheckIns = [...checkIns].sort((a, b) => a.at - b.at);
@@ -337,6 +352,7 @@ export function sittingRecap(
     const ctx = gameContexts(s, sortedCheckIns, DEFAULT_COACHING).get(s[0].matchId);
     return {
       matchIds: s.map((g) => g.matchId),
+      closed: now - s[s.length - 1].timestamp > PRACTICE_SITTING_GAP_MINUTES * 60_000,
       startedAt: s[0].timestamp,
       endedAt: s[s.length - 1].timestamp,
       games: s.length,
@@ -392,6 +408,8 @@ export interface PracticeSummary {
   weakestDays: WeakDay[];
   /** The newest fully reviewed sitting; Review shows it once one of its games was graded this session. */
   recap?: SittingRecap;
+  /** Execution per target over the range (self-rated targets with at least one grade), keyed by target id. */
+  byTarget: Record<string, ExecutionTally>;
   /** What Log Match pre-selects for a game logged right now (stickiness + check-in, like an inbox row's `suggestedFocus`). */
   nextFocus: string[];
 }

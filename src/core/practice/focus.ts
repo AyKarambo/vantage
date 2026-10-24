@@ -27,21 +27,24 @@ export function focusOf(review: MatchReview | undefined): string[] {
 
 /** Whether a review records a focus choice at all — a "no-read" review (empty grades, no choice) doesn't. */
 export function hasFocusChoice(review: MatchReview | undefined): boolean {
-  return !!review && (review.focusTargetIds !== undefined || Object.keys(review.grades ?? {}).length > 0);
+  // focusOf, not the raw grade keys: a Notion import whose only grade is the
+  // hidden bookkeeping id is not a choice the player made.
+  return !!review && (review.focusTargetIds !== undefined || focusOf(review).length > 0);
 }
 
 /**
  * Whether Mental and Review lead with practice (target execution) instead of
- * win/loss: `on`/`off` force it; `auto` follows whether any target is active
- * and not archived.
+ * win/loss: `on`/`off` force it; `auto` follows whether any SELF-RATED target
+ * is active and not archived — measured targets grade every game by
+ * themselves, so they give the player nothing to choose or practise here.
  */
 export function practiceFocusOn(
   settings: Pick<CoachingSettings, 'practiceFocus'>,
-  targets: ReadonlyArray<{ isActive: boolean; archivedAt?: number }>,
+  targets: ReadonlyArray<{ isActive: boolean; archivedAt?: number; mode?: string }>,
 ): boolean {
   if (settings.practiceFocus === 'on') return true;
   if (settings.practiceFocus === 'off') return false;
-  return targets.some((t) => t.isActive && !t.archivedAt);
+  return targets.some((t) => t.isActive && !t.archivedAt && t.mode !== 'measured');
 }
 
 /**
