@@ -13,7 +13,7 @@ import type {
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
   PlacementOffer, LiveMatchPayload, PendingChangedPayload, PendingMatch,
-  GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
+  CoachingSettings, GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
 } from '../../src/shared/contract';
 import type { GameRecord, MatchReview } from '../../src/core/analytics';
 import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } from '../../src/core/targets';
@@ -43,6 +43,7 @@ import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/b
 import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
 import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
 import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
+import { DEFAULT_COACHING, normalizeCoachingSettings } from '../../src/core/coachingSettings';
 import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
 import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, resetBoundaries, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, trackMatches, type PlacementRun } from '../../src/core/placements';
 import { App } from '../src/app/shell';
@@ -55,6 +56,7 @@ const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
 const STALENESS_KEY = 'vantagePreviewStaleness';
 const READINESS_KEY = 'vantagePreviewReadiness';
 const SESSION_SETTINGS_KEY = 'vantagePreviewSessionSettings';
+const COACHING_KEY = 'vantagePreviewCoaching';
 const GRADING_KEY = 'vantagePreviewGrading';
 const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
 const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
@@ -172,6 +174,10 @@ const savedSessionSettings = loadMap<unknown>(SESSION_SETTINGS_KEY) as Partial<S
 let sessionSettings: SessionSettings = Object.keys(savedSessionSettings).length
   ? normalizeSessionSettings(savedSessionSettings)
   : { ...DEFAULT_SESSION_SETTINGS };
+const savedCoaching = loadMap<unknown>(COACHING_KEY);
+let coaching: CoachingSettings = Object.keys(savedCoaching).length
+  ? normalizeCoachingSettings(savedCoaching)
+  : normalizeCoachingSettings(DEFAULT_COACHING);
 const savedGrading = loadMap<unknown>(GRADING_KEY) as Partial<GradingSettings>;
 let grading: GradingSettings = Object.keys(savedGrading).length
   ? normalizeGradingSettings(savedGrading)
@@ -455,7 +461,7 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
 }
 
 const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()], checkIns: previewCheckIns }, effectiveMasterData(), previewPending),
+  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, coaching, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()], checkIns: previewCheckIns }, effectiveMasterData(), previewPending),
   heroDetail: async (hero: string, f: DashboardFilters) =>
     heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
   matchDetail: async (matchId: string, f: DashboardFilters) => {
@@ -1149,6 +1155,12 @@ const mock: OwStatsApi = {
     sessionSettings = normalizeSessionSettings(input);
     save(SESSION_SETTINGS_KEY, sessionSettings);
     return sessionSettings;
+  },
+  getCoaching: async () => coaching,
+  setCoaching: async (input: CoachingSettings) => {
+    coaching = normalizeCoachingSettings(input);
+    save(COACHING_KEY, coaching);
+    return coaching;
   },
   getGrading: async () => grading,
   setGrading: async (input: GradingSettings) => {

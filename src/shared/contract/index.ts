@@ -33,6 +33,9 @@ export type {
 export type { DemoPreference } from '../../core/demoPreference';
 export type { RankSeriesPoint } from '../../core/rank/series';
 export type { SessionSettings } from '../../core/sessionSettings';
+export type {
+  CoachingSettings, CheckInQuestions, PracticeFocusMode, FocusStickiness, BreakDetection,
+} from '../../core/coachingSettings';
 export type { GradingSettings } from '../../core/gradingSettings';
 
 // Dashboard payloads

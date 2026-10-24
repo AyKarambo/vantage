@@ -8,6 +8,7 @@ import { normalizeBreakReminder, type BreakReminderSettings } from '../core/brea
 import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
 import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
 import { normalizeSessionSettings, type SessionSettings } from '../core/sessionSettings';
+import { normalizeCoachingSettings, type CoachingSettings } from '../core/coachingSettings';
 import { normalizeGradingSettings, type GradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
@@ -114,6 +115,7 @@ export interface DataProviderDeps {
   persistReadiness(s: ReadinessSettings): void;
   /** Persist a new session-gap threshold into the user's local config file. */
   persistSessionSettings(s: SessionSettings): void;
+  persistCoaching(s: CoachingSettings): void;
   /** Persist the measured-grade settings (partial-credit margin) into the user's local config file. */
   persistGrading(s: GradingSettings): void;
   /** Persist the master-data check settings (incl. `lastCheckedAt`) into the user's local config file (W1). */
@@ -773,6 +775,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       config.sessionSettings = normalizeSessionSettings(input);
       deps.persistSessionSettings(config.sessionSettings);
       return config.sessionSettings;
+    },
+    getCoaching: () => deps.getConfig().coaching,
+    setCoaching: (input) => {
+      const config = deps.getConfig();
+      config.coaching = normalizeCoachingSettings(input);
+      deps.persistCoaching(config.coaching);
+      return config.coaching;
     },
     getGrading: () => deps.getConfig().grading,
     setGrading: (input) => {

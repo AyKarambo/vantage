@@ -4,6 +4,7 @@ import type { CheckInMood } from '../../core/checkIn';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { CoachingSettings } from '../../core/coachingSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { MatchesTextFilter } from '../../core/dashboardData';
 import { IPC_CHANNELS, WINDOW_CHANNELS } from '../../shared/contract';
@@ -187,6 +188,8 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.setSessionSettings, (_e, input: SessionSettings) => provider.setSessionSettings(input));
 
   // Measured-grade settings (partial-credit margin).
+  handle(ch.getCoaching, () => provider.getCoaching());
+  handle(ch.setCoaching, (_e, input: CoachingSettings) => provider.setCoaching(input));
   handle(ch.getGrading, () => provider.getGrading());
   handle(ch.setGrading, (_e, input: GradingSettings) => provider.setGrading(input));
 

@@ -23,6 +23,7 @@ import { DEFAULT_STALENESS, type StalenessSettings } from './staleness';
 import { DEFAULT_BREAK_REMINDER, type BreakReminderSettings } from './breakReminder';
 import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type ReadinessSummary } from './readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
+import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
@@ -41,6 +42,8 @@ export interface ManualData {
   readiness?: ReadinessSettings;
   /** Effective "Current session" gap threshold; defaults when absent. */
   sessionSettings?: SessionSettings;
+  /** Effective practice-focus / check-in / break-detection settings; defaults when absent. */
+  coaching?: CoachingSettings;
   /** Effective measured-grade settings (partial-credit margin); defaults when absent. */
   grading?: GradingSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
@@ -339,6 +342,7 @@ export function computeDashboard(
     }),
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     sessionSettings,
+    coachingSettings: manual?.coaching ?? DEFAULT_COACHING,
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,

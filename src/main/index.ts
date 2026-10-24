@@ -429,6 +429,7 @@ function main(): void {
     persistReadiness: (readiness) => saveLocalConfig({ readiness }),
     persistSessionSettings: (sessionSettings) => saveLocalConfig({ sessionSettings }),
     persistGrading: (grading) => saveLocalConfig({ grading }),
+    persistCoaching: (coaching) => saveLocalConfig({ coaching }),
     persistMasterDataCheck: (masterData) => saveLocalConfig({ masterData }),
     recordGame: (game) => pipeline.recordGame(game),
     resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),

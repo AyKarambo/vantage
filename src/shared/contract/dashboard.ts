@@ -16,6 +16,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
+import type { CoachingSettings } from '../../core/coachingSettings';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
@@ -373,6 +374,8 @@ export interface DashboardData {
   readinessSettings: ReadinessSettings;
   /** The effective "Current session" gap threshold, so the Settings editor renders synchronously. */
   sessionSettings: SessionSettings;
+  /** Effective coaching settings (practice focus, check-in questions, break detection), so views render synchronously. */
+  coachingSettings: CoachingSettings;
   /** Effective measured-grade settings (partial-credit margin), so the Settings editor renders synchronously. */
   gradingSettings: GradingSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */
