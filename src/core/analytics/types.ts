@@ -62,6 +62,18 @@ export interface MatchReview {
   grades: Record<string, TargetGrade>;
   /** Feel flags — same shape as the quick-log self-report. */
   flags: MatchMental;
+  /**
+   * The self-rated targets the player chose to work on this game, picked on
+   * Review / Log Match (#321). `[]` is a deliberate "Nothing specific". Absent
+   * on older reviews — readers then derive the focus from the graded targets.
+   */
+  focusTargetIds?: string[];
+  /**
+   * The player's own break mark for the gap before this game: `true` = marked
+   * a break, `false` = removed an auto-detected one. Absent = follow break
+   * detection.
+   */
+  breakBefore?: boolean;
 }
 
 /** One finished game, already resolved to display values. */

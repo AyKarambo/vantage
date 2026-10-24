@@ -8,7 +8,7 @@
  * real app persists them to disk.
  */
 import type {
-  AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings, CheckInMood, SessionCheckIn,
+  AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings, CheckInInput, SessionCheckIn,
   DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
   MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
@@ -22,6 +22,7 @@ import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreferenc
 import { generateSampleGames } from '../../src/core/sampleData';
 import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
 import { isCompetitive } from '../../src/core/matchFilter';
+import { normalizeCheckIn } from '../../src/core/checkIn';
 import { clampZoom } from '../../src/core/zoom';
 import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
 import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
@@ -1132,8 +1133,9 @@ const mock: OwStatsApi = {
     save(BREAK_REMINDER_KEY, breakReminder);
     return breakReminder;
   },
-  recordCheckIn: async (mood: CheckInMood) => {
-    const entry: SessionCheckIn = { at: Date.now(), mood };
+  recordCheckIn: async (input: CheckInInput) => {
+    const entry = normalizeCheckIn(input, Date.now());
+    if (!entry) throw new Error('Invalid check-in');
     previewCheckIns.push(entry);
     save(CHECK_INS_KEY, previewCheckIns);
     return entry;

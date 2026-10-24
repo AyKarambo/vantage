@@ -30,7 +30,7 @@ export function checkInPrompt(ctx: ViewContext): HTMLElement | null {
   }
 
   const record = (mood: CheckInMood): void => {
-    void bridge.recordCheckIn(mood).then(() => ctx.refresh());
+    void bridge.recordCheckIn({ mood }).then(() => ctx.refresh());
   };
 
   return h('div', null,

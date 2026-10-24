@@ -1,6 +1,6 @@
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import type { BreakReminderSettings } from '../../core/breakReminder';
-import type { CheckInMood } from '../../core/checkIn';
+import type { CheckInInput } from '../../core/checkIn';
 import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
@@ -177,7 +177,7 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.setBreakReminder, (_e, input: BreakReminderSettings) =>
     provider.setBreakReminder(input),
   );
-  handle(ch.recordCheckIn, (_e, mood: CheckInMood) => provider.recordCheckIn(mood));
+  handle(ch.recordCheckIn, (_e, input: CheckInInput) => provider.recordCheckIn(input));
 
   // Readiness feature settings.
   handle(ch.getReadiness, () => provider.getReadiness());

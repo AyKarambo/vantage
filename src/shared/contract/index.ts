@@ -23,8 +23,11 @@ export type { TargetSummary, TargetMode, OrderedAttempt } from '../../core/targe
 export type { TargetLearningCurve, LearningCurvePoint, LearningPhase } from '../../core/targets';
 export type { StalenessSettings } from '../../core/staleness';
 export type { BreakReminderSettings } from '../../core/breakReminder';
-export type { CheckInMood, SessionCheckIn } from '../../core/checkIn';
-export { CHECK_IN_MOODS, CHECK_IN_LABELS, CHECK_IN_FRESH_MINUTES } from '../../core/checkIn';
+export type { CheckInMood, SessionCheckIn, CheckInSleep, CheckInEnergy, CheckInInput } from '../../core/checkIn';
+export {
+  CHECK_IN_MOODS, CHECK_IN_LABELS, CHECK_IN_FRESH_MINUTES,
+  CHECK_IN_SLEEP, CHECK_IN_ENERGY, CHECK_IN_SLEEP_LABELS, CHECK_IN_ENERGY_LABELS, normalizeCheckIn,
+} from '../../core/checkIn';
 export type {
   ReadinessSummary, ReadinessSettings, ReadinessBand, ReadinessRecommendation,
   ReadinessConfidence, ReadinessConfidenceGate, ReadinessSignal, ReadinessLoad, ReadinessTrendPoint,
