@@ -20,6 +20,7 @@ import { roleIcon } from '../components/roleIcon';
 import { inlineLink } from '../components/inlineLink';
 import { dataTable, type Column } from '../components/table';
 import { roleOfHero } from '../../../src/core/heroes';
+import { battleTagName } from '../../../src/core/model';
 import { backControl, viewHead, type ViewContext } from './view';
 
 export function playerHistory(ctx: ViewContext): HTMLElement {
@@ -120,7 +121,7 @@ function sections(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement {
   );
 
   return h('div', null,
-    viewHead(d.name, sub),
+    viewHead(d.name, sub, friendToggle(d.name)),
     collisionNote(d),
     whoTheyAreBand(d),
     teamSplit(d),
@@ -128,6 +129,33 @@ function sections(d: PlayerMatchHistory, ctx: ViewContext): HTMLElement {
     card({ class: 'card--flush', style: { padding: '4px 10px 10px' } }, tableHost),
     showRank ? rankFootnote(d) : noRankColumnNote(d, ctx),
   );
+}
+
+/**
+ * Tag / untag this player as a friend (#319). A tagged friend is starred in the
+ * "Queued with" picker and lets a new match be auto-labelled with its party.
+ * Matched by name before the `#`, like everything else on this page; local-only.
+ */
+function friendToggle(name: string): HTMLElement {
+  const key = battleTagName(name);
+  let on = false;
+  const btn = h('button', {
+    class: 'chip',
+    title: 'Friends are starred in "Queued with" and auto-fill your group on new matches when the party size matches',
+    on: {
+      click: () => {
+        void bridge.setFriend({ name, friend: !on }).then((list) => paint(list.some((f) => f.key === key)));
+      },
+    },
+  });
+  const paint = (next: boolean): void => {
+    on = next;
+    btn.classList.toggle('is-on', on);
+    btn.textContent = on ? '★ Friend' : '☆ Mark as friend';
+  };
+  paint(false);
+  void bridge.friends().then((list) => paint(list.some((f) => f.key === key)));
+  return btn;
 }
 
 /**

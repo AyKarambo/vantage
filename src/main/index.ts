@@ -16,6 +16,7 @@ import { ManualStore } from '../store/manualLog';
 import { RankAnchorStore } from '../store/rankAnchors';
 import { PlacementStore } from '../store/placements';
 import { CheckInStore } from '../store/checkIns';
+import { FriendStore } from '../store/friends';
 import { MasterDataStore } from '../store/masterData';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
@@ -189,6 +190,7 @@ function main(): void {
   const rankAnchors = new RankAnchorStore(dataDir);
   const placements = new PlacementStore(dataDir);
   const checkIns = new CheckInStore(dataDir);
+  const friends = new FriendStore(dataDir);
   const masterDataStore = new MasterDataStore(dataDir);
   // Effective (defaults ⊕ overrides) map views for the Notion Maps seed (all maps)
   // and the sample generator's competitive pool (active only).
@@ -213,6 +215,7 @@ function main(): void {
     rankAnchors,
     placements,
     checkIns,
+    friends,
     masterData: masterDataStore,
   });
 
@@ -365,6 +368,9 @@ function main(): void {
   // anchor, a placement run, an import) — including writes the MCP server makes
   // on the user's behalf, which reach no renderer callback of their own.
   let pushDataChanged: () => void = () => {};
+  // GEP's getInfo(), bound once the GEP service exists (gep sensor only) — the
+  // pipeline probes it at match_start when the lobby's party count was missed.
+  let probeGepInfo: () => Promise<unknown> = () => Promise.resolve(null);
   const pipeline = createMatchPipeline({
     history,
     aggregator,
@@ -375,6 +381,9 @@ function main(): void {
     // — drives the live dashboard refresh and the F4 account auto-switch.
     onGameLogged: (payload) => pushGameLogged(payload),
     onPendingChanged: (payload) => pushPendingChanged(payload),
+    probeInfo: () => probeGepInfo(),
+    // Read per match so a friend tagged mid-session labels the very next game.
+    friendKeys: () => friends.keys(),
   });
 
   // The in-progress match: the same GEP stream the pipeline consumes, folded
@@ -415,6 +424,7 @@ function main(): void {
     rankAnchors,
     placements,
     checkIns,
+    friends,
     masterDataStore,
     fetchMasterDataUpdate: () => fetchOverfast(config.masterData.overfastBaseUrl),
     notion,
@@ -720,6 +730,7 @@ function main(): void {
 
   if (config.sensor === 'gep') {
     const gep = new GepService(config.overwatchGameId);
+    probeGepInfo = () => gep.getActiveInfo();
     gep.on('message', pipeline.feed);
     gep.on('message', (msg: GepMessage) => statusMonitor.message(msg));
     gep.on('message', (msg: GepMessage) => liveMatchMonitor.message(msg));
@@ -734,6 +745,10 @@ function main(): void {
       // crashes or is alt-F4'd emits no match_end, so without this the board
       // would keep presenting a finished match as current.
       liveMatchMonitor.setAttached(s.gameRunning && s.enabled);
+      // A held party size belongs to one game session: after Overwatch exits,
+      // the next launch starts outside any party, and GEP only re-sends the
+      // count when it changes — so a stale duo must not carry into it.
+      if (!s.gameRunning) aggregator.clearPartyCount();
     });
     gep.on('log', log.adapter('gep'));
 

@@ -10,6 +10,7 @@ export const OUTBOX_FILE = 'outbox.json';
 export const RANK_ANCHORS_FILE = 'rankAnchors.json';
 export const PLACEMENTS_FILE = 'placements.json';
 export const CHECK_INS_FILE = 'checkIns.json';
+export const FRIENDS_FILE = 'friends.json';
 export const MASTER_DATA_FILE = 'masterData.json';
 export const LEGACY_HISTORY_JSON_FILE = 'history.json';
 
@@ -34,6 +35,8 @@ export interface DataArtifactPresence {
   placements: boolean;
   /** `checkIns.json` — pre-session mood check-ins (S10 phase 2). */
   checkIns: boolean;
+  /** `friends.json` — players the user tagged as friends (local-only). */
+  friends: boolean;
   /** `masterData.json` — editable heroes/maps/seasons override deltas. */
   masterData: boolean;
   /** Frozen legacy `history.json` backup, present only on installs migrated from pre-SQLite. */
@@ -89,6 +92,7 @@ export function planDataMigration(
   addFile(RANK_ANCHORS_FILE, files.rankAnchors, true);
   addFile(PLACEMENTS_FILE, files.placements, true);
   addFile(CHECK_INS_FILE, files.checkIns, true);
+  addFile(FRIENDS_FILE, files.friends, true);
   addFile(MASTER_DATA_FILE, files.masterData, true);
   addFile(LEGACY_HISTORY_JSON_FILE, files.legacyHistoryJson, true);
 

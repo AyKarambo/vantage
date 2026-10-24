@@ -37,8 +37,44 @@ export class MatchAggregator {
     this.mapModeOf = options.mapModeOf ?? staticMapMode;
   }
 
+  /**
+   * Latest party size GEP reported (solo normalized to 1). GEP pushes
+   * `party_player_count` only when it CHANGES — typically in the lobby, before
+   * `match_start` — so it must outlive the per-match reset in `handle` and
+   * `finalize`, or the next match would silently lose its group size.
+   */
+  private partyCount?: number;
+
   reset(): void {
     this.current = newMutable();
+    this.partyCount = undefined;
+  }
+
+  /**
+   * Forget the held party size without touching the match in progress — for
+   * the game exiting, after which a relaunch starts a fresh (party-less) session.
+   */
+  clearPartyCount(): void {
+    this.partyCount = undefined;
+  }
+
+  /** True once a party size is held (pushed by GEP or seeded from a probe). */
+  hasPartyCount(): boolean {
+    return this.partyCount !== undefined;
+  }
+
+  /**
+   * Gap-filler for a `getInfo()` probe, for when the lobby update was missed
+   * (e.g. the app started mid-session). Never overrides a pushed update: it is a
+   * no-op when a count is already held, and leaves a group size already on the
+   * in-progress record alone.
+   */
+  seedPartyCount(n: number | undefined): void {
+    if (n === undefined || this.partyCount !== undefined) return;
+    const count = normalizePartyCount(n);
+    this.partyCount = count;
+    const rec = this.current.record;
+    if (rec.groupSize === undefined) rec.groupSize = count;
   }
 
   /** Feed one normalized GEP message. Returns a finished record on match end. */
@@ -46,6 +82,8 @@ export class MatchAggregator {
     if (isMatchStartMessage(msg)) {
       this.current = newMutable();
       this.current.record.startedAt = this.now();
+      // The lobby's party size was reported before match_start and won't be re-sent.
+      if (this.partyCount !== undefined) this.current.record.groupSize = this.partyCount;
       return null;
     }
 
@@ -92,9 +130,15 @@ export class MatchAggregator {
         case K.queueType:
           rec.queueType = asString(msg.value) ?? rec.queueType;
           break;
-        case K.partySize:
-          rec.groupSize = asNumber(msg.value) ?? rec.groupSize;
+        case K.partySize: {
+          const n = asNumber(msg.value);
+          if (n !== undefined) {
+            // 0 arrives after a match / on leaving a party and means solo.
+            this.partyCount = normalizePartyCount(n);
+            rec.groupSize = this.partyCount;
+          }
           break;
+        }
       }
       return;
     }
@@ -464,6 +508,11 @@ function toRole(raw: string | undefined): Role | undefined {
 }
 
 // --- helpers ------------------------------------------------------------------
+
+/** GEP reports 0 (and 1) for a solo queue; both mean a group of one. */
+function normalizePartyCount(n: number): number {
+  return n <= 1 ? 1 : n;
+}
 
 function nameMatches(msg: GepMessage, name: string): boolean {
   return msg.key?.toLowerCase() === name || msg.feature?.toLowerCase() === name;

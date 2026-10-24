@@ -3,7 +3,7 @@
  * history and the full match-detail payload. Electron-free so main, preload
  * and the renderer bundle can all share it.
  */
-import type { Role, Result, HeroStat } from '../../core/model';
+import type { Role, Result, HeroStat, MatchParty } from '../../core/model';
 
 /** The player's own per-10 averages on a hero — the "usual" comparison baseline for the match-detail per-hero card (H8). */
 export type UsualPer10 = Pick<HeroStat, 'eliminations' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'>;
@@ -270,6 +270,15 @@ export interface MatchDetail {
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */
   finalScore?: string;
   heroes: string[];
+  /** The recorded party (who you queued with), when one is — absent means none recorded. `members: []` is an explicit Solo. */
+  party?: MatchParty;
+  /** Effective party size: recorded party + you, else the raw GEP count; absent when neither is known. */
+  groupSize?: number;
+  /**
+   * Own-team players other than you, from the stored roster — the choices the party
+   * picker offers. Absent without a roster or when you were alone on your team.
+   */
+  teammates?: string[];
   /**
    * Local player's per-hero lines, merged per hero; [] when GEP gave no
    * per-hero data. `minutes`, when present, are already on the played-time

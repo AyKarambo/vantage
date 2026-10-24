@@ -200,7 +200,7 @@ export class HistoryStore {
 
   /**
    * Patch a stored game's editable fields in place (result/role/map/heroes/
-   * gameType/timestamp, plus the manual layer mental/srDelta/review/performance).
+   * gameType/timestamp, plus the manual layer mental/srDelta/review/performance/party).
    * Only the provided keys change; a `null` value deletes that key (e.g. clearing
    * srDelta); false if the id is unknown. Game facts are editable on any match now
    * — the {@link ../main/dataProvider editMatch} layer stamps `factsEditedAt` when
@@ -212,6 +212,7 @@ export class HistoryStore {
     matchId: string,
     patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'timestamp' | 'mental' | 'review'>> &
       { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null;
+        party?: GameRecord['party'] | null;
         rankAtStart?: GameRecord['rankAtStart'] | null },
   ): boolean {
     const game = this.getOne(matchId);

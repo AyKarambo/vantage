@@ -14,7 +14,7 @@ import type { ThresholdSuggestion } from '../../core/targets';
 import type { DashboardFilters, DashboardData, HeroDetail, MatchRow, PendingChangedPayload } from './dashboard';
 import type { MatchesTextFilter } from '../../core/dashboardData';
 import type { MatchDetail, PlayerMatchHistory, PlayerRecord } from './matchDetail';
-import type { PlayerList, PlayerListQuery } from './players';
+import type { PlayerList, PlayerListQuery, FriendEntry, FriendInput } from './players';
 import type { LiveMatchPayload } from './liveMatch';
 import type {
   ExportResult, ImportResult, NotionStatus, NotionDatabaseSummary, NotionPageSummary, SyncProgress,
@@ -80,6 +80,10 @@ export interface OwStatsApi {
    * which stays a complete all-time record for one player.
    */
   playerList(query: PlayerListQuery): Promise<PlayerList>;
+  /** Every player tagged as a friend (local-only, never exported), sorted by name. */
+  friends(): Promise<FriendEntry[]>;
+  /** Tag or untag a player as a friend; returns the updated list. Keyed by name-before-`#`. */
+  setFriend(input: FriendInput): Promise<FriendEntry[]>;
   exportNotion(filters: DashboardFilters): Promise<ExportResult>;
   /** Re-run export for exactly these match ids (W6's "Retry failed") — bypasses the filter bar entirely. */
   exportNotionMatches(matchIds: string[]): Promise<ExportResult>;
@@ -396,6 +400,8 @@ export const IPC_CHANNELS = {
   playerHistory: 'dashboard:player-history',
   playerList: 'dashboard:player-list',
   playerRecords: 'dashboard:player-records',
+  friends: 'players:friends',
+  setFriend: 'players:set-friend',
   exportNotion: 'dashboard:export-notion',
   exportNotionMatches: 'dashboard:export-notion-matches',
   notionStatus: 'notion:status',

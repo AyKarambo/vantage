@@ -19,6 +19,7 @@ import type {
   RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementOffer, PlacementDeclineInput,
+  FriendEntry, FriendInput,
   MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
 } from '../../shared/contract';
 
@@ -146,6 +147,10 @@ export interface DataProvider {
   getCheckIns(): SessionCheckIn[];
   /** Record a pre-session check-in at the current instant; returns the stored entry. */
   recordCheckIn(mood: CheckInMood): SessionCheckIn;
+  /** Every player tagged as a friend (local-only), sorted by name. */
+  friends(): FriendEntry[];
+  /** Tag/untag a player as a friend by BattleTag or bare name; returns the new list. Empty names are ignored. */
+  setFriend(input: FriendInput): FriendEntry[];
   /** Current readiness feature settings. */
   getReadiness(): ReadinessSettings;
   /** Persist new readiness feature settings; returns the persisted value. */

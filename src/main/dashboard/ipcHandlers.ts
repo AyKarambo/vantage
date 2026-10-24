@@ -12,7 +12,7 @@ import type {
   MatchEditInput, RankAnchorInput, RankEntryPreviewInput, RendererErrorInput, Result, ReviewInput, TargetEditInput, ThresholdSuggestionInput,
   PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
   PlacementDeclineInput,
-  HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate,
+  HeroEntry, MapEntry, SeasonEntry, AcceptedUpdate, FriendInput,
 } from '../../shared/contract';
 import type { DataProvider } from './provider';
 import { isTrustedIpcEvent } from './webContentsSecurity';
@@ -91,6 +91,8 @@ export function registerDashboardIpc(provider: DataProvider): void {
   handle(ch.playerHistory, (_e, name: string) => playerHistoryRead(provider, name));
   handle(ch.playerRecords, (_e, names: string[]) => playerRecordsRead(provider, names));
   handle(ch.playerList, (_e, query: PlayerListQuery) => playerListRead(provider, query));
+  handle(ch.friends, () => provider.friends());
+  handle(ch.setFriend, (_e, input: FriendInput) => provider.setFriend(input));
 
   // Notion sync screen.
   handle(ch.notionStatus, () => provider.notionStatus());
