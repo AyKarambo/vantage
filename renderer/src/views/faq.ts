@@ -112,6 +112,25 @@ function faqTopics(email: string): FaqTopic[] {
       ],
     },
     {
+      topic: 'Practice focus',
+      entries: [
+        {
+          q: 'What is practice focus?',
+          a: 'When it’s on, Mental and Review lead with how well you carried out your active targets, and win/loss ' +
+            'moves to second place. It’s set to Auto by default, which turns it on while any target is active; ' +
+            'Always on and Off are there if you want to choose. Off, or with no targets, Mental and Review show ' +
+            'the stats view as before.',
+          link: { label: 'Open Coaching settings →', go: (ctx) => ctx.navigate('settings', { section: 'coaching' }) },
+        },
+        {
+          q: 'Why aren’t all my targets graded on Review?',
+          a: 'You choose what you worked on in each game. Only the targets you pick get a Hit, Partial or Missed ' +
+            'row, and a target you didn’t work on isn’t counted as a miss. Your choice can carry over to the next ' +
+            'game if you ask it to.',
+        },
+      ],
+    },
+    {
       topic: 'Your data',
       entries: [
         {

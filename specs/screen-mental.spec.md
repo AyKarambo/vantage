@@ -1,6 +1,6 @@
 # Screen spec: Mental (`mental`)
 
-**Source:** `renderer/src/views/mental.ts`, `renderer/src/components/breakReminderEditor.ts`, `src/core/mental.ts`, `src/core/mentalAnalytics.ts` (`COST_MIN_SAMPLE`, `TiltTrendRead.flaggedGames`, F6; `tiltByCheckIn`, S10 phase 2), `src/core/confidence.ts` (`confidenceTier`, F6), `src/core/breakReminder.ts`, `renderer/src/components/primitives/unlock.ts` (`unlockHint`, F1), `src/core/checkIn.ts` (`SessionCheckIn`, `CHECK_IN_MOODS`/`CHECK_IN_LABELS`/`CHECK_IN_FRESH_MINUTES`, S10 phase 2), `renderer/src/components/checkInPrompt.ts`, `src/store/checkIns.ts`.
+**Source:** `renderer/src/views/mental.ts`, `renderer/src/views/mental/practice.ts` and `src/core/practice/*` (practice focus, #321), `renderer/src/components/breakReminderEditor.ts`, `src/core/mental.ts`, `src/core/mentalAnalytics.ts` (`COST_MIN_SAMPLE`, `TiltTrendRead.flaggedGames`, F6; `tiltByCheckIn`, S10 phase 2), `src/core/confidence.ts` (`confidenceTier`, F6), `src/core/breakReminder.ts`, `renderer/src/components/primitives/unlock.ts` (`unlockHint`, F1), `src/core/checkIn.ts` (`SessionCheckIn`, `CHECK_IN_MOODS`/`CHECK_IN_LABELS`/`CHECK_IN_FRESH_MINUTES`, S10 phase 2), `renderer/src/components/checkInPrompt.ts`, `src/store/checkIns.ts`.
 
 **Shared context:** Renders from a `DashboardData` snapshot via `ViewContext`; the global filter bar re-scopes the range.
 
@@ -27,6 +27,28 @@ Surface the signals the game never reports — self-logged tilt, comms quality, 
   Below all five, the shared **stop-rule line** (`components/stopRuleLine.ts`, S10 phase 1) combines the game-position tilt peak (falling back to the winrate-fade position when tilt has no sample-gated peak) with the break reminder's threshold into one sentence — "Your stop rule: end after game 3 or 2 losses in a row." — with a **Set the break reminder to match →** action when a stop point is readable but the reminder is off. The same line renders on Overview's Mental card and the idle Live screen, reading the identical `stopRule()` in `src/core/stopRule.ts`.
 - **The pre-session check-in PROMPT itself** (`components/checkInPrompt.ts`, S10 phase 2) is NOT on this screen — Mental only reads its RESULT (the `tiltByCheckIn` trigger above). The prompt renders on the idle Live screen's "Before you queue" card and the Overview head (both places a player looks right before queuing, not after), alongside the stop-rule line on Live. One click on **Calm** / **Edgy** / **Tilted** calls `bridge.recordCheckIn`, stored unfiltered in `src/store/checkIns.ts` (`checkIns.json`, capped at 500 entries) and refetches; for `CHECK_IN_FRESH_MINUTES` (90, the same window `tiltByCheckIn` matches against) after logging, the prompt instead reads "Logged: `<mood>` — good luck out there." Hidden entirely on demo data (`DashboardData.isSample`) — a mood check-in about a sample season would otherwise sit in the same unscoped store a real one does and leak into the read once real history exists.
 - **Flags this range card:** counts of Tilt, Toxic mates, Leaver — my team, Leaver — enemy, Positive comms, Abusive comms (six boxes). Each count OR-merges the quick-log flag with the Review-screen flag on the same game, so a game flagged from either source counts once. The leaver count is split my-team / enemy (a legacy single `leaver: true` counts as my-team); both boxes drill into the combined `'leaver'` Matches filter. A non-zero box wears `.stat-box--link` (accent border, hover lift, trailing arrow, S8) so it reads as a drill-down instead of looking identical to a plain stat; a zero count is dimmed instead.
+
+## Practice layout (#321)
+
+Shown when **practice focus** is on (Settings › Coaching: **Auto** — the default, on while any target is active — / **Always on** / **Off**; `src/core/practice/focus.ts`). The header button reads "Practice focus · Auto|On" and links to that setting. With it off, or with no targets, the page is the stats layout above, unchanged. Sittings on this layout use a **90-minute** gap.
+
+- **Target execution** (the lead card) — hit = 1, partial = ½, averaged over the window; a delta against the previous window. Winrate is a secondary line that points to Trends.
+- **Session quality** — execution per sitting for the last 8 sittings, with a small W–L as context.
+- **Your active targets** — per target: hit rate, recent grades, and a "landing more often" read when the recent window beats the earlier one.
+- **What shapes your performance** — a table of sleep, energy, mood and food from the pre-session check-in, applied to every game of the sitting it preceded, plus breaks and game number in sitting (from match times). Columns: games, target execution, how you played, winrate. Rows under 5 games are dimmed. One headline names the factor with the largest "how you played" gap of at least 10 points, worded as a correlation, never as proof.
+- **Your weakest days** — lowest-rated days with at least 3 rated games, each with plain fact tags (no advice).
+- **How you played over time** — the 0–100 self-rating card, moved here from Trends (see Trends).
+- **State** — as above.
+- **Tilt & triggers**, **What it costs you** and **Flags** — kept in collapsed sections below.
+
+Source for this layout: `renderer/src/views/mental/practice.ts`, `src/core/practice/analytics.ts` (`sittings.ts` for the sitting split).
+
+## Stats layout changes (#321)
+
+- The tilt chart card is renamed **"Tilt trend"**.
+- The self-rating card ("Your self-rating") lives here now, not on Trends.
+- A dismissible banner — "Practising something specific? Track a target…" — links to Targets.
+- **Session & triggers** gains **Sleep (check-in)** and **Energy (check-in)** rows when check-ins carry those answers.
 
 ## Out-of-Scope
 
