@@ -211,7 +211,7 @@ account's per-role lines beneath it.
   A **Customize view** popover lets you set role, heroes, account, SR delta, rank at start, duration,
   final score, performance rating, target grades, leaver/mental flags and **party size** (Solo /
   Duo / *N*-stack — the people you recorded as queued with plus you when set, else the size
-  GEP reported; hover it to see who. GEP only sends the party size when it changes, usually in
+  GEP reported, else Solo; hover it to see who. GEP only sends the party size when it changes, usually in
   the lobby, so Vantage carries it into every match until it changes, and a reported 0 counts
   as solo) each to hidden,
   inline (folded into the row's meta line), or its own aligned column — the choice

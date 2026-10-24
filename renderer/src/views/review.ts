@@ -892,7 +892,7 @@ function expanded(
 
   const flagsRow = mentalFlagsRow(flags);
   // MatchRow carries no roster, so the teammates load from the match detail.
-  const party = partyPicker({ party: m.party });
+  const party = partyPicker({ party: m.party, detectedGroupSize: m.groupSize });
   loadPartyContext(party, { matchId: m.matchId, filters: ctx.data.filters });
 
   // The score/duration fold-in (R4) rides on the same meta line as the rest

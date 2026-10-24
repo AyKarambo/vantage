@@ -112,7 +112,7 @@ export function matchDetail(
     finalScore: game.finalScore,
     heroes: game.heroes,
     ...(game.party ? { party: game.party } : {}),
-    ...(groupSize !== undefined ? { groupSize } : {}),
+    groupSize,
     ...(teammates.length ? { teammates } : {}),
     perHero,
     mental: game.mental,

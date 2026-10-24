@@ -26,9 +26,14 @@ export function normalizeMembers(names: readonly string[]): string[] {
   return out;
 }
 
-/** Party size for a game: members + 1 when a party is recorded, else the raw GEP count. */
-export function effectiveGroupSize(g: Pick<GameRecord, 'party' | 'groupSize'>): number | undefined {
-  return g.party ? g.party.members.length + 1 : g.groupSize;
+/**
+ * Party size for a game: members + 1 when a party is recorded, else the raw
+ * GEP count, else Solo. Solo is the default — nothing recorded and no group
+ * detected means you queued alone; the picker's Solo chip only exists to
+ * correct a group GEP detected when you were in fact alone.
+ */
+export function effectiveGroupSize(g: Pick<GameRecord, 'party' | 'groupSize'>): number {
+  return g.party ? g.party.members.length + 1 : g.groupSize ?? 1;
 }
 
 /**

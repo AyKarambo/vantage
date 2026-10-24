@@ -658,7 +658,7 @@ function buildMatchEditor(
   const isComp = classifyGameType(d.gameType) === 'competitive';
   const state = { result: d.result, role: d.role, map: d.map };
   // The detail already carries the roster's teammates; only friends load late.
-  const party = partyPicker({ party: d.party, teammates: d.teammates });
+  const party = partyPicker({ party: d.party, teammates: d.teammates, detectedGroupSize: d.groupSize });
   loadPartyContext(party);
   // Full hero set (a hand-logged match can have several) — a role-filtered chip
   // grid, so editing never collapses the list to just the first hero.

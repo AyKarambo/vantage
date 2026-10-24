@@ -32,6 +32,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Changed
 
+- **No group means Solo.** A game counts as Solo unless the game reported a group or you picked who you
+  queued with — it no longer lands in "Unknown". The **Solo** chip in "Queued with" is now lit by default
+  and is there to correct a group the game detected when you were actually alone.
 - **Self-rating moved from Trends to Mental.** Trends now shows objective facts only. "How you played over
   time" on Mental carries the self-rating chart.
 - **Target staleness counts only games you worked on.** A self-rated target goes stale based on the games

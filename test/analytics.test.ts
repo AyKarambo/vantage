@@ -144,7 +144,7 @@ describe('grouping', () => {
 });
 
 describe('byGroupSize (H9)', () => {
-  it('buckets Solo / Duo / Trio+, and Unknown for a game with no reported size', () => {
+  it('buckets Solo / Duo / Trio+, and a game with no reported size as Solo', () => {
     const games = [
       game({ result: 'Win', map: 'A', role: 'damage', groupSize: 1 }),
       game({ result: 'Loss', map: 'A', role: 'damage', groupSize: 1 }),
@@ -153,10 +153,10 @@ describe('byGroupSize (H9)', () => {
       game({ result: 'Loss', map: 'A', role: 'damage' }), // no groupSize at all
     ];
     const g = Object.fromEntries(byGroupSize(games).map((x) => [x.key, x]));
-    expect(g.Solo).toMatchObject({ games: 2, wins: 1, losses: 1 });
+    expect(g.Solo).toMatchObject({ games: 3, wins: 1, losses: 2 });
     expect(g.Duo).toMatchObject({ games: 1, wins: 1 });
     expect(g['Trio+']).toMatchObject({ games: 1, wins: 1 });
-    expect(g.Unknown).toMatchObject({ games: 1, losses: 1 });
+    expect(g.Unknown).toBeUndefined();
   });
 
   it('uses the recorded party over the GEP count, and counts an explicit solo as Solo', () => {

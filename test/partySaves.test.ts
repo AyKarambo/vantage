@@ -68,7 +68,7 @@ describe('editMatch — party', () => {
     expect(byGroupSize([stored()]).map((x) => x.key)).toEqual(['Solo']);
   });
 
-  it('null clears and falls back to the GEP count, or Unknown', () => {
+  it('null clears and falls back to the GEP count, or Solo', () => {
     const { provider, stored } = harness(
       g({ groupSize: 3, party: { members: [], source: 'manual' } }),
       g({ matchId: 'b', party: { members: [], source: 'manual' } }),
@@ -77,7 +77,7 @@ describe('editMatch — party', () => {
     provider.editMatch({ matchId: 'b', party: null });
     expect(stored('a').party).toBeUndefined();
     expect(effectiveGroupSize(stored('a'))).toBe(3);
-    expect(effectiveGroupSize(stored('b'))).toBeUndefined();
+    expect(effectiveGroupSize(stored('b'))).toBe(1);
   });
 
   it('turns an auto-labelled party into a manual one', () => {

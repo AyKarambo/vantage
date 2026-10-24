@@ -412,10 +412,10 @@ describe('matchDetail — party and teammates', () => {
     expect(d?.groupSize).toBe(3);
   });
 
-  it('falls back to the raw GEP count, and omits both when nothing is known', () => {
+  it('falls back to the raw GEP count, and to Solo when nothing is known', () => {
     expect(matchDetail([minimal({ groupSize: 2 })], 'legacy-1')?.groupSize).toBe(2);
     const d = matchDetail([minimal()], 'legacy-1');
     expect(d).not.toHaveProperty('party');
-    expect(d).not.toHaveProperty('groupSize');
+    expect(d?.groupSize).toBe(1);
   });
 });

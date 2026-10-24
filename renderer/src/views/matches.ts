@@ -540,7 +540,7 @@ function partyLabel(size: number): string {
 
 /** Hover text for the Party field: who it was, and where that came from. */
 function partyTitle(m: MatchRow): string {
-  if (!m.party) return 'Party size from the game';
+  if (!m.party) return (m.groupSize ?? 1) > 1 ? 'Party size from the game' : 'Solo — no group detected or recorded';
   if (!m.party.members.length) return 'Marked solo';
   const who = `With ${m.party.members.join(', ')}`;
   return m.party.source === 'auto' ? `${who} (auto-filled from your friends)` : who;

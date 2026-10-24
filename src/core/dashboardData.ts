@@ -674,7 +674,7 @@ export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeas
     ...(g.rankAtStart !== undefined && !suppressed?.has(g.matchId) ? { rankAtStart: g.rankAtStart } : {}),
     ...(g.finalScore !== undefined ? { finalScore: g.finalScore } : {}),
     ...(g.performance !== undefined ? { performance: g.performance } : {}),
-    ...(groupSize !== undefined ? { groupSize } : {}),
+    groupSize,
     ...(g.party ? { party: g.party } : {}),
     ...(matchStatTotals(g) ?? {}),
     ...(flags ? { flags } : {}),
