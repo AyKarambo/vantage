@@ -2,14 +2,14 @@ import type { DataProvider } from './dashboard';
 import type { HistoryStore } from '../store/history';
 import type { ManualStore } from '../store/manualLog';
 import type { NotionRuntime } from './notionRuntime';
-import type { AppConfig, MasterDataConfig } from './config';
+import type { AppConfig } from './config';
 import type { Logger } from './logger';
-import { normalizeBreakReminder, type BreakReminderSettings } from '../core/breakReminder';
-import { normalizeStaleness, type StalenessSettings } from '../core/staleness';
-import { normalizeReadiness, type ReadinessSettings } from '../core/readiness';
-import { normalizeSessionSettings, type SessionSettings } from '../core/sessionSettings';
-import { normalizeCoachingSettings, type CoachingSettings } from '../core/coachingSettings';
-import { normalizeGradingSettings, type GradingSettings } from '../core/gradingSettings';
+import { normalizeBreakReminder } from '../core/breakReminder';
+import { normalizeStaleness } from '../core/staleness';
+import { normalizeReadiness } from '../core/readiness';
+import { normalizeSessionSettings } from '../core/sessionSettings';
+import { normalizeCoachingSettings } from '../core/coachingSettings';
+import { normalizeGradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
@@ -76,6 +76,9 @@ function isPlausibleMinutes(m: number | null | undefined): m is number {
  * services.
  */
 
+/** The config sections the Settings screen reads and writes as a whole. */
+type SettingsSection = 'breakReminder' | 'staleness' | 'readiness' | 'sessionSettings' | 'coaching' | 'grading';
+
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
   /** Durable game history: dataset reads plus review + manual-layer writes, account
@@ -117,19 +120,8 @@ export interface DataProviderDeps {
    * or isn't JSON (the caller turns that into an error result).
    */
   importFile: { pick(): Promise<unknown | undefined> };
-  /** Persist new break-reminder settings into the user's local config file. */
-  persistBreakReminder(s: BreakReminderSettings): void;
-  /** Persist new target-staleness thresholds into the user's local config file. */
-  persistStaleness(s: StalenessSettings): void;
-  /** Persist new readiness feature settings into the user's local config file. */
-  persistReadiness(s: ReadinessSettings): void;
-  /** Persist a new session-gap threshold into the user's local config file. */
-  persistSessionSettings(s: SessionSettings): void;
-  persistCoaching(s: CoachingSettings): void;
-  /** Persist the measured-grade settings (partial-credit margin) into the user's local config file. */
-  persistGrading(s: GradingSettings): void;
-  /** Persist the master-data check settings (incl. `lastCheckedAt`) into the user's local config file (W1). */
-  persistMasterDataCheck(s: MasterDataConfig): void;
+  /** Persist changed settings sections (break reminder, staleness, …, master-data check) into the user's local config file. */
+  persistConfig(patch: Partial<Pick<AppConfig, SettingsSection | 'masterData'>>): void;
   /** Match-pipeline entry for manually logged games (same dedupe + reminder path as live ones). */
   recordGame(g: GameRecord): boolean;
   /** Match-pipeline entry to complete a held pending match (takes it out of the pending store into history). */
@@ -215,6 +207,23 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
   // long session of cleanup can't accumulate records without limit.
   const deletedUndo = new Map<string, GameRecord>();
   const UNDO_BUFFER = 20;
+  // Each settings section: read live from config; a write normalizes the
+  // untrusted IPC input, applies it in memory and persists just that section.
+  const section = <K extends SettingsSection>(key: K, normalize: (input: AppConfig[K]) => AppConfig[K]) => ({
+    get: (): AppConfig[K] => deps.getConfig()[key],
+    set: (input: AppConfig[K]): AppConfig[K] => {
+      const value = normalize(input);
+      deps.getConfig()[key] = value;
+      deps.persistConfig({ [key]: value } as Partial<Pick<AppConfig, K>>);
+      return value;
+    },
+  });
+  const breakReminder = section('breakReminder', normalizeBreakReminder);
+  const readiness = section('readiness', normalizeReadiness);
+  const sessionSettings = section('sessionSettings', normalizeSessionSettings);
+  const coaching = section('coaching', normalizeCoachingSettings);
+  const grading = section('grading', normalizeGradingSettings);
+  const staleness = section('staleness', normalizeStaleness);
   const provider: DataProvider = {
     games: allGames,
     historyRevision: () => deps.history.revision(),
@@ -807,13 +816,18 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       }
     },
     cleanupNotionDuplicates: () => deps.notion.cleanupDuplicates(),
-    getBreakReminder: () => deps.getConfig().breakReminder,
-    setBreakReminder: (input) => {
-      const config = deps.getConfig();
-      config.breakReminder = normalizeBreakReminder(input);
-      deps.persistBreakReminder(config.breakReminder);
-      return config.breakReminder;
-    },
+    getBreakReminder: breakReminder.get,
+    setBreakReminder: breakReminder.set,
+    getReadiness: readiness.get,
+    setReadiness: readiness.set,
+    getSessionSettings: sessionSettings.get,
+    setSessionSettings: sessionSettings.set,
+    getCoaching: coaching.get,
+    setCoaching: coaching.set,
+    getGrading: grading.get,
+    setGrading: grading.set,
+    getStaleness: staleness.get,
+    setStaleness: staleness.set,
     getCheckIns: () => deps.checkIns.all(),
     recordCheckIn: (input) => {
       const entry = normalizeCheckIn(input, Date.now());
@@ -827,41 +841,6 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       typeof input?.name === 'string' && typeof input.friend === 'boolean'
         ? deps.friends.set(input.name, input.friend)
         : deps.friends.list(),
-    getReadiness: () => deps.getConfig().readiness,
-    setReadiness: (input) => {
-      const config = deps.getConfig();
-      config.readiness = normalizeReadiness(input);
-      deps.persistReadiness(config.readiness);
-      return config.readiness;
-    },
-    getSessionSettings: () => deps.getConfig().sessionSettings,
-    setSessionSettings: (input) => {
-      const config = deps.getConfig();
-      config.sessionSettings = normalizeSessionSettings(input);
-      deps.persistSessionSettings(config.sessionSettings);
-      return config.sessionSettings;
-    },
-    getCoaching: () => deps.getConfig().coaching,
-    setCoaching: (input) => {
-      const config = deps.getConfig();
-      config.coaching = normalizeCoachingSettings(input);
-      deps.persistCoaching(config.coaching);
-      return config.coaching;
-    },
-    getGrading: () => deps.getConfig().grading,
-    setGrading: (input) => {
-      const config = deps.getConfig();
-      config.grading = normalizeGradingSettings(input);
-      deps.persistGrading(config.grading);
-      return config.grading;
-    },
-    getStaleness: () => deps.getConfig().staleness,
-    setStaleness: (input) => {
-      const config = deps.getConfig();
-      config.staleness = normalizeStaleness(input);
-      deps.persistStaleness(config.staleness);
-      return config.staleness;
-    },
     listNotionDatabases: () => deps.notion.listDatabases(),
     listNotionPages: () => deps.notion.listPages(),
     selectNotionDatabase: (databaseId) => deps.notion.selectDatabase(databaseId),
@@ -978,7 +957,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // not "did it find changes".
       const config = deps.getConfig();
       config.masterData = { ...config.masterData, lastCheckedAt: Date.now() };
-      deps.persistMasterDataCheck(config.masterData);
+      deps.persistConfig({ masterData: config.masterData });
       return diffMasterData(effectiveMasterData(), fetched);
     },
     masterDataApplyUpdate: (accepted) => {

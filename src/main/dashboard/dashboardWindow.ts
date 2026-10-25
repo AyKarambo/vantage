@@ -38,7 +38,7 @@ export class DashboardWindow {
 
   /** Construct once — IPC registration is process-global. */
   constructor(
-    private readonly provider: DataProvider,
+    provider: DataProvider,
     private readonly iconPath: string,
     private readonly ui: WindowUiDeps,
   ) {
