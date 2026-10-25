@@ -87,6 +87,8 @@ export function computeDashboard(
   // this function never reads history for them, so they can't touch analytics.
   pendingMatches: PendingMatch[] = [],
 ): DashboardData {
+  // One instant for the whole snapshot, so no two of its windows can straddle a tick.
+  const now = Date.now();
   // Effective map-mode + season boundaries come from the (possibly user-edited)
   // master data so an edited mode/season is honored everywhere; both default to
   // the built-in snapshot, so callers that pass nothing get today's behavior.
@@ -98,7 +100,7 @@ export function computeDashboard(
   // Non-competitive rows may still exist in the DB (pre-update history) but
   // must be invisible everywhere the dashboard looks.
   const all = allGames.filter((g) => isCompetitive(g.gameType));
-  const games = applyFilters(all, filters, seasonStartsList);
+  const games = applyFilters(all, filters, seasonStartsList, now);
   const overall = winLoss(games);
   // Rank is per-person, computed over the FULL history (like readiness), not the
   // filtered set — the anchored "real" rank the sidebar/KPI show over the heuristic.
@@ -184,7 +186,7 @@ export function computeDashboard(
   // account/role scope as `games`, a shifted date range. `undefined` on
   // "All time" (there's nothing before everything) or when the active
   // season has no addressable predecessor for this data.
-  const previousRange = previousDateRange(all, filters, seasonStartsList, Date.now());
+  const previousRange = previousDateRange(all, filters, seasonStartsList, now);
   const previous: DashboardData['previous'] = previousRange
     ? (() => {
       let prevGames = all.filter((g) => g.timestamp >= previousRange.start && g.timestamp < previousRange.end);
@@ -212,7 +214,7 @@ export function computeDashboard(
   let accountRoleGames = all;
   if (filters.account && filters.account !== 'all') accountRoleGames = accountRoleGames.filter((g) => g.account === filters.account);
   if (filters.role && filters.role !== 'all') accountRoleGames = accountRoleGames.filter((g) => g.role === filters.role);
-  const bySeason = bySeasonOf(accountRoleGames, seasonStartsList, suppressed, Date.now());
+  const bySeason = bySeasonOf(accountRoleGames, seasonStartsList, suppressed, now);
   const heroStatsWithForm = heroStats(games, { mapModeOf, suppressed }).map((r) => {
     // Trend/form (H6) reuse Focus's dimension-agnostic reads, joined onto
     // each hero row here rather than inside heroStats() — that stays a pure
@@ -242,7 +244,7 @@ export function computeDashboard(
     isSample: demo.active,
     demoPreference: demo.preference,
     hasRealHistory: demo.hasRealHistory,
-    generatedAt: Date.now(),
+    generatedAt: now,
     filters: {
       account: filters.account ?? 'all',
       role: filters.role ?? 'all',
@@ -251,7 +253,7 @@ export function computeDashboard(
     options: {
       accounts: distinct(all.map((g) => g.account)).sort(),
       roles: distinct(all.map((g) => g.role)),
-      seasons: seasonsForData(all.map((g) => g.timestamp), Date.now(), seasonStartsList)
+      seasons: seasonsForData(all.map((g) => g.timestamp), now, seasonStartsList)
         .map((w) => ({ id: w.id, label: w.label })),
     },
     greetingName: topAccount(all),
@@ -265,7 +267,7 @@ export function computeDashboard(
     accountActivity: accountLastPlayedAt(all),
     rankTrend,
     placements,
-    session: currentSession(sessionGames, Date.now(), sessionSettings.gapMinutes),
+    session: currentSession(sessionGames, now, sessionSettings.gapMinutes),
     // Every past sitting (S4), same account scope + gap as `session` above, capped like every other list.
     sessions: sessionHistory(sessionGames, sessionSettings.gapMinutes, suppressed).slice(0, ROW_CAP),
     byRole: byRole(games),
@@ -285,14 +287,14 @@ export function computeDashboard(
     // Momentum (C6): the same trailing-window comparison in weeks once the
     // chart itself switches to weekly buckets, so the strip and the chart
     // it sits above agree on what "recent" means.
-    momentum: windowCompare(games, Date.now(), weekly ? 28 : 7),
+    momentum: windowCompare(games, now, weekly ? 28 : 7),
     ...(previous ? { previous } : {}),
     bySeason,
     timeOfDay: byTimeOfDay(games),
     // Positions are numbered over the person's whole history — a role/date
     // filter must scope which games are counted, not renumber their sittings.
-    sessionPosition: bySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
-    calendar: calendar(games, activityWindowDays(filters.days, Date.now(), seasonStartsList)),
+    sessionPosition: bySessionPosition(all, { include: inRange }),
+    calendar: calendar(games, activityWindowDays(filters.days, now, seasonStartsList)),
     focusMaps: focusBy(games, (g) => g.map).slice(0, 8),
     // How many maps have actually reached the floor (F4) — Focus's and
     // Overview's empty states branch on this instead of conflating "no map
@@ -330,14 +332,14 @@ export function computeDashboard(
     tiltTrend: tiltTrend(games),
     // Same convention as sessionPosition above: number over the whole history,
     // aggregate only the filtered games.
-    tiltBySession: tiltBySessionPosition(all, { include: new Set(games.map((g) => g.matchId)) }),
+    tiltBySession: tiltBySessionPosition(all, { include: inRange }),
     // "When do I tilt" triggers (S9). Time-of-day and by-map are plain FILTERED
     // reads, same convention as tiltTrend; after-result needs the sitting
     // boundary, so it takes the same all/include split as tiltBySession above.
     tiltByTimeOfDay: tiltByTimeOfDay(games),
-    tiltAfterResult: tiltAfterResult(all, { include: new Set(games.map((g) => g.matchId)) }),
+    tiltAfterResult: tiltAfterResult(all, { include: inRange }),
     tiltByMap: tiltByMap(games),
-    tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: new Set(games.map((g) => g.matchId)) }),
+    tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: inRange }),
     tiltBySleep: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'sleep'),
     tiltByEnergy: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'energy'),
     practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching),
@@ -347,7 +349,7 @@ export function computeDashboard(
     reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets))
       .map(({ g, extra }) => ({ ...toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed), ...extra })),
     pendingReviews: pending.length,
-    pendingReviewsRecent: pendingReviewsRecent(pending),
+    pendingReviewsRecent: pendingReviewsRecent(pending, now),
     pendingMatches,
     breakReminder: manual?.breakReminder ?? DEFAULT_BREAK_REMINDER,
     staleness: manual?.staleness ?? DEFAULT_STALENESS,
@@ -360,7 +362,7 @@ export function computeDashboard(
     // safeReadiness never throws, so a readiness bug can never blank the whole
     // dashboard. `manual.readinessSummary` (W8) is the edge's memoized
     // result — recomputing here only when the caller didn't supply one.
-    readiness: manual?.readinessSummary ?? safeReadiness(all, Date.now(), {
+    readiness: manual?.readinessSummary ?? safeReadiness(all, now, {
       targets: manual?.targets ?? [],
       rankAnchors: manual?.rankAnchors,
       suppressed,
@@ -371,7 +373,7 @@ export function computeDashboard(
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
-    ...(recapOf(sessionGames, authoredTargets, sessionSettings.gapMinutes, margin, suppressed) ?? {}),
+    ...(recapOf(sessionGames, authoredTargets, now, sessionSettings.gapMinutes, margin, suppressed) ?? {}),
   };
 }
 
@@ -384,11 +386,12 @@ export function computeDashboard(
 function recapOf(
   sessionGames: GameRecord[],
   authoredTargets: AuthoredTarget[],
+  now: number,
   gapMinutes: number,
   margin?: number,
   suppressed?: ReadonlySet<string>,
 ): { recap: NonNullable<DashboardData['recap']> } | null {
-  const debrief = sessionDebrief(sessionGames, authoredTargets, Date.now(), gapMinutes, margin, suppressed);
+  const debrief = sessionDebrief(sessionGames, authoredTargets, now, gapMinutes, margin, suppressed);
   return debrief?.closed ? { recap: debrief } : null;
 }
 
@@ -396,6 +399,7 @@ export function applyFilters(
   games: GameRecord[],
   f: DashboardFilters,
   seasonStartsList?: readonly number[],
+  now = Date.now(),
 ): GameRecord[] {
   let out = games;
   if (f.account && f.account !== 'all') out = out.filter((g) => g.account === f.account);
@@ -405,7 +409,6 @@ export function applyFilters(
       // A specific season id (spec D2/D3): resolve to its [start, end) window.
       // An unknown/unlistable id (untrusted IPC, or a season that rolled off
       // the list) falls back to the 30-day window rather than showing nothing.
-      const now = Date.now();
       const w = seasonWindowById(f.days.season, now, seasonStartsList);
       if (w) {
         out = out.filter((g) => g.timestamp >= w.start && g.timestamp < w.end);
@@ -414,7 +417,7 @@ export function applyFilters(
         out = out.filter((g) => g.timestamp >= cutoff);
       }
     } else {
-      const cutoff = Date.now() - f.days * 86400000;
+      const cutoff = now - f.days * 86400000;
       out = out.filter((g) => g.timestamp >= cutoff);
     }
   }
