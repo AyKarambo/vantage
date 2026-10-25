@@ -3,6 +3,7 @@ import {
   FRESH_MATCH_START_MS, INITIAL_LIVE_MATCH, LIVE_FEED_CAP, clockElapsedMs, isMatchStart, liveClock, reduceLiveMatch, liveMatchDetached,
   liveRoster, liveOpponentNames, liveTrueDamage, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
 } from '../src/core/liveMatch';
+import { DOORS_FALLBACK_MS } from '../src/core/roundClock';
 import type { GepMessage } from '../src/core/model';
 
 /**
@@ -638,6 +639,8 @@ describe('reduceLiveMatch — joining a match already running', () => {
 describe('liveClock — the match clock runs only inside rounds, like the game’s', () => {
   const roundStart = event('round_start', null);
   const roundEnd = event('round_end', null);
+  // The burst that opens the doors: an opponent's hero_id appears (name still null).
+  const enemyReveal = roster(0, { is_local: false, is_teammate: false, team: 0, hero_name: null, hero_id: 9, damage: 0 });
 
   it('is stopped through hero select, before the first round_start', () => {
     const s = live(1000);
@@ -654,13 +657,75 @@ describe('liveClock — the match clock runs only inside rounds, like the game�
     expect(liveClock(s)).toEqual({ phase: 'between-rounds', bankedMs: 300_000 });
     expect(clockElapsedMs(liveClock(s), 999_000)).toBe(300_000); // stopped
     s = reduceLiveMatch(s, roundStart, 329_000);
-    expect(clockElapsedMs(liveClock(s), 389_000)).toBe(360_000); // the 1 s change is not counted
+    s = reduceLiveMatch(s, enemyReveal, 378_000);
+    expect(clockElapsedMs(liveClock(s), 438_000)).toBe(360_000); // round change + hero select not counted
   });
 
   it('closes a round whose round_end was lost when the next one starts', () => {
     let s = reduceLiveMatch(live(0), roundStart, 0);
     s = reduceLiveMatch(s, roundStart, 60_000);
-    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 60_000, runningSince: 60_000 });
+    expect(liveClock(s)).toEqual({ phase: 'between-rounds', bankedMs: 60_000, runningSince: 60_000 + DOORS_FALLBACK_MS });
+  });
+
+  // The halftime of a real capture (2026-10-25): round_end → round_start in
+  // 1 s, then 49 s of hero select/setup until the opponents' heroes appear.
+  describe('after a round change it waits for the doors', () => {
+    const halftime = (): LiveMatchState => {
+      let s = reduceLiveMatch(live(0), roundStart, 28_000);
+      s = reduceLiveMatch(s, roundEnd, 470_000);
+      return reduceLiveMatch(s, roundStart, 471_000);
+    };
+
+    it('is stopped through the hero select inside the next round', () => {
+      const s = halftime();
+      expect(liveClock(s).phase).toBe('between-rounds');
+      expect(clockElapsedMs(liveClock(s), 500_000)).toBe(442_000);
+    });
+
+    it('a teammate swapping heroes does not start it', () => {
+      const s = reduceLiveMatch(halftime(), roster(9, { is_local: true, is_teammate: true, team: 1, hero_id: 66, hero_name: 'CASSIDY' }), 505_000);
+      expect(liveClock(s).phase).toBe('between-rounds');
+    });
+
+    it('an opponent still masked (hero_id 0) does not start it', () => {
+      const s = reduceLiveMatch(halftime(), roster(0, { is_teammate: false, team: 0, hero_id: 0, hero_name: 'UNKNOWN' }), 505_000);
+      expect(liveClock(s).phase).toBe('between-rounds');
+    });
+
+    it('runs from the moment the opponents’ heroes appear (doors open)', () => {
+      const s = reduceLiveMatch(halftime(), enemyReveal, 520_000);
+      expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 442_000, runningSince: 520_000 });
+      expect(clockElapsedMs(liveClock(s), 580_000)).toBe(502_000);
+    });
+
+    it('a later reveal in the same round keeps the first one', () => {
+      const s = reduceLiveMatch(halftime(), enemyReveal, 520_000);
+      const again = reduceLiveMatch(s, roster(1, { is_teammate: false, team: 0, hero_id: 41, damage: 5 }), 521_000);
+      expect(liveClock(again).runningSince).toBe(520_000);
+    });
+
+    it('reads the side off the local team when the tick has no is_teammate', () => {
+      let s = reduceLiveMatch(halftime(), roster(9, { battlenet_tag: 'Karambo#21442', is_local: true, team: 1, hero_id: 66 }), 500_000);
+      expect(liveClock(s).phase).toBe('between-rounds');
+      s = reduceLiveMatch(s, roster(0, { team: 0, hero_id: 9 }), 520_000);
+      expect(liveClock(s).runningSince).toBe(520_000);
+    });
+
+    it('falls back to running once no reveal came within the fallback', () => {
+      const c = liveClock(halftime());
+      expect(c.runningSince).toBe(471_000 + DOORS_FALLBACK_MS);
+      expect(clockElapsedMs(c, 471_000 + DOORS_FALLBACK_MS + 10_000)).toBe(452_000);
+    });
+
+    it('a round that ends before its doors open adds nothing', () => {
+      const s = reduceLiveMatch(halftime(), roundEnd, 480_000);
+      expect(liveClock(s).bankedMs).toBe(442_000);
+    });
+
+    it('the first round after match_start does not wait — its hero select came before it', () => {
+      const s = reduceLiveMatch(live(0), roundStart, 28_000);
+      expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 28_000 });
+    });
   });
 
   it('ignores a stray round_end, by reference', () => {

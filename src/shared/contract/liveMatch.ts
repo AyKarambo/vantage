@@ -49,8 +49,10 @@ export interface LiveMatchPayload {
   joinedMidMatch?: boolean;
   /**
    * The match clock, Overwatch-style: it runs only inside rounds — stopped
-   * through hero select and each round change. The renderer adds
-   * `now - runningSince` to `bankedMs` while a round is running. Present while live.
+   * through hero select and each round change until the doors open. The
+   * renderer adds `now - runningSince` to `bankedMs` once `now` has reached
+   * `runningSince` — in a round change that is the fallback start, so it can
+   * lie ahead. Present while live.
    */
   clock?: {
     phase: 'hero-select' | 'round' | 'between-rounds';

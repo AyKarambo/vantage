@@ -15,6 +15,7 @@ import { asNumber, asString, parseRoster } from './gepValues';
 import { resolveMapId } from '../resolvers/mapId';
 import { mapMode as staticMapMode } from '../maps';
 import { overlapMinutes, playWindowsOf, windowMinutes, type MapModeResolver } from '../playedTime';
+import { noteDoors, roundClockMs, type ClockRound } from '../roundClock';
 
 export interface MatchAggregatorOptions {
   /**
@@ -147,7 +148,10 @@ export class MatchAggregator {
       const now = this.now();
       const open = openRound(this.current.rounds);
       if (open) open.endedAt = now; // a missed round_end: close it as the next round begins
-      this.current.rounds.push({ startedAt: now });
+      // Only the round right after match_start has its hero select outside it;
+      // every other round's clock waits for the doors (see roundClock).
+      const first = this.current.rounds.length === 0 && this.current.record.startedAt != null;
+      this.current.rounds.push(first ? { startedAt: now } : { startedAt: now, waitsForDoors: true });
       return null;
     }
     if (isRoundEndMessage(msg)) {
@@ -228,7 +232,21 @@ export class MatchAggregator {
     }
   }
 
+  /** The local player's team, from the roster so far — the side fallback when a tick lacks `is_teammate`. */
+  private localTeam(): number | undefined {
+    const tag = this.current.record.battleTag;
+    for (const p of this.current.rosterAll.values()) {
+      if (p.isLocal || (tag && isLocal(p.battleTag, tag))) return p.team;
+    }
+    return undefined;
+  }
+
   private applyRoster(key: string, value: unknown): void {
+    const rounds = this.current.rounds;
+    const last = rounds[rounds.length - 1];
+    const doors = noteDoors(last, value, this.now(), this.localTeam());
+    if (doors && doors !== last) rounds[rounds.length - 1] = doors;
+
     const player = parseRoster(value);
     if (!player) return;
     // As the scoreboard tears down at match end, GEP resets each roster slot to
@@ -395,13 +413,13 @@ export class MatchAggregator {
       rec.rounds = rounds;
       const played = windowMinutes(playWindowsOf(rounds, this.mapModeOf(rec.mapName ?? '')));
       if (played > 0) rec.playedMinutes = played;
-      // The displayed match length is the ROUND time — what Overwatch's own
-      // clock counts. It is stopped through hero select (~28 s before the first
-      // round) and each ~1 s round change, and the post-match scoreboard falls
-      // after the last round. Checked against a match the game reported as
-      // 20:06. The per-10 divisor above is separate and stays as it was.
-      const roundMinutes = windowMinutes(rounds);
-      if (roundMinutes > 0) rec.durationMinutes = Math.round(roundMinutes);
+      // The displayed match length is the match CLOCK, the same one the live
+      // board shows: stopped through hero select (~28 s before the first
+      // round), through each round change until the doors open, and after the
+      // last round (the post-match scoreboard). The per-10 divisor above is
+      // separate and stays as it was.
+      const clockMs = this.current.rounds.reduce((ms, r) => ms + roundClockMs({ ...r, endedAt: r.endedAt ?? endedAt }), 0);
+      if (clockMs > 0) rec.durationMinutes = Math.round(clockMs / 60000);
     }
 
     this.closeCurrentHeroSegment(endedAt);
@@ -522,7 +540,7 @@ interface MutableMatch {
   roundWins: number;
   roundLosses: number;
   /** Every GEP round observed (`round_start` → `round_end`), in order; the last may still be open. */
-  rounds: Array<{ startedAt: number; endedAt?: number }>;
+  rounds: ClockRound[];
   /** When `match_outcome` arrived — closes a round whose `round_end` never came. */
   outcomeAt?: number;
   // per-hero tracking

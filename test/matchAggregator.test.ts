@@ -275,6 +275,7 @@ describe('MatchAggregator round timing (played time)', () => {
     at(28_000, round('round_start'));
     at(28_000 + 5 * MIN, round('round_end'));
     at(29_000 + 5 * MIN, round('round_start'));
+    at(44_000 + 5 * MIN, info('roster', 'roster_5', { is_teammate: false, team: 0, hero_id: 9 })); // doors open
     at(29_000 + 9 * MIN, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', kills: 20, deaths: 5, assists: 7, damage: 9000 }));
     at(29_000 + 10 * MIN, info('match_info', 'match_outcome', 'victory'));
     at(29_003 + 10 * MIN, round('round_end'));
@@ -287,9 +288,9 @@ describe('MatchAggregator round timing (played time)', () => {
     // Round 1 fully fightable (5 min); round 2 minus the 15 s round-change overlay.
     const played = (5 * MIN + (5 * MIN + 3 - 15_000)) / MIN;
     expect(rec.playedMinutes).toBeCloseTo(played, 9);
-    // The displayed duration is the ROUND time, as the game's own clock counts
-    // it — hero select, the round change and the scoreboard tail excluded:
-    // 5 min + ~5 min → 10, where the wall clock would read ~11.15.
+    // The displayed duration is the match clock — hero select, the round
+    // change until the doors open and the scoreboard tail excluded:
+    // 5 min + 4:45 → 10, where the wall clock would read ~11.15.
     expect(rec.durationMinutes).toBe(10);
     // The single hero's minutes are the played minutes (its segment ran from
     // match start to match end, clipped to the play windows).
