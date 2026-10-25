@@ -1,8 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { Role } from '../core/model';
 import { rankKey } from '../core/rank';
 import type { PlacementRun } from '../core/placements';
+import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 /** The full on-disk shape: runs and per-track declined-season bookkeeping, both keyed by {@link rankKey}. */
 interface PlacementState {
@@ -15,18 +14,15 @@ interface PlacementState {
  * after a season reset" bookkeeping the calculated-rank engine can't derive on
  * its own (it needs a `startedAt` and per-match predictions, both entered by
  * the player). Same shape as the other stores: a single JSON file with atomic
- * writes, dir-injected and Electron-free so it stays unit-testable. Sibling of
+ * writes, location-injected and Electron-free so it stays unit-testable. Sibling of
  * {@link ./rankAnchors RankAnchorStore}, which this mirrors closely.
  */
 export class PlacementStore {
-  private file: string;
-  private tmp: string;
+  private readonly doc: JsonDoc;
   private state: PlacementState;
 
-  constructor(dir: string) {
-    fs.mkdirSync(dir, { recursive: true });
-    this.file = path.join(dir, 'placements.json');
-    this.tmp = path.join(dir, 'placements.tmp.json');
+  constructor(docs: JsonDocs) {
+    this.doc = docs('placements.json');
     this.state = this.load();
   }
 
@@ -116,15 +112,13 @@ export class PlacementStore {
    * `placements.json` before calling this; `relocate` just repoints and re-reads.
    */
   relocate(newDir: string): void {
-    fs.mkdirSync(newDir, { recursive: true });
-    this.file = path.join(newDir, 'placements.json');
-    this.tmp = path.join(newDir, 'placements.tmp.json');
+    this.doc.relocate(newDir);
     this.state = this.load();
   }
 
   private load(): PlacementState {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<PlacementState>;
+      const parsed = (this.doc.read() ?? {}) as Partial<PlacementState>;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptyState();
 
       const rawRuns = parsed.runs;
@@ -156,8 +150,7 @@ export class PlacementStore {
   }
 
   private save(): void {
-    fs.writeFileSync(this.tmp, JSON.stringify(this.state, null, 2), 'utf8');
-    fs.renameSync(this.tmp, this.file);
+    this.doc.write(this.state);
   }
 }
 

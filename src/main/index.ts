@@ -18,6 +18,7 @@ import { PlacementStore } from '../store/placements';
 import { CheckInStore } from '../store/checkIns';
 import { FriendStore } from '../store/friends';
 import { MasterDataStore } from '../store/masterData';
+import { jsonFiles } from '../store/jsonFiles';
 import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
 import { createGepServicePoller } from './gepServicePoller';
@@ -134,7 +135,7 @@ function main(): void {
   // `defaultDataDir` over, before any store constructs and reads/creates them.
   if (dataDir !== defaultDataDir) backfillLegacySideStores(defaultDataDir, dataDir, log);
 
-  const outbox = new OutboxStore(dataDir);
+  const outbox = new OutboxStore(jsonFiles(dataDir));
 
   let history: HistoryStore;
   try {
@@ -180,7 +181,7 @@ function main(): void {
   let firstRunNeedsDataChoice =
     config.dataFolder === undefined && config.historyDbFolder === undefined && history.count() === 0;
 
-  const manual = new ManualStore(dataDir);
+  const manual = new ManualStore(jsonFiles(dataDir));
   // One-time, idempotent migration (Decision B.3): the pre-batch importer used
   // to seed a *visible* "Improvement Target" authored target so Notion-imported
   // grades had somewhere to render. That's gone (B2 keeps it hidden bookkeeping
@@ -188,11 +189,11 @@ function main(): void {
   // means a user-authored target that merely shares the name survives, along
   // with its grades; `removeTarget` is a no-op once the seeded target is gone.
   manual.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
-  const rankAnchors = new RankAnchorStore(dataDir);
-  const placements = new PlacementStore(dataDir);
-  const checkIns = new CheckInStore(dataDir);
-  const friends = new FriendStore(dataDir);
-  const masterDataStore = new MasterDataStore(dataDir);
+  const rankAnchors = new RankAnchorStore(jsonFiles(dataDir));
+  const placements = new PlacementStore(jsonFiles(dataDir));
+  const checkIns = new CheckInStore(jsonFiles(dataDir));
+  const friends = new FriendStore(jsonFiles(dataDir));
+  const masterDataStore = new MasterDataStore(jsonFiles(dataDir));
   // Effective (defaults ⊕ overrides) map views for the Notion Maps seed (all maps)
   // and the sample generator's competitive pool (active only).
   const allMapNames = (): string[] =>
@@ -209,7 +210,7 @@ function main(): void {
   // The match in progress survives an app restart: a checkpoint left by the
   // last run is held until GEP names the running match, and adopted only if it
   // is the same one (by the game's own match_id).
-  const matchCheckpoints = new MatchCheckpointStore(app.getPath('userData'));
+  const matchCheckpoints = new MatchCheckpointStore(jsonFiles(app.getPath('userData'), { compact: true }));
   aggregator.armResume(matchCheckpoints.load());
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 

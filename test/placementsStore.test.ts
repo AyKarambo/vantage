@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { PlacementStore } from '../src/store/placements';
 import type { PlacementRun } from '../src/core/placements';
+import { jsonFiles } from '../src/store/jsonFiles';
 
 let dir: string;
 beforeEach(() => {
@@ -24,34 +25,34 @@ const run = (p: Partial<PlacementRun> = {}): PlacementRun => ({
 
 describe('PlacementStore', () => {
   it('starts empty for a fresh/empty dir', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     expect(s.allRuns()).toEqual([]);
     expect(s.getRun('Main', 'tank')).toBeUndefined();
     expect(s.declinedFor('Main', 'tank')).toEqual([]);
   });
 
   it('round-trips a run through save + reload', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     s.setRun(run({ preRunAnchor: { tier: 'Gold', division: 3, progressPct: 40, setAt: 1 } }));
     expect(s.getRun('Main', 'tank')).toMatchObject({ account: 'Main', role: 'tank' });
 
-    const reopened = new PlacementStore(dir);
+    const reopened = new PlacementStore(jsonFiles(dir));
     expect(reopened.getRun('Main', 'tank')).toEqual(run({ preRunAnchor: { tier: 'Gold', division: 3, progressPct: 40, setAt: 1 } }));
     expect(reopened.allRuns()).toHaveLength(1);
   });
 
   it('recovers from corrupt JSON as empty state, without throwing', () => {
     fs.writeFileSync(path.join(dir, 'placements.json'), '{ not json', 'utf8');
-    expect(() => new PlacementStore(dir)).not.toThrow();
-    const s = new PlacementStore(dir);
+    expect(() => new PlacementStore(jsonFiles(dir))).not.toThrow();
+    const s = new PlacementStore(jsonFiles(dir));
     expect(s.allRuns()).toEqual([]);
     expect(s.declinedFor('Main', 'tank')).toEqual([]);
   });
 
   it('recovers from a top-level array as empty state, without throwing', () => {
     fs.writeFileSync(path.join(dir, 'placements.json'), JSON.stringify([1, 2, 3]), 'utf8');
-    expect(() => new PlacementStore(dir)).not.toThrow();
-    expect(new PlacementStore(dir).allRuns()).toEqual([]);
+    expect(() => new PlacementStore(jsonFiles(dir))).not.toThrow();
+    expect(new PlacementStore(jsonFiles(dir)).allRuns()).toEqual([]);
   });
 
   it('defaults a missing predictions field to {}', () => {
@@ -60,7 +61,7 @@ describe('PlacementStore', () => {
       JSON.stringify({ runs: { 'Main::tank': { account: 'Main', role: 'tank', startedAt: 1 } }, declined: {} }),
       'utf8',
     );
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     expect(s.getRun('Main', 'tank')?.predictions).toEqual({});
   });
 
@@ -77,7 +78,7 @@ describe('PlacementStore', () => {
       }),
       'utf8',
     );
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     expect(s.allRuns()).toHaveLength(1);
     expect(s.getRun('Main', 'tank')).toBeDefined();
     expect(s.getRun('Main', 'damage')).toBeUndefined();
@@ -93,35 +94,35 @@ describe('PlacementStore', () => {
       }),
       'utf8',
     );
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     expect((s.getRun('Main', 'tank') as any).futureField).toBe('keep-me');
 
     // Force a save (setRun on a different track) and confirm the field survives the round trip.
     s.setRun(run({ account: 'Alt', role: 'support' }));
-    const reopened = new PlacementStore(dir);
+    const reopened = new PlacementStore(jsonFiles(dir));
     expect((reopened.getRun('Main', 'tank') as any).futureField).toBe('keep-me');
   });
 
   it('addDeclined is idempotent (no duplicate entries)', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     s.addDeclined('Main', 'tank', 100);
     s.addDeclined('Main', 'tank', 100);
     s.addDeclined('Main', 'tank', 200);
     expect(s.declinedFor('Main', 'tank')).toEqual([100, 200]);
-    expect(new PlacementStore(dir).declinedFor('Main', 'tank')).toEqual([100, 200]); // persisted
+    expect(new PlacementStore(jsonFiles(dir)).declinedFor('Main', 'tank')).toEqual([100, 200]); // persisted
   });
 
   it('removeRun deletes the run and reports whether anything was removed', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     s.setRun(run());
     expect(s.removeRun('Main', 'tank')).toBe(true);
     expect(s.getRun('Main', 'tank')).toBeUndefined();
-    expect(new PlacementStore(dir).getRun('Main', 'tank')).toBeUndefined(); // persisted
+    expect(new PlacementStore(jsonFiles(dir)).getRun('Main', 'tank')).toBeUndefined(); // persisted
     expect(s.removeRun('Main', 'tank')).toBe(false);
   });
 
   it('removeAccount drops every run and decline record for an account across roles, leaving others', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     s.setRun(run({ account: 'Rando#4521', role: 'tank' }));
     s.setRun(run({ account: 'Rando#4521', role: 'damage' }));
     s.setRun(run({ account: 'Karambo', role: 'support' }));
@@ -136,12 +137,12 @@ describe('PlacementStore', () => {
     expect(s.declinedFor('Karambo', 'support')).toEqual([100]);
 
     // Persisted, and removing an absent account is a no-op.
-    expect(new PlacementStore(dir).getRun('Karambo', 'support')).toBeDefined();
+    expect(new PlacementStore(jsonFiles(dir)).getRun('Karambo', 'support')).toBeDefined();
     expect(s.removeAccount('Ghost')).toBe(0);
   });
 
   it('relabel moves runs and declines to the new account label and re-keys them', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     s.setRun(run({ account: 'Main', role: 'tank' }));
     s.setRun(run({ account: 'Main', role: 'support' }));
     s.setRun(run({ account: 'Alt', role: 'damage' }));
@@ -162,7 +163,7 @@ describe('PlacementStore', () => {
   });
 
   it('relocate moves the file to a new dir and reloads from there', () => {
-    const s = new PlacementStore(dir);
+    const s = new PlacementStore(jsonFiles(dir));
     s.setRun(run());
 
     const newDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-placements-new-'));
@@ -172,9 +173,9 @@ describe('PlacementStore', () => {
 
       expect(s.getRun('Main', 'tank')).toBeDefined();
       s.setRun(run({ account: 'Alt', role: 'damage' }));
-      expect(new PlacementStore(newDir).getRun('Alt', 'damage')).toBeDefined();
+      expect(new PlacementStore(jsonFiles(newDir)).getRun('Alt', 'damage')).toBeDefined();
       // relocate itself doesn't touch the old dir's file (copy is the migration executor's job).
-      expect(new PlacementStore(dir).getRun('Alt', 'damage')).toBeUndefined();
+      expect(new PlacementStore(jsonFiles(dir)).getRun('Alt', 'damage')).toBeUndefined();
     } finally {
       fs.rmSync(newDir, { recursive: true, force: true });
     }

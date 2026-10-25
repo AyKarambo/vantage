@@ -1,6 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { SessionCheckIn } from '../core/checkIn';
+import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 /**
  * How many check-ins to keep. A check-in only ever matters for the ONE
@@ -17,18 +16,15 @@ const MAX_CHECK_INS = 500;
  * {@link ./rankAnchors RankAnchorStore} or {@link ./placements PlacementStore},
  * since a check-in isn't attached to any existing entity (account, role,
  * match) — it precedes the sitting it eventually gets matched against.
- * Same on-disk shape as the other stores: a single JSON file, atomic writes,
- * dir-injected and Electron-free so it stays unit-testable.
+ * Same on-disk shape as the other stores: a single JSON document, atomic
+ * writes, location-injected and Electron-free so it stays unit-testable.
  */
 export class CheckInStore {
-  private file: string;
-  private tmp: string;
+  private readonly doc: JsonDoc;
   private state: SessionCheckIn[];
 
-  constructor(dir: string) {
-    fs.mkdirSync(dir, { recursive: true });
-    this.file = path.join(dir, 'checkIns.json');
-    this.tmp = path.join(dir, 'checkIns.tmp.json');
+  constructor(docs: JsonDocs) {
+    this.doc = docs('checkIns.json');
     this.state = this.load();
   }
 
@@ -42,7 +38,7 @@ export class CheckInStore {
     this.state.push(entry);
     this.state.sort((a, b) => a.at - b.at);
     if (this.state.length > MAX_CHECK_INS) this.state = this.state.slice(this.state.length - MAX_CHECK_INS);
-    this.save();
+    this.doc.write(this.state);
     return entry;
   }
 
@@ -52,23 +48,12 @@ export class CheckInStore {
    * contract as the other stores' `relocate`.
    */
   relocate(newDir: string): void {
-    fs.mkdirSync(newDir, { recursive: true });
-    this.file = path.join(newDir, 'checkIns.json');
-    this.tmp = path.join(newDir, 'checkIns.tmp.json');
+    this.doc.relocate(newDir);
     this.state = this.load();
   }
 
   private load(): SessionCheckIn[] {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private save(): void {
-    fs.writeFileSync(this.tmp, JSON.stringify(this.state, null, 2), 'utf8');
-    fs.renameSync(this.tmp, this.file);
+    const parsed = this.doc.read();
+    return Array.isArray(parsed) ? parsed : [];
   }
 }

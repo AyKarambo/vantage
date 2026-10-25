@@ -7,6 +7,7 @@ import type { AuthoredTarget } from '../src/core/targets';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
 import { HistoryStore } from '../src/store/history';
 import type { GameRecord } from '../src/core/analytics';
+import { jsonFiles } from '../src/store/jsonFiles';
 
 let dir: string;
 
@@ -23,7 +24,7 @@ afterEach(() => {
 
 describe('ManualStore', () => {
   it('adds and lists authored targets', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     expect(store.targets()).toHaveLength(0);
     store.addTarget(target('t1'));
     expect(store.targets()).toHaveLength(1);
@@ -31,7 +32,7 @@ describe('ManualStore', () => {
   });
 
   it('upserts by id rather than duplicating', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1', 'first'));
     store.addTarget(target('t1', 'renamed'));
     expect(store.targets()).toHaveLength(1);
@@ -39,23 +40,23 @@ describe('ManualStore', () => {
   });
 
   it('persists across instances', () => {
-    new ManualStore(dir).addTarget(target('t2'));
-    expect(new ManualStore(dir).targets().map((t) => t.id)).toEqual(['t2']);
+    new ManualStore(jsonFiles(dir)).addTarget(target('t2'));
+    expect(new ManualStore(jsonFiles(dir)).targets().map((t) => t.id)).toEqual(['t2']);
   });
 
   it('removes a target', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t3'));
     store.removeTarget('t3');
     expect(store.targets()).toHaveLength(0);
   });
 
   it('updateTarget edits name/mode/rule but preserves createdAt and lifecycle state', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     const original = { ...target('t1', 'before'), createdAt: 1234, archivedAt: 99 };
     store.addTarget(original);
     store.updateTarget('t1', { name: 'after', mode: 'measured', rule: 'Deaths ≤ 2' });
-    const t = new ManualStore(dir).targets()[0];
+    const t = new ManualStore(jsonFiles(dir)).targets()[0];
     expect(t.name).toBe('after');
     expect(t.mode).toBe('measured');
     expect(t.rule).toBe('Deaths ≤ 2');
@@ -65,51 +66,51 @@ describe('ManualStore', () => {
   });
 
   it('updateTarget ignores unknown ids', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1'));
     store.updateTarget('nope', { name: 'x', mode: 'self', rule: 'You grade it' });
     expect(store.targets()[0].name).toBe('t1');
   });
 
   it('addTarget persists a measured target’s roleScope/heroScope across instances', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget({ ...target('t1'), mode: 'measured', rule: 'Damage ≥ 9000', roleScope: 'damage', heroScope: ['Tracer'] });
-    const t = new ManualStore(dir).targets()[0];
+    const t = new ManualStore(jsonFiles(dir)).targets()[0];
     expect(t.roleScope).toBe('damage');
     expect(t.heroScope).toEqual(['Tracer']);
   });
 
   it('updateTarget persists roleScope/heroScope, and clears them when the patch omits them', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1'));
     store.updateTarget('t1', { name: 'scoped', mode: 'measured', rule: 'Healing ≥ 9000', roleScope: 'support', heroScope: ['Ana'] });
-    let t = new ManualStore(dir).targets()[0];
+    let t = new ManualStore(jsonFiles(dir)).targets()[0];
     expect(t.roleScope).toBe('support');
     expect(t.heroScope).toEqual(['Ana']);
     // Switching back to self-rated (no scope in the patch) clears the saved scope.
     store.updateTarget('t1', { name: 'unscoped', mode: 'self', rule: 'You grade it' });
-    t = new ManualStore(dir).targets()[0];
+    t = new ManualStore(jsonFiles(dir)).targets()[0];
     expect(t.roleScope).toBeUndefined();
     expect(t.heroScope).toBeUndefined();
   });
 
   it('active toggle persists across instances', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1'));
     store.setActive('t1', false);
-    expect(new ManualStore(dir).targets()[0].isActive).toBe(false);
-    new ManualStore(dir).setActive('t1', true);
-    expect(new ManualStore(dir).targets()[0].isActive).toBe(true);
+    expect(new ManualStore(jsonFiles(dir)).targets()[0].isActive).toBe(false);
+    new ManualStore(jsonFiles(dir)).setActive('t1', true);
+    expect(new ManualStore(jsonFiles(dir)).targets()[0].isActive).toBe(true);
   });
 
   it('archive sets archivedAt and restore clears it, persisted', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1'));
     store.setArchived('t1', true);
-    const archived = new ManualStore(dir).targets()[0];
+    const archived = new ManualStore(jsonFiles(dir)).targets()[0];
     expect(archived.archivedAt).toBeTypeOf('number');
-    new ManualStore(dir).setArchived('t1', false);
-    expect(new ManualStore(dir).targets()[0].archivedAt).toBeUndefined();
+    new ManualStore(jsonFiles(dir)).setArchived('t1', false);
+    expect(new ManualStore(jsonFiles(dir)).targets()[0].archivedAt).toBeUndefined();
   });
 
   it('backfills isActive: true on legacy records missing the field', () => {
@@ -117,7 +118,7 @@ describe('ManualStore', () => {
       targets: [{ id: 'old', name: 'old', mode: 'self', scope: 'season', rule: 'You grade it', createdAt: 1 }],
     };
     fs.writeFileSync(path.join(dir, 'manual.json'), JSON.stringify(legacy), 'utf8');
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     expect(store.targets()[0].isActive).toBe(true);
     expect(store.targets()[0].archivedAt).toBeUndefined();
   });
@@ -127,19 +128,19 @@ describe('ManualStore', () => {
       targets: [{ id: 't1', name: 't1', mode: 'self', rule: 'You grade it', createdAt: 1, isActive: true, heroScope: 'Tracer' }],
     };
     fs.writeFileSync(path.join(dir, 'manual.json'), JSON.stringify(legacy));
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     expect(store.targets()[0].heroScope).toEqual(['Tracer']);
   });
 
   it('updateTarget persists a multi-hero heroScope array across instances', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1'));
     store.updateTarget('t1', { name: 't1', mode: 'self', rule: 'You grade it', heroScope: ['Tracer', 'Genji'] });
-    expect(new ManualStore(dir).targets()[0].heroScope).toEqual(['Tracer', 'Genji']);
+    expect(new ManualStore(jsonFiles(dir)).targets()[0].heroScope).toEqual(['Tracer', 'Genji']);
   });
 
   it('relocate re-points and reloads from the new dir', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target('t1'));
 
     const newDir = fs.mkdtempSync(path.join(os.tmpdir(), 'owsync-manual-new-'));
@@ -149,10 +150,10 @@ describe('ManualStore', () => {
 
       expect(store.targets().map((t) => t.id)).toEqual(['t1']);
       store.addTarget(target('t2'));
-      expect(new ManualStore(newDir).targets().map((t) => t.id).sort()).toEqual(['t1', 't2']);
+      expect(new ManualStore(jsonFiles(newDir)).targets().map((t) => t.id).sort()).toEqual(['t1', 't2']);
       // The old dir's file is untouched by relocate itself (copy/delete is the
       // migration executor's job, not the store's).
-      expect(new ManualStore(dir).targets().map((t) => t.id)).toEqual(['t1']);
+      expect(new ManualStore(jsonFiles(dir)).targets().map((t) => t.id)).toEqual(['t1']);
     } finally {
       fs.rmSync(newDir, { recursive: true, force: true });
     }
@@ -164,28 +165,28 @@ describe('ManualStore', () => {
   // never a user-authored target that merely shares the display name — and
   // must never touch grades stored on matches (HistoryStore).
   it('migration: removeTarget(internal id) deletes only the seeded synthetic target', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target(NOTION_IMPROVEMENT_TARGET_ID, 'Improvement Target'));
     store.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
     expect(store.targets()).toHaveLength(0);
     // Idempotent: running the migration again (e.g. next launch) is a no-op.
     expect(() => store.removeTarget(NOTION_IMPROVEMENT_TARGET_ID)).not.toThrow();
-    expect(new ManualStore(dir).targets()).toHaveLength(0);
+    expect(new ManualStore(jsonFiles(dir)).targets()).toHaveLength(0);
   });
 
   it('migration: a user-authored target sharing the seeded name survives (different id)', () => {
-    const store = new ManualStore(dir);
+    const store = new ManualStore(jsonFiles(dir));
     store.addTarget(target(NOTION_IMPROVEMENT_TARGET_ID, 'Improvement Target'));
     store.addTarget(target('t-1700000000000', 'Improvement Target'));
     store.removeTarget(NOTION_IMPROVEMENT_TARGET_ID);
-    const remaining = new ManualStore(dir).targets();
+    const remaining = new ManualStore(jsonFiles(dir)).targets();
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).toBe('t-1700000000000');
     expect(remaining[0].name).toBe('Improvement Target');
   });
 
   it('migration: stored grades on matches are untouched by target removal', () => {
-    const manual = new ManualStore(dir);
+    const manual = new ManualStore(jsonFiles(dir));
     manual.addTarget(target(NOTION_IMPROVEMENT_TARGET_ID, 'Improvement Target'));
     manual.addTarget(target('t-1700000000000', 'Improvement Target'));
 
@@ -209,7 +210,7 @@ describe('ManualStore', () => {
       const games = history.all();
       expect(games.find((g) => g.matchId === 'm1')?.review?.grades[NOTION_IMPROVEMENT_TARGET_ID]).toBe('hit');
       expect(games.find((g) => g.matchId === 'm2')?.review?.grades['t-1700000000000']).toBe('missed');
-      expect(new ManualStore(dir).targets().map((t) => t.id)).toEqual(['t-1700000000000']);
+      expect(new ManualStore(jsonFiles(dir)).targets().map((t) => t.id)).toEqual(['t-1700000000000']);
     } finally {
       history.close();
       fs.rmSync(historyDir, { recursive: true, force: true });

@@ -1,5 +1,4 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 /** Per-match Notion export state: the page to update in place, and the content
  *  signature at the time of that write (see `matchExportSignature`). */
@@ -38,14 +37,11 @@ interface OutboxState {
  * and detect when nothing changed since the last successful sync.
  */
 export class OutboxStore {
-  private file: string;
-  private tmp: string;
+  private readonly doc: JsonDoc;
   private state: OutboxState;
 
-  constructor(dir: string) {
-    fs.mkdirSync(dir, { recursive: true });
-    this.file = path.join(dir, 'outbox.json');
-    this.tmp = path.join(dir, 'outbox.tmp.json');
+  constructor(docs: JsonDocs) {
+    this.doc = docs('outbox.json');
     this.state = this.load();
   }
 
@@ -141,16 +137,13 @@ export class OutboxStore {
    * before calling this); `relocate` just repoints and re-reads.
    */
   relocate(newDir: string): void {
-    fs.mkdirSync(newDir, { recursive: true });
-    this.file = path.join(newDir, 'outbox.json');
-    this.tmp = path.join(newDir, 'outbox.tmp.json');
+    this.doc.relocate(newDir);
     this.state = this.load();
   }
 
   private load(): OutboxState {
     try {
-      const raw = fs.readFileSync(this.file, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<OutboxState>;
+      const parsed = (this.doc.read() ?? {}) as Partial<OutboxState>;
       const records =
         parsed.records && typeof parsed.records === 'object' ? parsed.records : {};
       const state: OutboxState = { records };
@@ -162,7 +155,6 @@ export class OutboxStore {
   }
 
   private save(): void {
-    fs.writeFileSync(this.tmp, JSON.stringify(this.state, null, 2), 'utf8');
-    fs.renameSync(this.tmp, this.file);
+    this.doc.write(this.state);
   }
 }

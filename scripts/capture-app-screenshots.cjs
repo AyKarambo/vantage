@@ -36,6 +36,7 @@ const { HistoryStore } = require(path.join(ROOT, 'dist', 'store', 'history'));
 const { ManualStore } = require(path.join(ROOT, 'dist', 'store', 'manualLog'));
 const { RankAnchorStore } = require(path.join(ROOT, 'dist', 'store', 'rankAnchors'));
 const { MasterDataStore } = require(path.join(ROOT, 'dist', 'store', 'masterData'));
+const { jsonFiles } = require(path.join(ROOT, 'dist', 'store', 'jsonFiles'));
 const { generateSampleGames } = require(path.join(ROOT, 'dist', 'core', 'sampleData'));
 const { DEFAULT_MASTER_DATA, mergeMasterData } = require(path.join(ROOT, 'dist', 'core', 'masterData'));
 const { DEFAULT_BREAK_REMINDER } = require(path.join(ROOT, 'dist', 'core', 'breakReminder'));
@@ -83,9 +84,9 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true });
 
   const history = new HistoryStore(dataDir);
-  const manual = new ManualStore(dataDir);
-  const rankAnchors = new RankAnchorStore(dataDir);
-  const masterDataStore = new MasterDataStore(dataDir);
+  const manual = new ManualStore(jsonFiles(dataDir));
+  const rankAnchors = new RankAnchorStore(jsonFiles(dataDir));
+  const masterDataStore = new MasterDataStore(jsonFiles(dataDir));
 
   // Mirrors appConfig.ts's DEFAULTS exactly (not ad hoc `{}` stand-ins) so every
   // screen — notably Readiness, which defaults to *enabled* — matches what a
