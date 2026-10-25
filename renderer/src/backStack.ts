@@ -110,7 +110,15 @@ export const MAX_DEPTH = 20;
  * one mirror of `ViewParams` rather than two.
  */
 export function sameParams(a: ViewParams, b: ViewParams): boolean {
-  return ALL_PARAM_KEYS.every((k) => a[k] === b[k]);
+  return ALL_PARAM_KEYS.every((k) => sameParamValue(a[k], b[k]));
+}
+
+/** `===`, except list params (`prefillHeroes`, `prefillMap`) compare element-wise —
+ *  a freshly built array on every navigation would never `===` the previous one. */
+function sameParamValue(a: ViewParams[keyof ViewParams], b: ViewParams[keyof ViewParams]): boolean {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
 }
 
 /**

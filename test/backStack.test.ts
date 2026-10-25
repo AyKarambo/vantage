@@ -63,6 +63,12 @@ describe('routeParams / sameParams / sameEntry', () => {
     }
   });
 
+  it('sameParams compares list params element-wise, not by array identity', () => {
+    expect(sameParams({ prefillHeroes: ['Genji', 'Tracer'] }, { prefillHeroes: ['Genji', 'Tracer'] })).toBe(true);
+    expect(sameParams({ prefillMap: ['Ilios'] }, { prefillMap: ['Ilios', 'Nepal'] })).toBe(false);
+    expect(sameParams({ prefillHeroes: ['Genji'] }, {})).toBe(false);
+  });
+
   it('sameEntry ignores effect params but distinguishes route params and views', () => {
     expect(sameEntry(entry('targets'), entry('targets', { editTargetId: 't1' }))).toBe(true);
     expect(sameEntry(entry('matches'), entry('matches', { day: '2026-08-01' }))).toBe(false);

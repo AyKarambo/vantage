@@ -5,7 +5,8 @@
  * a small context of callbacks.
  */
 import { h, render } from '../dom';
-import type { AppState, ViewId } from '../store';
+import type { AppState, ViewId, ViewParams } from '../store';
+import { sameParams } from '../backStack';
 import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role } from '../../../src/shared/contract';
 import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
@@ -260,7 +261,7 @@ export class App {
   private readonly gepDot = h('span', { class: 'status-dot' });
   private readonly gepLabel = h('span', { class: 'gep-label' }, '');
   /** What the content host currently shows — re-render only when this changes. */
-  private lastRendered: { data: DashboardData; view: ViewId; matchId?: string; highlight?: string; day?: string; flag?: string; map?: string; prefillName?: string; prefillRole?: string; prefillHeroes?: string[]; playerName?: string; targetId?: string; editTargetId?: string; epoch: number } | null = null;
+  private lastRendered: { data: DashboardData; view: ViewId; params: ViewParams; epoch: number } | null = null;
   /** The snapshot the filter bar was last built for. Background refreshes patch
    *  `refreshing`/`status` without changing `data`, so re-rendering the bar then
    *  would tear down its live controls mid-click and swallow the click — the
@@ -619,31 +620,13 @@ export class App {
     // Background refreshes and status-only patches keep the current DOM (and
     // scroll position); re-render only for a new snapshot, route, or an
     // explicit rerender() epoch bump.
-    const key = {
-      data: state.data,
-      view: state.view,
-      matchId: state.params.matchId,
-      highlight: state.params.highlight,
-      day: state.params.day,
-      flag: state.params.flag,
-      map: state.params.map,
-      prefillName: state.params.prefillName,
-      prefillRole: state.params.prefillRole,
-      prefillHeroes: state.params.prefillHeroes,
-      playerName: state.params.playerName,
-      targetId: state.params.targetId,
-      editTargetId: state.params.editTargetId,
-      epoch: state.renderEpoch,
-    };
+    const key = { data: state.data, view: state.view, params: state.params, epoch: state.renderEpoch };
     const last = this.lastRendered;
-    if (last && last.data === key.data && last.view === key.view
-      && last.matchId === key.matchId && last.highlight === key.highlight
-      && last.day === key.day && last.flag === key.flag && last.map === key.map
-      && last.prefillName === key.prefillName
-      && last.prefillRole === key.prefillRole && sameStrings(last.prefillHeroes, key.prefillHeroes)
-      && last.playerName === key.playerName
-      && last.targetId === key.targetId && last.editTargetId === key.editTargetId
-      && last.epoch === key.epoch) return;
+    // Every ViewParams key counts, via the backStack key table — a param this
+    // memo didn't list (Settings' `section`, Players' `search`) used to be
+    // dropped on the floor when it changed on the screen already showing.
+    const sameRoute = !!last && last.view === key.view && last.epoch === key.epoch && sameParams(last.params, key.params);
+    if (sameRoute && last.data === key.data) return;
     // Having passed the equality check with every non-`data` field equal means
     // only the snapshot changed — a background refresh. If the user is pressing
     // inside the content host, defer it: replacing the pressed element mid-click
@@ -656,21 +639,14 @@ export class App {
     // all by the time it fired; flushed by the `selectionchange` listener in
     // `bindGlobals` once the selection clears or moves elsewhere. Route/epoch
     // changes fall through and render at once either way.
-    if ((this.contentPressed || this.hasSelectionInContent()) && last && last.view === key.view && last.matchId === key.matchId
-      && last.highlight === key.highlight && last.day === key.day && last.flag === key.flag
-      && last.map === key.map
-      && last.prefillName === key.prefillName
-      && last.prefillRole === key.prefillRole && sameStrings(last.prefillHeroes, key.prefillHeroes)
-      && last.playerName === key.playerName
-      && last.targetId === key.targetId && last.editTargetId === key.editTargetId && last.epoch === key.epoch) {
+    if (sameRoute && (this.contentPressed || this.hasSelectionInContent())) {
       this.pendingContentRender = true;
       return;
     }
     // Remember where the outgoing route was scrolled; restore it when a
     // navigation (not a data refresh on the same route) returns here.
-    if (last) this.scrollMemory.set(routeKey(last.view, last.matchId, last.playerName, last.targetId), this.contentHost.scrollTop);
-    const navigated = !last || last.view !== key.view || last.matchId !== key.matchId
-      || last.playerName !== key.playerName || last.targetId !== key.targetId;
+    if (last) this.scrollMemory.set(routeKey(last.view, last.params), this.contentHost.scrollTop);
+    const navigated = !last || routeKey(last.view, last.params) !== routeKey(key.view, key.params);
     // A same-route re-render (e.g. a master-data edit round-tripping through
     // store.refresh()) replaces the DOM. That resets scrollTop to 0 and, because
     // a brand-new `.view` is mounted, replays the `rise-in` entry animation —
@@ -682,7 +658,7 @@ export class App {
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
     if (navigated) {
-      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.matchId, key.playerName, key.targetId)) ?? 0;
+      this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.params)) ?? 0;
     } else {
       const view = this.contentHost.firstElementChild as HTMLElement | null;
       if (view) view.style.animation = 'none';
@@ -1477,15 +1453,7 @@ export class App {
   }
 }
 
-/** Value equality for the `prefillHeroes` (H1) render-memo key — a freshly
- *  built array on every navigation would never `===` the previous one. */
-function sameStrings(a?: string[], b?: string[]): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
-
-function routeKey(view: ViewId, matchId?: string, playerName?: string, targetId?: string): string {
+function routeKey(view: ViewId, { matchId, playerName, targetId }: ViewParams): string {
   if (matchId) return `${view}:${matchId}`;
   if (playerName) return `${view}:@${playerName}`;
   if (targetId) return `${view}:#${targetId}`;
