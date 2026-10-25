@@ -1,35 +1,20 @@
 import type { GameRecord } from '../../core/analytics';
-import type { Role } from '../../core/model';
-import type { AuthoredTarget, ThresholdSuggestion } from '../../core/targets';
-import type { BreakReminderSettings } from '../../core/breakReminder';
-import type { CheckInInput, SessionCheckIn } from '../../core/checkIn';
-import type { StalenessSettings } from '../../core/staleness';
-import type { ReadinessSettings } from '../../core/readiness';
-import type { SessionSettings } from '../../core/sessionSettings';
-import type { CoachingSettings } from '../../core/coachingSettings';
-import type { GradingSettings } from '../../core/gradingSettings';
+import type { AuthoredTarget } from '../../core/targets';
+import type { SessionCheckIn } from '../../core/checkIn';
 import type { DemoContext } from '../../core/demoPreference';
 import type { RankAnchorMap } from '../../core/rank';
 import type { PlacementRun } from '../../core/placements';
 import type { MasterDataConfig } from '../config';
-import type {
-  AccountSummary, AccountInput, AppInfo, AppUiSettings, AuthoredTargetInput, CleanupDuplicatesResult,
-  DataLocation, DataLocationResult, DevModeAuthStatusPayload, ExportBackupResult, ExportResult, GepStatusPayload, ImportResult, ImportFileResult, LogEntry, LogExportResult, LogLevel,
-  IgnorePendingReviewsInput, ThresholdSuggestionInput,
-  ManualMatchInput, MatchEditInput, NotionStatus, NotionDatabaseSummary, NotionPageSummary, PendingMatch,
-  RankAnchorInput, RankSummary, RankEntryPreviewInput, RankEntryPreview, RendererErrorInput, Result, ReviewInput, TargetEditInput,
-  PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput,
-  PlacementOffer, PlacementDeclineInput,
-  FriendEntry, FriendInput,
-  MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate,
-} from '../../shared/contract';
+import type { ExportResult, MasterData, PendingMatch } from '../../shared/contract';
+import type { ProviderContract } from './handlers';
 
 /**
- * The data contract between the dashboard window and the composition root:
- * everything the renderer can ask of the main process, gathered in one
- * interface so the IPC layer stays thin and mechanical.
+ * The data contract between the dashboard window and the composition root.
+ * Every contract method the provider answers itself is taken from `OwStatsApi`
+ * (see {@link ProviderContract}), so its signature is declared exactly once; only
+ * the main-internal reads the composed handlers build on are declared here.
  */
-export interface DataProvider {
+export interface DataProvider extends ProviderContract {
   games(): GameRecord[];
   /**
    * Opaque revision of the history store — changes on every write, never
@@ -42,212 +27,22 @@ export interface DataProvider {
   /** Demo facts (effective display, raw choice, real-history presence) for the dashboard payload. */
   demoContext(): DemoContext;
   exportToNotion?(games: GameRecord[]): Promise<ExportResult>;
-  /** Current Notion connection state (for the Notion sync screen). */
-  notionStatus(): NotionStatus;
-  /** Save an integration token, (re)build the client, return the new state. */
-  setNotionToken(token: string): NotionStatus;
-  /** Remove the saved token and return the new state. */
-  clearNotionToken(): NotionStatus;
   /** The player's authored improvement targets (◎ manual). */
   manualTargets(): AuthoredTarget[];
-  /** Persist a new authored target. */
-  saveTarget(input: AuthoredTargetInput): void;
-  /** The player's own median/75th-percentile value for a measured stat (R7) — the Measured builder pane's "Your usual: …" line. */
-  suggestThreshold(input: ThresholdSuggestionInput): ThresholdSuggestion | null;
-  /** Persist a manually-logged match; returns its new id. */
-  logMatch(input: ManualMatchInput): { matchId: string };
-  /** Edit a stored match's manual layer (game facts stay locked on auto-tracked matches).
-   *  `saved: false` when the id is unknown to real history — a demo game (F3). */
-  editMatch(input: MatchEditInput): { saved: boolean };
-  /** Delete one recorded match; `deleted: false` if the id is unknown. Undoable via {@link undoDeleteMatch}. */
-  deleteMatch(matchId: string): { deleted: boolean };
-  /** Restore a just-deleted match from the in-memory undo buffer; `restored: false` once it's gone. */
-  undoDeleteMatch(matchId: string): { restored: boolean };
-  /** The tracked accounts (battleTag → label). */
-  listAccounts(): AccountSummary[];
-  /** Create or edit an account; returns the updated list. */
-  saveAccount(input: AccountInput): AccountSummary[];
-  /** Delete a CONFIGURED account by battleTag — removes the label only (history untouched). */
-  deleteAccount(battleTag: string): AccountSummary[];
-  /** IRREVERSIBLY delete a detected-unlabelled account: drops its history rows + rank anchors. */
-  deleteDetectedAccount(account: string): AccountSummary[];
-  /** Computed current rank for each anchored (account, role). */
-  getRanks(): RankSummary[];
-  /** Per-account, per-role most-played hero names (desc by play count), over the full unfiltered history. */
-  mostPlayedHeroes(): Record<string, Partial<Record<Role, string[]>>>;
-  /** Set (or replace) the one-time rank anchor for an (account, role); returns the ranks. */
-  setRankAnchor(input: RankAnchorInput): RankSummary[];
   /** Anchors keyed for the rank engine, passed into the match-detail read. */
   rankAnchorMap(): RankAnchorMap;
-  /** Translate an entered "rank after this match" into its ±%; read-only. */
-  rankEntryPreview(input: RankEntryPreviewInput): RankEntryPreview;
-  /** Every tracked placement run, with progress, latest prediction and drift. */
-  getPlacements(): PlacementRunSummary[];
   /** The raw runs, for the dashboard read — it needs `startedAt` and the counted
    *  set to suppress open-run deltas, which the summaries deliberately don't carry.
    *  Main-internal, like {@link DataProvider.rankAnchorMap}; never crosses IPC. */
   placementRuns(): PlacementRun[];
-  /** Begin a run for an (account, role); `fromMatchId` backdates it to an already-logged match. */
-  startPlacementRun(input: PlacementStartInput): PlacementRunSummary[];
-  /** Record (or clear) the predicted rank Overwatch showed after one placement match. */
-  setPlacementPrediction(input: PlacementPredictionInput): PlacementRunSummary[];
-  /** Confirm the real post-placement rank; writes the new anchor at the last counted match. */
-  completePlacementRun(input: PlacementCompleteInput): PlacementRunSummary[];
-  /** Rewind a run to its beginning, restoring the pre-run anchor, and keep it open. */
-  resetPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
-  /** Rewind as above, then drop the run entirely — its matches return to normal rank arithmetic. */
-  cancelPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
-  /** Re-derive a completed run's counted matches after history changed under it. */
-  recountPlacementRun(input: PlacementTrackInput): PlacementRunSummary[];
-  /** Whether to offer this track a placement run right now, or null. */
-  placementOffer(input: PlacementTrackInput): PlacementOffer | null;
-  /** Record a "not now" for a track and season. */
-  declinePlacementRun(input: PlacementDeclineInput): void;
-  /** Pull matches from the configured Notion Gametracker database into history. */
-  importNotion(): Promise<ImportResult>;
-  /** Delete every Notion-imported match from history (for a clean re-import); returns how many were removed. */
-  deleteImportedMatches(): { deleted: number };
-  /** Pick a Vantage import file and ingest it into history (marked file-imported); async (shows a dialog). */
-  importFromFile(): Promise<ImportFileResult>;
-  /** Delete every file-imported match (independently of Notion imports); returns how many were removed. */
-  deleteFileImports(): { deleted: number };
-  /** How many file-imported matches are stored (Settings → Data status line). */
-  fileImportedCount(): number;
-  /** When the most recent file import landed (epoch ms), for the persistent "Last import" line (W3). Undefined if none. */
-  lastFileImportAt(): number | undefined;
-  /** Write a full local backup (games incl. review/mental, accounts, every rank anchor, targets) to a user-chosen file (W3 phase 2). */
-  exportBackup(): Promise<ExportBackupResult>;
-  /** Explicit action: archive redundant duplicate rows (Notion trash) in the configured Gametracker database. */
-  cleanupNotionDuplicates(): Promise<CleanupDuplicatesResult>;
-  /** Attach a Review-screen read (grades + flags) to a tracked match.
-   *  `saved: false` when the id is unknown to real history — a demo game (F3). */
-  saveReview(input: ReviewInput): { saved: boolean };
-  /** Bulk legacy-review import; skips unknown ids and already-reviewed games. */
-  importReviews(inputs: ReviewInput[]): { imported: number; skipped: number };
-  /** Edit a target's name/mode/rule, preserving lifecycle state + accrued grades. */
-  updateTarget(input: TargetEditInput): void;
-  /** Toggle whether the target is graded on the Review screen. */
-  setTargetActive(id: string, active: boolean): void;
-  /** Archive (restorable) or restore a target. */
-  setTargetArchived(id: string, archived: boolean): void;
-  /** Permanently remove a target. */
-  deleteTarget(id: string): void;
-  /** Deactivate every active target at once (the "start a fresh focus" rotation reset). */
-  deactivateAllTargets(): void;
-  /** Current target-staleness thresholds. */
-  getStaleness(): StalenessSettings;
-  /** Persist new target-staleness thresholds; returns the persisted (clamped) value. */
-  setStaleness(input: StalenessSettings): StalenessSettings;
-  /** Current break-reminder settings. */
-  getBreakReminder(): BreakReminderSettings;
-  /** Persist new break-reminder settings; returns the persisted (clamped) value. */
-  setBreakReminder(input: BreakReminderSettings): BreakReminderSettings;
   /** Every stored pre-session check-in (S10 phase 2) — the dashboard payload
    *  reads this to split game-1 tilt by mood and to know whether a fresh
    *  prompt is due. */
   getCheckIns(): SessionCheckIn[];
-  /** Record a pre-session check-in at the current instant; returns the stored entry. */
-  recordCheckIn(input: CheckInInput): SessionCheckIn;
-  /** Every player tagged as a friend (local-only), sorted by name. */
-  friends(): FriendEntry[];
-  /** Tag/untag a player as a friend by BattleTag or bare name; returns the new list. Empty names are ignored. */
-  setFriend(input: FriendInput): FriendEntry[];
-  /** Current readiness feature settings. */
-  getReadiness(): ReadinessSettings;
-  /** Persist new readiness feature settings; returns the persisted value. */
-  setReadiness(input: ReadinessSettings): ReadinessSettings;
-  /** Current "Current session" gap threshold. */
-  getSessionSettings(): SessionSettings;
-  /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
-  setSessionSettings(input: SessionSettings): SessionSettings;
-  /** Current coaching (practice focus / check-in / break) settings. */
-  getCoaching(): CoachingSettings;
-  /** Persist new coaching settings; returns the persisted (normalized) value. */
-  setCoaching(input: CoachingSettings): CoachingSettings;
-  /** Current measured-grade settings (the partial-credit margin). */
-  getGrading(): GradingSettings;
-  /** Persist new measured-grade settings; returns the persisted (clamped) value. */
-  setGrading(input: GradingSettings): GradingSettings;
-  /** Databases the Notion integration can see, for the picker. */
-  listNotionDatabases(): Promise<{ databases: NotionDatabaseSummary[]; error?: string }>;
-  /** Pages the Notion integration can see — candidate parents for auto-create. */
-  listNotionPages(): Promise<{ pages: NotionPageSummary[]; error?: string }>;
-  /** Select an existing database as the Gametracker target. */
-  selectNotionDatabase(databaseId: string): Promise<NotionStatus>;
-  /** Create a correctly-shaped Maps + Gametracker database pair under a parent page, then select it. */
-  createNotionDatabase(parentPageId: string): Promise<NotionStatus>;
-  /** Snapshot of the recent log-entry ring (the in-app viewer's source). */
-  getLogEntries(): LogEntry[];
-  /** Current minimum log level. */
-  getLogLevel(): LogLevel;
-  /** Set the session log level; returns the applied value. */
-  setLogLevel(level: LogLevel): LogLevel;
-  /** Record an uncaught renderer error in the main-process log. */
-  logRendererError(input: RendererErrorInput): void;
-  /**
-   * Export the log ring to a user-chosen file for "Report a bug" — third-party
-   * PII and registered secrets are stripped before it's written. Never
-   * uploads; the file only goes where the user's save dialog points.
-   */
-  exportLogBundle(): Promise<LogExportResult>;
-  /** Current connection/data-flow status snapshot. */
-  getGepStatus(): GepStatusPayload;
-  /** Dev-mode auth status snapshot. */
-  getDevModeAuthStatus(): DevModeAuthStatusPayload;
-  /** App-behavior settings (Settings screen). */
-  getAppSettings(): AppUiSettings;
-  /** Apply + persist app-behavior settings; returns the applied values. */
-  setAppSettings(patch: Partial<AppUiSettings>): AppUiSettings;
-  /** Persist the Overwolf dev key to ~/.ow-cli/dev-key; returns whether one is now present. */
-  setDevKey(key: string): { hasKey: boolean };
-  /** Version + build/runtime facts + support contact (the About screen). */
-  getAppInfo(): AppInfo;
-  /** Open a maintainer URL via shell.openExternal, guarded by a scheme allowlist. */
-  openExternal(url: string): Promise<void>;
-  /** Restart the app to apply a staged GEP package fix (user-initiated only). */
-  applyGepUpdate(): void;
-  /** Where Vantage's data folder currently lives (DB + manual data). */
-  getDataLocation(): DataLocation;
-  /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder; async (shows a dialog). */
-  chooseDataFolder(): Promise<DataLocationResult>;
-  /** Commit a chosen data folder — migrates by default, or adopts in place when the caller confirms. */
-  setDataFolder(input: { folder: string; adopt?: boolean }): Promise<DataLocationResult>;
-  /** First-run folder picker; validates the choice and adopts existing Vantage data automatically. */
-  chooseFirstRunDataFolder(): Promise<DataLocationResult>;
-  /** Open the current data folder in the OS file manager (W3). */
-  revealDataFolder(): void;
-  /** Remove a game's review (undo of a first-time save). */
-  clearReview(matchId: string): void;
-  /** Read-only: how many pending-review rows "Mark older games as no-read" would affect right now (R1). */
-  previewPendingReviewIgnore(input: IgnorePendingReviewsInput): { count: number };
-  /** Bulk-saves an empty review on every matching pending row; returns their ids for Undo. */
-  ignorePendingReviews(input: IgnorePendingReviewsInput): { matchIds: string[] };
-  /** Undo of {@link ignorePendingReviews}: clears reviews on exactly these matchIds. */
-  clearReviews(matchIds: string[]): void;
   /** Played competitive matches held without a GEP outcome, awaiting a manual result (the "Needs result" section). */
   pendingMatches(): PendingMatch[];
-  /** Complete a held pending match with a win/loss/draw — moves it into history via the normal pipeline. */
-  resolvePendingMatch(matchId: string, result: Result): void;
-  /** Dismiss a held pending match without logging it (the user's "not a real match" verdict). */
-  dismissPendingMatch(matchId: string): void;
   /** The effective master data (defaults ⊕ overrides) — feeds the dashboard read + the editor. */
   effectiveMasterData(): MasterData;
-  /** Add/edit a hero; persists the delta and returns the new effective master data. */
-  masterDataUpsertHero(entry: HeroEntry): MasterData;
-  /** Remove a hero (tombstone a built-in, or drop a user addition). */
-  masterDataRemoveHero(name: string): MasterData;
-  /** Add/edit a map (name/mode/isActive). */
-  masterDataUpsertMap(entry: MapEntry): MasterData;
-  /** Remove a map (history unaffected; suggestions/generator exclude it). */
-  masterDataRemoveMap(name: string): MasterData;
-  /** Add/edit a season (start + label). */
-  masterDataUpsertSeason(entry: SeasonEntry): MasterData;
-  /** Remove a season by its `S:<iso>` id. */
-  masterDataRemoveSeason(id: string): MasterData;
-  /** Fetch the online catalog and diff vs current — the Update preview (no persist). */
-  masterDataFetchUpdate(): Promise<UpdatePreview>;
-  /** Persist the accepted subset of an Update preview; returns the new effective master data. */
-  masterDataApplyUpdate(accepted: AcceptedUpdate): MasterData;
   /** The Master Data source's own settings — when it was last successfully checked (W1). */
   getMasterDataConfig(): MasterDataConfig;
 }
