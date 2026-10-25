@@ -19,7 +19,9 @@ import { targetGradeRow, bindTargetGradeKeys, mentalFlagChips, commsToneSwitch }
 import { resultChooser, bindResultKeys, bindSaveKeys } from '../components/resultChooser';
 import { paintHeroChips } from '../components/heroPicker';
 import { performanceSlider } from '../components/performanceSlider';
-import { focusTargetChooser } from '../components/focusTargetChooser';
+import { focusTargetChooser, type FocusChooser } from '../components/focusTargetChooser';
+import { scopeBadge } from '../views/targets/shared';
+import { matchInTargetScope } from '../../../src/core/targets';
 import { breakChip } from '../components/breakChip';
 import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { field, optionalLabel } from '../components/formField';
@@ -32,7 +34,7 @@ import { srEntryMode } from '../../../src/core/placements';
 import { bridge } from '../bridge';
 import { prefs, DEFAULT_SUGGESTED_HEROES } from '../prefs';
 import type {
-  AccountSummary, MatchMental, PlacementRunSummary, RankEntryPreview, RankSummary, Result, Role, TargetGrade,
+  AccountSummary, MatchMental, PlacementRunSummary, RankEntryPreview, RankSummary, Result, Role, TargetGrade, TargetSummary,
 } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
 
@@ -229,6 +231,8 @@ function buildForm(
 
   const grades: Record<string, TargetGrade> = {};
   const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
+  // Set once the targets block exists; role / hero / map changes call it to re-scope the targets.
+  let repaintTargets = (): void => {};
 
   // Free-typed map text resolves case-insensitively onto the known map list
   // (spec AC 22 — inactive maps stay loggable); see resolveMapName.
@@ -445,7 +449,7 @@ function buildForm(
       value: state.map,
       maps: ctx.data.masterData.maps,
       recentMaps: ctx.data.matches.map((m) => m.map),
-      onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); },
+      onChange: (v) => { state.map = v; mapError.classList.add('hidden'); updateSaveEnabled(); repaintTargets(); },
       // L4: the same hint a failed Save attempt already showed, but the
       // moment the field can't resolve — not silently blanked with Save
       // just disabled and no explanation.
@@ -467,6 +471,7 @@ function buildForm(
       seedPrediction();
       paintRank();
       paintHeroes();
+      repaintTargets();
     }),
   );
 
@@ -527,6 +532,10 @@ function buildForm(
     paintHeroChips(heroHost, state.heroes, state.role, ctx.data.masterData.heroes, { shortlist, shortlistLimit: limit, search: true });
   };
   paintHeroes();
+  // A chip toggles `state.heroes` itself on click; this bubble-phase listener only re-scopes the targets.
+  heroHost.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('button.chip')) repaintTargets();
+  });
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
   /**
@@ -639,34 +648,60 @@ function buildForm(
   // Review uses — only the chosen self-rated targets get graded (measured
   // ones grade themselves from stats), plus the break mark.
   const practice = ctx.data.practice.on;
-  const selfTargets = activeTargets.filter((t) => t.mode !== 'measured');
-  const chooser = practice && selfTargets.length
-    ? focusTargetChooser({
-        targets: selfTargets,
-        initial: carry?.focusTargetIds ?? ctx.data.practice.nextFocus,
-        grades,
-        stickiness: ctx.data.coachingSettings.focusStickiness,
-        onStickiness: (focusStickiness) => {
-          ctx.data.coachingSettings.focusStickiness = focusStickiness;
-          void bridge.setCoaching({ ...ctx.data.coachingSettings, focusStickiness });
-        },
-      })
-    : null;
-  // Only when breaks are marked by hand: a freshly logged game has no
-  // previous-game gap to seed the chip from, so in automatic mode the
-  // detection itself decides (and the chip would just contradict it).
-  const brk = practice && ctx.data.coachingSettings.breakDetection === 'manual' ? breakChip(false) : null;
-  const targetRows = chooser ? [] : activeTargets.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }));
-  const targetsBlock = field(
-    optionalLabel(practice ? 'What did you work on?' : 'Targets', '— grade now or later on Review'),
-    h('div', { class: 'stack', style: { gap: '10px' } },
+  // Role / hero / map-scoped targets follow the form, like Review: a Genji
+  // target isn't on offer for a Sojourn game. Heroes and map only narrow once
+  // picked, so a scoped target doesn't vanish before you've said who you played.
+  const inScope = (t: TargetSummary): boolean => matchInTargetScope(
+    { role: state.role, heroes: [...state.heroes], map: state.map },
+    { ...t, heroScope: state.heroes.size ? t.heroScope : undefined, mapScope: state.map ? t.mapScope : undefined },
+  );
+  let chooser: FocusChooser | null = null;
+  let targetRows: Array<{ el: HTMLElement; set: (g: TargetGrade) => void }> = [];
+  let initialFocus = carry?.focusTargetIds ?? ctx.data.practice.nextFocus;
+  const targetsHost = h('div', { class: 'stack', style: { gap: '10px' } });
+  const paintTargets = (): void => {
+    const shown = activeTargets.filter(inScope);
+    // A target that left the scope takes its grade with it.
+    for (const id of Object.keys(grades)) if (!shown.some((t) => t.id === id)) delete grades[id];
+    if (chooser) initialFocus = chooser.focusIds() ?? initialFocus;
+    const selfTargets = shown.filter((t) => t.mode !== 'measured');
+    chooser = practice && selfTargets.length
+      ? focusTargetChooser({
+          targets: selfTargets,
+          initial: initialFocus,
+          grades,
+          stickiness: ctx.data.coachingSettings.focusStickiness,
+          onStickiness: (focusStickiness) => {
+            ctx.data.coachingSettings.focusStickiness = focusStickiness;
+            void bridge.setCoaching({ ...ctx.data.coachingSettings, focusStickiness });
+          },
+          scopeBadge,
+        })
+      : null;
+    targetRows = chooser ? [] : shown.map((t) => targetGradeRow(t, grades[t.id], (g) => { grades[t.id] = g; }, scopeBadge(t)));
+    const hidden = activeTargets.length - shown.length;
+    render(targetsHost,
       ...(chooser
         ? [chooser.el]
         : targetRows.length
           ? targetRows.map((r) => r.el)
-          : [h('div', { class: 'hint' }, 'No active targets — add some on the Targets page.')]),
-      brk ? brk.el : null,
-    ),
+          : [h('div', { class: 'hint' }, activeTargets.length
+              ? 'None of your active targets apply to this role / these heroes.'
+              : 'No active targets — add some on the Targets page.')]),
+      hidden && (chooser || targetRows.length)
+        ? h('div', { class: 'hint' }, `${hidden} target${hidden === 1 ? '' : 's'} hidden — scoped to another role, hero or map`)
+        : null,
+    );
+  };
+  paintTargets();
+  repaintTargets = paintTargets;
+  // Only when breaks are marked by hand: a freshly logged game has no
+  // previous-game gap to seed the chip from, so in automatic mode the
+  // detection itself decides (and the chip would just contradict it).
+  const brk = practice && ctx.data.coachingSettings.breakDetection === 'manual' ? breakChip(false) : null;
+  const targetsBlock = field(
+    optionalLabel(practice ? 'What did you work on?' : 'Targets', '— grade now or later on Review'),
+    h('div', { class: 'stack', style: { gap: '10px' } }, targetsHost, brk ? brk.el : null),
   );
 
   const saveAndClose = (): void => {
@@ -773,7 +808,7 @@ function buildForm(
   // editor, L5 — see bindSaveKeys).
   bindResultKeys(form, resultRow);
   bindSaveKeys(form, { save: saveAndClose, saveAndNext });
-  bindTargetGradeKeys(form, chooser ? () => chooser.rows() : targetRows);
+  bindTargetGradeKeys(form, () => (chooser ? chooser.rows() : targetRows));
 
   // Nothing moves focus into the dialog by default, which leaves W/L/D dead and
   // (worse) leaves focus on the opener button, so a stray Enter re-clicks it and
