@@ -1,5 +1,5 @@
 import { battleTagName, type GepMessage, type RosterPlayer } from './model';
-import { isMatchEndMessage, isMatchStartMessage } from './matchAggregator';
+import { isMatchEndMessage, isMatchInProgressMessage, isMatchStartMessage } from './matchAggregator';
 import { K } from './matchAggregator/keys';
 import { asNumber, asObject, asString, asBool, parseRoster } from './matchAggregator/gepValues';
 import { deployableOf, resolveHero } from './resolvers/hero';
@@ -63,7 +63,17 @@ export const LIVE_FEED_CAP = 8;
 export interface LiveMatchState {
   /** `live` between a match_start and the match ending (or GEP detaching). */
   phase: 'idle' | 'live';
+  /**
+   * When THIS app saw the match open. For a match joined mid-way (see
+   * {@link joinedMidMatch}) that is when it attached, not when the match began.
+   */
   startedAt?: number;
+  /**
+   * The match was already running when the feed attached — the app (or GEP)
+   * started mid-match, so no `match_start` was ever seen and the real start
+   * time is unknown.
+   */
+  joinedMidMatch?: boolean;
   /** When the last match ENDED, for the idle screen's "just finished" note. */
   endedAt?: number;
   mapName?: string;
@@ -75,6 +85,22 @@ export interface LiveMatchState {
   roster: Record<string, RosterPlayer>;
   /** Most recent kill-feed entries, newest first, capped at {@link LIVE_FEED_CAP}. */
   feed: LiveKill[];
+  /**
+   * Match facts reported while IDLE, held for a mid-match join. GEP's attach
+   * snapshot sends `map`, `game_type`, `battle_tag` … BEFORE the `game_state`
+   * that reveals a match is running, so without this the joined board would
+   * open with no map. Never projected while idle; dropped when a match opens
+   * through `match_start` (whose own facts follow it).
+   */
+  lobby?: LobbyFacts;
+}
+
+/** The match facts {@link LiveMatchState.lobby} holds while idle. */
+export interface LobbyFacts {
+  mapName?: string;
+  gameType?: string;
+  queueType?: string;
+  localBattleTag?: string;
 }
 
 export const INITIAL_LIVE_MATCH: LiveMatchState = {
@@ -99,16 +125,77 @@ export const INITIAL_LIVE_MATCH: LiveMatchState = {
  *     window, and re-stamping `endedAt` so the idle screen claims a match just
  *     finished when none ever started.
  *  3. Then apply the message, and only then check for the end.
+ *
+ * The one exception to rule 2 is `game_state = match_in_progress` while idle:
+ * the feed attached to a match already running (the app restarted mid-match),
+ * whose `match_start` fired before anyone was listening. Without it the board
+ * would sit idle for the whole match while the roster streams past. In a normal
+ * match that state follows `match_start` and lands while already live — a no-op.
  */
 export function reduceLiveMatch(state: LiveMatchState, msg: GepMessage, now: number): LiveMatchState {
   if (isMatchStartMessage(msg)) {
     return { ...INITIAL_LIVE_MATCH, phase: 'live', startedAt: now, roster: {}, feed: [] };
   }
-  if (state.phase !== 'live') return state;
+  if (state.phase !== 'live') {
+    if (isMatchInProgressMessage(msg)) return joinRunningMatch(state, now);
+    return noteLobbyFact(state, msg);
+  }
 
   const next = applyMessage(state, msg, now);
   if (isMatchEndMessage(msg)) return { ...INITIAL_LIVE_MATCH, endedAt: now };
   return next;
+}
+
+/**
+ * Open a match the feed reports as already running. Starts from the facts the
+ * attach snapshot sent while idle; the roster fills from the next ticks.
+ */
+function joinRunningMatch(state: LiveMatchState, now: number): LiveMatchState {
+  const lobby = state.lobby ?? {};
+  return {
+    ...INITIAL_LIVE_MATCH,
+    phase: 'live',
+    startedAt: now,
+    joinedMidMatch: true,
+    roster: {},
+    feed: [],
+    ...(lobby.mapName ? { mapName: lobby.mapName } : {}),
+    ...(lobby.gameType ? { gameType: lobby.gameType } : {}),
+    ...(lobby.queueType ? { queueType: lobby.queueType } : {}),
+    ...(lobby.localBattleTag ? { localBattleTag: lobby.localBattleTag } : {}),
+  };
+}
+
+/**
+ * While idle, remember the match facts a later mid-match join would need. A
+ * `null` (the feed clears them as a match ends) forgets the fact, so a stale map
+ * can't carry into the next join. Same reference when nothing changed.
+ */
+function noteLobbyFact(state: LiveMatchState, msg: GepMessage): LiveMatchState {
+  const feature = msg.feature?.toLowerCase();
+  const key = msg.key?.toLowerCase();
+  let field: keyof LobbyFacts | undefined;
+  let value: string | undefined;
+  if (feature === K.gameInfo && key === K.battleTag) {
+    field = 'localBattleTag';
+    value = asString(msg.value);
+  } else if (feature === K.gameInfo && key === K.gameType) {
+    field = 'gameType';
+    value = asString(msg.value);
+  } else if (feature === K.gameInfo && key === K.queueType) {
+    field = 'queueType';
+    value = asString(msg.value);
+  } else if (feature === K.matchInfo && key === K.map) {
+    field = 'mapName';
+    value = resolveMapId(asString(msg.value)) ?? undefined;
+  }
+  if (!field) return state;
+  value = value || undefined;
+  if (state.lobby?.[field] === value) return state;
+  const lobby: LobbyFacts = { ...state.lobby };
+  if (value) lobby[field] = value;
+  else delete lobby[field];
+  return { ...state, lobby };
 }
 
 /**
@@ -420,14 +507,17 @@ export const FRESH_MATCH_START_MS = 30_000;
  * is not one, and neither is a window that opens (or reloads) while a match is
  * already running: that first push says `live`, but nobody just started
  * anything, and yanking someone off the screen they opened is the wrong move.
+ * A match JOINED mid-way (the app restarted during it) is catching up too, so it
+ * never fires either.
  * `prev` is the last payload this window received, `null` before the first.
  */
 export function isMatchStart(
   prev: { live: boolean; startedAt?: number } | null,
-  next: { live: boolean; startedAt?: number },
+  next: { live: boolean; startedAt?: number; joinedMidMatch?: boolean },
   now: number,
 ): boolean {
   if (!next.live || next.startedAt === undefined) return false;
+  if (next.joinedMidMatch) return false;
   if (prev?.live && prev.startedAt === next.startedAt) return false;
   if (!prev) return now - next.startedAt <= FRESH_MATCH_START_MS;
   return true;

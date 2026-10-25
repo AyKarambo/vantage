@@ -6,10 +6,9 @@
  * push channel, the tray icon, and the release log.
  */
 import {
-  INITIAL_GEP_TRACK, gepHealth, reduceGepSignal,
+  INITIAL_GEP_TRACK, gepHealth, gepSignalOf, reduceGepSignal,
   type GepHealthState, type GepHealthTrack,
 } from '../core/gepHealth';
-import { isMatchEndMessage, isMatchStartMessage } from '../core/matchAggregator';
 import type { GepMessage } from '../core/model';
 import { isGepOutdated, type ServiceStatus } from '../core/gepService';
 import type { GepStatusPayload } from '../shared/contract';
@@ -121,10 +120,7 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
       evaluate();
     },
     message(msg) {
-      const kind = isMatchStartMessage(msg) ? 'match-start'
-        : isMatchEndMessage(msg) ? 'match-end'
-        : 'event';
-      track = reduceGepSignal(track, { kind }, now());
+      track = reduceGepSignal(track, { kind: gepSignalOf(msg) }, now());
       evaluate();
     },
     current: payload,

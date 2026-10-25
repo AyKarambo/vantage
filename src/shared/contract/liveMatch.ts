@@ -39,8 +39,14 @@ export interface LiveKillEntry {
 export interface LiveMatchPayload {
   /** Whether a match is in progress right now. */
   live: boolean;
-  /** ms epoch the current match started. */
+  /** ms epoch the current match started — or, when `joinedMidMatch`, when Vantage joined it. */
   startedAt?: number;
+  /**
+   * The match was already running when the feed attached (the app restarted
+   * mid-match), so the real start time is unknown and `startedAt` is when
+   * tracking began.
+   */
+  joinedMidMatch?: boolean;
   /** ms epoch the last match ended — the idle screen's "just finished" note. */
   endedAt?: number;
   /** Canonical map name, once the feed reports one. */

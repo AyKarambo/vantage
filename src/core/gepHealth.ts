@@ -10,7 +10,10 @@
  * displayed state with `gepHealth`, mirroring the `breakReminder` pattern.
  */
 
-export type GepHealthState = 'no-game' | 'connected' | 'live' | 'stale';
+import { isMatchEndMessage, isMatchInProgressMessage, isMatchStartMessage } from './matchAggregator';
+import type { GepMessage } from './model';
+
+export type GepHealthState ='no-game' | 'connected' | 'live' | 'stale';
 
 /** Mid-match silence before the feed is flagged as stale. */
 export const STALE_AFTER_MS = 60_000;
@@ -37,6 +40,20 @@ export type GepSignal =
   | { kind: 'event' }
   | { kind: 'match-start' }
   | { kind: 'match-end' };
+
+/**
+ * Classify one GEP message as a feed signal. `game_state = match_in_progress`
+ * counts as a match start too: when the app (or GEP) attaches to a match
+ * already running, the `match_start` event fired before anyone was listening,
+ * and without this the indicator would claim "connected" — no match — for the
+ * whole match while its events stream in. In a normal match it lands right
+ * after `match_start`, where re-marking the match as running changes nothing.
+ */
+export function gepSignalOf(msg: GepMessage): 'match-start' | 'match-end' | 'event' {
+  if (isMatchStartMessage(msg) || isMatchInProgressMessage(msg)) return 'match-start';
+  if (isMatchEndMessage(msg)) return 'match-end';
+  return 'event';
+}
 
 /** Fold one raw feed signal into the track. Match boundaries are events too. */
 export function reduceGepSignal(t: GepHealthTrack, signal: GepSignal, now: number): GepHealthTrack {

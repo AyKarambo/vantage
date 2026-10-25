@@ -555,3 +555,82 @@ describe('isMatchStart — what "switch to Live when a match starts" reacts to',
     expect(isMatchStart(null, idle, NOW)).toBe(false);
   });
 });
+
+describe('reduceLiveMatch — joining a match already running', () => {
+  // The app restarted mid-match: GEP attaches and sends its snapshot — the
+  // match facts, then `game_state = match_in_progress` — but never a
+  // `match_start`, which fired before anyone was listening. Order as captured.
+  const attachSnapshot: GepMessage[] = [
+    info('game_info', 'game_mode', '22'),
+    info('game_info', 'game_queue_type', 'ROLE_QUEUE'),
+    info('match_info', 'map', '212'),
+    info('game_info', 'game_type', 'RANKED'),
+    info('game_info', 'battle_tag', 'Karambo#21442'),
+    info('game_info', 'game_state', 'match_in_progress'),
+  ];
+  const join = (t = 1000): LiveMatchState =>
+    attachSnapshot.reduce((s, m) => reduceLiveMatch(s, m, t), INITIAL_LIVE_MATCH);
+
+  it('goes live on match_in_progress while idle, marked as joined mid-match', () => {
+    const s = join(700);
+    expect(s.phase).toBe('live');
+    expect(s.startedAt).toBe(700);
+    expect(s.joinedMidMatch).toBe(true);
+  });
+
+  it('keeps the match facts the snapshot sent BEFORE the game_state', () => {
+    const s = join();
+    expect(s.gameType).toBe('RANKED');
+    expect(s.queueType).toBe('ROLE_QUEUE');
+    expect(s.localBattleTag).toBe('Karambo#21442');
+    expect(s.mapName).toBeDefined();
+    expect(s.lobby).toBeUndefined();
+  });
+
+  it('fills the scoreboard from the roster ticks that follow', () => {
+    let s = join();
+    s = reduceLiveMatch(s, roster(9, { player_name: 'KARAMBO', battlenet_tag: 'Karambo#21442', is_local: true, team: 1, kills: 4, deaths: 10 }), 1001);
+    s = reduceLiveMatch(s, roster(4, { player_name: 'NIGHTRULEZ', battlenet_tag: 'Nightrulez#1', team: 0, kills: 27, deaths: 8 }), 1002);
+    const r = liveRoster(s);
+    expect(r).toHaveLength(2);
+    expect(r.find((p) => p.isLocal)?.kills).toBe(4);
+    expect(liveTeamTotals(r).deathsKnown).toBe(true);
+  });
+
+  it('ends on match_end like any other match', () => {
+    const s = reduceLiveMatch(join(), event('match_end', null), 9000);
+    expect(s.phase).toBe('idle');
+    expect(s.endedAt).toBe(9000);
+    expect(s.joinedMidMatch).toBeUndefined();
+  });
+
+  it('is a no-op in a normal match, where the state follows match_start', () => {
+    const s = live(500);
+    expect(reduceLiveMatch(s, info('game_info', 'game_state', 'match_in_progress'), 600)).toBe(s);
+  });
+
+  it('is superseded by a match_start that arrives after it', () => {
+    const s = reduceLiveMatch(join(1000), start(), 1001);
+    expect(s.joinedMidMatch).toBeUndefined();
+    expect(s.startedAt).toBe(1001);
+  });
+
+  it('forgets a fact the feed clears with null, so it cannot leak into the next join', () => {
+    let s = reduceLiveMatch(INITIAL_LIVE_MATCH, info('game_info', 'game_type', 'RANKED'), 1);
+    s = reduceLiveMatch(s, info('game_info', 'game_type', null), 2);
+    s = reduceLiveMatch(s, info('game_info', 'game_state', 'match_in_progress'), 3);
+    expect(s.gameType).toBeUndefined();
+  });
+
+  it('keeps the same reference while idle when a fact repeats unchanged', () => {
+    const once = reduceLiveMatch(INITIAL_LIVE_MATCH, info('game_info', 'game_type', 'RANKED'), 1);
+    expect(reduceLiveMatch(once, info('game_info', 'game_type', 'RANKED'), 2)).toBe(once);
+    expect(reduceLiveMatch(INITIAL_LIVE_MATCH, info('game_info', 'game_mode', '22'), 1)).toBe(INITIAL_LIVE_MATCH);
+  });
+
+  it('does not switch the window to Live — a join is catching up, not a start', () => {
+    const NOW = 1_000_000;
+    expect(isMatchStart(null, { live: true, startedAt: NOW, joinedMidMatch: true }, NOW)).toBe(false);
+    expect(isMatchStart({ live: false }, { live: true, startedAt: NOW, joinedMidMatch: true }, NOW)).toBe(false);
+  });
+});
