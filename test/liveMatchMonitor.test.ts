@@ -182,6 +182,29 @@ describe('liveMatchMonitor — payload', () => {
   });
 });
 
+describe('liveMatchMonitor — round clock', () => {
+  it('publishes a round boundary at once, even inside the throttle window', () => {
+    const { monitor, published, at } = harness();
+    at(0);
+    monitor.message(event('match_start', null));
+    at(28_000);
+    monitor.message(info('roster', 'roster_0', JSON.stringify({ battle_tag: 'A#1', kills: 0 })));
+    at(28_200); // < PUBLISH_INTERVAL_MS after the last push
+    monitor.message(event('round_start', null));
+    expect(published.at(-1)?.clock).toEqual({ phase: 'round', bankedMs: 0, runningSince: 28_200 });
+  });
+
+  it('carries the clock only while live', () => {
+    const { monitor, published, at } = harness();
+    at(0);
+    monitor.message(event('match_start', null));
+    expect(published.at(-1)?.clock).toEqual({ phase: 'hero-select', bankedMs: 0 });
+    at(5_000);
+    monitor.message(event('match_end', null));
+    expect(published.at(-1)?.clock).toBeUndefined();
+  });
+});
+
 describe('toPayload', () => {
   it('is idle and empty for the initial state', () => {
     expect(toPayload(INITIAL_LIVE_MATCH, true)).toMatchObject({

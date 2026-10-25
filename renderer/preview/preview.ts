@@ -1433,6 +1433,11 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
     // (set once at match_start). Recomputing it per tick jitters by a few ms,
     // which reads as a brand-new match every second.
     startedAt: previewLiveStartedAt,
+    // The round clock, as the real monitor builds it: a short hero select,
+    // then the first round running (the game's own clock starts there).
+    clock: tick < 5
+      ? { phase: 'hero-select', bankedMs: 0 }
+      : { phase: 'round', bankedMs: 0, runningSince: previewLiveStartedAt + 5_000 },
     map: 'Ilios',
     totals: { yours: side(0), theirs: side(1), known: true, deathsKnown: true },
     gameType: 'competitive',

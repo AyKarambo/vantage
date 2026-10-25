@@ -40,6 +40,7 @@ import type { NetErrorKind } from '../core/netError';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
+import { MatchCheckpointStore } from '../store/matchCheckpoint';
 import { createDataProvider } from './dataProvider';
 import { createMcpBridge } from './mcp';
 import { createLogger, type Logger } from './logger';
@@ -205,6 +206,11 @@ function main(): void {
   const aggregator = new MatchAggregator(undefined, {
     mapModeOf: (map) => makeMapMode(mergeMasterData(DEFAULT_MASTER_DATA, masterDataStore.all()).maps)(map),
   });
+  // The match in progress survives an app restart: a checkpoint left by the
+  // last run is held until GEP names the running match, and adopted only if it
+  // is the same one (by the game's own match_id).
+  const matchCheckpoints = new MatchCheckpointStore(app.getPath('userData'));
+  aggregator.armResume(matchCheckpoints.load());
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray.png');
 
   // The migration executor repoints every store at once.
@@ -384,6 +390,7 @@ function main(): void {
     probeInfo: () => probeGepInfo(),
     // Read per match so a friend tagged mid-session labels the very next game.
     friendKeys: () => friends.keys(),
+    checkpoints: matchCheckpoints,
   });
 
   // The in-progress match: the same GEP stream the pipeline consumes, folded

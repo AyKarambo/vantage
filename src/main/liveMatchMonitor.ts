@@ -1,6 +1,6 @@
 import type { GepMessage, RosterPlayer, Role } from '../core/model';
 import {
-  INITIAL_LIVE_MATCH, liveMatchDetached, liveRoster, liveTeamTotals, localTeam, reduceLiveMatch,
+  INITIAL_LIVE_MATCH, liveClock, liveMatchDetached, liveRoster, liveTeamTotals, localTeam, reduceLiveMatch,
   type LiveMatchState,
 } from '../core/liveMatch';
 import { resolveRole } from '../core/resolvers/role';
@@ -21,8 +21,9 @@ import type { LiveMatchPayload, ScoreboardEntry } from '../shared/contract';
  * a serialize + IPC hop + full renderer repaint. A scoreboard that updates once
  * a second is indistinguishable from one that updates 20 times a second, so this
  * publishes at most once per {@link PUBLISH_INTERVAL_MS} — except for phase
- * changes, which are published immediately: "a match started" and "a match
- * ended" are the two things a delay would actually be felt on.
+ * changes and round boundaries, which are published immediately: "a match
+ * started", "a match ended" and "the clock started/stopped" are the things a
+ * delay would actually be felt on.
  */
 
 /** Minimum gap between mid-match pushes. Phase changes bypass it. */
@@ -54,7 +55,11 @@ export function createLiveMatchMonitor(deps: {
 
   const flush = (previous: LiveMatchState, force: boolean): void => {
     if (state === previous) return;
-    const phaseChanged = state.phase !== previous.phase;
+    // A round boundary bypasses the throttle like a phase change: the clock
+    // starts or stops on it, and the feed is often silent for ~40 s after one
+    // (the setup phase), so a withheld boundary would leave the clock wrong
+    // for that long.
+    const phaseChanged = state.phase !== previous.phase || state.rounds !== previous.rounds;
     const at = now();
     if (!phaseChanged && !force && at - lastPublishedAt < PUBLISH_INTERVAL_MS) return;
     lastPublishedAt = at;
@@ -91,6 +96,7 @@ export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): Live
     live: state.phase === 'live',
     ...(state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
     ...(state.joinedMidMatch ? { joinedMidMatch: true } : {}),
+    ...(state.phase === 'live' ? { clock: liveClock(state) } : {}),
     ...(state.endedAt !== undefined ? { endedAt: state.endedAt } : {}),
     ...(state.mapName !== undefined ? { map: state.mapName } : {}),
     ...(state.gameType !== undefined ? { gameType: state.gameType } : {}),

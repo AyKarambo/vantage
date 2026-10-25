@@ -99,7 +99,12 @@ export interface MatchRecord {
   finalScore?: string;
   startedAt?: number;
   endedAt?: number;
-  /** Wall-clock `match_start` → `match_end`, rounded to whole minutes — the displayed match length. */
+  /**
+   * The displayed match length in whole minutes: the summed GEP round time, the
+   * way the game's own clock counts it (stopped in hero select and between
+   * rounds). Captures without round events fall back to the wall clock
+   * `match_start` → `match_end`.
+   */
   durationMinutes?: number;
   /** Every GEP round observed, in order. Absent when the feed sent no round events. */
   rounds?: RoundSpan[];

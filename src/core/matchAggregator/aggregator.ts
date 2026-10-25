@@ -45,9 +45,61 @@ export class MatchAggregator {
    */
   private partyCount?: number;
 
+  /** A checkpoint from before a restart, waiting for the feed to name its match. */
+  private resume?: AggregatorCheckpoint;
+
   reset(): void {
     this.current = newMutable();
     this.partyCount = undefined;
+    this.resume = undefined;
+  }
+
+  /**
+   * A serializable copy of the match in progress, for surviving an app restart
+   * mid-match; `null` when no match is running or the feed hasn't named it yet
+   * (`match_id` is what a restart resumes by).
+   */
+  checkpoint(): AggregatorCheckpoint | null {
+    const c = this.current;
+    if (!c.gameMatchId || (c.record.startedAt == null && c.rounds.length === 0)) return null;
+    const { rosterAll, ...rest } = c;
+    return { version: 1, savedAt: this.now(), match: JSON.parse(JSON.stringify({ ...rest, rosterAll: [...rosterAll] })) };
+  }
+
+  /**
+   * Hold a checkpoint from before a restart. It is adopted when the feed next
+   * names the SAME `match_id` — GEP re-sends it in the snapshot it delivers on
+   * attach — and dropped for any other match. Too old to be the match still
+   * running ({@link RESUME_MAX_AGE_MS}) or unreadable, it is ignored.
+   */
+  armResume(cp: unknown): void {
+    this.resume = isCheckpoint(cp) && this.now() - cp.savedAt <= RESUME_MAX_AGE_MS ? cp : undefined;
+  }
+
+  /** True while a checkpoint is held, waiting for its match to be named. */
+  hasPendingResume(): boolean {
+    return this.resume !== undefined;
+  }
+
+  /**
+   * The feed named the running match. Adopt a held checkpoint for that same
+   * match — but only into a fresh session (nothing started or timed yet), so a
+   * live match is never overwritten. Facts this session already received
+   * (map, game type, BattleTag, party) win over the checkpoint's older copy.
+   */
+  private resumeIfSameMatch(gameMatchId: string): void {
+    const cp = this.resume;
+    if (!cp) return;
+    this.resume = undefined;
+    const fresh = this.current.record.startedAt == null && this.current.rounds.length === 0;
+    if (cp.match.gameMatchId !== gameMatchId || !fresh) return;
+    const now = this.current.record;
+    const restored = cp.match;
+    this.current = { ...restored, rosterAll: new Map(restored.rosterAll) } as MutableMatch;
+    const rec = this.current.record;
+    for (const k of ['gameType', 'queueType', 'mapName', 'battleTag', 'groupSize'] as const) {
+      if (now[k] !== undefined) (rec as unknown as Record<string, unknown>)[k] = now[k];
+    }
   }
 
   /**
@@ -145,7 +197,17 @@ export class MatchAggregator {
 
     if (feature === K.matchInfo || feature === K.roster) {
       if (key === K.map) rec.mapName = resolveMapId(asString(msg.value)) ?? rec.mapName;
-      else if (key === K.pseudoMatchId || key === K.matchId)
+      else if (key === K.matchId) {
+        const id = asString(msg.value);
+        // The game's own match id is stable across an app restart — the key a
+        // checkpoint resumes by (see resumeIfSameMatch).
+        if (id) {
+          this.resumeIfSameMatch(id);
+          this.current.gameMatchId = id;
+          this.current.record.matchId = id;
+        }
+      }
+      else if (key === K.pseudoMatchId)
         rec.matchId = asString(msg.value) ?? rec.matchId;
       else if (key === K.outcome) {
         const outcome = asString(msg.value);
@@ -302,7 +364,9 @@ export class MatchAggregator {
     const endedAt = this.now();
     rec.endedAt = endedAt;
     if (rec.startedAt != null) {
-      // Wall clock, rounded — the displayed match length, NOT the per-10 divisor.
+      // Wall clock, rounded — the displayed match length for a feed that sent
+      // no rounds; the round time below replaces it when rounds were seen.
+      // NOT the per-10 divisor.
       rec.durationMinutes = Math.max(0, Math.round((endedAt - rec.startedAt) / 60000));
     }
 
@@ -331,6 +395,13 @@ export class MatchAggregator {
       rec.rounds = rounds;
       const played = windowMinutes(playWindowsOf(rounds, this.mapModeOf(rec.mapName ?? '')));
       if (played > 0) rec.playedMinutes = played;
+      // The displayed match length is the ROUND time — what Overwatch's own
+      // clock counts. It is stopped through hero select (~28 s before the first
+      // round) and each ~1 s round change, and the post-match scoreboard falls
+      // after the last round. Checked against a match the game reported as
+      // 20:06. The per-10 divisor above is separate and stays as it was.
+      const roundMinutes = windowMinutes(rounds);
+      if (roundMinutes > 0) rec.durationMinutes = Math.round(roundMinutes);
     }
 
     this.closeCurrentHeroSegment(endedAt);
@@ -414,8 +485,31 @@ export function isMatchEndMessage(msg: GepMessage): boolean {
 
 // --- internal mutable state ---------------------------------------------------
 
+/** How old a checkpoint may be and still be the match running now — longer than any real match. */
+export const RESUME_MAX_AGE_MS = 90 * 60_000;
+
+/** The match in progress, serialized by {@link MatchAggregator.checkpoint}. */
+export interface AggregatorCheckpoint {
+  version: 1;
+  /** ms epoch the checkpoint was taken. */
+  savedAt: number;
+  /** The in-progress state, with the roster map as entries. Opaque to callers. */
+  match: Omit<MutableMatch, 'rosterAll'> & { rosterAll: Array<[string, RosterPlayer]> };
+}
+
+function isCheckpoint(cp: unknown): cp is AggregatorCheckpoint {
+  const c = cp as AggregatorCheckpoint | null;
+  return Boolean(
+    c && c.version === 1 && typeof c.savedAt === 'number' && c.match &&
+    typeof c.match.gameMatchId === 'string' && c.match.record && Array.isArray(c.match.rounds) &&
+    Array.isArray(c.match.segments) && Array.isArray(c.match.rosterAll),
+  );
+}
+
 interface MutableMatch {
   record: MatchRecord;
+  /** The game's own `match_id` — stable across an app restart, unlike anything Vantage generates. */
+  gameMatchId?: string;
   rosterLocal: Pick<
     RosterPlayer,
     'kills' | 'deaths' | 'assists' | 'damage' | 'healing' | 'mitigation'

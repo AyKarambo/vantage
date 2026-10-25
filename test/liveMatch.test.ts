@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  FRESH_MATCH_START_MS, INITIAL_LIVE_MATCH, LIVE_FEED_CAP, isMatchStart, reduceLiveMatch, liveMatchDetached,
+  FRESH_MATCH_START_MS, INITIAL_LIVE_MATCH, LIVE_FEED_CAP, clockElapsedMs, isMatchStart, liveClock, reduceLiveMatch, liveMatchDetached,
   liveRoster, liveOpponentNames, liveTrueDamage, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
 } from '../src/core/liveMatch';
 import type { GepMessage } from '../src/core/model';
@@ -632,5 +632,52 @@ describe('reduceLiveMatch — joining a match already running', () => {
     const NOW = 1_000_000;
     expect(isMatchStart(null, { live: true, startedAt: NOW, joinedMidMatch: true }, NOW)).toBe(false);
     expect(isMatchStart({ live: false }, { live: true, startedAt: NOW, joinedMidMatch: true }, NOW)).toBe(false);
+  });
+});
+
+describe('liveClock — the match clock runs only inside rounds, like the game’s', () => {
+  const roundStart = event('round_start', null);
+  const roundEnd = event('round_end', null);
+
+  it('is stopped through hero select, before the first round_start', () => {
+    const s = live(1000);
+    expect(liveClock(s)).toEqual({ phase: 'hero-select', bankedMs: 0 });
+    expect(clockElapsedMs(liveClock(s), 29_000)).toBe(0); // the old wall clock read 0:28 here
+  });
+
+  it('runs from round_start, stops between rounds, and banks each round', () => {
+    let s = live(0);
+    s = reduceLiveMatch(s, roundStart, 28_000);
+    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 28_000 });
+    expect(clockElapsedMs(liveClock(s), 88_000)).toBe(60_000);
+    s = reduceLiveMatch(s, roundEnd, 328_000);
+    expect(liveClock(s)).toEqual({ phase: 'between-rounds', bankedMs: 300_000 });
+    expect(clockElapsedMs(liveClock(s), 999_000)).toBe(300_000); // stopped
+    s = reduceLiveMatch(s, roundStart, 329_000);
+    expect(clockElapsedMs(liveClock(s), 389_000)).toBe(360_000); // the 1 s change is not counted
+  });
+
+  it('closes a round whose round_end was lost when the next one starts', () => {
+    let s = reduceLiveMatch(live(0), roundStart, 0);
+    s = reduceLiveMatch(s, roundStart, 60_000);
+    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 60_000, runningSince: 60_000 });
+  });
+
+  it('ignores a stray round_end, by reference', () => {
+    const s = live(0);
+    expect(reduceLiveMatch(s, roundEnd, 5)).toBe(s);
+  });
+
+  it('joined mid-round: runs from the join, and the round_end closes that round', () => {
+    let s = reduceLiveMatch(INITIAL_LIVE_MATCH, info('game_info', 'game_state', 'match_in_progress'), 10_000);
+    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 10_000 });
+    s = reduceLiveMatch(s, roundEnd, 70_000);
+    expect(liveClock(s).bankedMs).toBe(60_000);
+  });
+
+  it('joined in hero select: the first round_start shows that was no play, and drops it', () => {
+    let s = reduceLiveMatch(INITIAL_LIVE_MATCH, info('game_info', 'game_state', 'match_in_progress'), 10_000);
+    s = reduceLiveMatch(s, roundStart, 25_000);
+    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 25_000 });
   });
 });

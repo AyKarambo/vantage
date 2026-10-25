@@ -35,6 +35,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Changed
 
+- **The match clock counts like the game's.** The Live clock starts when the round starts, not during hero
+  select, and stops between rounds. A match's **Duration** is now that round time too, so it matches the length
+  Overwatch shows. Per-10 stats are unchanged.
 - **No group means Solo.** A game counts as Solo unless the game reported a group or you picked who you
   queued with — it no longer lands in "Unknown". The **Solo** chip in "Queued with" is now lit by default
   and is there to correct a group the game detected when you were actually alone.
@@ -52,6 +55,8 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **Restarting Vantage mid-match no longer loses the match.** If you restart Vantage during a match, it carries
+  on with the same match instead of saving only the last part it saw.
 - **Live board works when Vantage starts mid-match.** If Vantage (or its game connection) started while a
   match was already running, the Live board and status stayed idle for the whole match. It now picks the
   match up right away. Because the real start time isn't known, the clock reads "joined mid-match · … tracked".

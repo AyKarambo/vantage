@@ -41,7 +41,7 @@ import {
   readinessIcon, heroesIcon, mapsIcon, trendsIcon, notionSyncIcon, logsIcon, settingsIcon, aboutIcon, faqIcon,
 } from '../components/icons';
 import { overview } from '../views/overview';
-import { live } from '../views/live';
+import { live, liveClockText } from '../views/live';
 import { matches } from '../views/matches';
 import { matchDetail } from '../views/matchDetail';
 import { players } from '../views/players';
@@ -875,7 +875,9 @@ export class App {
     }
     // "Ilios · 12:34 · kills 3–4 (your team – enemy team)" once the map and both
     // sides' deaths have reported in; a plain "A match is in progress" before then.
-    const clock = p!.startedAt ? matchClock(p!.startedAt) : undefined;
+    // The round clock when the payload carries one (hero select / between
+    // rounds read as such), else the older wall clock.
+    const clock = p!.clock ? liveClockText(p!) : p!.startedAt ? matchClock(p!.startedAt) : undefined;
     const kills = p!.totals.deathsKnown ? liveTeamKills(p!.totals) : null;
     const killsText = kills ? `${kills.yours}–${kills.theirs}` : null;
     const title = [p!.map, clock, killsText ? `kills ${killsText} (your team – enemy team)` : undefined]

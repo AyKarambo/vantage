@@ -287,8 +287,10 @@ describe('MatchAggregator round timing (played time)', () => {
     // Round 1 fully fightable (5 min); round 2 minus the 15 s round-change overlay.
     const played = (5 * MIN + (5 * MIN + 3 - 15_000)) / MIN;
     expect(rec.playedMinutes).toBeCloseTo(played, 9);
-    // The wall clock stays the displayed duration: ~11.15 min → 11.
-    expect(rec.durationMinutes).toBe(11);
+    // The displayed duration is the ROUND time, as the game's own clock counts
+    // it — hero select, the round change and the scoreboard tail excluded:
+    // 5 min + ~5 min → 10, where the wall clock would read ~11.15.
+    expect(rec.durationMinutes).toBe(10);
     // The single hero's minutes are the played minutes (its segment ran from
     // match start to match end, clipped to the play windows).
     expect(rec.perHero).toHaveLength(1);
@@ -383,7 +385,7 @@ describe('MatchAggregator round timing (played time)', () => {
     // The hero minutes sum to the match's played minutes.
     expect(ph.Tracer.minutes! + ph.Genji.minutes!).toBeCloseTo(rec.playedMinutes!, 9);
     expect(rec.playedMinutes).toBeCloseTo((328_003 - windowStart) / MIN, 9);
-    expect(rec.durationMinutes).toBe(6); // 6.13 min wall clock
+    expect(rec.durationMinutes).toBe(5); // round time 5.0 min (the wall clock was 6.13)
   });
 
   it('a swap while a round is still open clips against the open round too (setup offset applied)', () => {
@@ -471,7 +473,7 @@ describe('MatchAggregator round timing (played time)', () => {
     expect(rec!.rounds).toEqual([{ startedAt: SIM_TIMING.roundStartMs, endedAt: SIM_TIMING.roundEndMs }]);
     expect(rec!.playedMinutes).toBeCloseTo((roundMs - ROUND_SETUP_SECONDS.Hybrid.first * 1000) / MIN, 9);
     expect(rec!.perHero![0].minutes).toBeCloseTo(rec!.playedMinutes!, 9);
-    expect(rec!.durationMinutes).toBe(Math.round((SIM_TIMING.roundEndMs + SIM_TIMING.matchEndAfterRoundEndMs) / MIN));
+    expect(rec!.durationMinutes).toBe(Math.round(roundMs / MIN)); // round time, not the wall clock
     expect(rec!.outcome).toBe('Victory');
     // The bare message list keeps match_end last (the roster-retention test slices it off).
     const messages = buildCompetitiveMatch({ battleTag: 'Karambo#21234', map: "King's Row" }, 'sim-rt');

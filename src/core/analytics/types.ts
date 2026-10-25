@@ -123,7 +123,11 @@ export interface GameRecord {
    * no rank anchor at the time — nothing to snapshot from.
    */
   rankAtStart?: RankPosition;
-  /** Wall-clock match length in whole minutes (the displayed "Duration"). Not a per-10 divisor — see {@link playedMinutes}. */
+  /**
+   * Match length in whole minutes (the displayed "Duration"): round time on
+   * captures with round events (older records: the wall clock). Not a per-10
+   * divisor — see {@link playedMinutes}.
+   */
   durationMinutes?: number;
   /**
    * Minutes the player could actually fight — the per-10-minute divisor.

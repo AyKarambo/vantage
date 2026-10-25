@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { games, gamesShort, net, pts, ratio, signed, RELATION_LABEL } from '../renderer/src/format';
-import { formatPlayedTime, parsePlayedTime } from '../renderer/src/format';
+import { clockText, formatPlayedTime, parsePlayedTime } from '../renderer/src/format';
 
 /**
  * K7: one spelling per quantity. `signed` switches to the real minus sign
@@ -66,5 +66,14 @@ describe('parsePlayedTime / formatPlayedTime — the editor played-time field', 
     expect(formatPlayedTime(20.1)).toBe('20:06');
     expect(formatPlayedTime(9.5)).toBe('9:30');
     expect(formatPlayedTime(parsePlayedTime('17:59')!)).toBe('17:59');
+  });
+});
+
+describe('clockText — the live round clock', () => {
+  it('formats a duration as mm:ss, flooring partial seconds and never negative', () => {
+    expect(clockText(754_000)).toBe('12:34');
+    expect(clockText(59_999)).toBe('0:59');
+    expect(clockText(20 * 60_000 + 6_000)).toBe('20:06');
+    expect(clockText(-5)).toBe('0:00');
   });
 });

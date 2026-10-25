@@ -1,5 +1,7 @@
 import { battleTagName, type GepMessage, type RosterPlayer } from './model';
-import { isMatchEndMessage, isMatchInProgressMessage, isMatchStartMessage } from './matchAggregator';
+import {
+  isMatchEndMessage, isMatchInProgressMessage, isMatchStartMessage, isRoundEndMessage, isRoundStartMessage,
+} from './matchAggregator';
 import { K } from './matchAggregator/keys';
 import { asNumber, asObject, asString, asBool, parseRoster } from './matchAggregator/gepValues';
 import { deployableOf, resolveHero } from './resolvers/hero';
@@ -86,6 +88,13 @@ export interface LiveMatchState {
   /** Most recent kill-feed entries, newest first, capped at {@link LIVE_FEED_CAP}. */
   feed: LiveKill[];
   /**
+   * The GEP rounds seen so far, in order; the last may still be running. Drives
+   * the match clock, which — like Overwatch's own — runs only INSIDE rounds:
+   * stopped through hero select (`match_start` → first `round_start`, ~28 s in
+   * every capture) and through each ~1 s round change.
+   */
+  rounds?: LiveRound[];
+  /**
    * Match facts reported while IDLE, held for a mid-match join. GEP's attach
    * snapshot sends `map`, `game_type`, `battle_tag` … BEFORE the `game_state`
    * that reveals a match is running, so without this the joined board would
@@ -93,6 +102,18 @@ export interface LiveMatchState {
    * through `match_start` (whose own facts follow it).
    */
   lobby?: LobbyFacts;
+}
+
+/** One GEP round on the live board. */
+export interface LiveRound {
+  startedAt: number;
+  endedAt?: number;
+  /**
+   * Opened by a mid-match join rather than a `round_start`: the round was
+   * already running when the feed attached — or we joined in hero select, which
+   * the next `round_start` reveals (see {@link applyRoundBoundary}).
+   */
+  implicit?: boolean;
 }
 
 /** The match facts {@link LiveMatchState.lobby} holds while idle. */
@@ -159,6 +180,9 @@ function joinRunningMatch(state: LiveMatchState, now: number): LiveMatchState {
     joinedMidMatch: true,
     roster: {},
     feed: [],
+    // Joined mid-round: the clock runs from the join. Only the time Vantage
+    // watched is known — the subtitle says so (joinedMidMatch).
+    rounds: [{ startedAt: now, implicit: true }],
     ...(lobby.mapName ? { mapName: lobby.mapName } : {}),
     ...(lobby.gameType ? { gameType: lobby.gameType } : {}),
     ...(lobby.queueType ? { queueType: lobby.queueType } : {}),
@@ -210,6 +234,7 @@ export function liveMatchDetached(state: LiveMatchState, now: number): LiveMatch
 }
 
 function applyMessage(state: LiveMatchState, msg: GepMessage, now: number): LiveMatchState {
+  if (isRoundStartMessage(msg) || isRoundEndMessage(msg)) return applyRoundBoundary(state, isRoundStartMessage(msg), now);
   const feature = msg.feature?.toLowerCase();
   const key = msg.key?.toLowerCase();
 
@@ -244,6 +269,53 @@ function applyMessage(state: LiveMatchState, msg: GepMessage, now: number): Live
     if (key?.startsWith(K.roster)) return applyRoster(state, key, msg.value);
   }
   return state;
+}
+
+/**
+ * Open or close a round. A `round_start` with a round still open closes it
+ * first (its `round_end` was lost) — except an IMPLICIT round from a join,
+ * which a `round_start` proves was hero select or a round change, not play, so
+ * it is dropped instead of counted. A `round_end` with nothing open is a stray.
+ */
+function applyRoundBoundary(state: LiveMatchState, start: boolean, now: number): LiveMatchState {
+  const rounds = [...(state.rounds ?? [])];
+  const last = rounds[rounds.length - 1];
+  const open = last && last.endedAt === undefined ? last : undefined;
+  if (start) {
+    if (open?.implicit) rounds.pop();
+    else if (open) rounds[rounds.length - 1] = { ...open, endedAt: now };
+    rounds.push({ startedAt: now });
+    return { ...state, rounds };
+  }
+  if (!open) return state;
+  rounds[rounds.length - 1] = { ...open, endedAt: now };
+  return { ...state, rounds };
+}
+
+/** Where the match clock stands — what the board shows instead of a wall clock. */
+export interface LiveClock {
+  /** Before the first round (hero select), inside a round, or in a round change. */
+  phase: 'hero-select' | 'round' | 'between-rounds';
+  /** Round time banked from the rounds already closed, in ms. */
+  bankedMs: number;
+  /** ms epoch the running round began; absent while the clock is stopped. */
+  runningSince?: number;
+}
+
+/** The match clock for the current state — Overwatch's own: round time only. */
+export function liveClock(state: Pick<LiveMatchState, 'rounds'>): LiveClock {
+  const rounds = state.rounds ?? [];
+  let bankedMs = 0;
+  for (const r of rounds) if (r.endedAt !== undefined) bankedMs += Math.max(0, r.endedAt - r.startedAt);
+  const last = rounds[rounds.length - 1];
+  if (!last) return { phase: 'hero-select', bankedMs };
+  if (last.endedAt === undefined) return { phase: 'round', bankedMs, runningSince: last.startedAt };
+  return { phase: 'between-rounds', bankedMs };
+}
+
+/** Elapsed match-clock time at `now`, in ms. */
+export function clockElapsedMs(clock: LiveClock, now: number): number {
+  return clock.bankedMs + (clock.runningSince !== undefined ? Math.max(0, now - clock.runningSince) : 0);
 }
 
 /**
