@@ -43,12 +43,12 @@ import { DashboardWindow } from './dashboard';
 import { createMatchPipeline } from './matchPipeline';
 import { MatchCheckpointStore } from '../store/matchCheckpoint';
 import { createDataProvider } from './dataProvider';
+import { createEventHub, type AppEvents } from './events';
 import { createMcpBridge } from './mcp';
 import { createLogger, type Logger } from './logger';
 import { createGepStatusMonitor } from './gepStatusMonitor';
 import { createLiveMatchMonitor } from './liveMatchMonitor';
-import type { LogEntry } from '../core/logging';
-import { EVENT_CHANNELS, type DataLocation, type DataLocationResult, type GameLoggedPayload, type PendingChangedPayload, type GepStatusPayload, type DevModeAuthStatusPayload, type LiveMatchPayload } from '../shared/contract';
+import { EVENT_CHANNELS, type DataLocation, type DataLocationResult } from '../shared/contract';
 import { TrayController, type TrayHandlers } from './tray';
 import { setAutoLaunch } from './autolaunch';
 import { runSimulation } from './simulate';
@@ -96,13 +96,16 @@ if (!app.requestSingleInstanceLock()) {
 function main(): void {
   let config = loadConfig();
 
+  // Subsystems publish here and never reach for the window or the tray, which
+  // subscribe once they exist; whatever is emitted before then has no listener.
+  const events = createEventHub<AppEvents>();
+
   // The release log exists before everything else so every subsystem can be
-  // wired to it. The dashboard push hook is filled in once the window exists.
-  let pushEntry: (e: LogEntry) => void = () => {};
+  // wired to it.
   const log = createLogger({
     dir: path.join(app.getPath('userData'), 'logs'),
     getSecrets: () => [getNotionToken() ?? ''].filter(Boolean),
-    onEntry: (e) => pushEntry(e),
+    onEntry: (e) => events.emit('onLogEntry', e),
     mirrorToConsole: !app.isPackaged,
   });
   log.info('main', 'Vantage started', { version: app.getVersion(), sensor: config.sensor });
@@ -318,17 +321,6 @@ function main(): void {
     return res.filePath;
   }
 
-  // Filled in once the data provider exists (mirrors pushEntry/publishStatus):
-  // the Settings apply-closure below is constructed as part of the provider's
-  // own dependencies, so it can't reference the bridge directly.
-  let setMcpEnabled: (enabled: boolean) => void = () => {};
-  let pushSyncProgress: (done: number, total: number) => void = () => {};
-  // Filled in once the dashboard window exists (mirrors pushEntry/pushSyncProgress).
-  let pushGameLogged: (payload: GameLoggedPayload) => void = () => {};
-  // Filled in once the dashboard window exists — the Settings apply-closure
-  // below needs to reach the LIVE window (W7's Ctrl+=/Settings text-size),
-  // same reason pushGameLogged is deferred.
-  let applyZoom: (factor: number) => void = () => {};
   const notion = new NotionRuntime({
     outbox,
     config: () => config,
@@ -346,7 +338,7 @@ function main(): void {
       // error, still toasts, exactly as before this fix.
       if (shouldToastNetError(kind)) tray.notifyError(title, body);
     },
-    onSyncProgress: (done, total) => pushSyncProgress(done, total),
+    onSyncProgress: (done, total) => events.emit('onSyncProgress', { done, total }),
     // Read live on every export: the user's own authored targets, active AND
     // archived — same "visible in-app" semantics `buildTargets` uses for the
     // dashboard's Targets library (everything except the hidden Notion
@@ -368,13 +360,6 @@ function main(): void {
     mapNames: allMapNames,
   });
 
-  // Fires when the pending ("needs result") set changes, so an open Review
-  // screen re-fetches (placeholder until the window exists, like pushGameLogged).
-  let pushPendingChanged: (payload?: PendingChangedPayload) => void = () => {};
-  // Fires after any write that moves the dashboard (a review, ±SR, a rank
-  // anchor, a placement run, an import) — including writes the MCP server makes
-  // on the user's behalf, which reach no renderer callback of their own.
-  let pushDataChanged: () => void = () => {};
   // GEP's getInfo(), bound once the GEP service exists (gep sensor only) — the
   // pipeline probes it at match_start when the lobby's party count was missed.
   let probeGepInfo: () => Promise<unknown> = () => Promise.resolve(null);
@@ -386,8 +371,9 @@ function main(): void {
     log: log.adapter('pipeline'),
     // Tell the renderer which account a newly recorded competitive match landed on
     // — drives the live dashboard refresh and the F4 account auto-switch.
-    onGameLogged: (payload) => pushGameLogged(payload),
-    onPendingChanged: (payload) => pushPendingChanged(payload),
+    onGameLogged: (payload) => events.emit('onGameLogged', payload),
+    // The pending ("needs result") set changed, so an open Review screen re-fetches.
+    onPendingChanged: (payload) => events.emit('onPendingChanged', payload ?? {}),
     probeInfo: () => probeGepInfo(),
     // Read per match so a friend tagged mid-session labels the very next game.
     friendKeys: () => friends.keys(),
@@ -396,21 +382,18 @@ function main(): void {
 
   // The in-progress match: the same GEP stream the pipeline consumes, folded
   // for READING rather than writing (the pipeline emits only at match end).
-  // Publishes through the placeholder until the window exists, like the others.
-  let pushLiveMatch: (p: LiveMatchPayload) => void = () => {};
   const liveMatchMonitor = createLiveMatchMonitor({
-    publish: (p) => pushLiveMatch(p),
+    publish: (p) => events.emit('onLiveMatch', p),
     // Read per publish, never captured, so the Settings toggle applies at once.
     killFeedEnabled: () => config.ui.liveKillFeed,
   });
 
   // Truthful connection indicator: folds GEP signals into the four-state
   // health model and fans changes out to the window, tray, and log.
-  let publishStatus: (p: GepStatusPayload) => void = () => {};
   const statusMonitor = createGepStatusMonitor({
     sensor: config.sensor === 'gep' ? 'gep' : 'counterwatch',
     log: (scope, message, fields) => log.info(scope, message, fields),
-    publish: (p) => publishStatus(p),
+    publish: (p) => events.emit('onGepStatus', p),
   });
 
   // Dev-mode auth: a one-shot, runtime-verified confirmation that ow-electron
@@ -418,12 +401,11 @@ function main(): void {
   // they were present in the env (see core/devMode.ts's doc comments). Resolves
   // at most once per process run; wiring for *how* it resolves lives further
   // down, independent of `config.sensor` (see the comment there for why).
-  let publishDevModeAuth: (p: DevModeAuthStatusPayload) => void = () => {};
   const devModeAttempted = computeDevModeAttempted({ packaged: app.isPackaged, env: process.env });
   const devModeAuthMonitor = createDevModeAuthMonitor({
     attempted: devModeAttempted,
     log: (scope, message, fields) => log.info(scope, message, fields),
-    publish: (p) => publishDevModeAuth(p),
+    publish: (p) => events.emit('onDevModeAuthStatus', p),
   });
 
   const dataProvider = createDataProvider({
@@ -447,7 +429,9 @@ function main(): void {
     resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),
     dismissPending: (matchId) => pipeline.dismissPending(matchId),
     notify: (title, body) => tray.notify(title, body),
-    announceChange: () => pushDataChanged(),
+    // Any write that moves the dashboard — including the MCP server's, which
+    // reach no renderer callback of their own.
+    announceChange: () => events.emit('onDataChanged', undefined),
     // Demo season draws only from the active competitive pool (spec AC 24).
     sampleGames: () => generateSampleGames(180, 42, activeMapNames()),
     logger: log,
@@ -526,7 +510,7 @@ function main(): void {
         if (patch.mcpEnabled !== undefined) {
           saveLocalUiConfig({ mcpEnabled: patch.mcpEnabled });
           config = loadConfig();
-          setMcpEnabled(config.ui.mcpEnabled);
+          events.emit('mcpEnabled', config.ui.mcpEnabled);
         }
         // Text-size zoom (W7) — a running-window resource like mcpEnabled
         // above: applied to the live webContents now, not just next launch.
@@ -537,7 +521,7 @@ function main(): void {
           const clamped = clampZoom(patch.uiZoom);
           saveLocalUiConfig({ uiZoom: clamped });
           config = loadConfig();
-          applyZoom(clamped);
+          events.emit('uiZoom', clamped);
         }
         return {
           closeToTray: config.ui.closeToTray,
@@ -632,8 +616,8 @@ function main(): void {
     provider: dataProvider,
     log: (message, fields) => log.info('mcp', message, fields),
   });
-  setMcpEnabled = (enabled) => void mcpBridge.setEnabled(enabled);
-  setMcpEnabled(config.ui.mcpEnabled);
+  events.on('mcpEnabled', (enabled) => void mcpBridge.setEnabled(enabled));
+  void mcpBridge.setEnabled(config.ui.mcpEnabled);
   // Close the pipe on the way out rather than relying on process teardown, so a
   // restart never races a still-bound stale endpoint.
   app.on('will-quit', () => void mcpBridge.stop());
@@ -676,13 +660,15 @@ function main(): void {
     },
     zoomFactor: () => config.ui.uiZoom ?? 1,
   });
-  applyZoom = (factor) => dashboard.setZoomFactor(factor);
-  pushEntry = (e) => dashboard.push(EVENT_CHANNELS.onLogEntry, e);
-  publishDevModeAuth = (p) => dashboard.push(EVENT_CHANNELS.onDevModeAuthStatus, p);
+  events.on('uiZoom', (factor) => dashboard.setZoomFactor(factor));
+  // Every renderer push goes out on its contract channel.
+  for (const [event, channel] of Object.entries(EVENT_CHANNELS) as Array<[keyof typeof EVENT_CHANNELS, string]>) {
+    events.on(event, (payload) => dashboard.push(channel, payload));
+  }
+  // The tray reads three of them too.
   let prevService: ServiceStatus | null = null;
   let prevOutdated = false;
-  publishStatus = (p) => {
-    dashboard.push(EVENT_CHANNELS.onGepStatus, p);
+  events.on('onGepStatus', (p) => {
     tray.setHealth(p.state);
     // Notify on a service down/recovery transition (banner always shows; only the
     // toast is gated by the user's setting). prevService is tracked regardless, so
@@ -705,26 +691,21 @@ function main(): void {
       if (note) tray.notify(note.title, note.body);
     }
     prevOutdated = outdated;
-  };
-  pushSyncProgress = (done, total) => dashboard.push(EVENT_CHANNELS.onSyncProgress, { done, total });
-  pushGameLogged = (payload) => {
-    dashboard.push(EVENT_CHANNELS.onGameLogged, payload);
+  });
+  events.on('onGameLogged', (payload) => {
     // The tray's "This sitting" read (S5) — scoped to whichever account the
     // match just landed on, same gap threshold the dashboard's own Current
     // session card uses, so the two can never disagree.
     const scoped = history.all().filter((g) => g.account === payload.account);
     const session = currentSession(scoped, Date.now(), config.sessionSettings.gapMinutes);
     tray.setState({ session: session ? { wins: session.wins, losses: session.losses } : undefined });
-  };
-  pushPendingChanged = (payload) => dashboard.push(EVENT_CHANNELS.onPendingChanged, payload);
-  pushLiveMatch = (p) => {
-    dashboard.push(EVENT_CHANNELS.onLiveMatch, p);
+  });
+  events.on('onLiveMatch', (p) => {
     // The tray's "Live: …" read (S5) — outside the dashboard window is where
     // it's actually needed, since that's the one place a running match was
     // otherwise invisible.
     tray.setState({ live: p.live && p.startedAt ? { map: p.map, startedAt: p.startedAt } : undefined });
-  };
-  pushDataChanged = () => dashboard.push(EVENT_CHANNELS.onDataChanged, undefined);
+  });
   statusMonitor.start();
 
   // Overwolf "front app" behaviour: relaunching the app (e.g. clicking its dock
