@@ -1,3 +1,5 @@
+import { plainText, type NotionPage } from './pages';
+
 /**
  * Pure id-derivation, grouping and canonical-row selection for Notion
  * Gametracker duplicate handling — client-free like `gametrackerSchema.ts` so
@@ -51,13 +53,10 @@ export function embeddedPageId(matchId: string): string | undefined {
  * `pickText` reader exactly (`plain_text` preferred, falling back to
  * `text.content`, joined and trimmed).
  */
-export function rowRefOf(page: any): RowRef {
+export function rowRefOf(page: NotionPage): RowRef {
   const pageId = String(page?.id ?? '');
   const createdTime = page?.created_time ?? undefined;
-  const richText = page?.properties?.['Match ID']?.rich_text;
-  const matchIdText = Array.isArray(richText)
-    ? richText.map((t: any) => t.plain_text ?? t.text?.content ?? '').join('').trim()
-    : '';
+  const matchIdText = plainText(page?.properties?.['Match ID']?.rich_text);
   return { pageId, createdTime, ...(matchIdText ? { matchIdText } : {}) };
 }
 

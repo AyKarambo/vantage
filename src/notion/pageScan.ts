@@ -1,5 +1,6 @@
 import { Client } from '@notionhq/client';
 import { resolveDataSourceId } from './dataSourceResolver';
+import type { NotionPage } from './pages';
 
 /**
  * Pages through every row of a Gametracker/Maps data source, resolving
@@ -15,7 +16,7 @@ import { resolveDataSourceId } from './dataSourceResolver';
  * `resolveDataSourceId` call on every page fetch. It resolves once itself
  * and pages via {@link queryDataSourcePages} with the already-resolved id.
  */
-export async function queryAllPages(client: Client, idOrDataSourceId: string): Promise<any[]> {
+export async function queryAllPages(client: Client, idOrDataSourceId: string): Promise<NotionPage[]> {
   const dataSourceId = await resolveDataSourceId(client, idOrDataSourceId);
   return queryDataSourcePages(client, dataSourceId);
 }
@@ -26,16 +27,16 @@ export async function queryAllPages(client: Client, idOrDataSourceId: string): P
  * caller that memoizes its own resolution (`NotionImporter`) can page
  * without a redundant resolve round trip.
  */
-export async function queryDataSourcePages(client: Client, dataSourceId: string): Promise<any[]> {
-  const results: any[] = [];
+export async function queryDataSourcePages(client: Client, dataSourceId: string): Promise<NotionPage[]> {
+  const results: NotionPage[] = [];
   let cursor: string | undefined;
   do {
-    const res: any = await client.dataSources.query({
+    const res = await client.dataSources.query({
       data_source_id: dataSourceId,
       start_cursor: cursor,
       page_size: 100,
     });
-    results.push(...(res.results ?? []));
+    results.push(...(res.results as NotionPage[]));
     cursor = res.has_more ? res.next_cursor ?? undefined : undefined;
   } while (cursor);
   return results;
