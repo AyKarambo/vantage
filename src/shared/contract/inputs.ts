@@ -95,6 +95,12 @@ export interface MatchEditInput {
    * receiver. There is no "clear" — every match keeps SOME timestamp.
    */
   playedAt?: number;
+  /**
+   * Corrected played time in minutes — the per-10 divisor — or `null` to drop a
+   * correction and use the recorded time again; `undefined` leaves it unchanged.
+   * Applies to any match.
+   */
+  playedMinutes?: number | null;
   /** New party, or `null` to clear it; `undefined` leaves it unchanged. Applies to any match. */
   party?: PartyInput;
 }

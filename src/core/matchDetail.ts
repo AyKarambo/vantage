@@ -108,6 +108,7 @@ export function matchDetail(
     rankAtStart: game.rankAtStart,
     durationMinutes: game.durationMinutes,
     ...(played ? { playedMinutes: played.minutes, playedSource: played.source } : {}),
+    ...(game.playedMinutesOverride != null ? { playedMinutesEdited: true } : {}),
     performance: game.performance,
     finalScore: game.finalScore,
     heroes: game.heroes,

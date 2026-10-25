@@ -19,6 +19,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **Fix a match's played time.** **Edit match** now has a **Played time** field (`mm:ss`, e.g. `20:06`). Use it
+  when Vantage only tracked part of a match, so the per-10 stats come out right. Clear it to use the recorded
+  time again.
 - **Practice focus for Mental and Review.** While you're working on targets, Mental and Review lead with
   how well you executed them, and win/loss moves to second place. Set it in **Settings → Coaching**: Auto
   (on while any target is active, the default), Always on, or Off.
