@@ -95,6 +95,24 @@ describe('focusPreselection', () => {
     expect(focusPreselection([old, newer, g], g, 'sticky', [], selectable)).toEqual(['a']);
   });
 
+  it('a hero-scoped pick survives a game it was out of scope for', () => {
+    // 'a' is Genji-only; 'b' applies everywhere. A Sojourn game in between can
+    // only offer 'b', so its pick must not overwrite the Genji choice.
+    const scopes = new Map([['a', { heroScope: ['Genji'] }]]);
+    const g1 = game(0, { focusTargetIds: ['a'], grades: { a: 'hit' } });
+    const sojourn = { ...game(15, { focusTargetIds: ['b'], grades: { b: 'hit' } }), heroes: ['Sojourn'] };
+    const g3 = game(30);
+    const all = [g1, sojourn, g3];
+    for (const mode of ['sitting', 'sticky'] as const) {
+      expect(focusPreselection(all, g3, mode, [], selectable, undefined, scopes)).toEqual(['a']);
+      // Without scopes it is the old nearest/latest read.
+      expect(focusPreselection(all, g3, mode, [], selectable)).toEqual(['b']);
+    }
+    // The next Sojourn game still takes the latest choice — the Sojourn one.
+    const sojourn2 = { ...game(45), heroes: ['Sojourn'] };
+    expect(focusPreselection([...all, sojourn2], sojourn2, 'sticky', [], selectable, undefined, scopes)).toEqual(['b']);
+  });
+
   it('falls back to the check-in\'s today\'s focus for that sitting only (AC8)', () => {
     const g = game(30);
     const nextSitting = game(400);

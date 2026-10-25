@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { autoParty, effectiveGroupSize, normalizeMembers, ownTeammates, partyFromInput, partyKey } from '../src/core/party';
+import { autoParty, carriedParty, effectiveGroupSize, normalizeMembers, ownTeammates, partyFits, partyFromInput, partyKey, sittingPartyFill } from '../src/core/party';
+import type { GameRecord } from '../src/core/analytics';
 import type { RosterPlayer } from '../src/core/model';
 
 const me: RosterPlayer = { battleTag: 'Me#1111', isLocal: true, team: 0 };
@@ -101,5 +102,46 @@ describe('partyFromInput', () => {
     expect(partyFromInput({ members: [] })).toEqual({ members: [], source: 'manual' });
     expect(partyFromInput(undefined)).toBeUndefined();
     expect(partyFromInput({ members: 'x' })).toBeUndefined();
+  });
+});
+
+describe('carrying a group through a sitting', () => {
+  const MIN = 60_000;
+  const T0 = Date.UTC(2026, 9, 25, 14, 0);
+  const duoRoster: RosterPlayer[] = [me, { battleTag: 'Lampenlicht#2153', team: 0 }, { battleTag: 'Rando#9', team: 0 }, { battleTag: 'Enemy#1', team: 1 }];
+  const g = (id: string, min: number, extra: Partial<GameRecord> = {}): GameRecord => ({
+    matchId: id, timestamp: T0 + min * MIN, account: 'Main', role: 'support', map: 'Ilios', result: 'Win',
+    gameType: 'Competitive', heroes: ['Ana'], groupSize: 2, roster: duoRoster, ...extra,
+  });
+  const duo = { members: ['Lampenlicht#2153'], source: 'manual' as const };
+
+  it('partyFits checks group size and that every member is on your team', () => {
+    expect(partyFits(g('a', 0), ['Lampenlicht#2153'])).toBe(true);
+    expect(partyFits(g('a', 0, { groupSize: 3 }), ['Lampenlicht#2153'])).toBe(false);
+    expect(partyFits(g('a', 0), ['Enemy#1'])).toBe(false);
+    expect(partyFits(g('a', 0), ['Someone#5'])).toBe(false);
+    expect(partyFits(g('a', 0, { party: duo }), ['Lampenlicht#2153'])).toBe(false);
+    // No roster: the group size alone has to agree; with neither, nothing fits.
+    expect(partyFits(g('a', 0, { roster: undefined }), ['X'])).toBe(true);
+    expect(partyFits(g('a', 0, { roster: undefined, groupSize: undefined }), ['X'])).toBe(false);
+  });
+
+  it('carriedParty takes the previous game\'s group in the same sitting', () => {
+    const prev = g('p', 0, { party: duo });
+    expect(carriedParty([prev], g('n', 15))).toEqual({ members: ['Lampenlicht#2153'], source: 'auto' });
+    // A new sitting, an explicit Solo, or a roster that disagrees carries nothing.
+    expect(carriedParty([prev], g('n', 300))).toBeUndefined();
+    expect(carriedParty([g('p', 0, { party: { members: [], source: 'manual' } })], g('n', 15))).toBeUndefined();
+    expect(carriedParty([prev], g('n', 15, { roster: [me, { battleTag: 'Other#1', team: 0 }] }))).toBeUndefined();
+  });
+
+  it('sittingPartyFill spreads a pick to neighbours until the group changes', () => {
+    const all = [
+      g('s0', 0, { groupSize: 1 }), // solo before — group changed, stop
+      g('s1', 15), g('s2', 30), g('s3', 45), g('s4', 60),
+      g('later', 400),
+    ];
+    expect(sittingPartyFill(all, 's2', ['Lampenlicht#2153']).sort()).toEqual(['s1', 's3', 's4']);
+    expect(sittingPartyFill(all, 's2', [])).toEqual([]);
   });
 });

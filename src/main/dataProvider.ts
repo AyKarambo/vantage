@@ -28,7 +28,7 @@ import { resolveAccount } from '../core/resolvers/account';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { resolveResult } from '../core/resolvers/result';
 import type { Role, Result, MatchRecord } from '../core/model';
-import { partyFromInput } from '../core/party';
+import { partyFromInput, sittingPartyFill } from '../core/party';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -249,6 +249,14 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
       const party = partyFromInput(input.party);
       if (party !== undefined) deps.history.editManual(input.matchId, { party });
+      // One pick covers the sitting: the unlabelled games around this one whose
+      // roster / group size still agree take the same group, so a duo isn't
+      // re-picked on every card.
+      if (party?.members.length) {
+        for (const id of sittingPartyFill(deps.history.all(), input.matchId, party.members)) {
+          deps.history.editManual(id, { party: { members: [...party.members], source: 'auto' } });
+        }
+      }
       // GEP can't report SR, so the player may set it here (competitive only);
       // `null` clears, `undefined` leaves it unchanged (editManual deletes on null).
       if (input.srDelta !== undefined) {

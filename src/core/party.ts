@@ -4,6 +4,7 @@
  */
 import type { GameRecord } from './analytics/types';
 import { battleTagName, type MatchParty, type RosterPlayer } from './model';
+import { sittingsOf } from './practice/sittings';
 
 export type { MatchParty } from './model';
 
@@ -72,6 +73,62 @@ export function autoParty(
   const friends = ownTeammates(game.roster).filter((n) => friendKeys.has(partyKey(n)));
   if (friends.length !== game.groupSize - 1) return undefined;
   return { members: friends, source: 'auto' };
+}
+
+/**
+ * Whether a party of `members` is a believable label for an unlabelled game —
+ * the test behind carrying a group across one sitting. The GEP-reported group
+ * size must agree when there is one, and when the roster tells teams apart
+ * every member must be on the player's team. With neither a roster nor a group
+ * size there is nothing to check against, so nothing carries.
+ */
+export function partyFits(
+  game: Pick<GameRecord, 'party' | 'groupSize' | 'roster'>,
+  members: readonly string[],
+): boolean {
+  if (game.party || !members.length) return false;
+  if (game.groupSize !== undefined && game.groupSize !== members.length + 1) return false;
+  if (!game.roster?.length) return game.groupSize !== undefined;
+  // Same caution as autoParty: a roster that has teams but no known local team
+  // can't say which side a name was on.
+  const local = game.roster.find((p) => p.isLocal);
+  if (local?.team === undefined && game.roster.some((p) => p.team !== undefined)) return false;
+  const team = new Set(ownTeammates(game.roster).map(partyKey));
+  return members.every((m) => team.has(partyKey(m)));
+}
+
+/**
+ * The group to carry onto a freshly captured `game` from earlier in the same
+ * sitting: the latest game before it with a recorded party. An explicit Solo
+ * there carries nothing, and neither does a party that doesn't {@link partyFits fit}.
+ */
+export function carriedParty(history: readonly GameRecord[], game: GameRecord): MatchParty | undefined {
+  if (game.party) return undefined;
+  const sitting = sittingsOf([...history.filter((g) => g.matchId !== game.matchId), game])
+    .find((s) => s.some((g) => g.matchId === game.matchId)) ?? [];
+  const prev = sitting.filter((g) => g.timestamp < game.timestamp && g.party).pop();
+  if (!prev?.party?.members.length || !partyFits(game, prev.party.members)) return undefined;
+  return { members: [...prev.party.members], source: 'auto' };
+}
+
+/**
+ * The unlabelled games of `matchId`'s sitting that should take on the party the
+ * player just set there: walking outward from it in both directions, every
+ * neighbour the party {@link partyFits fits}, stopping at the first game that
+ * already has a party or doesn't fit (the group changed there).
+ */
+export function sittingPartyFill(all: readonly GameRecord[], matchId: string, members: readonly string[]): string[] {
+  if (!members.length) return [];
+  const sitting = sittingsOf(all).find((s) => s.some((g) => g.matchId === matchId));
+  if (!sitting) return [];
+  const at = sitting.findIndex((g) => g.matchId === matchId);
+  const out: string[] = [];
+  for (const step of [-1, 1]) {
+    for (let i = at + step; i >= 0 && i < sitting.length && partyFits(sitting[i], members); i += step) {
+      out.push(sitting[i].matchId);
+    }
+  }
+  return out;
 }
 
 /**
