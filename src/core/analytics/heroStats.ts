@@ -24,6 +24,7 @@
 import type { GameRecord, HeroSummary, HeroStat } from './types';
 import { heroCredits, heroPlayedMinutes, playedTimeOf, type MapModeResolver } from '../playedTime';
 import { roundCredit } from './grouping';
+import { round1 } from '../num';
 
 export interface HeroStatsOptions {
   /** Map name → mode for the played-time estimate on captures without rounds (defaults to the built-in table). */
@@ -109,4 +110,3 @@ function scale(t: HeroStat, f: number) {
     mitigation: Math.round(t.mitigation * f),
   };
 }
-const round1 = (n: number) => Math.round(n * 10) / 10;

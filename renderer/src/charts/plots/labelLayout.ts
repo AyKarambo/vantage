@@ -1,3 +1,4 @@
+import { clamp } from '../../../../src/core/num';
 /**
  * Collision-free label placement for a point chart — pure geometry, no DOM, so
  * it unit-tests in node (see test/labelLayout.test.ts).
@@ -57,7 +58,6 @@ const DOT_HIT = 500;
 const AMBIGUOUS = 9;
 const REFINE_PASSES = 3;
 
-const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 
 const overlaps = (a: Rect, b: Rect, pad = 0): boolean =>
   a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;

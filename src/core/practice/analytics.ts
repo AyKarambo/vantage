@@ -4,6 +4,7 @@ import { DEFAULT_COACHING, type CoachingSettings } from '../coachingSettings';
 import { isTilted } from '../mental';
 import { COST_MIN_SAMPLE, type TiltBucket } from '../mentalAnalytics';
 import { gameContexts, PRACTICE_SITTING_GAP_MINUTES, sittingsOf, type GameContext } from './sittings';
+import { round1 } from '../num';
 
 /**
  * Practice reads for Mental and Review (issue #321): how often the player did
@@ -413,5 +414,3 @@ export interface PracticeSummary {
   /** What Log Match pre-selects for a game logged right now (stickiness + check-in, like an inbox row's `suggestedFocus`). */
   nextFocus: string[];
 }
-
-const round1 = (n: number): number => Math.round(n * 10) / 10;

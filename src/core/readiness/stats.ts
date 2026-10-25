@@ -38,6 +38,4 @@ export function winsorizedZ(
 }
 
 /** Clamp helper shared by the subscore math. */
-export function clamp(n: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, n));
-}
+export { clamp } from '../num';

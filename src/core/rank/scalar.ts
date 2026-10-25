@@ -1,5 +1,6 @@
 import { TIERS } from './engine';
 import type { RankPosition } from './types';
+import { clamp } from '../num';
 
 /**
  * A monotonic scalar for a ladder position — the reversible representation the
@@ -20,7 +21,6 @@ const POINTS_PER_TIER = POINTS_PER_DIVISION * DIVISIONS_PER_TIER; // 500
 const MAX_POINTS =
   (TIERS.length - 1) * POINTS_PER_TIER + (DIVISIONS_PER_TIER - 1) * POINTS_PER_DIVISION + 100;
 
-const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 const tierIdx = (tier: string): number => {
   const i = TIERS.indexOf(tier);
   return i < 0 ? 0 : i;

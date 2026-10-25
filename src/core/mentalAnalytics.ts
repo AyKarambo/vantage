@@ -3,6 +3,7 @@ import type { SessionCheckIn } from './checkIn';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isTilted } from './mental';
+import { round1 } from './num';
 
 /**
  * Mental-impact analytics (issue #70): what tilt, comms tone, toxic teammates
@@ -328,5 +329,3 @@ function ratedSide(games: GameRecord[]): RatedSide {
     rated: rated.length,
   };
 }
-
-const round1 = (n: number): number => Math.round(n * 10) / 10;

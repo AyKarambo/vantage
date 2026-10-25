@@ -21,6 +21,7 @@ import { aggregateImprovementGrade } from './aggregateGrade';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
 import type { AuthoredTarget } from './types';
 import type { TargetScope } from './scope';
+import { round1 } from '../num';
 
 export type MeasuredOp = '≤' | '≥' | '=';
 
@@ -64,7 +65,6 @@ const STAT_FIELD: Record<string, keyof Pick<HeroStat, 'eliminations' | 'deaths' 
   Mitigation: 'mitigation',
 };
 
-const round1 = (n: number): number => Math.round(n * 10) / 10;
 const sum = (rows: readonly HeroStat[], field: keyof HeroStat): number =>
   rows.reduce((n, r) => n + (r[field] as number), 0);
 

@@ -10,6 +10,7 @@
 
 import type { GameRecord } from './types';
 import { dayKey } from './grouping';
+import { round1 } from '../num';
 
 export interface PerformanceBucket {
   key: string;
@@ -45,7 +46,6 @@ export interface PerformanceStats {
   byMap: PerformanceBucket[];
 }
 
-const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 function avgOf(list: GameRecord[]): number | null {
   if (list.length === 0) return null;
