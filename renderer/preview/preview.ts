@@ -20,13 +20,7 @@ import type {
 import type { MatchRecord, Role } from '../../src/core/model';
 import type { DemoPreference } from '../../src/core/demoPreference';
 import type { FetchedCatalog } from '../../src/core/masterData';
-import type { AppConfig } from '../../src/main/config';
-import { DEFAULT_BREAK_REMINDER } from '../../src/core/breakReminder';
-import { DEFAULT_STALENESS } from '../../src/core/staleness';
-import { DEFAULT_READINESS } from '../../src/core/readiness';
-import { DEFAULT_SESSION_SETTINGS } from '../../src/core/sessionSettings';
-import { DEFAULT_COACHING, normalizeCoachingSettings } from '../../src/core/coachingSettings';
-import { DEFAULT_GRADING_SETTINGS } from '../../src/core/gradingSettings';
+import { defaultConfig, type AppConfig } from '../../src/main/config/schema';
 import { generateSampleGames } from '../../src/core/sampleData';
 import { buildImportEnvelope } from '../../src/core/importEnvelope';
 import { isCompetitive } from '../../src/core/matchFilter';
@@ -77,27 +71,17 @@ const dataChanged = channel<void>();
 const sampleSeason = generateSampleGames(220, 42);
 const configDoc = docs('config.json');
 const storedConfig = (configDoc.read() ?? {}) as Partial<AppConfig>;
+const defaults = defaultConfig();
 const config: AppConfig = {
-  overwatchGameId: 10844,
-  runAtLogin: false,
+  ...defaults,
   sensor: 'gep',
-  notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
   // Seeded from the sample season so its accounts read as configured ones.
   accounts: Object.fromEntries([...new Set(sampleSeason.map((g) => g.account))].map((n) => [`${n}#0000`, n])),
-  mapAliases: {},
-  breakReminder: { ...DEFAULT_BREAK_REMINDER },
-  staleness: { ...DEFAULT_STALENESS },
-  readiness: { ...DEFAULT_READINESS },
-  sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
-  grading: { ...DEFAULT_GRADING_SETTINGS },
-  coaching: normalizeCoachingSettings(DEFAULT_COACHING),
-  masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
   ...storedConfig,
   ui: {
-    closeToTray: true, demoPreference: 'on', devMode: true, gepNotifications: true, liveKillFeed: true,
-    autoSwitchToLive: false, autoSwitchToReview: false,
-    // Off, like the real default: there is no main process to host the pipe.
-    mcpEnabled: false,
+    ...defaults.ui,
+    // The sample season shows until something real is logged.
+    demoPreference: 'on',
     // Matches the mocked AppInfo.version so "What's new" reads as already seen.
     lastSeenVersion: 'preview',
     ...storedConfig.ui,
