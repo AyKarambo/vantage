@@ -1,4 +1,4 @@
-import type { GameRecord } from '../core/analytics';
+import type { GameRecord } from './analytics';
 
 /** A manual-layer edit: a value sets the field, `null` deletes it, `undefined` leaves it. */
 export type ManualPatch =

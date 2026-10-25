@@ -3,7 +3,7 @@ import type { MatchRecord } from '../core/model';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
 import type { HistoryStore } from './history';
 import type { JsonDoc } from './jsonDocs';
-import { applyManualPatch, type ManualPatch } from './manualPatch';
+import { applyManualPatch, type ManualPatch } from '../core/manualPatch';
 
 /** The history operations the app's edges use — what both history stores provide. */
 export type HistoryPort = Pick<

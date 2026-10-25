@@ -17,7 +17,6 @@ import { redactForExport } from '../core/logRedaction';
 import { formatDiagnostics } from '../core/about';
 import { currentRank, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
-import { sourceOf } from '../core/source';
 import { parseVantageImport, buildImportEnvelope, type ImportAccount } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
 import { suggestMeasuredThreshold } from '../core/targets';
@@ -29,6 +28,7 @@ import { resolveMapId } from '../core/resolvers/mapId';
 import { resolveResult } from '../core/resolvers/result';
 import type { Role, Result, MatchRecord } from '../core/model';
 import { partyFromInput, sittingPartyFill } from '../core/party';
+import { manualGameRecord, matchEditPatch, reviewMarks } from '../core/matchEdit';
 import {
   DEFAULT_MASTER_DATA, mergeMasterData, applyAccepted, diffMasterData,
   upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
@@ -51,23 +51,6 @@ import type {
   PlacementRunSummary, PlacementOffer, PlacementTrackInput,
 } from '../shared/contract';
 import type { GameRecord } from '../core/analytics';
-
-/**
- * Order-insensitive equality for two hero lists — a pure edit-change check used
- * by {@link editMatch} to decide whether a save actually altered the hero facts
- * (so re-ordering alone never trips the "facts edited" marker).
- */
-function sameHeroes(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort();
-  const sb = [...b].sort();
-  return sa.every((h, i) => h === sb[i]);
-}
-
-/** A hand-entered played time worth storing: positive and no longer than any real match. */
-function isPlausibleMinutes(m: number | null | undefined): m is number {
-  return typeof m === 'number' && Number.isFinite(m) && m > 0 && m <= 120;
-}
 
 /**
  * Builds the {@link DataProvider} the dashboard consumes: every renderer-facing
@@ -251,13 +234,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     saveReview: (input) => {
       // A demo match (F3) is never in real history — `setReview` reports that
       // honestly instead of the write silently vanishing on the next refetch.
-      // `focusTargetIds` / `breakBefore` arrive over untrusted IPC: keep only a
-      // string array / a boolean, and never add the key when absent.
-      const focus = Array.isArray(input.focusTargetIds) ? input.focusTargetIds.filter((id) => typeof id === 'string') : undefined;
       const saved = deps.history.setReview(input.matchId, {
-        at: Date.now(), grades: input.grades, flags: input.flags,
-        ...(focus ? { focusTargetIds: focus } : {}),
-        ...(typeof input.breakBefore === 'boolean' ? { breakBefore: input.breakBefore } : {}),
+        at: Date.now(), grades: input.grades, flags: input.flags, ...reviewMarks(input),
       });
       if (!saved) return { saved };
       if (input.performance !== undefined) deps.history.editManual(input.matchId, { performance: input.performance });
@@ -297,48 +275,17 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     setTargetArchived: (id, archived) => deps.manual.setArchived(id, archived),
     deleteTarget: (id) => deps.manual.removeTarget(id),
     logMatch: (input) => {
-      const matchId = `manual-${Date.now()}`;
-      const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
-      const focus = Array.isArray(input.focusTargetIds) ? input.focusTargetIds.filter((id) => typeof id === 'string') : undefined;
-      const breakBefore = typeof input.breakBefore === 'boolean' ? input.breakBefore : undefined;
-      // A log with "Nothing specific" chosen (`focusTargetIds: []`) or a break
-      // mark is still a deliberate read, so it makes a review even with no grades.
-      const makeReview = !!grades || focus !== undefined || breakBefore !== undefined;
-      const party = partyFromInput(input.party);
-      deps.recordGame({
-        matchId,
-        timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
-        account: input.account || Object.values(deps.getConfig().accounts)[0] || 'You',
-        role: input.role,
-        map: input.map,
-        result: input.result,
-        gameType: input.gameType,
-        source: 'manual',
-        heroes: input.heroes ?? (input.hero ? [input.hero] : []),
-        mental: input.mental,
-        ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
-        ...(input.performance != null ? { performance: input.performance } : {}),
-        ...(party ? { party } : {}),
-        // Inline target grades captured while logging are stored as a review, the
-        // same shape the Review screen writes — so they score identically.
-        ...(makeReview ? {
-          review: {
-            at: Date.now(), grades: grades ?? {}, flags: input.mental ?? {},
-            ...(focus ? { focusTargetIds: focus } : {}),
-            ...(breakBefore !== undefined ? { breakBefore } : {}),
-          },
-        } : {}),
-      });
+      const now = Date.now();
+      const matchId = `manual-${now}`;
+      deps.recordGame(manualGameRecord(input, {
+        matchId, now, account: Object.values(deps.getConfig().accounts)[0] || 'You',
+      }));
       // Logged WITH a ±% (the quick-log card's usual case) — snapshot where the
       // track stood going in, straight away. Logged without one, there is
       // nothing to snapshot until a ±% is added on Review.
       if (input.srDelta != null) syncRankAtStart(deps, matchId);
-      // L3: no OS banner for a hand-logged match — the player is already
-      // looking at Vantage (they just typed it in a second ago), and the
-      // renderer's own post-save toast already says more (account, role,
-      // ±%, Undo) than this ever did. This was, in fact, the app's ONLY
-      // "Match logged" OS notification — an auto-tracked (GEP) match never
-      // fired one at all, so nothing here needs preserving for that path.
+      // No OS notification: the player is looking at Vantage already, and the
+      // renderer's own post-save toast says more (account, role, ±%, Undo).
       return { matchId };
     },
     editMatch: (input: MatchEditInput) => {
@@ -346,73 +293,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // A demo match (F3) is never in real history — say so honestly instead of
       // silently no-opping and letting the renderer believe the edit landed.
       if (!game) return { saved: false };
-      const isManual = sourceOf(game) === 'manual';
-      const patch: Parameters<HistoryStore['editManual']>[1] = {};
-      // Game facts are editable on EVERY match now — a result the feed got wrong
-      // (a leaver scored as a loss, a misread draw) can be hand-corrected on an
-      // auto-tracked match too. `heroes` (the multi-hero list) wins when provided;
-      // fall back to the legacy single-hero coercion. Both honour `[]`/'' as "clear".
-      const nextHeroes =
-        input.heroes !== undefined ? input.heroes
-        : input.hero !== undefined ? (input.hero ? [input.hero] : [])
-        : undefined;
-      if (input.result !== undefined) patch.result = input.result;
-      if (input.role !== undefined) patch.role = input.role;
-      if (input.map !== undefined) patch.map = input.map;
-      if (input.gameType !== undefined) patch.gameType = input.gameType;
-      if (nextHeroes !== undefined) patch.heroes = nextHeroes;
-      // Provenance honesty: when a hand-edit actually CHANGES a game fact on an
-      // auto-tracked match, stamp `factsEditedAt` so the UI can show a subtle
-      // "edited" marker (the record keeps source 'gep'). Never on manual matches
-      // (editable by nature), and not when the save leaves every fact untouched.
-      const factsChanged =
-        (input.result !== undefined && input.result !== game.result) ||
-        (input.role !== undefined && input.role !== game.role) ||
-        (input.map !== undefined && input.map !== game.map) ||
-        (input.gameType !== undefined && input.gameType !== game.gameType) ||
-        (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes ?? []));
-      if (!isManual && factsChanged) patch.factsEditedAt = Date.now();
-      // The manual layer applies to any match. srDelta: number sets it, null
-      // clears it (editManual deletes on null), undefined leaves it unchanged.
-      if (input.mental !== undefined) patch.mental = input.mental;
-      // Rank movement arrives as a plain srDelta, always. "Set current rank" is
-      // an input aid the renderer resolves through `rankEntryPreview` before
-      // saving, so there is no absolute-rank branch to maintain here.
-      if (input.srDelta !== undefined) patch.srDelta = input.srDelta;
-      if (input.performance !== undefined) patch.performance = input.performance;
-      // Who the player queued with. Deliberately NOT a "fact" for `factsEditedAt`:
-      // it is the player's own annotation layer (like mental / srDelta), not
-      // something the game feed reported, so correcting it never marks a GEP
-      // match "edited". A hand edit always stores `source: 'manual'`, so the
-      // auto-labeller (which only runs on new captures) can never overwrite it.
-      const party = partyFromInput(input.party);
-      if (party !== undefined) patch.party = party;
-      // Played time is honoured for a hand-logged match only — a GEP capture's
-      // timestamp is the instant the game itself ended, not something a player
-      // can honestly correct after the fact. Clamped to the past like the log
-      // card's own playedAt (a skewed clock can never produce future history).
-      if (input.playedAt !== undefined && isManual) patch.timestamp = Math.min(input.playedAt, Date.now());
-      // Played-time correction (the per-10 divisor), on any match: a capture
-      // that joined mid-match saw only part of it. null drops the correction;
-      // anything that isn't a sane match length is ignored rather than stored.
-      if (input.playedMinutes === null) patch.playedMinutesOverride = null;
-      else if (isPlausibleMinutes(input.playedMinutes)) patch.playedMinutesOverride = input.playedMinutes;
-      // Stamp a review when there are grades to save, OR when the match is
-      // already reviewed — an edit with no targets shouldn't mark an otherwise-
-      // ungraded match as reviewed, but if it's already reviewed we must
-      // re-stamp review.flags alongside patch.mental so the two layers can't
-      // drift (an editor flag-only edit would otherwise leave review.flags
-      // stale while mental moves on, resurrecting the old flag on read).
-      const hasGrades = !!(input.grades && Object.keys(input.grades).length);
-      if (hasGrades || game.review) {
-        patch.review = {
-          // Keep the focus / break mark a prior Review or Log Match saved.
-          ...game.review,
-          at: Date.now(),
-          grades: hasGrades ? input.grades! : game.review?.grades ?? {},
-          flags: input.mental ?? game.mental ?? {},
-        };
-      }
+      const patch = matchEditPatch(game, input, Date.now());
       deps.history.editManual(input.matchId, patch);
       // The editor can add a ±% to a match that had none, change it, or clear
       // it — and can move the match's role/timestamp, which changes which track

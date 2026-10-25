@@ -5,7 +5,7 @@ import type { GameRecord, MatchReview } from '../core/analytics';
 import type { MatchRecord } from '../core/model';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
 import { resolveMapId } from '../core/resolvers/mapId';
-import { applyManualPatch, type ManualPatch } from './manualPatch';
+import { applyManualPatch, type ManualPatch } from '../core/manualPatch';
 
 /**
  * Reconstruct a {@link GameRecord} from its stored `data` blob, normalizing a
