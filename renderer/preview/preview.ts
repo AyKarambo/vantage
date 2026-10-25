@@ -1,374 +1,146 @@
 /**
- * Browser preview harness. Stands in for the Electron preload bridge by mocking
- * `window.owstats` with the pure core running against the sample season, so the
- * full UI can be viewed and iterated in a plain browser — no Overwolf runtime.
+ * Browser preview harness. Stands in for the Electron preload bridge by running
+ * the app's own Electron-free data layer — the DataProvider, the dashboard
+ * handler table and the match pipeline — over in-browser stores: the sample
+ * season, plus history and the JSON side-stores kept in localStorage. Every
+ * read and write therefore goes through exactly the code the app runs; only
+ * what has no browser equivalent is simulated here (the Notion workspace,
+ * GEP / dev-mode status, the log feed, the data folder, file dialogs and the
+ * live match).
  *
- * Manual writes (logMatch / saveTarget / saveReview / target lifecycle) are
- * persisted to localStorage so they survive a reload here, mirroring how the
- * real app persists them to disk.
+ * Query switches: ?demo=on|off|unset, ?gep=connected|live|stale|no-game|cycle|
+ * down|degraded|staged|outdated, ?devmode=off|pending|ok|failed|cycle,
+ * ?firstRunData=1, ?players=N. Drive a match from the console with `previewLive`.
  */
 import type {
-  AccountInput, AccountSummary, AppUiSettings, AuthoredTargetInput, BreakReminderSettings, CheckInInput, SessionCheckIn,
-  DashboardFilters, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload, LogEntry, LogLevel, ManualMatchInput,
-  MatchEditInput, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi, PlacementRunSummary,
-  PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput, PlacementTrackInput, PlacementDeclineInput,
-  PlacementOffer, LiveMatchPayload, PendingChangedPayload, PendingMatch,
-  CoachingSettings, FriendEntry, FriendInput, GradingSettings, PlayerListQuery, RankAnchorInput, RankEntryPreviewInput, RankSummary, ReadinessSettings, RendererErrorInput, ReviewInput, SessionSettings, StalenessSettings, SyncProgress, TargetEditInput, ThresholdSuggestionInput,
+  AppUiSettings, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload,
+  LiveMatchPayload, LogEntry, LogLevel, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
+  PendingChangedPayload, PlayerList, SyncProgress,
 } from '../../src/shared/contract';
-import type { GameRecord, MatchReview } from '../../src/core/analytics';
-import { activeMeasuredTargets, suggestMeasuredThreshold, type AuthoredTarget } from '../../src/core/targets';
-import { battleTagName, type MatchParty, type Result, type Role } from '../../src/core/model';
-import { effectiveDemo, type DemoPreference } from '../../src/core/demoPreference';
-import { generateSampleGames } from '../../src/core/sampleData';
-import { computeDashboard, applyFilters, pendingReviewMatches, eligibleForNoRead, selectMatches, toMatchRow, matchesFilter, matchSearchFilter, type MatchesTextFilter } from '../../src/core/dashboardData';
-import { isCompetitive } from '../../src/core/matchFilter';
-import { normalizeCheckIn } from '../../src/core/checkIn';
-import { clampZoom } from '../../src/core/zoom';
-import { mergeAccountList, isConfiguredAccount, UNKNOWN_ACCOUNT } from '../../src/core/accountsManage';
-import { heroDetail, mostPlayedHeroes as rankHeroesByPlays } from '../../src/core/analytics';
-import { roleOfHero } from '../../src/core/heroes';
-import { matchDetail, orderScoreboard } from '../../src/core/matchDetail';
-import {
-  PLAYER_ROW_CAP, normalizePlayerSelection, playerDirectory, playerMatchHistory, playerRecords,
-  selectPlayers,
-} from '../../src/core/playerIndex';
-import {
-  DEFAULT_MASTER_DATA, mergeMasterData, diffMasterData, applyAccepted, makeMapMode,
-  upsertHeroOverride, removeHeroOverride, upsertMapOverride, removeMapOverride,
-  upsertSeasonOverride, removeSeasonOverride, emptyOverrides,
-  type MasterDataOverrides, type FetchedCatalog,
-} from '../../src/core/masterData';
-import { sourceOf } from '../../src/core/source';
-import { partyFromInput } from '../../src/core/party';
-import { currentRank, enteringRanks, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchor, type RankAnchorMap } from '../../src/core/rank';
-import { DEFAULT_BREAK_REMINDER, normalizeBreakReminder } from '../../src/core/breakReminder';
-import { DEFAULT_STALENESS, normalizeStaleness } from '../../src/core/staleness';
-import { DEFAULT_READINESS, normalizeReadiness } from '../../src/core/readiness';
-import { DEFAULT_SESSION_SETTINGS, normalizeSessionSettings } from '../../src/core/sessionSettings';
+import type { MatchRecord, Role } from '../../src/core/model';
+import type { DemoPreference } from '../../src/core/demoPreference';
+import type { FetchedCatalog } from '../../src/core/masterData';
+import type { AppConfig } from '../../src/main/config';
+import { DEFAULT_BREAK_REMINDER } from '../../src/core/breakReminder';
+import { DEFAULT_STALENESS } from '../../src/core/staleness';
+import { DEFAULT_READINESS } from '../../src/core/readiness';
+import { DEFAULT_SESSION_SETTINGS } from '../../src/core/sessionSettings';
 import { DEFAULT_COACHING, normalizeCoachingSettings } from '../../src/core/coachingSettings';
-import { DEFAULT_GRADING_SETTINGS, normalizeGradingSettings } from '../../src/core/gradingSettings';
-import { PLACEMENT_RUN_LENGTH, runProgress, hasDrifted, isAwaitingRank, resetBoundaries, shouldOfferRun, shouldOfferNewTrackRun, suppressedMatchIds, trackMatches, type PlacementRun } from '../../src/core/placements';
+import { DEFAULT_GRADING_SETTINGS } from '../../src/core/gradingSettings';
+import { generateSampleGames } from '../../src/core/sampleData';
+import { buildImportEnvelope } from '../../src/core/importEnvelope';
+import { isCompetitive } from '../../src/core/matchFilter';
+import { clampZoom } from '../../src/core/zoom';
+import { roleOfHero } from '../../src/core/heroes';
+import { orderScoreboard } from '../../src/core/matchDetail';
+import { createDataProvider, type DataProviderDeps } from '../../src/main/dataProvider';
+import { dashboardHandlers, type DashboardInvokers } from '../../src/main/dashboard/handlers';
+import { createMatchPipeline } from '../../src/main/matchPipeline';
+import { MemoryHistoryStore } from '../../src/store/memoryHistory';
+import { ManualStore } from '../../src/store/manualLog';
+import { RankAnchorStore } from '../../src/store/rankAnchors';
+import { PlacementStore } from '../../src/store/placements';
+import { CheckInStore } from '../../src/store/checkIns';
+import { FriendStore } from '../../src/store/friends';
+import { MasterDataStore } from '../../src/store/masterData';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
+import { localDocs } from './localDocs';
 
-const LOGGED_KEY = 'vantagePreviewLogged';
-const TARGETS_KEY = 'vantagePreviewTargets';
-const REVIEWS_KEY = 'vantagePreviewReviews';
-const BREAK_REMINDER_KEY = 'vantagePreviewBreakReminder';
-const STALENESS_KEY = 'vantagePreviewStaleness';
-const READINESS_KEY = 'vantagePreviewReadiness';
-const SESSION_SETTINGS_KEY = 'vantagePreviewSessionSettings';
-const COACHING_KEY = 'vantagePreviewCoaching';
-const GRADING_KEY = 'vantagePreviewGrading';
-const NOTION_DB_KEY = 'vantagePreviewNotionDatabaseId';
-const NOTION_TOKEN_KEY = 'vantagePreviewNotionTokenSet';
-const APP_SETTINGS_KEY = 'vantagePreviewAppSettings';
-const ACCOUNTS_KEY = 'vantagePreviewAccounts';
-const ANCHORS_KEY = 'vantagePreviewAnchors';
-const EDITS_KEY = 'vantagePreviewEdits';
-const DELETED_KEY = 'vantagePreviewDeleted';
-const MASTER_DATA_KEY = 'vantagePreviewMasterData';
-const MASTER_DATA_CHECK_KEY = 'vantagePreviewMasterDataCheck';
-const PLACEMENTS_KEY = 'vantagePreviewPlacements';
-const DECLINED_KEY = 'vantagePreviewPlacementsDeclined';
-const CHECK_INS_KEY = 'vantagePreviewCheckIns';
-const FRIENDS_KEY = 'vantagePreviewFriends';
+const params = new URLSearchParams(location.search);
+const docs = localDocs('vantagePreview');
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Preview-side master-data overrides, persisted to localStorage like other writes. */
-function loadOverrides(): MasterDataOverrides {
-  try {
-    const p = JSON.parse(localStorage.getItem(MASTER_DATA_KEY) ?? 'null');
-    if (p && typeof p === 'object') return { heroes: p.heroes ?? {}, maps: p.maps ?? {}, seasons: p.seasons ?? {} };
-  } catch {
-    /* fall through to empty */
-  }
-  return emptyOverrides();
-}
-let previewOverrides = loadOverrides();
-const saveOverrides = (): void => localStorage.setItem(MASTER_DATA_KEY, JSON.stringify(previewOverrides));
-const effectiveMasterData = () => mergeMasterData(DEFAULT_MASTER_DATA, previewOverrides);
-
-const load = <T>(key: string): T[] => {
-  try {
-    const v = JSON.parse(localStorage.getItem(key) ?? '[]');
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-};
-const loadMap = <T>(key: string): Record<string, T> => {
-  try {
-    const v = JSON.parse(localStorage.getItem(key) ?? '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-};
-const save = (key: string, value: unknown): void => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* storage unavailable */
-  }
-};
-
-const season = generateSampleGames(220, 42);
-const logged: GameRecord[] = load<GameRecord>(LOGGED_KEY);
-// Older preview targets predate the active flag / activatedAt stamp — backfill like ManualStore does.
-const targets: AuthoredTarget[] = load<AuthoredTarget>(TARGETS_KEY)
-  .map((t) => ({ ...t, isActive: t.isActive ?? true, activatedAt: t.activatedAt ?? t.createdAt }));
-const previewReviews: Record<string, MatchReview> = loadMap<MatchReview>(REVIEWS_KEY);
-const previewCheckIns: SessionCheckIn[] = load<SessionCheckIn>(CHECK_INS_KEY);
-// Friends (name key → display spelling), mirroring FriendStore's keying.
-const previewFriends: Record<string, string> = loadMap<string>(FRIENDS_KEY);
-const friendList = (): FriendEntry[] =>
-  Object.entries(previewFriends)
-    .map(([key, name]) => ({ key, name }))
-    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-// Manual-layer edits from the Matches drill-down, overlaid onto any match.
-const previewEdits: Record<string, Partial<GameRecord>> = loadMap<Partial<GameRecord>>(EDITS_KEY);
-// Hard-deleted matches. The app drops the row from SQLite outright; the preview
-// can't delete from the generated season, so it tombstones the id and filters it
-// out of `dataset()` — same observable behaviour, and it survives a reload.
-const previewDeleted: Record<string, true> = loadMap<true>(DELETED_KEY);
-// Mirrors the main process's in-memory undo buffer — deliberately not persisted,
-// so a reload ends the undo window here exactly as a restart does in the app.
-const deletedUndo = new Map<string, GameRecord>();
-// Subscribers to the synthetic live match (see `previewLive` at the bottom).
-const liveMatchListeners = new Set<(p: LiveMatchPayload) => void>();
-// Accounts (battleTag → label). Seeded from the sample season's accounts.
-type AnchorRecord = RankAnchor & { account: string; role: Role };
-const seededAccounts = (): Record<string, string> => {
-  const names = [...new Set(season.map((g) => g.account))];
-  return Object.fromEntries(names.map((n) => [`${n}#0000`, n]));
-};
-const storedAccounts = loadMap<string>(ACCOUNTS_KEY);
-const previewAccounts: Record<string, string> = Object.keys(storedAccounts).length ? storedAccounts : seededAccounts();
-const previewAnchors: Record<string, AnchorRecord> = loadMap<AnchorRecord>(ANCHORS_KEY);
-const anchorMap = (): RankAnchorMap => {
-  const out: RankAnchorMap = {};
-  for (const a of Object.values(previewAnchors)) {
-    out[rankKey(a.account, a.role)] = { tier: a.tier, division: a.division, progressPct: a.progressPct, setAt: a.setAt };
-  }
-  return out;
-};
-const accountList = (): AccountSummary[] =>
-  mergeAccountList(previewAccounts, dataset().map((g) => g.account));
-const previewRanks = (): RankSummary[] => {
-  const games = dataset();
-  const map = anchorMap();
-  return Object.values(previewAnchors).map((a) => {
-    const s = currentRank(games, map, a.account, a.role);
-    return {
-      account: a.account, role: a.role,
-      tier: s?.tier ?? a.tier, division: s?.division ?? a.division,
-      progressPct: s?.progressPct ?? a.progressPct,
-      protected: s?.protected ?? false,
-    };
-  });
-};
-const savedBreakReminder = loadMap<unknown>(BREAK_REMINDER_KEY) as Partial<BreakReminderSettings>;
-let breakReminder: BreakReminderSettings = Object.keys(savedBreakReminder).length
-  ? normalizeBreakReminder(savedBreakReminder)
-  : { ...DEFAULT_BREAK_REMINDER };
-const savedStaleness = loadMap<unknown>(STALENESS_KEY) as Partial<StalenessSettings>;
-let staleness: StalenessSettings = Object.keys(savedStaleness).length
-  ? normalizeStaleness(savedStaleness)
-  : { ...DEFAULT_STALENESS };
-const savedReadiness = loadMap<unknown>(READINESS_KEY) as Partial<ReadinessSettings>;
-let readiness: ReadinessSettings = Object.keys(savedReadiness).length
-  ? normalizeReadiness(savedReadiness)
-  : { ...DEFAULT_READINESS };
-const savedSessionSettings = loadMap<unknown>(SESSION_SETTINGS_KEY) as Partial<SessionSettings>;
-let sessionSettings: SessionSettings = Object.keys(savedSessionSettings).length
-  ? normalizeSessionSettings(savedSessionSettings)
-  : { ...DEFAULT_SESSION_SETTINGS };
-const savedCoaching = loadMap<unknown>(COACHING_KEY);
-let coaching: CoachingSettings = Object.keys(savedCoaching).length
-  ? normalizeCoachingSettings(savedCoaching)
-  : normalizeCoachingSettings(DEFAULT_COACHING);
-const savedGrading = loadMap<unknown>(GRADING_KEY) as Partial<GradingSettings>;
-let grading: GradingSettings = Object.keys(savedGrading).length
-  ? normalizeGradingSettings(savedGrading)
-  : { ...DEFAULT_GRADING_SETTINGS };
-let masterDataLastCheckedAt: number | undefined = (() => {
-  try {
-    const raw = localStorage.getItem(MASTER_DATA_CHECK_KEY);
-    return raw ? Number(raw) : undefined;
-  } catch {
-    return undefined;
-  }
-})();
-
-// In-memory placement run tracker. Keyed by `${account}::${role}`.
-const loadPlacementRuns = (): Map<string, PlacementRun> => {
-  try {
-    const stored = localStorage.getItem(PLACEMENTS_KEY);
-    if (!stored) return new Map();
-    const records: Array<[string, PlacementRun]> = JSON.parse(stored);
-    return new Map(Array.isArray(records) ? records : []);
-  } catch {
-    return new Map();
-  }
-};
-let previewPlacementRuns = loadPlacementRuns();
-/** Reset-season starts already declined per track, mirroring the store's `declined` map. */
-const previewDeclined: Record<string, number[]> = loadMap<number[]>(DECLINED_KEY);
-/**
- * Put a track's anchor back exactly as the run found it — the harness mirror of
- * the provider's `restorePreRunAnchor`. A run started on an unanchored track
- * snapshots `null`, and restoring that has to mean unanchored again, or the
- * preview would show a rank the "player" never set and quietly misrepresent the
- * one behaviour this feature is built around.
- */
-function restorePreviewAnchor(run: PlacementRun): void {
-  const key = rankKey(run.account, run.role);
-  if (run.preRunAnchor) {
-    previewAnchors[key] = { ...run.preRunAnchor, account: run.account, role: run.role };
-  } else {
-    delete previewAnchors[key];
-  }
-  save(ANCHORS_KEY, previewAnchors);
+/** A push channel: what an `onX` subscription of the bridge listens to. */
+function channel<T>(): { emit(payload: T): void; on(cb: (payload: T) => void): () => void } {
+  const listeners = new Set<(payload: T) => void>();
+  return {
+    emit: (payload) => { for (const cb of listeners) cb(payload); },
+    on: (cb) => {
+      listeners.add(cb);
+      return () => { listeners.delete(cb); };
+    },
+  };
 }
 
-const savePlacementRuns = (): void => {
-  try {
-    localStorage.setItem(PLACEMENTS_KEY, JSON.stringify([...previewPlacementRuns.entries()]));
-  } catch {
-    /* storage unavailable */
-  }
-};
+const logEntries = channel<LogEntry>();
+const gepStatus = channel<GepStatusPayload>();
+const devModeAuth = channel<DevModeAuthStatusPayload>();
+const syncProgress = channel<SyncProgress>();
+const gameLogged = channel<GameLoggedPayload>();
+const pendingChanged = channel<PendingChangedPayload>();
+const liveMatch = channel<LiveMatchPayload>();
+const dataChanged = channel<void>();
 
-const placementRunKey = (account: string, role: Role): string => `${account}::${role}`;
+// --- config ------------------------------------------------------------------
 
-const getPlacements = (): PlacementRunSummary[] => {
-  const games = dataset();
-  const summaries: PlacementRunSummary[] = [];
-  for (const run of previewPlacementRuns.values()) {
-    const { counted, target, latestPrediction, countedMatchIds } = runProgress(games, run);
-    summaries.push({
-      account: run.account,
-      role: run.role,
-      counted,
-      target,
-      ...(latestPrediction ? { latestPrediction } : {}),
-      completed: run.completedAt !== undefined,
-      drifted: hasDrifted(games, run),
-      awaitingRank: isAwaitingRank(games, run),
-      countedMatchIds,
-    });
-  }
-  return summaries;
-};
-
-// Saved reviews are overlaid onto the dataset so the pure core exercises the
-// full pipeline (inbox, mental merge, target scoring) exactly as in the app.
-// Mirrors src/main/dataProvider.ts's games(): real (logged) games win; the demo
-// season shows only while opted in with no real games — so ?demo=off/unset
-// previews the honest empty states end-to-end.
-const dataset = (): GameRecord[] =>
-  (logged.length ? logged : appSettings.demoPreference === 'on' ? season : []).filter((g) => !previewDeleted[g.matchId]).map((g) => {
-    let out = g;
-    if (previewEdits[g.matchId]) out = { ...out, ...previewEdits[g.matchId] };
-    if (previewReviews[g.matchId]) out = { ...out, review: previewReviews[g.matchId] };
-    return out;
-  });
-
-// Party lives on the logged record itself (the real store keeps it on the row), so
-// a clear is a true delete — an overlay spread could not remove a logged value.
-const writeParty = (matchId: string, party: MatchParty | null): void => {
-  const game = logged.find((g) => g.matchId === matchId);
-  if (!game) return;
-  if (party) game.party = party;
-  else delete game.party;
-  save(LOGGED_KEY, logged);
-};
-
-const findTarget = (id: string): AuthoredTarget | undefined => targets.find((t) => t.id === id);
-
-// The pending set matching the combined Role/account scope + the Review-only
-// age cutoff, computed fresh (not capped) so "Ignore all" can act on more
-// than the 150 rendered rows just like the real app — the same two `core/`
-// functions `dataProvider.ts`'s real implementation calls (R1), so this
-// harness can never drift from what the app actually does.
-const eligibleForIgnore = (input: { filters: DashboardFilters; minAgeDays: number }): GameRecord[] => {
-  const seasonStarts = effectiveMasterData().seasons.map((s) => s.start);
-  const pending = pendingReviewMatches(dataset(), input.filters, seasonStarts);
-  return eligibleForNoRead(pending, input.minAgeDays);
-};
-
-// Canned Notion picker data — the preview has no real Notion runtime, but the
-// database-picker card still needs something to list and select against.
-const CANNED_DATABASES: NotionDatabaseSummary[] = [
-  { id: 'db-gametracker', title: 'Gametracker', url: 'https://notion.so/db-gametracker' },
-  { id: 'db-old-season', title: 'Gametracker (Season 1 — archived)', url: 'https://notion.so/db-old-season' },
-];
-const CANNED_PAGES: NotionPageSummary[] = [
-  { id: 'page-overwatch', title: 'Overwatch', url: 'https://notion.so/page-overwatch' },
-  { id: 'page-gaming', title: 'Gaming', url: 'https://notion.so/page-gaming' },
-];
-let selectedNotionDatabaseId: string | undefined = localStorage.getItem(NOTION_DB_KEY) ?? undefined;
-let notionTokenSet = localStorage.getItem(NOTION_TOKEN_KEY) === '1';
-let appSettings: AppUiSettings = {
-  closeToTray: true,
+const sampleSeason = generateSampleGames(220, 42);
+const configDoc = docs('config.json');
+const storedConfig = (configDoc.read() ?? {}) as Partial<AppConfig>;
+const config: AppConfig = {
+  overwatchGameId: 10844,
   runAtLogin: false,
-  demoPreference: 'on',
-  devMode: true,
-  gepNotifications: true,
-  liveKillFeed: true,
-  autoSwitchToLive: false,
-  autoSwitchToReview: false,
-  // Off, like the real default: the preview harness has no main process to
-  // host the pipe, so the toggle is only ever cosmetic here.
-  mcpEnabled: false,
-  // Matches the mocked AppInfo.version below ('preview') so the "What's new"
-  // highlight (T21) reads as already-seen instead of popping on every reload.
-  lastSeenVersion: 'preview',
-  ...(loadMap<unknown>(APP_SETTINGS_KEY) as Partial<AppUiSettings>),
+  sensor: 'gep',
+  notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
+  // Seeded from the sample season so its accounts read as configured ones.
+  accounts: Object.fromEntries([...new Set(sampleSeason.map((g) => g.account))].map((n) => [`${n}#0000`, n])),
+  mapAliases: {},
+  breakReminder: { ...DEFAULT_BREAK_REMINDER },
+  staleness: { ...DEFAULT_STALENESS },
+  readiness: { ...DEFAULT_READINESS },
+  sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
+  grading: { ...DEFAULT_GRADING_SETTINGS },
+  coaching: normalizeCoachingSettings(DEFAULT_COACHING),
+  masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
+  ...storedConfig,
+  ui: {
+    closeToTray: true, demoPreference: 'on', devMode: true, gepNotifications: true, liveKillFeed: true,
+    autoSwitchToLive: false, autoSwitchToReview: false,
+    // Off, like the real default: there is no main process to host the pipe.
+    mcpEnabled: false,
+    // Matches the mocked AppInfo.version so "What's new" reads as already seen.
+    lastSeenVersion: 'preview',
+    ...storedConfig.ui,
+  },
 };
-// ?demo=on|off|unset overrides the persisted choice — lets design QA preview the
-// first-run prompt (unset) and the honest empty states (off) without Electron.
-const demoParam = new URLSearchParams(location.search).get('demo');
-if (demoParam === 'on' || demoParam === 'off' || demoParam === 'unset') {
-  appSettings.demoPreference = demoParam as DemoPreference;
-}
-const previewDemo = () => ({
-  active: effectiveDemo(appSettings.demoPreference, logged.length),
-  preference: appSettings.demoPreference,
-  hasRealHistory: logged.length > 0,
-});
+const saveConfig = (): void => configDoc.write(config);
+// ?demo=on|off|unset overrides the persisted choice — previews the first-run
+// prompt (unset) and the honest empty states (off) without Electron.
+const demoParam = params.get('demo');
+if (demoParam === 'on' || demoParam === 'off' || demoParam === 'unset') config.ui.demoPreference = demoParam as DemoPreference;
 
-// Fake log feed: a canned backlog plus a slow trickle of new entries, so the
-// Logs screen's tail/filter/pause behaviors are all exercisable in a browser.
-let previewLogLevel: LogLevel = 'info';
-const logListeners = new Set<(e: LogEntry) => void>();
-const previewLog: LogEntry[] = [
+const appUiSettings = (): AppUiSettings => ({ ...config.ui, runAtLogin: config.runAtLogin });
+
+// --- simulated edges ---------------------------------------------------------
+
+// Fake log feed: a canned backlog plus a slow trickle, so the Logs screen's
+// tail/filter/pause behaviors are exercisable in a browser.
+let logLevel: LogLevel = 'info';
+const logBacklog: LogEntry[] = [
   { ts: Date.now() - 90_000, level: 'info', scope: 'main', message: 'Vantage started', fields: { version: 'preview', sensor: 'gep' } },
   { ts: Date.now() - 80_000, level: 'info', scope: 'gep', message: 'game detected', fields: { game: 10844 } },
   { ts: Date.now() - 75_000, level: 'debug', scope: 'gep', message: 'info update kill_feed' },
   { ts: Date.now() - 60_000, level: 'warn', scope: 'notion', message: 'shape validation skipped — no database selected' },
   { ts: Date.now() - 30_000, level: 'error', scope: 'renderer', message: 'example forwarded error', fields: { source: 'preview' } },
 ];
-let previewLogTick = 0;
+const appendLog = (e: LogEntry): void => {
+  logBacklog.push(e);
+  logEntries.emit(e);
+};
+let logTick = 0;
 setInterval(() => {
-  const e: LogEntry = {
+  appendLog({
     ts: Date.now(),
-    level: previewLogLevel === 'debug' && previewLogTick % 2 === 0 ? 'debug' : 'info',
-    scope: previewLogTick % 3 === 0 ? 'pipeline' : 'gep',
-    message: `preview heartbeat #${++previewLogTick}`,
-  };
-  previewLog.push(e);
-  for (const cb of logListeners) cb(e);
+    level: logLevel === 'debug' && logTick % 2 === 0 ? 'debug' : 'info',
+    scope: logTick % 3 === 0 ? 'pipeline' : 'gep',
+    message: `preview heartbeat #${++logTick}`,
+  });
 }, 4000);
 
-// Simulated connection status: pick a state with ?gep=live|stale|connected|
-// no-game, or ?gep=cycle to rotate through all four (default: connected).
-const gepListeners = new Set<(s: GepStatusPayload) => void>();
+// Simulated connection status (?gep=…, default connected; `cycle` rotates).
 const GEP_STATES: GepHealthState[] = ['no-game', 'connected', 'live', 'stale'];
-const gepParam = new URLSearchParams(location.search).get('gep') ?? 'connected';
-let gepState: GepHealthState = (GEP_STATES as string[]).includes(gepParam)
-  ? (gepParam as GepHealthState)
-  : 'connected';
+const gepParam = params.get('gep') ?? 'connected';
+let gepState: GepHealthState = (GEP_STATES as string[]).includes(gepParam) ? (gepParam as GepHealthState) : 'connected';
 const gepPayload = (): GepStatusPayload => ({
   state: gepState,
   sensor: 'gep',
@@ -377,89 +149,68 @@ const gepPayload = (): GepStatusPayload => ({
   eventsThisSession: gepState === 'no-game' ? 0 : 128,
   matchInProgress: gepState === 'live' || gepState === 'stale',
   gepPackageVersion: '309.0.0',
-  // ?gep=down|degraded|staged|outdated previews the service-outage / restart-to-apply banner.
   ...(gepParam === 'down' ? { serviceStatus: 'down', serviceMessage: 'Events are disabled' } : {}),
   ...(gepParam === 'degraded' ? { serviceStatus: 'degraded' } : {}),
   ...(gepParam === 'staged' ? { updateStaged: true } : {}),
-  // ?gep=outdated previews the "GEP update needed" banner (loaded package below Overwolf's minimum).
   ...(gepParam === 'outdated' ? { gepMinVersion: '315.0.2', gepOutdated: true, gepPackageVersion: '315.0.1' } : {}),
 });
 if (gepParam === 'cycle') {
   let i = 1;
   setInterval(() => {
     gepState = GEP_STATES[i++ % GEP_STATES.length];
-    for (const cb of gepListeners) cb(gepPayload());
+    gepStatus.emit(gepPayload());
   }, 5000);
 }
 
-// Simulated dev-mode auth status: pick a state with ?devmode=off|pending|ok|failed,
-// or ?devmode=cycle to rotate through all four (default: off — hidden badge, matches
-// a packaged build / Settings toggle off, which is the common case).
-const devModeAuthListeners = new Set<(s: DevModeAuthStatusPayload) => void>();
+// Simulated dev-mode auth status (?devmode=…, default off — the hidden badge).
 type DevModeAuthPreviewState = 'off' | 'pending' | 'ok' | 'failed';
 const DEV_MODE_AUTH_STATES: DevModeAuthPreviewState[] = ['off', 'pending', 'ok', 'failed'];
-const devModeAuthParam = new URLSearchParams(location.search).get('devmode') ?? 'off';
-let devModeAuthState: DevModeAuthPreviewState = (DEV_MODE_AUTH_STATES as string[]).includes(devModeAuthParam)
-  ? (devModeAuthParam as DevModeAuthPreviewState)
+const devModeParam = params.get('devmode') ?? 'off';
+let devModeState: DevModeAuthPreviewState = (DEV_MODE_AUTH_STATES as string[]).includes(devModeParam)
+  ? (devModeParam as DevModeAuthPreviewState)
   : 'off';
 const devModeAuthPayload = (): DevModeAuthStatusPayload => {
-  switch (devModeAuthState) {
-    case 'off':
-      return { attempted: false, outcome: 'pending' };
-    case 'pending':
-      return { attempted: true, outcome: 'pending' };
-    case 'ok':
-      return { attempted: true, outcome: 'confirmed' };
+  switch (devModeState) {
+    case 'off': return { attempted: false, outcome: 'pending' };
+    case 'pending': return { attempted: true, outcome: 'pending' };
+    case 'ok': return { attempted: true, outcome: 'confirmed' };
     case 'failed':
-      return {
-        attempted: true,
-        outcome: 'failed',
-        detail: 'ow-electron reported failed-to-initialize for the gep package',
-      };
+      return { attempted: true, outcome: 'failed', detail: 'ow-electron reported failed-to-initialize for the gep package' };
   }
 };
-if (devModeAuthParam === 'cycle') {
+if (devModeParam === 'cycle') {
   let j = 1;
   setInterval(() => {
-    devModeAuthState = DEV_MODE_AUTH_STATES[j++ % DEV_MODE_AUTH_STATES.length];
-    for (const cb of devModeAuthListeners) cb(devModeAuthPayload());
+    devModeState = DEV_MODE_AUTH_STATES[j++ % DEV_MODE_AUTH_STATES.length];
+    devModeAuth.emit(devModeAuthPayload());
   }, 5000);
 }
 
-const syncListeners = new Set<(p: SyncProgress) => void>();
-const gameLoggedListeners = new Set<(p: GameLoggedPayload) => void>();
-const pendingChangedListeners = new Set<(p: PendingChangedPayload) => void>();
-/** Matches that ended without a result, held for Review's Needs-result card. Session-only (the real store is a SQLite table). */
-const previewPending: PendingMatch[] = [];
-
-// Canned count of "imported" matches so the wipe-for-re-import affordance is testable.
-let previewImportedMatches = 0;
-// Canned count of file-imported matches (Settings → Data), cleared independently of Notion imports.
-let previewFileImports = 0;
-// When the last simulated file import "landed" (W3's persistent Last import line).
-let previewLastFileImportAt: number | undefined;
-
-// In-memory data-folder mock (Area C): the browser preview has no real
-// filesystem to migrate, so "choosing a folder" just relabels the mock
-// location instead of moving anything. `?firstRunData=1` shows the first-run
-// data-location prompt (default: already-chosen, matching an existing install
-// per spec C5) so the prompt itself stays reachable without a fresh Electron
-// profile.
-const DEFAULT_DATA_FOLDER = '(browser preview — in-memory)';
-let previewDataFolder = DEFAULT_DATA_FOLDER;
-let previewDataFolderIsDefault = true;
-let previewNeedsFirstRunChoice = new URLSearchParams(location.search).get('firstRunData') === '1';
-let previewFolderPickCount = 0;
-
-function notionStatusFor(databaseId: string | undefined): NotionStatus {
-  const db = CANNED_DATABASES.find((d) => d.id === databaseId);
-  // The preview has no real export ledger, so treat every competitive game as
-  // still needing a sync — enough to exercise the "Sync N games" copy.
-  const competitiveGames = dataset().filter((g) => isCompetitive(g.gameType)).length;
+// A canned Notion workspace: token state and the picked database persist, the
+// database/page pickers list fixed entries, and sync/import run against it.
+const CANNED_DATABASES: NotionDatabaseSummary[] = [
+  { id: 'db-gametracker', title: 'Gametracker', url: 'https://notion.so/db-gametracker' },
+  { id: 'db-old-season', title: 'Gametracker (Season 1 — archived)', url: 'https://notion.so/db-old-season' },
+];
+const CANNED_PAGES: NotionPageSummary[] = [
+  { id: 'page-overwatch', title: 'Overwatch', url: 'https://notion.so/page-overwatch' },
+  { id: 'page-gaming', title: 'Gaming', url: 'https://notion.so/page-gaming' },
+];
+const notionDoc = docs('notion.json');
+const notionState: { tokenSet: boolean; databaseId?: string } = {
+  tokenSet: false,
+  ...(notionDoc.read() as { tokenSet?: boolean; databaseId?: string } | undefined),
+};
+const saveNotion = (): void => notionDoc.write(notionState);
+const selectedDatabase = (): NotionDatabaseSummary | undefined => CANNED_DATABASES.find((d) => d.id === notionState.databaseId);
+function notionStatus(): NotionStatus {
+  const db = selectedDatabase();
+  // No export ledger here, so every competitive game reads as still unsynced.
+  const competitiveGames = provider.games().filter((g) => isCompetitive(g.gameType)).length;
   return {
-    tokenSet: notionTokenSet,
+    tokenSet: notionState.tokenSet,
     databaseConfigured: Boolean(db),
-    connected: notionTokenSet && Boolean(db),
+    connected: notionState.tokenSet && Boolean(db),
     gametrackerUrl: db?.url,
     unsyncedGames: competitiveGames,
     competitiveGames,
@@ -467,912 +218,239 @@ function notionStatusFor(databaseId: string | undefined): NotionStatus {
     databaseId: db?.id,
     databaseTitle: db?.title,
     shapeValid: db ? true : undefined,
-    shapeIssues: undefined,
     lastSyncedAt: db ? Date.now() - 3_600_000 : undefined,
-    // Canned so the "Last synced ... — N synced · M failed (reason)" line
-    // (W6) has something to render in the preview; a real run overwrites it.
     lastSyncResult: db ? { at: Date.now() - 3_600_000, ok: 12, updated: 2, failed: 1, firstError: 'Notion rate limit — try again shortly' } : undefined,
-    importedMatches: previewImportedMatches,
-    // Demo the schema auto-provisioning note: on connect, Vantage added the
-    // columns this database was missing so its schema stays in step with the app.
+    importedMatches: history.importedCount('notion'),
     schemaProvision: db ? { created: ['SR Delta', 'Comms', 'Tilt'] } : undefined,
   };
 }
+const notion: DataProviderDeps['notion'] = {
+  export: async (games) => {
+    if (!selectedDatabase()) return { ok: 0, failed: 0, unavailable: true };
+    // Per-game progress, so the sync card's live counter is exercisable.
+    for (let done = 1; done <= games.length; done += 8) {
+      syncProgress.emit({ done: Math.min(done, games.length), total: games.length });
+      await sleep(60);
+    }
+    return { ok: games.length, failed: 0, skipped: 0 };
+  },
+  // Four "rows" from the workspace, through the provider's real import path.
+  import: async () => {
+    if (!selectedDatabase()) return { games: [], failed: 0, duplicates: 0, unavailable: true };
+    const games = generateSampleGames(4, 7).map((g, i) => ({ ...g, matchId: `notion-${i}`, pageId: `page-${i}` }));
+    return { games, failed: 0, duplicates: 0 };
+  },
+  status: () => notionStatus(),
+  setToken: () => {
+    notionState.tokenSet = true;
+    saveNotion();
+    return notionStatus();
+  },
+  clearToken: () => {
+    notionState.tokenSet = false;
+    delete notionState.databaseId;
+    saveNotion();
+    return notionStatus();
+  },
+  listDatabases: async () => ({ databases: CANNED_DATABASES }),
+  listPages: async () => ({ pages: CANNED_PAGES }),
+  selectDatabase: async (databaseId) => {
+    notionState.databaseId = databaseId;
+    saveNotion();
+    return notionStatus();
+  },
+  createDatabase: async () => {
+    await sleep(400);
+    notionState.databaseId = 'db-gametracker';
+    saveNotion();
+    return notionStatus();
+  },
+  clearExports: () => {},
+  cleanupDuplicates: async () =>
+    selectedDatabase() ? { archived: 2, kept: 1, failed: 0 } : { archived: 0, kept: 0, failed: 0, unavailable: true },
+};
 
-const mock: OwStatsApi = {
-  getDashboard: async (f: DashboardFilters) => computeDashboard(dataset(), f, previewDemo(), { targets, breakReminder, staleness, readiness, sessionSettings, coaching, grading, rankAnchors: anchorMap(), placementRuns: [...previewPlacementRuns.values()], checkIns: previewCheckIns }, effectiveMasterData(), previewPending),
-  heroDetail: async (hero: string, f: DashboardFilters) =>
-    heroDetail(applyFilters(dataset(), f, effectiveMasterData().seasons.map((s) => s.start)), hero),
-  matchDetail: async (matchId: string, f: DashboardFilters) => {
-    const games = dataset();
-    const eff = effectiveMasterData();
-    return matchDetail(games, matchId, applyFilters(games, f, eff.seasons.map((s) => s.start)), anchorMap(), makeMapMode(eff.maps), activeMeasuredTargets(targets), grading.partialMargin);
-  },
-  matchesPage: async (input: { filters?: DashboardFilters; before: number; limit: number; text?: MatchesTextFilter }) => {
-    const eff = effectiveMasterData();
-    const mapModeOf = makeMapMode(eff.maps);
-    let filtered = applyFilters(dataset(), input.filters ?? {}, eff.seasons.map((s) => s.start));
-    if (input.text) filtered = matchesFilter(filtered, mapModeOf, input.text);
-    const { rows } = selectMatches(filtered, { before: input.before, limit: input.limit });
-    return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasuredTargets(targets), grading.partialMargin));
-  },
-  searchMatches: async (input: { filters?: DashboardFilters; q: string; limit: number }) => {
-    const eff = effectiveMasterData();
-    const mapModeOf = makeMapMode(eff.maps);
-    const filtered = applyFilters(dataset(), input.filters ?? {}, eff.seasons.map((s) => s.start));
-    const matched = matchSearchFilter(filtered, input.q);
-    const { rows } = selectMatches(matched, { limit: input.limit });
-    return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasuredTargets(targets), grading.partialMargin));
-  },
-  playerHistory: async (name: string) => {
-    // Same composition as `reads.playerHistoryRead`, so the harness shows the
-    // rank column the real app does rather than a silently empty one — including
-    // its competitive-only gate, which this mock used to skip (the harness listed
-    // quick-play games the real drill-down never shows).
-    const games = dataset().filter((g) => isCompetitive(g.gameType));
-    const runs = [...previewPlacementRuns.values()];
-    return playerMatchHistory(games, name, makeMapMode(effectiveMasterData().maps),
-      enteringRanks(games, anchorMap(), {
-        suppressed: suppressedMatchIds(games, runs),
-        resetBefore: resetBoundaries(runs),
-      }));
-  },
-  playerRecords: async (names: string[]) => playerRecords(dataset(), names),
-  friends: async () => friendList(),
-  setFriend: async (input: FriendInput) => {
-    const key = battleTagName(input?.name ?? '');
-    if (key) {
-      const existing = previewFriends[key];
-      if (!input.friend) delete previewFriends[key];
-      else if (!existing || (input.name.includes('#') && !existing.includes('#'))) previewFriends[key] = input.name.trim();
-      save(FRIENDS_KEY, previewFriends);
-    }
-    return friendList();
-  },
-  playerList: async (query: PlayerListQuery) => {
-    const sel = normalizePlayerSelection(query);
-    const scope = { account: query?.filters?.account ?? 'all', role: query?.filters?.role ?? 'all', days: query?.filters?.days ?? 30 };
-    const games = applyFilters(
-      dataset().filter((g) => isCompetitive(g.gameType)),
-      scope,
-      effectiveMasterData().seasons.map((s) => s.start),
-    );
-    const dir = playerDirectory(games);
-    // The demo roster pool is ~20 names, so nothing here can exercise the row
-    // cap, its caption, or the empty states. `?players=N` pads the aggregate
-    // with synthetic rows so those are reachable by hand. Preview-only — this
-    // file never ships.
-    const pad = Number(new URLSearchParams(location.search).get('players'));
-    if (Number.isFinite(pad) && pad > dir.players.length) {
-      for (let i = dir.players.length; i < pad; i++) {
-        dir.players.push({
-          key: `synth${i}`, name: `Synthetic${i}#${1000 + i}`,
-          games: (i % 17) + 1, lastSeen: Date.now() - i * 60_000,
-          sameTeam: { wins: i % 5, losses: i % 3 }, enemyTeam: { wins: i % 4, losses: i % 6 },
-          ambiguous: i % 23 === 0,
-        });
-      }
-    }
-    const { rows, matched } = selectPlayers(dir.players, sel);
+// The data folder: nothing to move in a browser, so a "pick" relabels the
+// location. Every third pick finds existing Vantage data (the adopt flow);
+// ?firstRunData=1 shows the first-run folder prompt.
+const DEFAULT_DATA_FOLDER = '(browser preview — in-memory)';
+const dataFolder = {
+  folder: DEFAULT_DATA_FOLDER,
+  needsFirstRunChoice: params.get('firstRunData') === '1',
+  picks: 0,
+};
+const moveTo = (folder: string): DataLocationResult => {
+  dataFolder.folder = folder;
+  dataFolder.needsFirstRunChoice = false;
+  return { ok: true, location: { folder, isDefault: folder === DEFAULT_DATA_FOLDER }, changed: true };
+};
+const nextPickedFolder = (): string => `C:\\Users\\preview\\OneDrive\\Vantage-data-${++dataFolder.picks}`;
+
+// --- the real data layer -----------------------------------------------------
+
+const history = new MemoryHistoryStore(docs('history.json'));
+const friends = new FriendStore(docs);
+const pipeline = createMatchPipeline({
+  history,
+  aggregator: { handle: () => null },
+  getConfig: () => config,
+  notify: (title, body) => console.info('[preview] notify', title, body),
+  log: (...args) => console.debug('[preview] pipeline', ...args),
+  onGameLogged: (payload) => gameLogged.emit(payload),
+  onPendingChanged: (payload) => pendingChanged.emit(payload ?? {}),
+  friendKeys: () => friends.keys(),
+});
+
+const provider = createDataProvider({
+  history,
+  manual: new ManualStore(docs),
+  rankAnchors: new RankAnchorStore(docs),
+  placements: new PlacementStore(docs),
+  checkIns: new CheckInStore(docs),
+  friends,
+  masterDataStore: new MasterDataStore(docs),
+  // A synthetic catalog (one new hero, one new map) exercises the Update preview.
+  fetchMasterDataUpdate: async (): Promise<FetchedCatalog> => {
+    await sleep(300);
+    const eff = provider.effectiveMasterData();
     return {
-      rows, matched,
-      totalInScope: dir.players.length,
-      cap: PLAYER_ROW_CAP,
-      scannedGames: dir.scannedGames,
-      gamesWithRoster: dir.gamesWithRoster,
-      sort: sel.sort, dir: sel.dir,
-      appliedSearch: sel.search, appliedMinGames: sel.minGames, appliedRelation: sel.relation,
-      scope,
-    };
-  },
-  onLiveMatch: (cb: (p: LiveMatchPayload) => void) => {
-    liveMatchListeners.add(cb);
-    return () => liveMatchListeners.delete(cb);
-  },
-  exportNotion: async () => {
-    if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
-    // Simulate per-game progress so the sync card's live counter is testable.
-    const total = Math.min(dataset().length, 40);
-    for (let done = 1; done <= total; done += 8) {
-      for (const cb of syncListeners) cb({ done: Math.min(done, total), total });
-      await new Promise((r) => setTimeout(r, 60));
-    }
-    return { ok: dataset().length, failed: 0, skipped: 0 };
-  },
-  exportNotionMatches: async (matchIds: string[]) => {
-    if (!selectedNotionDatabaseId) return { ok: 0, failed: 0, unavailable: true };
-    const total = matchIds.length;
-    for (let done = 1; done <= total; done += 8) {
-      for (const cb of syncListeners) cb({ done: Math.min(done, total), total });
-      await new Promise((r) => setTimeout(r, 60));
-    }
-    return { ok: total, failed: 0, skipped: 0 };
-  },
-  // The preview has no Notion runtime; token state is tracked locally, and the
-  // database picker operates against a small canned list (see CANNED_DATABASES).
-  notionStatus: async () => notionStatusFor(selectedNotionDatabaseId),
-  setNotionToken: async () => {
-    // A token alone doesn't select a database — the picker card is what shows next.
-    notionTokenSet = true;
-    localStorage.setItem(NOTION_TOKEN_KEY, '1');
-    return notionStatusFor(selectedNotionDatabaseId);
-  },
-  clearNotionToken: async () => {
-    notionTokenSet = false;
-    selectedNotionDatabaseId = undefined;
-    localStorage.removeItem(NOTION_TOKEN_KEY);
-    localStorage.removeItem(NOTION_DB_KEY);
-    return notionStatusFor(undefined);
-  },
-  listNotionDatabases: async () => ({ databases: CANNED_DATABASES }),
-  listNotionPages: async () => ({ pages: CANNED_PAGES }),
-  selectNotionDatabase: async (databaseId: string) => {
-    selectedNotionDatabaseId = databaseId;
-    localStorage.setItem(NOTION_DB_KEY, databaseId);
-    return notionStatusFor(databaseId);
-  },
-  createNotionDatabase: async (_parentPageId: string) => {
-    // Simulate the ~15s auto-create latency the real IPC call incurs.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    selectedNotionDatabaseId = 'db-gametracker';
-    localStorage.setItem(NOTION_DB_KEY, selectedNotionDatabaseId);
-    return notionStatusFor(selectedNotionDatabaseId);
-  },
-  // Master data: overrides persist to localStorage; the Update fetch is simulated
-  // with a synthetic catalog (one new hero + one new map) so the preview exercises
-  // the additions/changes → accept/discard flow without any network.
-  masterDataGet: async () => effectiveMasterData(),
-  masterDataUpsertHero: async (entry) => {
-    previewOverrides = upsertHeroOverride(previewOverrides, DEFAULT_MASTER_DATA, entry);
-    saveOverrides();
-    return effectiveMasterData();
-  },
-  masterDataRemoveHero: async (name) => {
-    previewOverrides = removeHeroOverride(previewOverrides, DEFAULT_MASTER_DATA, name);
-    saveOverrides();
-    return effectiveMasterData();
-  },
-  masterDataUpsertMap: async (entry) => {
-    previewOverrides = upsertMapOverride(previewOverrides, DEFAULT_MASTER_DATA, entry);
-    saveOverrides();
-    return effectiveMasterData();
-  },
-  masterDataRemoveMap: async (name) => {
-    previewOverrides = removeMapOverride(previewOverrides, DEFAULT_MASTER_DATA, name);
-    saveOverrides();
-    return effectiveMasterData();
-  },
-  masterDataUpsertSeason: async (entry) => {
-    previewOverrides = upsertSeasonOverride(previewOverrides, DEFAULT_MASTER_DATA, entry);
-    saveOverrides();
-    return effectiveMasterData();
-  },
-  masterDataRemoveSeason: async (id) => {
-    previewOverrides = removeSeasonOverride(previewOverrides, DEFAULT_MASTER_DATA, id);
-    saveOverrides();
-    return effectiveMasterData();
-  },
-  masterDataFetchUpdate: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const eff = effectiveMasterData();
-    const fetched: FetchedCatalog = {
       heroes: [...eff.heroes, { name: 'Preview Hero', role: 'damage' }],
       maps: [
         ...eff.maps.map((m) => ({ name: m.name, mode: m.mode, isActive: true })),
         { name: 'Preview Arena', mode: 'Control', isActive: true },
       ],
     };
-    // Persisted on a successful fetch regardless of outcome (W1) — mirrors the
-    // real dataProvider's masterDataFetchUpdate handler.
-    masterDataLastCheckedAt = Date.now();
-    save(MASTER_DATA_CHECK_KEY, masterDataLastCheckedAt);
-    return diffMasterData(eff, fetched);
   },
-  masterDataApplyUpdate: async (accepted) => {
-    previewOverrides = applyAccepted(previewOverrides, DEFAULT_MASTER_DATA, accepted);
-    saveOverrides();
-    return effectiveMasterData();
+  notion,
+  getConfig: () => config,
+  persistAccounts: (accounts) => {
+    config.accounts = accounts;
+    saveConfig();
   },
-  getMasterDataCheck: async () => ({ lastCheckedAt: masterDataLastCheckedAt }),
-  logMatch: async (input: ManualMatchInput) => {
-    const matchId = `manual-${Date.now()}`;
-    const account = input.account || Object.values(previewAccounts)[0] || 'You';
-    const grades = input.grades && Object.keys(input.grades).length ? input.grades : undefined;
-    const party = partyFromInput(input.party);
-    logged.push({
-      matchId,
-      timestamp: input.playedAt != null ? Math.min(input.playedAt, Date.now()) : Date.now(),
-      account,
-      role: input.role,
-      map: input.map,
-      result: input.result,
-      gameType: input.gameType,
-      source: 'manual',
-      heroes: input.heroes ?? (input.hero ? [input.hero] : []),
-      mental: input.mental,
-      ...(input.srDelta != null ? { srDelta: input.srDelta } : {}),
-      ...(input.performance != null ? { performance: input.performance } : {}),
-      ...(party ? { party } : {}),
-    });
-    save(LOGGED_KEY, logged);
-    // Same snapshot the real provider takes on a log that carries its own ±%.
-    if (input.srDelta != null) {
-      const game = logged[logged.length - 1];
-      const state = rankEnteringMatch(dataset(), anchorMap(), game.account, game.role, game.timestamp);
-      if (state) {
-        game.rankAtStart = { tier: state.tier, division: state.division, progressPct: state.progressPct };
-        save(LOGGED_KEY, logged);
-      }
-    }
-    if (grades) {
-      previewReviews[matchId] = { at: Date.now(), grades, flags: input.mental ?? {} };
-      save(REVIEWS_KEY, previewReviews);
-    }
-    // Mirror the app's onGameLogged push so the auto-switch (F4) is exercisable here.
-    for (const cb of gameLoggedListeners) {
-      cb({
-        matchId, account,
-        configured: isConfiguredAccount(account, previewAccounts),
-        role: input.role,
-        // The harness only ever logs by hand, and the shell raises the placement
-        // offer for `'gep'` only — so a preview log deliberately does NOT stand
-        // in for a live capture here. Exercise that path with `npm start` and
-        // OW_SYNC_SIMULATE=1 (see CLAUDE.md), not in the browser.
-        source: 'manual',
-      });
-    }
-    return { matchId };
-  },
-  editMatch: async (input: MatchEditInput) => {
-    const game = dataset().find((g) => g.matchId === input.matchId);
-    // Mirrors the real dataProvider: only a REAL (logged) match can be edited —
-    // a demo row `dataset()` would still resolve while the season is showing,
-    // but nothing behind it is actually persisted (F3).
-    if (!game || !logged.some((g) => g.matchId === input.matchId)) return { saved: false };
-    const patch: Partial<GameRecord> = { ...previewEdits[input.matchId] };
-    // Mirrors the real dataProvider: game facts are editable on every match, and
-    // a fact change on an auto-tracked (GEP) record stamps `factsEditedAt`.
-    const nextHeroes =
-      input.heroes !== undefined ? input.heroes
-      : input.hero !== undefined ? (input.hero ? [input.hero] : [])
-      : undefined;
-    if (input.result !== undefined) patch.result = input.result;
-    if (input.role !== undefined) patch.role = input.role;
-    if (input.map !== undefined) patch.map = input.map;
-    if (input.gameType !== undefined) patch.gameType = input.gameType;
-    if (nextHeroes !== undefined) patch.heroes = nextHeroes;
-    const sameHeroes = (a: string[], b: string[]): boolean =>
-      a.length === b.length && [...a].sort().every((h, i) => h === [...b].sort()[i]);
-    const factsChanged =
-      (input.result !== undefined && input.result !== game.result) ||
-      (input.role !== undefined && input.role !== game.role) ||
-      (input.map !== undefined && input.map !== game.map) ||
-      (input.gameType !== undefined && input.gameType !== game.gameType) ||
-      (nextHeroes !== undefined && !sameHeroes(nextHeroes, game.heroes ?? []));
-    if (sourceOf(game) !== 'manual' && factsChanged) patch.factsEditedAt = Date.now();
-    if (input.mental !== undefined) patch.mental = input.mental;
-    if (input.srDelta !== undefined) {
-      if (input.srDelta === null) delete patch.srDelta;
-      else patch.srDelta = input.srDelta;
-    }
-    if (input.performance !== undefined) {
-      if (input.performance === null) delete patch.performance;
-      else patch.performance = input.performance;
-    }
-    // Played time (L5) — hand-logged matches only; mirrors the real
-    // dataProvider's clamp-to-the-past + manual-only gate.
-    if (input.playedAt !== undefined && sourceOf(game) === 'manual') {
-      patch.timestamp = Math.min(input.playedAt, Date.now());
-    }
-    // Played-time correction — any match; null drops it (mirrors dataProvider).
-    if (input.playedMinutes === null) delete patch.playedMinutesOverride;
-    else if (input.playedMinutes !== undefined && input.playedMinutes > 0 && input.playedMinutes <= 120) {
-      patch.playedMinutesOverride = input.playedMinutes;
-    }
-    previewEdits[input.matchId] = patch;
-    save(EDITS_KEY, previewEdits);
-    const party = partyFromInput(input.party);
-    if (party !== undefined) writeParty(input.matchId, party);
-    if (input.grades && Object.keys(input.grades).length) {
-      previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.mental ?? game.mental ?? {} };
-      save(REVIEWS_KEY, previewReviews);
-    }
-    return { saved: true };
-  },
-  deleteMatch: async (matchId: string) => {
-    if (!dataset().some((g) => g.matchId === matchId)) return { deleted: false };
-    previewDeleted[matchId] = true;
-    save(DELETED_KEY, previewDeleted);
-    // The real store keeps everything on the one row, so a delete takes the
-    // manual layer with it — mirror that here rather than leaving orphans that
-    // would reattach if the id ever came back.
-    delete previewEdits[matchId];
-    delete previewReviews[matchId];
-    save(EDITS_KEY, previewEdits);
-    save(REVIEWS_KEY, previewReviews);
-    const i = logged.findIndex((g) => g.matchId === matchId);
-    if (i >= 0) {
-      deletedUndo.set(matchId, logged[i]);
-      logged.splice(i, 1);
-      save(LOGGED_KEY, logged);
-    }
-    return { deleted: true };
-  },
-  undoDeleteMatch: async (matchId: string) => {
-    if (!previewDeleted[matchId]) return { restored: false };
-    delete previewDeleted[matchId];
-    save(DELETED_KEY, previewDeleted);
-    // A hand-logged game was spliced out of `logged`; the generated season is
-    // untouched on disk, so clearing the tombstone is enough to bring it back.
-    const record = deletedUndo.get(matchId);
-    if (record) {
-      deletedUndo.delete(matchId);
-      logged.push(record);
-      save(LOGGED_KEY, logged);
-    }
-    return { restored: true };
-  },
-  listAccounts: async () => accountList(),
-  saveAccount: async (input: AccountInput) => {
-    const newLabel = input.label || input.battleTag;
-    const oldLabel = input.previousBattleTag ? previewAccounts[input.previousBattleTag] : undefined;
-    if (input.previousBattleTag && input.previousBattleTag !== input.battleTag) delete previewAccounts[input.previousBattleTag];
-    // Cascade a label rename onto games + anchors (both key by label), mirroring the app.
-    if (oldLabel && oldLabel !== newLabel) {
-      for (const g of logged) if (g.account === oldLabel) g.account = newLabel;
-      for (const g of season) if (g.account === oldLabel) g.account = newLabel;
-      for (const key of Object.keys(previewAnchors)) {
-        const a = previewAnchors[key];
-        if (a.account !== oldLabel) continue;
-        delete previewAnchors[key];
-        a.account = newLabel;
-        previewAnchors[rankKey(newLabel, a.role)] = a;
-      }
-      save(LOGGED_KEY, logged);
-      save(ANCHORS_KEY, previewAnchors);
-    }
-    previewAccounts[input.battleTag] = newLabel;
-    save(ACCOUNTS_KEY, previewAccounts);
-    return accountList();
-  },
-  deleteAccount: async (battleTag: string) => {
-    delete previewAccounts[battleTag];
-    save(ACCOUNTS_KEY, previewAccounts);
-    return accountList();
-  },
-  deleteDetectedAccount: async (account: string) => {
-    // IRREVERSIBLE: drop logged rows under this account + its rank anchors,
-    // mirroring the app. (Demo-season rows aren't stored here, so only logged
-    // detected accounts are removable in the preview.)
-    for (let i = logged.length - 1; i >= 0; i--) {
-      if (logged[i].account === account) logged.splice(i, 1);
-    }
-    for (const key of Object.keys(previewAnchors)) {
-      if (previewAnchors[key].account === account) delete previewAnchors[key];
-    }
-    save(LOGGED_KEY, logged);
-    save(ANCHORS_KEY, previewAnchors);
-    return accountList();
-  },
-  getRanks: async () => previewRanks(),
-  rankEntryPreview: async (input: RankEntryPreviewInput) => {
-    // Mirrors the provider: without an anchor there is no rank-before to measure
-    // against, so report that rather than a fabricated 0.
-    if (!previewAnchors[rankKey(input.account, input.role)]) return { anchored: false as const };
-    return {
-      anchored: true as const,
-      srDelta: srDeltaForSetRank(dataset(), anchorMap(), input.account, input.role, input.timestamp, input.rank),
-    };
-  },
-  getPlacements: async () => getPlacements(),
-  startPlacementRun: async (input: PlacementStartInput) => {
-    const key = placementRunKey(input.account, input.role);
-    // Search the whole dataset, not just `logged` — a backdated run usually
-    // starts on a generated season match, which is the common preview case.
-    const startedAt = input.fromMatchId
-      ? (dataset().find((g) => g.matchId === input.fromMatchId)?.timestamp ?? Date.now())
-      : Date.now();
-    const existing = previewPlacementRuns.get(key);
-    if (existing?.completedAt !== undefined) restorePreviewAnchor(existing);
-    const prior = previewAnchors[rankKey(input.account, input.role)];
-    const run: PlacementRun = {
-      account: input.account,
-      role: input.role,
-      startedAt,
-      // Snapshotting for real matters here: reversibility is the whole point of
-      // this feature, so a harness that always stored `null` would show reset
-      // silently failing to restore anything — worse than not simulating it.
-      preRunAnchor: existing?.preRunAnchor
-        ?? (prior ? { tier: prior.tier, division: prior.division, progressPct: prior.progressPct, setAt: prior.setAt } : null),
-      predictions: {},
-    };
-    previewPlacementRuns.set(key, run);
-    savePlacementRuns();
-    return getPlacements();
-  },
-  setPlacementPrediction: async (input: PlacementPredictionInput) => {
-    const key = placementRunKey(input.account, input.role);
-    const run = previewPlacementRuns.get(key);
-    if (run) {
-      if (input.prediction === null) {
-        delete run.predictions[input.matchId];
-      } else {
-        run.predictions[input.matchId] = input.prediction;
-      }
-      savePlacementRuns();
-    }
-    return getPlacements();
-  },
-  completePlacementRun: async (input: PlacementCompleteInput) => {
-    const key = placementRunKey(input.account, input.role);
-    const run = previewPlacementRuns.get(key);
-    if (run) {
-      const games = dataset();
-      const window = games
-        .filter(
-          (g) =>
-            g.account === run.account &&
-            g.role === run.role &&
-            isCompetitive(g.gameType) &&
-            g.timestamp >= run.startedAt,
-        )
-        .sort((a, b) => a.timestamp - b.timestamp);
-      const countedIds = window.slice(0, PLACEMENT_RUN_LENGTH).map((g) => g.matchId);
-      // Anchored at the LAST match in the run's window, mirroring the real
-      // provider: the rank timeline filters strictly after the anchor, which is
-      // what keeps every suppressed match from moving the rank they just settled.
-      // The window rather than the counted ten, because the rank being entered
-      // already includes anything played after the tenth — see the note there.
-      const setAt = window.length ? window[window.length - 1].timestamp : run.startedAt;
-      previewAnchors[rankKey(input.account, input.role)] = {
-        account: input.account,
-        role: input.role,
-        tier: input.tier,
-        division: input.division,
-        progressPct: input.progressPct ?? 0,
-        setAt,
-      };
-      save(ANCHORS_KEY, previewAnchors);
-      run.completedAt = Date.now();
-      run.completedMatchIds = countedIds;
-      savePlacementRuns();
-    }
-    return getPlacements();
-  },
-  resetPlacementRun: async (input: PlacementTrackInput) => {
-    const key = placementRunKey(input.account, input.role);
-    const run = previewPlacementRuns.get(key);
-    if (run) {
-      if (run.completedAt !== undefined) restorePreviewAnchor(run);
-      run.predictions = {};
-      delete run.completedAt;
-      delete run.completedMatchIds;
-      savePlacementRuns();
-    }
-    return getPlacements();
-  },
-  cancelPlacementRun: async (input: PlacementTrackInput) => {
-    const key = placementRunKey(input.account, input.role);
-    const run = previewPlacementRuns.get(key);
-    if (run?.completedAt !== undefined && run) restorePreviewAnchor(run);
-    previewPlacementRuns.delete(key);
-    savePlacementRuns();
-    return getPlacements();
-  },
-  placementOffer: async (input: PlacementTrackInput) => {
-    // Mirrors the provider: the season containing "now" from the EFFECTIVE
-    // table, so a season the developer flags in the preview's Master data
-    // editor raises an offer exactly like a shipped reset does.
-    const now = Date.now();
-    const seasons = [...effectiveMasterData().seasons].sort((a, b) => a.start - b.start);
-    let current: { start: number; label: string; isReset?: boolean } | undefined;
-    for (const s of seasons) {
-      if (s.start <= now) current = s;
-      else break;
-    }
-    if (!current) return null;
-    const anchor = previewAnchors[rankKey(input.account, input.role)];
-    const existingRun = previewPlacementRuns.get(placementRunKey(input.account, input.role));
-    const declinedSeasonStarts = previewDeclined[rankKey(input.account, input.role)] ?? [];
-    const season = { start: current.start, label: current.label };
-    // Both rules, in the provider's order, backdated the same way — see
-    // `offerFrom` in src/main/dataProvider.ts.
-    const offer = (reason: PlacementOffer['reason']): PlacementOffer => {
-      const claimed = trackMatches(dataset(), input.account, input.role, season.start);
-      const backdates = claimed.length > 0 && claimed.length <= PLACEMENT_RUN_LENGTH;
-      return {
-        account: input.account, role: input.role,
-        seasonStart: season.start, seasonLabel: season.label,
-        reason,
-        backdatedCount: backdates ? claimed.length : 0,
-        ...(backdates ? { fromMatchId: claimed[0].matchId } : {}),
-      };
-    };
-    if (shouldOfferRun({
-      seasonStart: current.start,
-      isResetSeason: current.isReset === true,
-      anchor: anchor ?? null,
-      existingRun,
-      declinedSeasonStarts,
-    })) return offer('season-reset');
-    if (input.account === UNKNOWN_ACCOUNT) return null;
-    if (shouldOfferNewTrackRun({
-      seasonStart: current.start,
-      anchor: anchor ?? null,
-      existingRun,
-      declinedSeasonStarts,
-      trackMatchCount: trackMatches(dataset(), input.account, input.role, current.start).length,
-    })) return offer('new-track');
-    return null;
-  },
-  declinePlacementRun: async (input: PlacementDeclineInput) => {
-    const key = rankKey(input.account, input.role);
-    const list = previewDeclined[key] ?? [];
-    if (!list.includes(input.seasonStart)) previewDeclined[key] = [...list, input.seasonStart];
-    save(DECLINED_KEY, previewDeclined);
-  },
-  recountPlacementRun: async (_input: PlacementTrackInput) => {
-    // No-op refresh: just return the current state.
-    return getPlacements();
-  },
-  mostPlayedHeroes: async () => {
-    const games = dataset();
-    const roles: Role[] = ['tank', 'damage', 'support', 'openQ'];
-    const out: Record<string, Partial<Record<Role, string[]>>> = {};
-    for (const account of new Set(games.map((g) => g.account))) {
-      const perRole: Partial<Record<Role, string[]>> = {};
-      for (const role of roles) {
-        const names = rankHeroesByPlays(games, account, role);
-        if (names.length) perRole[role] = names;
-      }
-      if (Object.keys(perRole).length) out[account] = perRole;
-    }
-    return out;
-  },
-  setRankAnchor: async (input: RankAnchorInput) => {
-    previewAnchors[rankKey(input.account, input.role)] = {
-      account: input.account, role: input.role,
-      tier: input.tier, division: input.division, progressPct: input.progressPct, setAt: Date.now(),
-    };
-    save(ANCHORS_KEY, previewAnchors);
-    return previewRanks();
-  },
-  importNotion: async () => {
-    if (!selectedNotionDatabaseId) return { imported: 0, skipped: 0, failed: 0, unavailable: true };
-    // No real Notion rows in the harness — return a canned result so the UI is testable.
-    previewImportedMatches += 4;
-    return { imported: 4, skipped: 2, failed: 0, accountsAdded: 2 };
-  },
-  deleteImportedMatches: async () => {
-    const deleted = previewImportedMatches;
-    previewImportedMatches = 0;
-    return { deleted };
-  },
-  importFromFile: async () => {
-    // No real filesystem in the harness — simulate importing a small file.
-    previewFileImports += 5;
-    previewLastFileImportAt = Date.now();
-    return { imported: 5, skipped: 0, invalid: 0, accountsAdded: 1, anchorSet: true };
-  },
-  deleteFileImports: async () => {
-    const deleted = previewFileImports;
-    previewFileImports = 0;
-    previewLastFileImportAt = undefined;
-    return { deleted };
-  },
-  fileImportedCount: async () => previewFileImports,
-  lastFileImportAt: async () => previewLastFileImportAt,
-  // No real filesystem/save-dialog in the harness — log the intent, same as openExternal.
-  exportBackup: async () => {
-    console.info('[preview] exportBackup', { games: dataset().length, targets: targets.length });
-    return { path: 'C:\\Users\\preview\\Documents\\vantage-backup-preview.json' };
-  },
-  cleanupNotionDuplicates: async () => {
-    if (!selectedNotionDatabaseId) return { archived: 0, kept: 0, failed: 0, unavailable: true };
-    // No real Notion rows in the harness — return a canned result so the UI is testable.
-    return { archived: 2, kept: 1, failed: 0 };
-  },
-  saveTarget: async (input: AuthoredTargetInput) => {
-    const now = Date.now();
-    targets.push({ id: `t-${now}`, createdAt: now, isActive: true, activatedAt: now, scope: 'season', ...input });
-    save(TARGETS_KEY, targets);
-  },
-  suggestThreshold: async (input: ThresholdSuggestionInput) =>
-    suggestMeasuredThreshold(dataset(), input.stat, input.account, {
-      roleScope: input.roleScope, heroScope: input.heroScope, mapScope: input.mapScope,
+  // "Choosing a file" imports a small generated backup through the real path.
+  importFile: {
+    pick: async () => buildImportEnvelope({
+      games: generateSampleGames(5, 99).map((g) => ({ ...g, matchId: `file-${g.matchId}` })),
+      accounts: [],
+      rankAnchors: {},
+      targets: [],
     }),
-  saveReview: async (input: ReviewInput) => {
-    // Mirrors the real dataProvider: only a REAL (logged) match can be
-    // reviewed — grading a demo row is practice only and is never persisted (F3).
-    if (!logged.some((g) => g.matchId === input.matchId)) return { saved: false };
-    previewReviews[input.matchId] = { at: Date.now(), grades: input.grades, flags: input.flags };
-    save(REVIEWS_KEY, previewReviews);
-    if (input.performance !== undefined) {
-      previewEdits[input.matchId] = { ...previewEdits[input.matchId], performance: input.performance };
-      save(EDITS_KEY, previewEdits);
-    }
-    const party = partyFromInput(input.party);
-    if (party !== undefined) writeParty(input.matchId, party);
-    // The ±%, and with it the `rankAtStart` snapshot — mirroring what
-    // `syncRankAtStart` does in the real provider, so the harness can actually
-    // show the feature rather than only ever rendering its empty state.
-    // `null` clears both; `undefined` leaves them alone.
-    if (input.srDelta !== undefined) {
-      const edit = { ...previewEdits[input.matchId] };
-      if (input.srDelta === null) {
-        delete edit.srDelta;
-        delete edit.rankAtStart;
-      } else {
-        edit.srDelta = input.srDelta;
-        const game = dataset().find((g) => g.matchId === input.matchId);
-        // Written once, like the real one: an existing snapshot is left alone.
-        if (game && !game.rankAtStart) {
-          const state = rankEnteringMatch(dataset(), anchorMap(), game.account, game.role, game.timestamp);
-          if (state) edit.rankAtStart = { tier: state.tier, division: state.division, progressPct: state.progressPct };
-        }
+  },
+  persistConfig: (patch) => {
+    Object.assign(config, patch);
+    saveConfig();
+  },
+  recordGame: (game) => pipeline.recordGame(game),
+  resolvePending: (matchId, result) => pipeline.resolvePending(matchId, result),
+  dismissPending: (matchId) => pipeline.dismissPending(matchId),
+  notify: (title, body) => console.info('[preview] notify', title, body),
+  announceChange: () => dataChanged.emit(),
+  sampleGames: () => sampleSeason,
+  logger: {
+    entries: () => [...logBacklog],
+    getLevel: () => logLevel,
+    setLevel: (level) => { logLevel = level; },
+    error: (scope, message, fields) => appendLog({ ts: Date.now(), level: 'error', scope, message, ...(fields ? { fields } : {}) }),
+  },
+  getSecrets: () => [],
+  gepStatus: gepPayload,
+  devModeAuthStatus: devModeAuthPayload,
+  appSettings: {
+    get: appUiSettings,
+    apply: (patch) => {
+      const { runAtLogin, ...ui } = patch;
+      if (runAtLogin !== undefined) config.runAtLogin = runAtLogin;
+      config.ui = { ...config.ui, ...ui };
+      if (patch.uiZoom !== undefined) {
+        config.ui.uiZoom = clampZoom(patch.uiZoom);
+        // No webContents.setZoomFactor in a browser — CSS zoom is the closest stand-in.
+        document.documentElement.style.setProperty('zoom', String(config.ui.uiZoom));
       }
-      previewEdits[input.matchId] = edit;
-      save(EDITS_KEY, previewEdits);
-    }
-    return { saved: true };
+      saveConfig();
+      return appUiSettings();
+    },
   },
-  importReviews: async (inputs: ReviewInput[]) => {
-    const known = new Set(dataset().map((g) => g.matchId));
-    let imported = 0;
-    let skipped = 0;
-    for (const i of inputs) {
-      if (!known.has(i.matchId) || previewReviews[i.matchId]) {
-        skipped++;
-        continue;
-      }
-      previewReviews[i.matchId] = { at: Date.now(), grades: i.grades, flags: i.flags };
-      imported++;
-    }
-    if (imported) save(REVIEWS_KEY, previewReviews);
-    return { imported, skipped };
-  },
-  updateTarget: async (input: TargetEditInput) => {
-    const t = findTarget(input.id);
-    if (!t) return;
-    t.name = input.name;
-    t.mode = input.mode;
-    t.rule = input.rule;
-    if (input.roleScope != null) t.roleScope = input.roleScope;
-    else delete t.roleScope;
-    if (input.heroScope != null && input.heroScope.length > 0) t.heroScope = input.heroScope;
-    else delete t.heroScope;
-    save(TARGETS_KEY, targets);
-  },
-  setTargetActive: async (id: string, active: boolean) => {
-    const t = findTarget(id);
-    if (!t) return;
-    t.isActive = active;
-    if (active) t.activatedAt = Date.now();
-    save(TARGETS_KEY, targets);
-  },
-  deactivateAllTargets: async () => {
-    for (const t of targets) t.isActive = false;
-    save(TARGETS_KEY, targets);
-  },
-  setTargetArchived: async (id: string, archived: boolean) => {
-    const t = findTarget(id);
-    if (!t) return;
-    if (archived) t.archivedAt = Date.now();
-    else delete t.archivedAt;
-    save(TARGETS_KEY, targets);
-  },
-  deleteTarget: async (id: string) => {
-    const idx = targets.findIndex((t) => t.id === id);
-    if (idx < 0) return;
-    targets.splice(idx, 1);
-    save(TARGETS_KEY, targets);
-  },
-  getBreakReminder: async () => breakReminder,
-  setBreakReminder: async (input: BreakReminderSettings) => {
-    breakReminder = normalizeBreakReminder(input);
-    save(BREAK_REMINDER_KEY, breakReminder);
-    return breakReminder;
-  },
-  recordCheckIn: async (input: CheckInInput) => {
-    const entry = normalizeCheckIn(input, Date.now());
-    if (!entry) throw new Error('Invalid check-in');
-    previewCheckIns.push(entry);
-    save(CHECK_INS_KEY, previewCheckIns);
-    return entry;
-  },
-  getStaleness: async () => staleness,
-  setStaleness: async (input: StalenessSettings) => {
-    staleness = normalizeStaleness(input);
-    save(STALENESS_KEY, staleness);
-    return staleness;
-  },
-  getReadiness: async () => readiness,
-  setReadiness: async (input: ReadinessSettings) => {
-    readiness = normalizeReadiness(input);
-    save(READINESS_KEY, readiness);
-    return readiness;
-  },
-  getSessionSettings: async () => sessionSettings,
-  setSessionSettings: async (input: SessionSettings) => {
-    sessionSettings = normalizeSessionSettings(input);
-    save(SESSION_SETTINGS_KEY, sessionSettings);
-    return sessionSettings;
-  },
-  getCoaching: async () => coaching,
-  setCoaching: async (input: CoachingSettings) => {
-    coaching = normalizeCoachingSettings(input);
-    save(COACHING_KEY, coaching);
-    return coaching;
-  },
-  getGrading: async () => grading,
-  setGrading: async (input: GradingSettings) => {
-    grading = normalizeGradingSettings(input);
-    save(GRADING_KEY, grading);
-    return grading;
-  },
-  getLogEntries: async () => [...previewLog],
-  getLogLevel: async () => previewLogLevel,
-  setLogLevel: async (level: LogLevel) => {
-    previewLogLevel = level;
-    return previewLogLevel;
-  },
-  logRendererError: async (input: RendererErrorInput) => {
-    const e: LogEntry = {
-      ts: Date.now(), level: 'error', scope: 'renderer', message: input.message,
-      fields: { ...(input.source ? { source: input.source } : {}) },
-    };
-    previewLog.push(e);
-    for (const cb of logListeners) cb(e);
-  },
-  exportLogBundle: async () => {
-    // No filesystem or save dialog in the browser harness — echo the intent
-    // and report a cancel, same shape a real dismissed dialog would return.
-    console.info('[preview] exportLogBundle (no filesystem in the browser preview)');
-    return { cancelled: true };
-  },
-  onLogEntry: (cb: (e: LogEntry) => void) => {
-    logListeners.add(cb);
-    return () => logListeners.delete(cb);
-  },
-  getGepStatus: async () => gepPayload(),
-  onGepStatus: (cb: (s: GepStatusPayload) => void) => {
-    gepListeners.add(cb);
-    return () => gepListeners.delete(cb);
-  },
-  getDevModeAuthStatus: async () => devModeAuthPayload(),
-  onDevModeAuthStatus: (cb: (s: DevModeAuthStatusPayload) => void) => {
-    devModeAuthListeners.add(cb);
-    return () => devModeAuthListeners.delete(cb);
-  },
-  onSyncProgress: (cb: (p: SyncProgress) => void) => {
-    syncListeners.add(cb);
-    return () => syncListeners.delete(cb);
-  },
-  onGameLogged: (cb: (p: GameLoggedPayload) => void) => {
-    gameLoggedListeners.add(cb);
-    return () => gameLoggedListeners.delete(cb);
-  },
-  onPendingChanged: (cb: (p: PendingChangedPayload) => void) => {
-    pendingChangedListeners.add(cb);
-    return () => pendingChangedListeners.delete(cb);
-  },
-  // The harness writes straight into its own in-memory stores rather than
-  // through a provider, so there is nothing to announce — the views' own
-  // `store.refresh()` already re-reads them.
-  onDataChanged: (_cb: () => void) => () => {},
-  getAppSettings: async () => appSettings,
-  setAppSettings: async (patch: Partial<AppUiSettings>) => {
-    appSettings = { ...appSettings, ...patch };
-    if (patch.uiZoom !== undefined) {
-      appSettings.uiZoom = clampZoom(patch.uiZoom);
-      // No real webContents.setZoomFactor in the browser harness — the
-      // (non-standard but Chromium-supported) CSS `zoom` property is the
-      // closest visual stand-in, so W7's text-size setting is testable here.
-      (document.documentElement.style as any).zoom = String(appSettings.uiZoom);
-    }
-    save(APP_SETTINGS_KEY, appSettings);
-    return appSettings;
-  },
-  setDevKey: async (key: string) => ({ hasKey: key.trim().length > 0 }),
-  getAppInfo: async () => ({
-    version: 'preview',
-    supportEmail: 'timo.seikel@gmail.com',
-    electron: 'preview',
-    chromium: 'preview',
-    node: 'preview',
-    v8: 'preview',
-    platform: 'browser',
-    osRelease: 'preview',
-    packaged: false,
-    devMode: false,
-    // Tied to the same ?devmode=... simulated state as the badge (T9), so the
-    // Settings "Dev Mode" section's reveal-on-attempt can be previewed too.
-    devModeAttempted: devModeAuthState !== 'off',
+  setDevKey: (key) => ({ hasKey: key.trim().length > 0 }),
+  appInfo: () => ({
+    version: 'preview', supportEmail: 'timo.seikel@gmail.com',
+    electron: 'preview', chromium: 'preview', node: 'preview', v8: 'preview',
+    platform: 'browser', osRelease: 'preview', packaged: false, devMode: false,
+    // Tied to ?devmode=… so the Settings "Dev Mode" section's reveal is previewable.
+    devModeAttempted: devModeState !== 'off',
     gepPackageVersion: 'preview',
     mcpBridgePath: '/dev/dist/mcp/stdio.js',
   }),
-  applyGepUpdate: async () => { /* preview: restart is a no-op */ },
-  openExternal: async (url: string) => {
-    // No shell in the browser harness — echo the intent so links stay debuggable.
-    console.info('[preview] openExternal', url);
+  openExternal: async (url) => console.info('[preview] openExternal', url),
+  // No save dialog in a browser: report where it "would" have been written.
+  saveTextFile: async (defaultName, contents) => {
+    console.info('[preview] saveTextFile', defaultName, `${contents.length} chars`);
+    return `C:\\Users\\preview\\Documents\\${defaultName}`;
   },
-  getDataLocation: async () => ({
-    folder: previewDataFolder,
-    isDefault: previewDataFolderIsDefault,
-    ...(previewNeedsFirstRunChoice ? { needsFirstRunChoice: true } : {}),
-  }),
-  // No real filesystem in the browser preview: each "pick" just cycles through
-  // a couple of canned folder names. The first pick simulates an ordinary new
-  // folder (migrate); every third simulates one that already holds Vantage
-  // data (requiresAdopt), so the adopt-or-cancel flow stays exercisable here.
-  chooseDataFolder: async (): Promise<DataLocationResult> => {
-    previewFolderPickCount++;
-    const target = `C:\\Users\\preview\\OneDrive\\Vantage-data-${previewFolderPickCount}`;
-    if (previewFolderPickCount % 3 === 0) {
-      return { ok: true, location: { folder: target, isDefault: false }, changed: false, requiresAdopt: true };
-    }
-    previewDataFolder = target;
-    previewDataFolderIsDefault = false;
-    return { ok: true, location: { folder: previewDataFolder, isDefault: false }, changed: true };
+  applyGepUpdate: () => {},
+  dataLocation: {
+    get: () => ({
+      folder: dataFolder.folder,
+      isDefault: dataFolder.folder === DEFAULT_DATA_FOLDER,
+      ...(dataFolder.needsFirstRunChoice ? { needsFirstRunChoice: true } : {}),
+    }),
+    choose: async () => {
+      const target = nextPickedFolder();
+      if (dataFolder.picks % 3 === 0) {
+        return { ok: true, location: { folder: target, isDefault: false }, changed: false, requiresAdopt: true };
+      }
+      return moveTo(target);
+    },
+    set: async (input) => moveTo(input.folder),
+    chooseFirstRun: async () => moveTo(nextPickedFolder()),
+    reveal: () => console.info('[preview] revealDataFolder', dataFolder.folder),
   },
-  setDataFolder: async (input: { folder: string; adopt?: boolean }): Promise<DataLocationResult> => {
-    previewDataFolder = input.folder;
-    previewDataFolderIsDefault = input.folder === DEFAULT_DATA_FOLDER;
-    previewNeedsFirstRunChoice = false;
-    return { ok: true, location: { folder: previewDataFolder, isDefault: previewDataFolderIsDefault }, changed: true };
-  },
-  chooseFirstRunDataFolder: async (): Promise<DataLocationResult> => {
-    previewFolderPickCount++;
-    const target = `C:\\Users\\preview\\OneDrive\\Vantage-data-${previewFolderPickCount}`;
-    previewDataFolder = target;
-    previewDataFolderIsDefault = false;
-    previewNeedsFirstRunChoice = false;
-    return { ok: true, location: { folder: previewDataFolder, isDefault: false }, changed: true };
-  },
-  // No OS file manager in the browser harness — echo the intent, same as openExternal.
-  revealDataFolder: async () => { console.info('[preview] revealDataFolder', previewDataFolder); },
-  clearReview: async (matchId: string) => {
-    delete previewReviews[matchId];
-    save(REVIEWS_KEY, previewReviews);
-  },
-  // The pending store is a real-app SQLite table; here it is a session-only list that
-  // previewLive.finishWithoutResult() fills, mirroring the pipeline's signals: a hold
-  // names its match, a dismissal signals with no payload, and a resolve signals the same
-  // way and then records the game (an onGameLogged push with source 'gep').
-  resolvePendingMatch: async (matchId: string, result: Result) => {
-    const i = previewPending.findIndex((m) => m.matchId === matchId);
-    if (i < 0) return;
-    const [held] = previewPending.splice(i, 1);
-    logged.push({
-      matchId: held.matchId, timestamp: held.timestamp, account: held.account, role: held.role, map: held.map,
-      result, gameType: 'Competitive', source: 'gep', heroes: held.heroes,
+});
+
+// --- the bridge ----------------------------------------------------------------
+
+/**
+ * Every contract method through the provider's handler table — with the
+ * structured clone IPC applies on both sides, so the renderer can never hold a
+ * live reference into the stores.
+ */
+const handlers = dashboardHandlers(provider) as unknown as Record<string, (...args: unknown[]) => unknown>;
+const invokers = Object.fromEntries(
+  Object.entries(handlers).map(([method, handle]) => [
+    method,
+    async (...args: unknown[]) => structuredClone(await handle(...structuredClone(args))),
+  ]),
+) as unknown as DashboardInvokers;
+
+/**
+ * `?players=N` pads the Players list with synthetic rows: the sample roster
+ * pool is ~20 names, too few to reach the row cap, its caption or the paging.
+ */
+function padPlayers(list: PlayerList): PlayerList {
+  const pad = Number(params.get('players'));
+  if (!Number.isFinite(pad) || pad <= list.totalInScope) return list;
+  const rows = [...list.rows];
+  for (let i = list.totalInScope; i < pad && rows.length < list.cap; i++) {
+    rows.push({
+      key: `synth${i}`, name: `Synthetic${i}#${1000 + i}`,
+      games: (i % 17) + 1, lastSeen: Date.now() - i * 60_000,
+      sameTeam: { wins: i % 5, losses: i % 3 }, enemyTeam: { wins: i % 4, losses: i % 6 },
+      ambiguous: i % 23 === 0,
     });
-    save(LOGGED_KEY, logged);
-    for (const cb of pendingChangedListeners) cb({});
-    for (const cb of gameLoggedListeners) {
-      cb({ matchId: held.matchId, account: held.account, configured: isConfiguredAccount(held.account, previewAccounts), role: held.role, source: 'gep' });
-    }
-  },
-  dismissPendingMatch: async (matchId: string) => {
-    const i = previewPending.findIndex((m) => m.matchId === matchId);
-    if (i < 0) return;
-    previewPending.splice(i, 1);
-    for (const cb of pendingChangedListeners) cb({});
-  },
-  previewPendingReviewIgnore: async (input) => ({ count: eligibleForIgnore(input).length }),
-  ignorePendingReviews: async (input) => {
-    const eligible = eligibleForIgnore(input);
-    const matchIds = eligible.map((g) => g.matchId);
-    if (matchIds.length) {
-      for (const g of eligible) previewReviews[g.matchId] = { at: Date.now(), grades: {}, flags: {} };
-      save(REVIEWS_KEY, previewReviews);
-    }
-    return { matchIds };
-  },
-  clearReviews: async (matchIds: string[]) => {
-    for (const id of matchIds) delete previewReviews[id];
-    save(REVIEWS_KEY, previewReviews);
-  },
+  }
+  return { ...list, rows, matched: pad, totalInScope: pad };
+}
+
+const bridge: OwStatsApi = {
+  ...invokers,
+  playerList: async (query) => padPlayers(await invokers.playerList(query)),
+  onLogEntry: logEntries.on,
+  onGepStatus: gepStatus.on,
+  onDevModeAuthStatus: devModeAuth.on,
+  onSyncProgress: syncProgress.on,
+  onGameLogged: gameLogged.on,
+  onPendingChanged: pendingChanged.on,
+  onLiveMatch: liveMatch.on,
+  onDataChanged: dataChanged.on,
   window: {
     minimize: () => console.info('[preview] minimize'),
     toggleMaximize: () => console.info('[preview] toggle-maximize'),
@@ -1380,28 +458,27 @@ const mock: OwStatsApi = {
   },
 };
 
-window.owstats = mock;
+window.owstats = bridge;
 new App(must('#app'));
 
+// --- live-match simulation ----------------------------------------------------
+
 /**
- * Live-match simulation for the browser harness.
- *
- * The real live board is fed by GEP, which the harness has no access to — so
- * without this the Live screen could only ever be seen in its idle state, and
- * the one screen that most needs eyeballs would be the one screen the harness
- * couldn't show. This synthesizes a plausible match from the sample season's own
- * players, so the scoreboard, the per-team totals and (crucially) the
- * with/vs records all render against real history.
- *
- * Drive it from the browser console:
- *   previewLive.start()   — begin a synthetic match that ticks
- *   previewLive.stop()    — end it
+ * The live board is fed by GEP, which the harness has no access to — so this
+ * synthesizes a plausible match from the sample history's own players, so the
+ * scoreboard, the per-team totals and the with/vs records render against real
+ * history. Drive it from the console:
+ *   previewLive.start() / stop()     — a synthetic match that ticks
+ *   previewLive.finish(role?)        — it ends with a result (recorded, source 'gep')
+ *   previewLive.finishWithoutResult(role?) — it ends without one (held for Review)
+ * Both finishes go through the real match pipeline.
  */
-function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
-  // Prefer players the sample history actually knows, so "Players you've met"
-  // has something real to show.
+let liveTimer: ReturnType<typeof setInterval> | undefined;
+let liveStartedAt = Date.now();
+
+function buildLiveMatch(tick: number): LiveMatchPayload {
   const known = [...new Set(
-    dataset().flatMap((g) => (g.roster ?? []).filter((p) => !p.isLocal && p.battleTag).map((p) => p.battleTag!)),
+    provider.games().flatMap((g) => (g.roster ?? []).filter((p) => !p.isLocal && p.battleTag).map((p) => p.battleTag!)),
   )].slice(0, 9);
   const heroes = ['Ana', 'Genji', 'Reinhardt', 'Lúcio', 'Tracer', 'Sigma', 'Kiriko', 'Sojourn', 'Orisa'];
   const roster = [
@@ -1418,8 +495,7 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
       mitigation: i % 4 === 0 ? 2000 + tick * 80 : 0,
     })),
   ];
-  // Summed the same way the real monitor sums the live roster, so the harness
-  // exercises the deaths/damage/healing rows rather than faking plausible numbers.
+  // Summed the way the real monitor sums the live roster.
   const side = (t: number): { damage: number; healing: number; deaths: number } => roster
     .filter((r) => r.team === t)
     .reduce((a, r) => ({
@@ -1429,27 +505,18 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
     }), { damage: 0, healing: 0, deaths: 0 });
   return {
     live: true,
-    // Fixed for the whole simulated match, like the real monitor's `startedAt`
-    // (set once at match_start). Recomputing it per tick jitters by a few ms,
-    // which reads as a brand-new match every second.
-    startedAt: previewLiveStartedAt,
-    // The round clock, as the real monitor builds it: a short hero select,
-    // then the first round running (the game's own clock starts there).
+    // Fixed for the whole match, like the real monitor's `startedAt`.
+    startedAt: liveStartedAt,
+    // A short hero select, then the first round running.
     clock: tick < 5
       ? { phase: 'hero-select', bankedMs: 0 }
-      : { phase: 'round', bankedMs: 0, runningSince: previewLiveStartedAt + 5_000 },
+      : { phase: 'round', bankedMs: 0, runningSince: liveStartedAt + 5_000 },
     map: 'Ilios',
     totals: { yours: side(0), theirs: side(1), known: true, deathsKnown: true },
     gameType: 'competitive',
-    // Through the same ordering the real monitor applies, so the harness shows
-    // the 5v5 layout rather than whatever order this file happens to build in.
     roster: orderScoreboard(roster),
-    // Mirrors what the real monitor does: the feed is withheld at the source
-    // when the setting is off, not filtered out in the view. Without this the
-    // Settings toggle would be untestable in the harness.
-    feed: appSettings.liveKillFeed ? ([
-      // A destroyed deployable and a revive, so the harness shows both of the
-      // non-kill shapes the real feed produces alongside ordinary kills.
+    // Withheld at the source when the setting is off, as the real monitor does.
+    feed: config.ui.liveKillFeed ? ([
       { at: Date.now(), attacker: 'Kirito', victim: 'Takigano', attackerHero: 'Pharah',
         attackerFriendly: true, deployable: { hero: 'Illari', label: 'Healing Pylon' } },
       { at: Date.now() - 2000, attacker: 'Kiriko', victim: 'Karambo', attackerHero: 'Kiriko',
@@ -1466,56 +533,52 @@ function buildPreviewLiveMatch(tick: number): LiveMatchPayload {
   };
 }
 
-let previewLiveTimer: ReturnType<typeof setInterval> | undefined;
-let previewLiveStartedAt = Date.now();
-(window as unknown as { previewLive: { start(): void; stop(): void; finish(role?: Role): string; finishWithoutResult(role?: Role): string } }).previewLive = {
-  start: () => {
+/** The capture GEP would hand the pipeline at match end, on the first configured account. */
+function capturedMatch(prefix: string, role: Role, outcome?: string): MatchRecord {
+  return {
+    matchId: `${prefix}-${Date.now()}`,
+    battleTag: Object.keys(config.accounts)[0],
+    mapName: 'Ilios',
+    gameType: 'competitive',
+    queueType: role === 'openQ' ? 'open' : 'role',
+    heroRole: role,
+    heroes: ['Genji'],
+    endedAt: Date.now(),
+    ...(outcome ? { outcome } : {}),
+  };
+}
+
+const previewLive = {
+  start: (): void => {
     let tick = 0;
-    previewLiveStartedAt = Date.now();
-    const emit = (p: LiveMatchPayload): void => { for (const cb of liveMatchListeners) cb(p); };
-    emit(buildPreviewLiveMatch(tick));
-    clearInterval(previewLiveTimer);
-    previewLiveTimer = setInterval(() => emit(buildPreviewLiveMatch(++tick)), 1000);
+    liveStartedAt = Date.now();
+    liveMatch.emit(buildLiveMatch(tick));
+    clearInterval(liveTimer);
+    liveTimer = setInterval(() => liveMatch.emit(buildLiveMatch(++tick)), 1000);
   },
-  stop: () => {
-    clearInterval(previewLiveTimer);
-    previewLiveTimer = undefined;
-    for (const cb of liveMatchListeners) {
-      cb({ live: false, endedAt: Date.now(), roster: [],
-        totals: {
-          yours: { damage: 0, healing: 0, deaths: 0 }, theirs: { damage: 0, healing: 0, deaths: 0 },
-          known: false, deathsKnown: false,
-        },
-        feed: [], teamsKnown: false });
-    }
-  },
-  // A live-tracked match ENDING: the live feed goes idle and the pipeline records the
-  // game, pushing onGameLogged with source 'gep' — the push "Open Review on match end"
-  // reacts to. (logMatch's own push is 'manual', which deliberately never triggers it.)
-  finish: (role: Role = 'damage') => {
-    (window as unknown as { previewLive: { stop(): void } }).previewLive.stop();
-    const matchId = `preview-gep-${Date.now()}`;
-    const account = Object.values(previewAccounts)[0] || 'You';
-    logged.push({
-      matchId, timestamp: Date.now(), account, role, map: 'Ilios', result: 'Win',
-      gameType: 'Competitive', source: 'gep', heroes: ['Genji'],
+  stop: (): void => {
+    clearInterval(liveTimer);
+    liveTimer = undefined;
+    liveMatch.emit({
+      live: false, endedAt: Date.now(), roster: [],
+      totals: {
+        yours: { damage: 0, healing: 0, deaths: 0 }, theirs: { damage: 0, healing: 0, deaths: 0 },
+        known: false, deathsKnown: false,
+      },
+      feed: [], teamsKnown: false,
     });
-    save(LOGGED_KEY, logged);
-    for (const cb of gameLoggedListeners) {
-      cb({ matchId, account, configured: isConfiguredAccount(account, previewAccounts), role, source: 'gep' });
-    }
-    return matchId;
   },
-  // A tracked match ending WITHOUT a confirmed result: the pipeline holds it for Review's
-  // Needs-result card and pushes onPendingChanged naming it (no onGameLogged).
-  finishWithoutResult: (role: Role = 'damage') => {
-    (window as unknown as { previewLive: { stop(): void } }).previewLive.stop();
-    const matchId = `preview-held-${Date.now()}`;
-    previewPending.push({
-      matchId, map: 'Ilios', heroes: ['Genji'], role,
-      account: Object.values(previewAccounts)[0] || 'You', timestamp: Date.now(), rosterCount: 10,
-    });
-    for (const cb of pendingChangedListeners) cb({ held: matchId });
-    return matchId;
+  finish: (role: Role = 'damage'): string => {
+    previewLive.stop();
+    const record = capturedMatch('preview-gep', role, 'victory');
+    pipeline.addMatch(record);
+    return record.matchId;
+  },
+  finishWithoutResult: (role: Role = 'damage'): string => {
+    previewLive.stop();
+    const record = capturedMatch('preview-held', role);
+    pipeline.addMatch(record);
+    return record.matchId;
   },
 };
+(window as unknown as { previewLive: typeof previewLive }).previewLive = previewLive;

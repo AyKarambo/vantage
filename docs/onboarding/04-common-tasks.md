@@ -46,16 +46,17 @@ For data that shouldn't ride along in the dashboard payload (like `heroDetail`):
 1. **Contract:** declare the method on `OwStatsApi` *and* add the channel to
    `IPC_CHANNELS` in [`src/shared/contract/api.ts`](../../src/shared/contract/api.ts).
    Input/output types live in the contract too — never `any` across the boundary.
-2. **Provider:** implement it on the provider in
-   [`src/main/dashboard/provider.ts`](../../src/main/dashboard/provider.ts), delegating
-   real logic to `src/core/` or the stores.
-3. **Handler:** register the one-line forward in
-   [`src/main/dashboard/ipcHandlers.ts`](../../src/main/dashboard/ipcHandlers.ts).
-4. **Preload and bridge need no changes** — both are generated from `IPC_CHANNELS`.
-5. **Preview mock:** add a fake implementation in
-   [`renderer/preview/preview.ts`](../../renderer/preview/preview.ts) so the browser
-   harness keeps working (typecheck will remind you).
-6. Call it from the renderer via `bridge.myMethod(...)`.
+2. **Provider:** implement it in `createDataProvider`
+   ([`src/main/dataProvider.ts`](../../src/main/dataProvider.ts)), delegating real logic
+   to `src/core/` or the stores. `DataProvider` takes the method's signature from the
+   contract, so the typecheck fails until it exists (add it to `AsyncProviderMethod` in
+   [`handlers.ts`](../../src/main/dashboard/handlers.ts) if it does real async work). A
+   method that is a composition over the provider rather than one of its own goes in
+   that file's `composed` table instead.
+3. **IPC, preload, bridge and preview need no changes** — the IPC handlers, the preload
+   and the renderer bridge are generated from `IPC_CHANNELS`, and the browser preview
+   runs the real provider.
+4. Call it from the renderer via `bridge.myMethod(...)`.
 
 ## Adding a chart
 
