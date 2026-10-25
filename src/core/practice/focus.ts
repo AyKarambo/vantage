@@ -2,6 +2,7 @@ import type { GameRecord, MatchReview } from '../analytics';
 import type { SessionCheckIn } from '../checkIn';
 import type { CoachingSettings, FocusStickiness } from '../coachingSettings';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
+import { matchInTargetScope, type TargetScope } from '../targets/scope';
 import { checkInForSitting, PRACTICE_SITTING_GAP_MINUTES, sittingsOf } from './sittings';
 
 /**
@@ -55,7 +56,9 @@ export function practiceFocusOn(
  * - `sticky` — the most recently SAVED choice, across sittings.
  * When that gives nothing, the "today's focus" of the check-in that preceded
  * this game's sitting applies — for that sitting only. The result is narrowed
- * to `selectable` (the active self-rated targets the chooser can show).
+ * to `selectable` (the active self-rated targets the chooser can show). With
+ * `scopes`, a choice made on a game where some of this game's targets were out
+ * of scope only counts when no game offering all of them is found.
  */
 export function focusPreselection(
   all: readonly GameRecord[],
@@ -64,8 +67,9 @@ export function focusPreselection(
   checkIns: readonly SessionCheckIn[],
   selectable: ReadonlySet<string>,
   gapMinutes = PRACTICE_SITTING_GAP_MINUTES,
+  scopes?: ReadonlyMap<string, TargetScope>,
 ): string[] {
-  return focusPreselector(all, stickiness, checkIns, selectable, gapMinutes)(game);
+  return focusPreselector(all, stickiness, checkIns, selectable, gapMinutes, scopes)(game);
 }
 
 /**
@@ -79,6 +83,7 @@ export function focusPreselector(
   checkIns: readonly SessionCheckIn[],
   selectable: ReadonlySet<string>,
   gapMinutes = PRACTICE_SITTING_GAP_MINUTES,
+  scopes?: ReadonlyMap<string, TargetScope>,
 ): (game: GameRecord) => string[] {
   const narrow = (ids: readonly string[]): string[] => ids.filter((id) => selectable.has(id));
   const sittingOf = new Map<string, GameRecord[]>();
@@ -88,15 +93,28 @@ export function focusPreselector(
     ? all.filter((g) => hasFocusChoice(g.review)).sort((a, b) => b.review!.at - a.review!.at)
     : [];
   const sorted = [...checkIns].sort((a, b) => a.at - b.at);
+  const inScope = (g: GameRecord, id: string): boolean => {
+    const scope = scopes?.get(id);
+    return !scope || matchInTargetScope(g, scope);
+  };
+  // Prefer a choice made with every target this game offers on offer there
+  // too: a Genji-only target is missing from a Sojourn game's chooser, so what
+  // was picked there says nothing about it, and the next Genji game should take
+  // the choice from the last game where it could have been picked.
+  const pick = (candidates: readonly GameRecord[], game: GameRecord): GameRecord | undefined => {
+    if (!scopes) return candidates[0];
+    const offered = [...selectable].filter((id) => inScope(game, id));
+    return candidates.find((c) => offered.every((id) => inScope(c, id))) ?? candidates[0];
+  };
   return (game) => {
     const sitting = sittingOf.get(game.matchId) ?? [game];
     if (stickiness === 'sitting') {
-      const nearest = sitting
+      const nearest = pick(sitting
         .filter((g) => g.matchId !== game.matchId && hasFocusChoice(g.review))
-        .sort((a, b) => Math.abs(a.timestamp - game.timestamp) - Math.abs(b.timestamp - game.timestamp))[0];
+        .sort((a, b) => Math.abs(a.timestamp - game.timestamp) - Math.abs(b.timestamp - game.timestamp)), game);
       if (nearest) return narrow(focusOf(nearest.review));
     } else if (stickiness === 'sticky') {
-      const latest = chosen.find((g) => g.matchId !== game.matchId);
+      const latest = pick(chosen.filter((g) => g.matchId !== game.matchId), game);
       if (latest) return narrow(focusOf(latest.review));
     }
     return narrow(checkInForSitting(sitting[0], sorted, gapMinutes)?.focusTargetIds ?? []);

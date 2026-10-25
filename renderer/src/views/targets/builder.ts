@@ -329,37 +329,44 @@ function suggestionPanel(stat: string, s: ThresholdSuggestion | null, onUse: (v:
  * {@link scopePickers}.
  */
 function scopeBlock(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void): HTMLElement {
-  const host = h('div');
-  let expanded = state.roleScope != null || (state.heroScope?.length ?? 0) > 0 || (state.mapScope?.length ?? 0) > 0;
-
-  const summaryRow = (): HTMLElement => {
-    const rolePart = state.roleScope ? roleLabel(state.roleScope) : 'any role';
-    const heroPart = state.heroScope?.length ? state.heroScope.join(', ') : 'any hero';
-    const mapPart = state.mapScope?.length ? state.mapScope.join(', ') : 'any map';
-    return h('div', {
-      class: 'hint',
-      style: { marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
-    },
-      state.roleScope ? roleIcon(state.roleScope, { size: 13 }) : null,
-      h('span', null, `Applies to: ${rolePart}, ${heroPart}, ${mapPart}`),
-      h('span', null, '·'),
-      inlineLink('Change', { onClick: () => { expanded = true; draw(); } }),
-    );
+  // The role row is always on show — "the whole role" is one click, and the
+  // most common scope. Only the long hero grid and map list stay folded (R5),
+  // opening by themselves when the loaded target already narrows by them.
+  let expanded = (state.heroScope?.length ?? 0) > 0 || (state.mapScope?.length ?? 0) > 0;
+  const detailHost = h('div');
+  const summary = h('div', { class: 'hint', style: { marginTop: '8px' } });
+  const paintSummary = (): void => {
+    const rolePart = state.roleScope ? `every ${roleLabel(state.roleScope)} hero` : 'every role';
+    const heroPart = state.heroScope?.length ? state.heroScope.join(', ') : rolePart;
+    const mapPart = state.mapScope?.length ? ` on ${state.mapScope.join(', ')}` : '';
+    summary.textContent = `Offered on Review and Log Match for ${heroPart}${mapPart} — other games don’t show it.`;
   };
-
-  const draw = (): void => {
-    render(host, expanded ? scopePickers(state, heroes, maps, onChange) : summaryRow());
+  const changed = (): void => { paintSummary(); onChange(); };
+  const pickers = scopePickers(state, heroes, maps, changed);
+  const drawDetail = (): void => {
+    render(detailHost, expanded
+      ? pickers.details
+      : h('div', { style: { marginTop: '8px' } },
+          inlineLink('Narrow to specific heroes or maps ›', { onClick: () => { expanded = true; drawDetail(); } })));
   };
-  draw();
-  return host;
+  paintSummary();
+  drawDetail();
+  return h('div', null,
+    h('div', { class: 'field-label', style: { marginTop: '14px' } }, 'Applies to'),
+    pickers.roles,
+    summary,
+    detailHost,
+  );
 }
 
 /** The role/hero/map picker (D, R9) itself — restricts grading to a role,
  *  one or more heroes, and/or one or more maps. Shared by both self-rated and
  *  measured targets; the scope is stored identically regardless of grading
- *  mode. Unchanged by the R5 disclosure above it — only when it's shown
- *  changed, not what it shows. */
-function scopePickers(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void): HTMLElement {
+ *  mode. Returns the role row and the hero/map details separately so the
+ *  block above can keep the role row always visible. */
+function scopePickers(
+  state: BuilderState, heroes: HeroEntry[], maps: MapEntry[], onChange: () => void,
+): { roles: HTMLElement; details: HTMLElement } {
   const heroHost = h('div');
   const heroSelected = new Set<string>(state.heroScope ?? []);
   const paintHeroes = (): void => {
@@ -426,15 +433,16 @@ function scopePickers(state: BuilderState, heroes: HeroEntry[], maps: MapEntry[]
   };
   paintMaps();
 
-  return h('div', null,
-    h('div', { class: 'field-label', style: { marginTop: '14px' } }, 'Scope (optional)'),
-    h('div', { class: 'hint', style: { marginBottom: '8px' } },
-      'Limit this target to a role, one or more heroes, and/or one or more maps — leave everything as “Any” to apply to the whole match. Out-of-scope matches don’t grade or offer this target.'),
-    roleHost,
-    h('div', { style: { marginTop: '8px' } }, heroHost),
-    h('div', { class: 'field-label', style: { marginTop: '12px', fontSize: '11.5px' } }, 'Map'),
-    h('div', { style: { marginTop: '6px' } }, mapHost),
-  );
+  return {
+    roles: roleHost,
+    details: h('div', null,
+      h('div', { class: 'field-label', style: { marginTop: '12px', fontSize: '11.5px' } }, 'Heroes'),
+      h('div', { class: 'hint', style: { marginBottom: '6px' } }, 'None picked = every hero of the role above.'),
+      heroHost,
+      h('div', { class: 'field-label', style: { marginTop: '12px', fontSize: '11.5px' } }, 'Map'),
+      h('div', { style: { marginTop: '6px' } }, mapHost),
+    ),
+  };
 }
 
 /** One of the three Hit/Partial/Missed grading swatches previewed under a self-graded target. */

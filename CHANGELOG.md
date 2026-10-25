@@ -55,6 +55,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **Card headers no longer squeeze.** On cards with a wide control next to the title (a row of hero
   tabs, say), the subtitle used to be squeezed into a narrow column, and the control could run past the
   card's edge. The subtitle now drops to its own line and the control wraps instead.
+- **Your group sticks for the whole sitting.** Pick who you queued with once and the other games of that
+  sitting take the same group, as long as the game's own group size and team list agree. The next game you
+  play with them starts with that group already filled in too.
+- **Hero- and role-scoped targets stay picked.** With "Keep this choice for" set to this sitting or until
+  you change it, a target limited to certain heroes or a role is no longer dropped just because a game in
+  between didn't offer it (a Sojourn game in the middle of a Genji target, say).
+- **Scope a target to a role in one click.** When you define a target, **Applies to** now shows the role
+  buttons right away — pick Damage and the target is for every Damage hero. "Narrow to specific heroes or
+  maps" opens the hero and map pickers when you want it tighter.
+- **Log Match only offers targets that fit the game.** Like Review, a target limited to a role, heroes or map
+  no longer shows when you log a game outside that scope. It updates as you change role, heroes or map.
 
 ## 0.41.0 — 18 October 2026
 

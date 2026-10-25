@@ -7,7 +7,7 @@ import { streak, type GameRecord } from '../core/analytics';
 import { classifyGameType, isCompetitive } from '../core/matchFilter';
 import { isConfiguredAccount } from '../core/accountsManage';
 import { sourceOf } from '../core/source';
-import { autoParty } from '../core/party';
+import { autoParty, carriedParty } from '../core/party';
 import type { GameLoggedPayload, PendingChangedPayload } from '../shared/contract';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
@@ -146,7 +146,11 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   function addMatch(record: MatchRecord): void {
     const game = matchToGame(record, deps.getConfig().accounts);
     // Only fresh captures pass through here, so older history is never relabelled.
-    const party = game && deps.friendKeys ? autoParty(game, deps.friendKeys()) : undefined;
+    // Tagged friends first; otherwise the group the player set on the previous
+    // game of this sitting carries over while the roster still agrees.
+    const party = game
+      ? (deps.friendKeys ? autoParty(game, deps.friendKeys()) : undefined) ?? carriedParty(deps.history.all(), game)
+      : undefined;
     if (game && party) game.party = party;
     // Happy path: clearly competitive AND has a resolvable result → auto-log it.
     // A manual log never reaches this branch.

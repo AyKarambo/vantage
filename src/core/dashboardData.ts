@@ -772,7 +772,11 @@ function inboxRows(
   const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
   const prevOf = new Map<string, GameRecord>();
   for (const s of sittingsOf(all)) s.forEach((g, i) => { if (i) prevOf.set(g.matchId, s[i - 1]); });
-  const preselect = selectable.size ? focusPreselector(all, coaching.focusStickiness, checkIns, selectable) : null;
+  // Scopes let a role/hero-scoped target keep its pick across games it was out of scope for.
+  const scopes = new Map(targets.filter((t) => selectable.has(t.id)).map((t) => [t.id, t] as const));
+  const preselect = selectable.size
+    ? focusPreselector(all, coaching.focusStickiness, checkIns, selectable, undefined, scopes)
+    : null;
   return rows.map((g) => {
     const suggested = preselect ? preselect(g) : [];
     const autoBreak = autoBreakBefore(g, prevOf.get(g.matchId) ?? null, coaching);
