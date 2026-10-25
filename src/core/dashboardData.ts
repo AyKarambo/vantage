@@ -7,7 +7,7 @@ import {
   byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
-  type GameRecord,
+  decided, type GameRecord,
 } from './analytics';
 import { effectiveGroupSize } from './party';
 import { isCompetitive } from './matchFilter';
@@ -30,7 +30,7 @@ import {
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
-import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap, type RankSeriesPoint } from './rank';
+import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap } from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role, Result } from './model';
@@ -233,7 +233,7 @@ export function computeDashboard(
       return {
         ...r,
         deltaGames: r.games - (prev?.games ?? 0),
-        ...(prev && prev.wins + prev.losses > 0 && r.wins + r.losses > 0
+        ...(prev && decided(prev) > 0 && decided(r) > 0
           ? { deltaWinrate: Math.round((r.winrate - prev.winrate) * 1000) / 10 }
           : {}),
       };

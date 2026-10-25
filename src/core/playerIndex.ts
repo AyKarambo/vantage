@@ -8,6 +8,7 @@ import type {
   PlayerEncounter, PlayerListQuery, PlayerListRow, PlayerMatchHistory, PlayerRecord,
   PlayerRelation, PlayerSharedMatch, PlayerSortKey, SharedMatchRank,
 } from '../shared/contract';
+import { decided, winrateOf } from './analytics';
 
 /**
  * Player-encounter index, derived at query time from the rosters stored on the
@@ -422,15 +423,6 @@ const RANKERS: Record<PlayerSortKey, (r: PlayerListRow) => number | null> = {
   lastSeen: (r) => r.lastSeen,
 };
 
-/**
- * Winrate, or null when nothing was decided — never 0, which would let a player
- * you have no decided games with top a "best record together" sort.
- */
-function winrateOf(w: { wins: number; losses: number }): number | null {
-  const n = w.wins + w.losses;
-  return n ? w.wins / n : null;
-}
-
 /** Total and locale-free, so the cap always cuts at the same row. */
 const tieBreak = (a: PlayerListRow, b: PlayerListRow): number =>
   b.games - a.games || b.lastSeen - a.lastSeen || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
@@ -495,8 +487,8 @@ export function selectPlayers(
     // nothing to show on either split, so it wouldn't answer "who did I play
     // with/against" any more honestly than one with no relation data at all.
     && (sel.relation === 'any'
-      || (sel.relation === 'with' && p.sameTeam.wins + p.sameTeam.losses > 0)
-      || (sel.relation === 'vs' && p.enemyTeam.wins + p.enemyTeam.losses > 0)));
+      || (sel.relation === 'with' && decided(p.sameTeam) > 0)
+      || (sel.relation === 'vs' && decided(p.enemyTeam) > 0)));
   matches.sort((a, b) => comparePlayers(a, b, sel.sort, sel.dir));
   return { rows: matches.slice(0, sel.limit), matched: matches.length };
 }

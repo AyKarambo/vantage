@@ -1,7 +1,7 @@
 /** Trends — winrate over time, splits by role/mode/account, and when you play. Objective, tracked facts only (#321): the self-rating card lives on Mental. */
 import { h } from '../dom';
 import type { Group, Momentum, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup } from '../../../src/shared/contract';
-import { sessionFade, bucketStart } from '../../../src/core/analytics';
+import { sessionFade, bucketStart, decided } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
 import { horizontalBars, lineChart, rankChart, type WrPoint, type RankSeries } from '../charts/plots';
@@ -132,7 +132,6 @@ function rankTrendCard(ctx: ViewContext): HTMLElement | null {
  */
 function timeOfDayCard(groups: Group[], overallWinrate: number): HTMLElement {
   const DECIDED_FLOOR = 10;
-  const decided = (g: Group): number => g.wins + g.losses;
   const solid = groups.filter((g) => decided(g) >= DECIDED_FLOOR);
   const best = solid.length >= 2 ? [...solid].sort((a, b) => b.winrate - a.winrate)[0] : null;
   // Needs a SECOND day-part to reach the floor too, not just the first — the
@@ -162,7 +161,7 @@ function sessionPositionCard(groups: Group[], overallWinrate: number): HTMLEleme
   // enough (F1). Games 1-2's own decided count is the actual gate.
   const earlyDecided = groups
     .filter((g) => g.key === '1' || g.key === '2')
-    .reduce((n, g) => n + g.wins + g.losses, 0);
+    .reduce((n, g) => n + decided(g), 0);
   return card({ title: 'Game # in session', sub: 'the fatigue curve — winrate by position in a sitting' },
     breakdownOrdered(groups.map((g) => ({ ...g, key: `Game ${g.key}` })), { minGames: BREAKDOWN_MIN_GAMES, marker: overallWinrate }),
     h('div', { style: { marginTop: '10px' } },

@@ -22,6 +22,7 @@ import { dataTable, type Column } from '../components/table';
 import { roleOfHero } from '../../../src/core/heroes';
 import { battleTagName } from '../../../src/core/model';
 import { backControl, viewHead, type ViewContext } from './view';
+import { decided } from '../../../src/core/analytics';
 
 export function playerHistory(ctx: ViewContext): HTMLElement {
   const host = h('div', { class: 'view view--fill' });
@@ -199,8 +200,8 @@ function whoTheyAreBand(d: PlayerMatchHistory): HTMLElement | null {
 
 /** Your record split by whether they were on your team — omitted when unknown. */
 function teamSplit(d: PlayerMatchHistory): HTMLElement | null {
-  const withYou = d.sameTeam.wins + d.sameTeam.losses;
-  const against = d.enemyTeam.wins + d.enemyTeam.losses;
+  const withYou = decided(d.sameTeam);
+  const against = decided(d.enemyTeam);
   if (!withYou && !against) return null;
   const parts: string[] = [];
   if (withYou) parts.push(`${RELATION_LABEL.with.long}: ${d.sameTeam.wins}W ${d.sameTeam.losses}L`);

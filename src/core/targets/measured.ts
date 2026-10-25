@@ -14,7 +14,6 @@
  * KDA is the ratio, not a rate.
  */
 import type { GameRecord, HeroStat, TargetGrade } from '../analytics';
-import { mergeHeroStats } from '../perHero';
 import { heroCredits, heroPlayedMinutes, playedTimeOf } from '../playedTime';
 import { heroMatchKey } from '../heroes';
 import { aggregateImprovementGrade } from './aggregateGrade';

@@ -1,7 +1,7 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h, render } from '../dom';
 import type { DashboardData, Group, LiveMatchPayload, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
-import { dayKey, dayPartAt, MAP_MIN_GAMES, splitUnknownMap } from '../../../src/core/analytics';
+import { dayKey, dayPartAt, MAP_MIN_GAMES, splitUnknownMap, decided } from '../../../src/core/analytics';
 import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
 import { READINESS_TUNING } from '../../../src/core/readiness';
 import { isStale } from '../../../src/core/staleness';
@@ -334,8 +334,8 @@ function kpiRow(ctx: ViewContext): HTMLElement {
   // few days up or down from this range's own average". Winrate needs
   // decided games on both sides to mean anything; the games count doesn't.
   const prev = d.previous;
-  const prevDecided = prev ? prev.overall.wins + prev.overall.losses : 0;
-  const curDecided = d.overall.wins + d.overall.losses;
+  const prevDecided = prev ? decided(prev.overall) : 0;
+  const curDecided = decided(d.overall);
   const winrateSub = prev && prevDecided && curDecided
     ? `vs ${prev.label}: ${signed(Math.round((d.overall.winrate - prev.overall.winrate) * 1000) / 10)} pts`
     : undefined;

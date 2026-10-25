@@ -1,4 +1,4 @@
-import { dayKey, dayPartAt, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts } from './analytics';
+import { dayKey, dayPartAt, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts, decided } from './analytics';
 import type { SessionCheckIn } from './checkIn';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
@@ -319,7 +319,7 @@ export function tiltByMap(games: GameRecord[], min = 3): TiltBucket[] {
 
 function winrateSide(games: GameRecord[]): WinrateSide {
   const wl = winLoss(games);
-  return { winrate: wl.winrate, decided: wl.wins + wl.losses };
+  return { winrate: wl.winrate, decided: decided(wl) };
 }
 
 function ratedSide(games: GameRecord[]): RatedSide {

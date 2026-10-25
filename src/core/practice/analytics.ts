@@ -1,4 +1,4 @@
-import { dayKey, dayPartAt, winLoss, type GameRecord, type TargetGrade } from '../analytics';
+import { dayKey, dayPartAt, winLoss, type GameRecord, type TargetGrade, decided } from '../analytics';
 import type { SessionCheckIn } from '../checkIn';
 import { DEFAULT_COACHING, type CoachingSettings } from '../coachingSettings';
 import { isTilted } from '../mental';
@@ -159,7 +159,7 @@ function factorRow(key: string, games: readonly GameRecord[], selfIds: ReadonlyS
     avgRating: rated.length ? round1(rated.reduce((a, g) => a + g.performance!, 0) / rated.length) : null,
     rated: rated.length,
     winrate: wl.winrate,
-    decided: wl.wins + wl.losses,
+    decided: decided(wl),
   };
 }
 

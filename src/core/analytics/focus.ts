@@ -6,10 +6,10 @@
  * targets so the screen can show whether focusing is actually working. Pure
  * and I/O-free — consumed by dashboardData.
  */
-import { focusBy, srSum, winLoss } from './grouping';
+import { decided, focusBy, srSum, winLoss } from './grouping';
 import { wilson } from '../targets/wilson';
 import { heroMatchKey } from '../heroes';
-import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm, WinLoss } from './types';
+import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm } from './types';
 import type { AuthoredTarget } from '../targets/types';
 // Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
 // analytics back, and this keeps the module graph cycle-free at runtime.
@@ -117,7 +117,7 @@ export function focusEntries(games: GameRecord[], opts: FocusEntriesOptions = {}
  * deficit ranked above a same-net entry that's really just a coin-flip sample.
  */
 function sampleAwareDeficit(e: FocusItem): number {
-  const decidedGames = e.wins + e.losses;
+  const decidedGames = decided(e);
   if (decidedGames === 0) return 0;
   return e.net * (0.5 - wilson(e.wins, decidedGames).low);
 }
@@ -367,4 +367,3 @@ function includesTokenRun(haystack: string[], needle: string[]): boolean {
   return false;
 }
 
-const decided = (wl: WinLoss): number => wl.wins + wl.losses;
