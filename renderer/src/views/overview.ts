@@ -5,7 +5,7 @@ import { dayKey, dayPartAt, MAP_MIN_GAMES, splitUnknownMap, decided } from '../.
 import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
 import { READINESS_TUNING } from '../../../src/core/readiness';
 import { isStale } from '../../../src/core/staleness';
-import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
+import { dateLong, greeting, int, pct, relTime, roleLabel, shortMapName, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl } from '../theme';
 import { scatterChart, sparkline, type ScatterPoint } from '../charts/plots';
@@ -21,7 +21,7 @@ import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { bridge } from '../bridge';
 import { prefs } from '../prefs';
 import { store } from '../store';
-import { viewHead, shorten, type ViewContext } from './view';
+import { viewHead, type ViewContext } from './view';
 import { coachHeadline } from '../coachHeadline';
 
 export function overview(ctx: ViewContext): HTMLElement {
@@ -260,7 +260,7 @@ function recapCard(ctx: ViewContext): HTMLElement | null {
       statBox(h('span', { class: r.net >= 0 ? 'is-win' : 'is-loss' }, `${r.wins}–${r.losses}`), `${signed(r.net)} net`),
       statBox(pct(r.winrate), 'winrate'),
       ...(r.srDelta !== undefined ? [statBox(`${signed(Math.round(r.srDelta))}%`, 'SR change')] : []),
-      ...(r.bestMap ? [statBox(shorten(r.bestMap), 'best map')] : []),
+      ...(r.bestMap ? [statBox(shortMapName(r.bestMap), 'best map')] : []),
       ...(r.targetHitRate !== undefined ? [statBox(pct(r.targetHitRate), 'targets hit')] : []),
     ].slice(0, 4);
     render(host, card({
@@ -739,7 +739,7 @@ function toScatter(byMap: Group[]): ScatterPoint[] {
       const net = m.losses - m.wins;
       return {
         name: m.key,
-        short: shorten(m.key),
+        short: shortMapName(m.key),
         winrate: m.winrate,
         volume: m.games,
         wins: m.wins,

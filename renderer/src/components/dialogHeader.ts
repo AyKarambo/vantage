@@ -4,9 +4,7 @@
  * div that had drifted from the log card's badge/close-button chrome. One
  * factory now backs both, so the two match-entry surfaces can't drift again.
  */
-import { h } from '../dom';
-
-type Child = Node | string | number | null | undefined | false;
+import { h, type Child } from '../dom';
 
 export interface DialogHeaderOpts {
   title: string;

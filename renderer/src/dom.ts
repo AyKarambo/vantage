@@ -5,7 +5,8 @@
  */
 
 type StyleInput = Partial<CSSStyleDeclaration> | string;
-type Child = Node | string | number | null | undefined | false;
+/** Anything {@link h} accepts as a child; `null`, `undefined` and `false` render nothing. */
+export type Child = Node | string | number | null | undefined | false;
 
 /** Attribute bag accepted by {@link h}; unrecognised keys pass through as plain DOM attributes. */
 export interface Props {

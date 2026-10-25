@@ -3,9 +3,7 @@
  * select wrapper. Each is a pure factory over its options, self-managing any
  * transient UI state (e.g. the active segment) so callers don't re-render.
  */
-import { h } from '../../dom';
-
-type Child = Node | string | number | null | undefined | false;
+import { h, type Child } from '../../dom';
 
 /**
  * Options for {@link button}; `variant` picks the visual weight, `default` is

@@ -2,10 +2,8 @@
  * The small-coloured-label family — pills, badges, and chips used to tag
  * results, data provenance, and toggleable filters throughout the UI.
  */
-import { h } from '../../dom';
+import { h, type Child } from '../../dom';
 import type { Result } from '../../../../src/shared/contract';
-
-type Child = Node | string | number | null | undefined | false;
 
 /** Visual tone for {@link pill}; drives the `is-*` colour class. */
 export type PillState = 'win' | 'loss' | 'draw' | 'accent';
