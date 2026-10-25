@@ -6,6 +6,7 @@ import { K } from './matchAggregator/keys';
 import { asNumber, asObject, asString, asBool, parseRoster } from './matchAggregator/gepValues';
 import { deployableOf, resolveHero } from './resolvers/hero';
 import { resolveMapId } from './resolvers/mapId';
+import { clockStartOf, noteDoors, roundClockMs, type ClockRound } from './roundClock';
 
 /**
  * The live (in-progress) match, folded from the same GEP message stream the
@@ -91,7 +92,8 @@ export interface LiveMatchState {
    * The GEP rounds seen so far, in order; the last may still be running. Drives
    * the match clock, which — like Overwatch's own — runs only INSIDE rounds:
    * stopped through hero select (`match_start` → first `round_start`, ~28 s in
-   * every capture) and through each ~1 s round change.
+   * every capture) and through each round change until the doors open (see
+   * `roundClock`).
    */
   rounds?: LiveRound[];
   /**
@@ -105,9 +107,7 @@ export interface LiveMatchState {
 }
 
 /** One GEP round on the live board. */
-export interface LiveRound {
-  startedAt: number;
-  endedAt?: number;
+export interface LiveRound extends ClockRound {
   /**
    * Opened by a mid-match join rather than a `round_start`: the round was
    * already running when the feed attached — or we joined in hero select, which
@@ -266,7 +266,7 @@ function applyMessage(state: LiveMatchState, msg: GepMessage, now: number): Live
       const mapName = resolveMapId(asString(msg.value)) ?? undefined;
       return mapName && mapName !== state.mapName ? { ...state, mapName } : state;
     }
-    if (key?.startsWith(K.roster)) return applyRoster(state, key, msg.value);
+    if (key?.startsWith(K.roster)) return noteRoundDoors(applyRoster(state, key, msg.value), msg.value, now);
   }
   return state;
 }
@@ -282,14 +282,32 @@ function applyRoundBoundary(state: LiveMatchState, start: boolean, now: number):
   const last = rounds[rounds.length - 1];
   const open = last && last.endedAt === undefined ? last : undefined;
   if (start) {
+    // A join's implicit round ended by a round_start (no round_end before it)
+    // was the opening hero select, so this round is the match's first.
+    const joinedInHeroSelect = Boolean(open?.implicit);
     if (open?.implicit) rounds.pop();
     else if (open) rounds[rounds.length - 1] = { ...open, endedAt: now };
-    rounds.push({ startedAt: now });
+    // Every round but a match's first begins behind a round change: hero
+    // select and setup run inside it, so the clock waits for the doors.
+    const first = rounds.length === 0 && (!state.joinedMidMatch || joinedInHeroSelect);
+    rounds.push(first ? { startedAt: now } : { startedAt: now, waitsForDoors: true });
     return { ...state, rounds };
   }
   if (!open) return state;
   rounds[rounds.length - 1] = { ...open, endedAt: now };
   return { ...state, rounds };
+}
+
+/**
+ * A roster tick that first shows an opponent's hero opens the doors of a round
+ * waiting behind a round change — the clock starts there.
+ */
+function noteRoundDoors(state: LiveMatchState, value: unknown, now: number): LiveMatchState {
+  const rounds = state.rounds;
+  const last = rounds?.[rounds.length - 1];
+  const next = noteDoors(last, value, now, localTeam(liveRoster(state)));
+  if (!rounds || !next || next === last) return state;
+  return { ...state, rounds: [...rounds.slice(0, -1), next] };
 }
 
 /** Where the match clock stands — what the board shows instead of a wall clock. */
@@ -298,7 +316,12 @@ export interface LiveClock {
   phase: 'hero-select' | 'round' | 'between-rounds';
   /** Round time banked from the rounds already closed, in ms. */
   bankedMs: number;
-  /** ms epoch the running round began; absent while the clock is stopped. */
+  /**
+   * ms epoch the clock runs from in the open round; absent between rounds.
+   * Behind a round change it is the doors opening — or, until they are seen,
+   * the fallback start, which lies in the FUTURE: the clock stays stopped
+   * until then (see {@link clockElapsedMs}).
+   */
   runningSince?: number;
 }
 
@@ -306,14 +329,16 @@ export interface LiveClock {
 export function liveClock(state: Pick<LiveMatchState, 'rounds'>): LiveClock {
   const rounds = state.rounds ?? [];
   let bankedMs = 0;
-  for (const r of rounds) if (r.endedAt !== undefined) bankedMs += Math.max(0, r.endedAt - r.startedAt);
+  for (const r of rounds) if (r.endedAt !== undefined) bankedMs += roundClockMs({ ...r, endedAt: r.endedAt });
   const last = rounds[rounds.length - 1];
   if (!last) return { phase: 'hero-select', bankedMs };
-  if (last.endedAt === undefined) return { phase: 'round', bankedMs, runningSince: last.startedAt };
-  return { phase: 'between-rounds', bankedMs };
+  if (last.endedAt !== undefined) return { phase: 'between-rounds', bankedMs };
+  // Still behind the round change: stopped, carrying the fallback start.
+  const phase = last.waitsForDoors && last.doorsAt === undefined ? 'between-rounds' : 'round';
+  return { phase, bankedMs, runningSince: clockStartOf(last) };
 }
 
-/** Elapsed match-clock time at `now`, in ms. */
+/** Elapsed match-clock time at `now`, in ms (a `runningSince` still ahead adds nothing). */
 export function clockElapsedMs(clock: LiveClock, now: number): number {
   return clock.bankedMs + (clock.runningSince !== undefined ? Math.max(0, now - clock.runningSince) : 0);
 }

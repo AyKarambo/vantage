@@ -247,14 +247,18 @@ function liveSubtitle(p: LiveMatchPayload): Node {
 
 /**
  * The match clock as the game counts it: round time only. Stopped through hero
- * select and between rounds; joined mid-match it only knows the time watched.
+ * select and each round change until the doors open; joined mid-match it only
+ * knows the time watched.
  */
 export function liveClockText(p: LiveMatchPayload, now = Date.now()): string {
   const c = p.clock;
   if (!c) return '';
   if (c.phase === 'hero-select') return 'hero select';
   const t = clockText(clockElapsedMs(c, now));
-  if (c.phase === 'between-rounds') return `${t} · between rounds`;
+  // Behind a round change the clock waits for the doors; past the fallback
+  // start (runningSince) it runs even though no reveal arrived.
+  const running = c.runningSince !== undefined && now >= c.runningSince;
+  if (c.phase === 'between-rounds' && !running) return `${t} · between rounds`;
   return p.joinedMidMatch ? `joined mid-match · ${t} tracked` : `${t} elapsed`;
 }
 

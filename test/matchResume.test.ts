@@ -14,6 +14,9 @@ const info = (feature: string, key: string, value: unknown): GepMessage => ({ ki
 const event = (key: string): GepMessage => ({ kind: 'event', feature: 'match_info', key, value: null });
 const roster = (p: Record<string, unknown>): GepMessage => info('roster', 'roster_0', p);
 
+/** The roster burst that opens the doors: an opponent's hero appears. */
+const opponentReveal = info('roster', 'roster_5', { is_teammate: false, team: 0, hero_id: 9 });
+
 function clocked() {
   let t = 0;
   const agg = new MatchAggregator(() => t);
@@ -36,8 +39,10 @@ function playUntilRestart(at: (ms: number, m: GepMessage) => unknown): void {
   at(28_000, event('round_start'));
   at(28_000 + 8 * MIN, event('round_end'));
   at(29_000 + 8 * MIN, event('round_start'));
+  at(77_000 + 8 * MIN, opponentReveal); // doors open 48 s into the round
   at(29_000 + 15 * MIN, event('round_end'));
   at(30_000 + 15 * MIN, event('round_start'));
+  at(78_000 + 15 * MIN, opponentReveal);
   at(30_000 + 17 * MIN, roster({ battlenet_tag: 'Karambo#21442', is_local: true, hero_name: 'CASSIDY', kills: 22, deaths: 9, damage: 9000 }));
 }
 
@@ -88,8 +93,9 @@ describe('MatchAggregator — resume after a restart', () => {
     expect(rec.matchId).toBe('3858793788');
     expect(rec.startedAt).toBe(0);
     expect(rec.rounds).toHaveLength(3);
-    // Round time 8 + 7 + 5 min = 20 — the game's own clock — not the ~2 min seen after the restart.
-    expect(rec.durationMinutes).toBe(20);
+    // The match clock 8 + 6:12 + 4:12 min ≈ 18 (rounds 2 and 3 wait 48 s for
+    // their doors) — not the ~2 min seen after the restart.
+    expect(rec.durationMinutes).toBe(18);
     expect(rec.eliminations).toBe(26);
     expect(rec.perHero?.[0]).toMatchObject({ hero: 'Cassidy', eliminations: 26, deaths: 11 });
   });
