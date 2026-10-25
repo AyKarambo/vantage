@@ -23,14 +23,14 @@
 import { h, render } from '../dom';
 import type { DashboardData, LiveMatchPayload, PlayerRecord, TargetSummary } from '../../../src/shared/contract';
 import { dayPartAt } from '../../../src/core/analytics';
-import { liveTrueDamage, liveTeamKills } from '../../../src/core/liveMatch';
+import { clockElapsedMs, liveTrueDamage, liveTeamKills } from '../../../src/core/liveMatch';
 import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getGepStatus, subscribeGepStatus } from '../gepStatus';
 import { scoreboard } from '../components/scoreboard';
 import { button, card, emptyState, pill, resultPill } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
-import { fmt, games, matchClock, net, pct, relTime, roleLabel, RELATION_LABEL } from '../format';
+import { clockText, fmt, games, matchClock, net, pct, relTime, roleLabel, RELATION_LABEL } from '../format';
 import { wrColor } from '../theme';
 import { readinessCard } from './overview';
 import { stopRuleLine } from '../components/stopRuleLine';
@@ -123,6 +123,14 @@ export function live(ctx: ViewContext): HTMLElement {
   // Repaints the stale-feed card (S6) the moment the feed goes quiet or
   // recovers, rather than waiting for the next unrelated live-match tick.
   const unsubscribeGep = subscribeGepStatus(() => { if (host.isConnected) paint(); });
+  // Advance the clock once a second while a round runs. The feed goes quiet for
+  // ~40 s at the start of every round (setup), so its ticks can't drive it.
+  const clockTimer = setInterval(() => {
+    if (!host.isConnected) { clearInterval(clockTimer); return; }
+    const p = getLiveMatch();
+    const el = host.querySelector('.live-clock');
+    if (el && p?.live && p.clock?.runningSince !== undefined) el.textContent = liveClockText(p);
+  }, 1000);
 
   refreshRecords(getLiveMatch());
   paint();
@@ -226,13 +234,28 @@ function filterScopeCaption(ctx: ViewContext): string {
   return `${f.role === 'all' ? 'all roles' : roleLabel(f.role)} · ${range}`;
 }
 
-function liveSubtitle(p: LiveMatchPayload): string {
+function liveSubtitle(p: LiveMatchPayload): Node {
   const parts = [p.map ?? 'Map not reported yet'];
   if (p.gameType) parts.push(p.gameType);
-  // Joined mid-match, the clock only knows when tracking began — say so rather
-  // than present it as the match's elapsed time.
-  if (p.startedAt) parts.push(p.joinedMidMatch ? `joined mid-match · ${matchClock(p.startedAt)} tracked` : `${matchClock(p.startedAt)} elapsed`);
-  return parts.join(' · ');
+  const head = parts.join(' · ');
+  // An older payload without a round clock falls back to the wall clock.
+  if (!p.clock) return document.createTextNode(p.startedAt ? `${head} · ${matchClock(p.startedAt)} elapsed` : head);
+  // The clock is its own span so the view's 1 s ticker can advance it without
+  // a full repaint — the feed is silent for ~40 s into every round.
+  return h('span', null, `${head} · `, h('span', { class: 'live-clock' }, liveClockText(p)));
+}
+
+/**
+ * The match clock as the game counts it: round time only. Stopped through hero
+ * select and between rounds; joined mid-match it only knows the time watched.
+ */
+export function liveClockText(p: LiveMatchPayload, now = Date.now()): string {
+  const c = p.clock;
+  if (!c) return '';
+  if (c.phase === 'hero-select') return 'hero select';
+  const t = clockText(clockElapsedMs(c, now));
+  if (c.phase === 'between-rounds') return `${t} · between rounds`;
+  return p.joinedMidMatch ? `joined mid-match · ${t} tracked` : `${t} elapsed`;
 }
 
 function idleSubtitle(p: LiveMatchPayload | null): string {

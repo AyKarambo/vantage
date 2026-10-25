@@ -47,6 +47,16 @@ export interface LiveMatchPayload {
    * tracking began.
    */
   joinedMidMatch?: boolean;
+  /**
+   * The match clock, Overwatch-style: it runs only inside rounds — stopped
+   * through hero select and each round change. The renderer adds
+   * `now - runningSince` to `bankedMs` while a round is running. Present while live.
+   */
+  clock?: {
+    phase: 'hero-select' | 'round' | 'between-rounds';
+    bankedMs: number;
+    runningSince?: number;
+  };
   /** ms epoch the last match ended — the idle screen's "just finished" note. */
   endedAt?: number;
   /** Canonical map name, once the feed reports one. */

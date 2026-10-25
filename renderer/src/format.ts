@@ -141,6 +141,12 @@ export function formatPlayedTime(minutes: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
+/** clockText(754_000) → "12:34" — a duration in ms as mm:ss (the live round clock). */
+export function clockText(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}`;
+}
+
 /** time(ts) → "2:45 PM" (local clock time, ms epoch in). */
 export function time(ts: number): string {
   return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

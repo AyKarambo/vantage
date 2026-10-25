@@ -1,5 +1,7 @@
 import type { HistoryStore } from '../store/history';
-import { isMatchStartMessage, partyCountFromInfo, type MatchAggregator } from '../core/matchAggregator';
+import {
+  isMatchStartMessage, isRoundEndMessage, isRoundStartMessage, partyCountFromInfo, type MatchAggregator,
+} from '../core/matchAggregator';
 import type { AppConfig } from './config';
 import type { GepMessage, MatchRecord, Result } from '../core/model';
 import { matchToGame } from '../core/gameRecord';
@@ -29,7 +31,8 @@ export interface MatchPipelineDeps {
    * Folds the GEP message stream into one finished MatchRecord per match. The
    * party-count methods are optional so tests can inject a bare `handle`.
    */
-  aggregator: Pick<MatchAggregator, 'handle'> & Partial<Pick<MatchAggregator, 'hasPartyCount' | 'seedPartyCount'>>;
+  aggregator: Pick<MatchAggregator, 'handle'> &
+    Partial<Pick<MatchAggregator, 'hasPartyCount' | 'seedPartyCount' | 'checkpoint' | 'hasPendingResume'>>;
   /** Live app config — re-read on every use (breakReminder, accounts), never cached. */
   getConfig(): AppConfig;
   /** Surface a user-facing notification (the tray balloon in production). */
@@ -62,7 +65,16 @@ export interface MatchPipelineDeps {
    * (see {@link autoParty}).
    */
   friendKeys?(): ReadonlySet<string>;
+  /**
+   * Where the match in progress is kept so an app restart mid-match resumes it
+   * (see MatchCheckpointStore). Optional: tests and headless paths can omit it.
+   */
+  checkpoints?: { save(checkpoint: unknown): void; clear(): void };
+  now?(): number;
 }
+
+/** Most time between two checkpoint writes while a match runs; round boundaries always write. */
+export const CHECKPOINT_INTERVAL_MS = 5_000;
 
 /**
  * The raw GEP-style outcome string a resolved {@link Result} maps back onto, so a
@@ -217,7 +229,40 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
     const record = deps.aggregator.handle(msg);
     if (isMatchStartMessage(msg)) probePartyCount();
     if (record) addMatch(record);
+    persistCheckpoint(msg, record !== null);
   };
+
+  const now = deps.now ?? ((): number => Date.now());
+  let checkpointWrittenAt = Number.NEGATIVE_INFINITY;
+  // A file may be left over from before this launch — the aggregator holds it
+  // as a pending resume until the feed names the match; cleared after that.
+  let checkpointOnDisk = true;
+
+  /**
+   * Keep the on-disk checkpoint current: written on every round boundary (the
+   * clock starts or stops there) and otherwise at most every
+   * {@link CHECKPOINT_INTERVAL_MS}, removed once the match is recorded or there
+   * is no match to resume. A failure is logged and never breaks the pipeline.
+   */
+  function persistCheckpoint(msg: GepMessage, ended: boolean): void {
+    const { aggregator, checkpoints } = deps;
+    if (!checkpoints || !aggregator.checkpoint) return;
+    try {
+      const boundary = isMatchStartMessage(msg) || isRoundStartMessage(msg) || isRoundEndMessage(msg);
+      if (!ended && !boundary && now() - checkpointWrittenAt < CHECKPOINT_INTERVAL_MS) return;
+      const cp = ended ? null : aggregator.checkpoint();
+      if (cp) {
+        checkpoints.save(cp);
+        checkpointWrittenAt = now();
+        checkpointOnDisk = true;
+      } else if (checkpointOnDisk && !aggregator.hasPendingResume?.()) {
+        checkpoints.clear();
+        checkpointOnDisk = false;
+      }
+    } catch (err) {
+      deps.log('match checkpoint failed', String(err));
+    }
+  }
 
   /** Seed the party count from `getInfo()` when the lobby update was missed. */
   function probePartyCount(): void {
