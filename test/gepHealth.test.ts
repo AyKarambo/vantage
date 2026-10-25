@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  INITIAL_GEP_TRACK, STALE_AFTER_MS, gepHealth, reduceGepSignal,
+  INITIAL_GEP_TRACK, STALE_AFTER_MS, gepHealth, gepSignalOf, reduceGepSignal,
   type GepHealthTrack, type GepSignal,
 } from '../src/core/gepHealth';
+import type { GepMessage } from '../src/core/model';
 
 /** Fold a list of (signal, at) through the reducer, as the monitor would. */
 function fold(signals: Array<[GepSignal['kind'], number]>): GepHealthTrack {
@@ -82,5 +83,31 @@ describe('gepHealth derivation', () => {
 
   it('pins the spec threshold at 60 seconds', () => {
     expect(STALE_AFTER_MS).toBe(60_000);
+  });
+});
+
+describe('gepSignalOf', () => {
+  const msg = (kind: 'info' | 'event', feature: string, key: string, value: unknown): GepMessage =>
+    ({ kind, feature, key, value } as GepMessage);
+
+  it('reads match_start and match_end as the match boundaries', () => {
+    expect(gepSignalOf(msg('event', 'match_info', 'match_start', null))).toBe('match-start');
+    expect(gepSignalOf(msg('event', 'match_info', 'match_end', null))).toBe('match-end');
+  });
+
+  it('reads game_state = match_in_progress as a start, for a match joined mid-way', () => {
+    // The app restarted mid-match: no match_start will come, only the snapshot.
+    expect(gepSignalOf(msg('info', 'game_info', 'game_state', 'match_in_progress'))).toBe('match-start');
+    const t = [
+      gepSignalOf(msg('info', 'game_info', 'game_state', 'match_in_progress')),
+      gepSignalOf(msg('info', 'roster', 'roster_0', '{}')),
+    ].reduce((acc, kind, i) => reduceGepSignal(acc, { kind }, 10 + i), reduceGepSignal(INITIAL_GEP_TRACK, { kind: 'attached' }, 0));
+    expect(gepHealth(t, 20)).toBe('live');
+  });
+
+  it('treats other game states and ordinary messages as plain events', () => {
+    expect(gepSignalOf(msg('info', 'game_info', 'game_state', 'loading_screen_start'))).toBe('event');
+    expect(gepSignalOf(msg('info', 'game_info', 'game_state', 'match_ended'))).toBe('match-end');
+    expect(gepSignalOf(msg('event', 'match_info', 'kill_feed', '{}'))).toBe('event');
   });
 });

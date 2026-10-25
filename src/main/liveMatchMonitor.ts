@@ -90,6 +90,7 @@ export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): Live
   return {
     live: state.phase === 'live',
     ...(state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
+    ...(state.joinedMidMatch ? { joinedMidMatch: true } : {}),
     ...(state.endedAt !== undefined ? { endedAt: state.endedAt } : {}),
     ...(state.mapName !== undefined ? { map: state.mapName } : {}),
     ...(state.gameType !== undefined ? { gameType: state.gameType } : {}),

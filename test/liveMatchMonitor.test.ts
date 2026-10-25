@@ -194,6 +194,15 @@ describe('toPayload', () => {
     s = reduceLiveMatch(s, event('match_end', null), 4000);
     expect(toPayload(s, true)).toMatchObject({ live: false, endedAt: 4000 });
   });
+
+  it('publishes a match joined mid-way at once, flagged so the clock is not read as elapsed time', () => {
+    const { monitor, published, at } = harness();
+    at(5000);
+    monitor.message(info('game_info', 'game_type', 'RANKED'));
+    monitor.message(info('game_info', 'game_state', 'match_in_progress'));
+    expect(published.at(-1)).toMatchObject({ live: true, startedAt: 5000, joinedMidMatch: true, gameType: 'RANKED' });
+    expect(toPayload(reduceLiveMatch(INITIAL_LIVE_MATCH, event('match_start', null), 1), true).joinedMidMatch).toBeUndefined();
+  });
 });
 
 describe('liveMatchMonitor — 5v5 ordering and team totals', () => {

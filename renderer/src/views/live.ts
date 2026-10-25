@@ -229,7 +229,9 @@ function filterScopeCaption(ctx: ViewContext): string {
 function liveSubtitle(p: LiveMatchPayload): string {
   const parts = [p.map ?? 'Map not reported yet'];
   if (p.gameType) parts.push(p.gameType);
-  if (p.startedAt) parts.push(`${matchClock(p.startedAt)} elapsed`);
+  // Joined mid-match, the clock only knows when tracking began — say so rather
+  // than present it as the match's elapsed time.
+  if (p.startedAt) parts.push(p.joinedMidMatch ? `joined mid-match · ${matchClock(p.startedAt)} tracked` : `${matchClock(p.startedAt)} elapsed`);
   return parts.join(' · ');
 }
 

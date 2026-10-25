@@ -376,6 +376,21 @@ export function isMatchStartMessage(msg: GepMessage): boolean {
   return msg.kind === 'event' && nameMatches(msg, 'match_start');
 }
 
+/**
+ * True when the feed reports a match RUNNING (`game_info.game_state =
+ * match_in_progress`). Unlike `match_start` this is state, not an event: GEP
+ * re-sends it in the snapshot it delivers on attach, so it is the only signal
+ * left when the app (or GEP) attaches to a match already under way — the
+ * `match_start` event fired before anyone was listening.
+ */
+export function isMatchInProgressMessage(msg: GepMessage): boolean {
+  return (
+    msg.feature?.toLowerCase() === K.gameInfo &&
+    msg.key?.toLowerCase() === K.gameState &&
+    asString(msg.value)?.toLowerCase() === 'match_in_progress'
+  );
+}
+
 /** True when the message marks a GEP round beginning (`match_info.round_start`). */
 export function isRoundStartMessage(msg: GepMessage): boolean {
   return msg.kind === 'event' && nameMatches(msg, K.roundStart);

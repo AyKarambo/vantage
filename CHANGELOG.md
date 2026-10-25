@@ -49,6 +49,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **Live board works when Vantage starts mid-match.** If Vantage (or its game connection) started while a
+  match was already running, the Live board and status stayed idle for the whole match. It now picks the
+  match up right away. Because the real start time isn't known, the clock reads "joined mid-match · … tracked".
 - **Review starts from your current rank.** Grading a ranked game in **Review** no longer begins at a
   blanket Gold 3: the rank and placement pickers are pre-filled with the rank Vantage has on record for
   that account and role, like Log Match already does. Touch a picker and it stays as you set it.
