@@ -64,6 +64,11 @@ function sameHeroes(a: string[], b: string[]): boolean {
   return sa.every((h, i) => h === sb[i]);
 }
 
+/** A hand-entered played time worth storing: positive and no longer than any real match. */
+function isPlausibleMinutes(m: number | null | undefined): m is number {
+  return typeof m === 'number' && Number.isFinite(m) && m > 0 && m <= 120;
+}
+
 /**
  * Builds the {@link DataProvider} the dashboard consumes: every renderer-facing
  * read/write, mapped onto injected stores and edges. No Electron imports (deps
@@ -378,6 +383,11 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       // can honestly correct after the fact. Clamped to the past like the log
       // card's own playedAt (a skewed clock can never produce future history).
       if (input.playedAt !== undefined && isManual) patch.timestamp = Math.min(input.playedAt, Date.now());
+      // Played-time correction (the per-10 divisor), on any match: a capture
+      // that joined mid-match saw only part of it. null drops the correction;
+      // anything that isn't a sane match length is ignored rather than stored.
+      if (input.playedMinutes === null) patch.playedMinutesOverride = null;
+      else if (isPlausibleMinutes(input.playedMinutes)) patch.playedMinutesOverride = input.playedMinutes;
       // Stamp a review when there are grades to save, OR when the match is
       // already reviewed — an edit with no targets shouldn't mark an otherwise-
       // ungraded match as reviewed, but if it's already reviewed we must

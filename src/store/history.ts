@@ -212,6 +212,7 @@ export class HistoryStore {
     matchId: string,
     patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'timestamp' | 'mental' | 'review'>> &
       { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null;
+        playedMinutesOverride?: number | null;
         party?: GameRecord['party'] | null;
         rankAtStart?: GameRecord['rankAtStart'] | null },
   ): boolean {

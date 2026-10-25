@@ -121,6 +121,26 @@ export function matchClock(startedAt: number, now = Date.now()): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * Read a typed played time: `mm:ss` ("20:06") or plain minutes ("20", "20.1").
+ * `undefined` for blank input, `null` for anything that isn't a time.
+ */
+export function parsePlayedTime(text: string): number | null | undefined {
+  const t = text.trim();
+  if (!t) return undefined;
+  const clock = /^(\d{1,3}):([0-5]\d)$/.exec(t);
+  const minutes = clock ? Number(clock[1]) + Number(clock[2]) / 60
+    : /^\d+(?:[.,]\d+)?$/.test(t) ? Number(t.replace(',', '.'))
+    : NaN;
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : null;
+}
+
+/** formatPlayedTime(20.1) → "20:06" — minutes as mm:ss. */
+export function formatPlayedTime(minutes: number): string {
+  const total = Math.round(minutes * 60);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 /** time(ts) → "2:45 PM" (local clock time, ms epoch in). */
 export function time(ts: number): string {
   return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

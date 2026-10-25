@@ -764,6 +764,11 @@ const mock: OwStatsApi = {
     if (input.playedAt !== undefined && sourceOf(game) === 'manual') {
       patch.timestamp = Math.min(input.playedAt, Date.now());
     }
+    // Played-time correction — any match; null drops it (mirrors dataProvider).
+    if (input.playedMinutes === null) delete patch.playedMinutesOverride;
+    else if (input.playedMinutes !== undefined && input.playedMinutes > 0 && input.playedMinutes <= 120) {
+      patch.playedMinutesOverride = input.playedMinutes;
+    }
     previewEdits[input.matchId] = patch;
     save(EDITS_KEY, previewEdits);
     const party = partyFromInput(input.party);

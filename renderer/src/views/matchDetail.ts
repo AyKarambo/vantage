@@ -8,7 +8,7 @@
 import { applyStyle, h, render } from '../dom';
 import type { MatchDetail, MatchDetailHeroStat, MatchMental, MatchRow, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary, UsualPer10 } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { dateLong, fmt, fmt1, isToday, prettyDay, rankLabel, relTime, roleLabel, signed, time, toDatetimeLocal, RELATION_LABEL } from '../format';
+import { dateLong, fmt, fmt1, formatPlayedTime, isToday, parsePlayedTime, prettyDay, rankLabel, relTime, roleLabel, signed, time, toDatetimeLocal, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { badge, button, card, confirmButton, pill, RESULT_LETTER, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
@@ -810,6 +810,32 @@ function buildMatchEditor(
       ? field(optionalLabel('Played', '— when this match actually ended'), playedInput)
       : null;
 
+    // Played time — a data fix for any match whose recorded time is wrong
+    // (Vantage joined mid-match and saw only part of it), so the per-10 stats
+    // divide by the real length. Pre-filled with the time in use; only a
+    // change is sent, and clearing a correction reverts to the recorded time.
+    const lengthInput = h('input', {
+      type: 'text',
+      class: 'vt-input',
+      inputmode: 'numeric',
+      placeholder: 'mm:ss',
+      value: d.playedMinutes != null ? formatPlayedTime(d.playedMinutes) : '',
+    }) as HTMLInputElement;
+    const lengthError = h('div', { class: 'hint hidden', style: { color: 'var(--loss-text, #d18a84)', marginTop: '4px' } },
+      'Enter the time as mm:ss, e.g. 20:06.');
+    lengthInput.addEventListener('input', () => lengthError.classList.add('hidden'));
+    const lengthField = field(optionalLabel('Played time', '— fix it if the match was only partly tracked'), lengthInput);
+    lengthField.append(lengthError);
+    /** The edit to send: a number sets, null drops a correction, undefined leaves it alone; false = invalid. */
+    const lengthEdit = (): number | null | undefined | false => {
+      const parsed = parsePlayedTime(lengthInput.value);
+      if (parsed === null) return false;
+      if (parsed === undefined) return d.playedMinutesEdited ? null : undefined;
+      // Unchanged to the second (the pre-filled value) → nothing to save.
+      const same = d.playedMinutes != null && Math.round(parsed * 60) === Math.round(d.playedMinutes * 60);
+      return same ? undefined : parsed;
+    };
+
     // The header badge (L5, shared layout with the log card via dialogHeader)
     // — reflects a live played-time edit immediately, the same way the log
     // card's own badge tracks its Played chip.
@@ -846,6 +872,7 @@ function buildMatchEditor(
         },
       })),
       playedField,
+      lengthField,
       field(optionalLabel('Heroes', '— tap all you played'), heroEditHost),
       // No Mode control — Vantage is competitive-only (spec D1); matches stay
       // competitive, mirroring the quick-log's removed mode picker.
@@ -933,6 +960,11 @@ function buildMatchEditor(
         return;
       }
       state.map = resolved;
+      const playedMinutes = lengthEdit();
+      if (playedMinutes === false) {
+        lengthError.classList.remove('hidden');
+        return;
+      }
       // A COUNTED placement match pre-empts the whole rank payload: no setRank,
       // no srDelta (the game reports neither during placements) — the predicted
       // rank instead, sent separately below (mirrors log-match's persist()).
@@ -962,6 +994,7 @@ function buildMatchEditor(
         // Manual only (isManual gates the field's very existence); main also
         // re-gates it, so this can never move a GEP capture's locked instant.
         ...(isManual && playedAt !== d.timestamp ? { playedAt } : {}),
+        ...(playedMinutes !== undefined ? { playedMinutes } : {}),
       });
       // A track with no anchor yet: the entered rank defines where tracking
       // starts, since there is no rank-before for it to be a change from.

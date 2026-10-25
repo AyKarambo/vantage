@@ -132,6 +132,13 @@ export interface GameRecord {
    * it from the wall-clock duration at read time.
    */
   playedMinutes?: number;
+  /**
+   * Hand-corrected played time in minutes, set in the match editor when the
+   * recorded time is wrong (e.g. Vantage joined the match mid-way and only saw
+   * part of it). When present it IS the per-10 divisor, ahead of the measured or
+   * estimated one; clearing it falls back to those. See {@link ../playedTime}.
+   */
+  playedMinutesOverride?: number;
   /** The GEP rounds behind {@link playedMinutes}, when the feed reported them. */
   rounds?: RoundSpan[];
   /** Self-rated performance for this match, 0-100, if the player rated it. */

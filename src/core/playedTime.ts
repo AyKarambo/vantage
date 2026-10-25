@@ -194,7 +194,7 @@ export interface PlayedTime {
   source: 'measured' | 'estimated' | 'reported';
 }
 
-type PlayedGame = Pick<GameRecord, 'matchId' | 'source' | 'map' | 'durationMinutes' | 'playedMinutes' | 'rounds' | 'perHero' | 'finalScore'>;
+type PlayedGame = Pick<GameRecord, 'matchId' | 'source' | 'map' | 'durationMinutes' | 'playedMinutes' | 'playedMinutesOverride' | 'rounds' | 'perHero' | 'finalScore'>;
 
 /** Minutes the recorded hero segments cover, when every merged row carries them. */
 function sumHeroMinutes(perHero: HeroStat[] | undefined): number | undefined {
@@ -210,6 +210,12 @@ function sumHeroMinutes(perHero: HeroStat[] | undefined): number | undefined {
  * than a rate.
  */
 export function playedTimeOf(game: PlayedGame, mapModeOf: MapModeResolver = staticMapMode): PlayedTime | null {
+  // A hand correction from the match editor beats anything recorded — the
+  // player is fixing a capture that saw only part of the match.
+  if (typeof game.playedMinutesOverride === 'number' && game.playedMinutesOverride > 0) {
+    const m = game.playedMinutesOverride;
+    return { minutes: m, baseMinutes: m, source: 'reported' };
+  }
   if (typeof game.playedMinutes === 'number' && game.playedMinutes > 0) {
     return { minutes: game.playedMinutes, baseMinutes: game.playedMinutes, source: 'measured' };
   }

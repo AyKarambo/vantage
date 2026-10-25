@@ -265,6 +265,8 @@ export interface MatchDetail {
    * as typed. Lets the panel flag an estimate.
    */
   playedSource?: 'measured' | 'estimated' | 'reported';
+  /** True when `playedMinutes` is a hand correction from the match editor. */
+  playedMinutesEdited?: boolean;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { games, gamesShort, net, pts, ratio, signed, RELATION_LABEL } from '../renderer/src/format';
+import { formatPlayedTime, parsePlayedTime } from '../renderer/src/format';
 
 /**
  * K7: one spelling per quantity. `signed` switches to the real minus sign
@@ -45,5 +46,25 @@ describe('format.ts — one vocabulary (K7)', () => {
   it('RELATION_LABEL gives one wording for the with/against relation', () => {
     expect(RELATION_LABEL.with).toEqual({ long: 'With you', short: 'with' });
     expect(RELATION_LABEL.against).toEqual({ long: 'Against you', short: 'vs' });
+  });
+});
+
+describe('parsePlayedTime / formatPlayedTime — the editor played-time field', () => {
+  it('reads mm:ss and plain minutes', () => {
+    expect(parsePlayedTime('20:06')).toBeCloseTo(20.1, 6);
+    expect(parsePlayedTime(' 9:30 ')).toBe(9.5);
+    expect(parsePlayedTime('20')).toBe(20);
+    expect(parsePlayedTime('12,5')).toBe(12.5);
+  });
+
+  it('is undefined for blank input and null for anything that is not a time', () => {
+    expect(parsePlayedTime('  ')).toBeUndefined();
+    for (const bad of ['abc', '20:6', '20:60', '0', '0:00', '-5']) expect(parsePlayedTime(bad)).toBeNull();
+  });
+
+  it('formats minutes back as mm:ss, round-tripping a typed value', () => {
+    expect(formatPlayedTime(20.1)).toBe('20:06');
+    expect(formatPlayedTime(9.5)).toBe('9:30');
+    expect(formatPlayedTime(parsePlayedTime('17:59')!)).toBe('17:59');
   });
 });

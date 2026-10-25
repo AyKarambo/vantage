@@ -117,6 +117,23 @@ describe('editMatch — hero list', () => {
     expect(patches[1].performance).toBeNull();
   });
 
+  it('stores a played-time correction on any match, and null drops it', () => {
+    const gep: GameRecord = { ...manualGame(['Cassidy']), matchId: 'gep-1', source: 'gep' };
+    const { provider, patches } = editHarness(gep);
+    provider.editMatch({ matchId: 'gep-1', playedMinutes: 20.1 });
+    expect(patches[0].playedMinutesOverride).toBe(20.1);
+    provider.editMatch({ matchId: 'gep-1', playedMinutes: null });
+    expect(patches[1].playedMinutesOverride).toBeNull();
+  });
+
+  it('ignores an implausible played time, and leaves it untouched when omitted', () => {
+    const { provider, patches } = editHarness(manualGame(['Tracer']));
+    provider.editMatch({ matchId: 'manual-1', playedMinutes: 0 });
+    provider.editMatch({ matchId: 'manual-1', playedMinutes: 600 });
+    provider.editMatch({ matchId: 'manual-1', map: 'Nepal' });
+    for (const p of patches) expect(p).not.toHaveProperty('playedMinutesOverride');
+  });
+
   it('leaves performance untouched when omitted', () => {
     const { provider, patches } = editHarness(manualGame(['Tracer']));
     provider.editMatch({ matchId: 'manual-1', map: 'Nepal' });

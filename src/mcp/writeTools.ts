@@ -92,6 +92,8 @@ export const registerWriteTools: ToolRegistrar = (server: McpServer, client: Pip
           mental: mental.optional(),
           srDelta: z.number().nullable().optional(),
           performance: z.number().min(0).max(100).nullable().optional(),
+          playedMinutes: z.number().positive().max(120).nullable().optional()
+            .describe('Corrected played time in minutes (e.g. 20.1 for 20:06) — the per-10 divisor; null reverts to the recorded time.'),
           grades: grades.optional(),
         }),
       },

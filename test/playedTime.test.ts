@@ -124,6 +124,17 @@ describe('ROUND_TALLY_MODES (H9)', () => {
 });
 
 describe('playedTimeOf', () => {
+  it('a HAND CORRECTION beats everything recorded — the match editor data fix', () => {
+    // Vantage joined mid-match: the rounds it saw add up to a fraction of the game.
+    const p = playedTimeOf(game({ playedMinutes: 1.6, durationMinutes: 3, playedMinutesOverride: 20.1 }));
+    expect(p).toEqual({ minutes: 20.1, baseMinutes: 20.1, source: 'reported' });
+    expect(playedMinutesOf(game({ playedMinutesOverride: 20.1 }))).toBe(20.1);
+  });
+
+  it('ignores a non-positive correction and falls back to the recorded time', () => {
+    expect(playedTimeOf(game({ playedMinutes: 9.4, playedMinutesOverride: 0 }))?.minutes).toBe(9.4);
+  });
+
   it('MEASURED: a recorded playedMinutes wins outright', () => {
     const p = playedTimeOf(game({ playedMinutes: 9.4, durationMinutes: 11 }));
     expect(p).toEqual({ minutes: 9.4, baseMinutes: 9.4, source: 'measured' });
