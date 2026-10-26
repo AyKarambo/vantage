@@ -8,7 +8,8 @@ JSDoc.
 ```
 src/            main-process TypeScript (compiled to dist/ as CommonJS)
 renderer/       renderer TypeScript + styles (bundled by esbuild, type-checked separately)
-test/           vitest suite (*.test.ts) — pure core + stores + Notion modules
+test/           vitest suite (*.test.ts) — pure core + stores + Notion modules;
+                test/dom/ mounts the renderer in happy-dom; test/visual/ holds screenshot baselines
 specs/          one behavioral spec per screen — what each view must show
 scripts/        build/dev tooling (.mjs) — esbuild, preview server, assets, packaging
 docs/           this folder, signing + store-submission notes, legal pages

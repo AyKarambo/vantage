@@ -989,7 +989,8 @@ New to the codebase? Start with the **[onboarding guide](docs/onboarding/README.
 setup, architecture, a folder-by-folder tour, and recipes for common changes.
 
 ```bash
-npm test           # vitest — analytics, aggregator, resolvers, store, and the Vantage models
+npm test           # vitest — analytics, aggregator, resolvers, store, the Vantage models, and
+                   # renderer DOM characterization tests (test/dom, happy-dom)
 npm run typecheck  # tsc for the main process, the renderer, the MCP bridge, and the test suite
 npm run test:visual  # screenshot every screen from the preview and diff against test/visual/baselines
                      # (-- --update rewrites the baselines; see docs/onboarding/04-common-tasks.md)

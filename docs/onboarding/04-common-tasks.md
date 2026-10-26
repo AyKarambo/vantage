@@ -70,7 +70,7 @@ can't read CSS custom properties, which is why the palette is mirrored in JS.
 
 ## Adding a test
 
-Conventions ([`test/`](../../test), vitest, node environment):
+Conventions ([`test/`](../../test), vitest, node environment — except `test/dom/`, below):
 
 - **Constructor injection over module mocks.** Units take their dependencies as
   parameters, so tests pass `vi.fn()` fakes — you'll rarely need `vi.mock()`. See
@@ -84,6 +84,23 @@ Conventions ([`test/`](../../test), vitest, node environment):
   wrong layer.
 
 Run `npm run test:watch` while developing.
+
+## Renderer DOM tests (`test/dom/`)
+
+`test/dom/**` runs in its own vitest project on **happy-dom** (everything else stays on
+node), in UTC with an en-US default locale (see [`test/dom/setup.ts`](../../test/dom/setup.ts)).
+[`test/dom/appHarness.ts`](../../test/dom/appHarness.ts) mounts the **real shell** over
+the **real data layer** — `providerHarness` (real stores in memory) behind
+`dashboardHandlers`, wired like the browser preview — with `Date` pinned, and records
+every bridge call (`app.callsTo('logMatch')`).
+
+They are *characterization* tests: they pin what the Log Match dialog, the match
+editor and the expanded Review card send today (`logMatch` / `editMatch` /
+`saveReview`, plus the rank-anchor and placement calls around them) and how the shell
+navigates (sidebar, Back / Escape, the params-only re-render). A refactor of those
+files must keep them passing unchanged; when you *mean* to change a payload, update
+the pinned value (`npx vitest run test/dom -u` refreshes the inline snapshots) and
+say why in the PR. Mount one app per file — the shell binds window-level keys.
 
 ## Visual regression (renderer changes)
 

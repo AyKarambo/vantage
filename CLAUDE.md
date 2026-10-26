@@ -53,7 +53,9 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
   guidance. If the server isn't connected, say so and fall back to `Read` / `Grep` — don't guess.
 
 ## Build & Test
-- `npm test` — run the vitest suite once (`test:watch` for watch mode).
+- `npm test` — run the vitest suite once (`test:watch` for watch mode). `test/dom/**` runs on
+  happy-dom: characterization tests that mount the real renderer and pin the payloads its
+  forms send — keep them passing unchanged through renderer refactors.
 - `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`) + preview, MCP bridge and the `test/` suite (`tsconfig.test.json`), no emit.
 - `npm run build` — tsc (main) + esbuild (renderer bundle). `npm run watch:renderer` rebuilds on change.
 - `npm start` — build and run with the demo dataset.

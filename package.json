@@ -106,6 +106,7 @@
     "@types/pngjs": "^6.0.5",
     "app-builder-lib": "~26.15.7",
     "esbuild": "^0.28.1",
+    "happy-dom": "^21.0.4",
     "pixelmatch": "^8.0.0",
     "pngjs": "^7.0.0",
     "typescript": "^6.0.3",
