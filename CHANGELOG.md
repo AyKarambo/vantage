@@ -56,6 +56,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **"Restart to apply" now covers every game-data update.** Overwolf sometimes updates a helper package that
+  game events depend on while Vantage is running. Vantage didn't ask for a restart then, so the next time you
+  started Overwatch the Live board stayed empty and the match wasn't recorded. Now the restart banner shows
+  for these updates too.
 - **Restarting Vantage mid-match no longer loses the match.** If you restart Vantage during a match, it carries
   on with the same match instead of saving only the last part it saw.
 - **Live board works when Vantage starts mid-match.** If Vantage (or its game connection) started while a

@@ -48,6 +48,16 @@ interface RawGepData {
 const OVERWATCH_FEATURES = ['gep_internal', 'game_info', 'match_info', 'kill', 'death', 'assist', 'roster'];
 
 /**
+ * Packages whose staged update needs a restart before live data can flow: GEP
+ * itself and `utility`, the package it loads its native game plugin from. A
+ * staged `utility` update with the old one still in memory makes the next game
+ * launch fail to load the plugin ('start-error') while GEP still reports the
+ * game as detected and the features as armed — a silent, dead feed
+ * (2026-10-26: a whole match went unrecorded until a restart).
+ */
+const RESTART_PACKAGES = new Set(['gep', 'utility']);
+
+/**
  * Wraps the Overwolf GEP package: waits for it to be ready, enables Overwatch
  * when detected, requests all features, and re-emits normalized {@link GepMessage}s.
  *
@@ -102,9 +112,10 @@ export class GepService extends EventEmitter {
     // A fixed GEP package is downloaded but needs a restart to apply → the app
     // surfaces a "restart to apply" prompt (never auto-restarts).
     packages.on('package-update-pending', (_e: unknown, info: Array<{ name?: string; version?: string }>) => {
-      if (!Array.isArray(info) || !info.some((p) => p?.name === 'gep')) return;
+      const names = Array.isArray(info) ? info.map((p) => p?.name).filter((n): n is string => !!n && RESTART_PACKAGES.has(n)) : [];
+      if (!names.length) return;
       this.status = { ...this.status, updateStaged: true };
-      this.emit('log', 'gep package update staged — restart to apply');
+      this.emit('log', `${names.join(' + ')} package update staged — restart to apply`);
       this.emit('status', this.getStatus());
     });
   }
@@ -116,10 +127,10 @@ export class GepService extends EventEmitter {
       const fn = this.packages?.hasPendingUpdates;
       if (typeof fn !== 'function') return;
       const res = fn.call(this.packages) as { hasPendingUpdate?: boolean; details?: Array<{ name?: string }> };
-      const staged = Boolean(res?.hasPendingUpdate) && (res.details ?? []).some((p) => p?.name === 'gep');
+      const staged = Boolean(res?.hasPendingUpdate) && (res.details ?? []).some((p) => !!p?.name && RESTART_PACKAGES.has(p.name));
       if (staged) {
         this.status = { ...this.status, updateStaged: true };
-        this.emit('log', 'gep package update already staged at startup — restart to apply');
+        this.emit('log', 'gep/utility package update already staged at startup — restart to apply');
       }
     } catch (err) {
       this.emit('log', 'hasPendingUpdates check failed', String(err));
