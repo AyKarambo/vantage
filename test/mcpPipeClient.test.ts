@@ -96,6 +96,6 @@ describe('when Vantage is reachable', () => {
     const results = await Promise.all(
       [1, 2, 3, 4].map((n) => client.call('ranks', { n } as never)),
     );
-    expect(results.map((r) => (r as { echo: number }).echo)).toEqual([1, 2, 3, 4]);
+    expect(results.map((r) => (r as unknown as { echo: number }).echo)).toEqual([1, 2, 3, 4]);
   });
 });

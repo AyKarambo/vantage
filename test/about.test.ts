@@ -12,7 +12,10 @@ const INFO: AppInfo = {
   platform: 'win32',
   osRelease: '10.0.26200',
   packaged: true,
+  devMode: false,
+  devModeAttempted: false,
   gepPackageVersion: '309.0.0',
+  mcpBridgePath: '',
 };
 
 describe('buildAboutRows', () => {

@@ -985,7 +985,7 @@ setup, architecture, a folder-by-folder tour, and recipes for common changes.
 
 ```bash
 npm test           # vitest — analytics, aggregator, resolvers, store, and the Vantage models
-npm run typecheck  # tsc for the main process, the renderer, and the MCP bridge
+npm run typecheck  # tsc for the main process, the renderer, the MCP bridge, and the test suite
 npm run build      # tsc (main) + esbuild (renderer bundle + MCP bridge)
 npm run build:mcp  # just the MCP bridge → dist/mcp/stdio.js
 npm run watch:renderer   # rebuild the renderer bundle on change

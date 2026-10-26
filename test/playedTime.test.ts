@@ -233,7 +233,7 @@ describe('heroPlayedMinutes', () => {
 
 describe('heroTimeShares', () => {
   it('splits by real minutes when every row has them', () => {
-    const shares = heroTimeShares({ heroes: ['Tracer', 'Genji'], perHero: [hero({ hero: 'Tracer', minutes: 6 }), hero({ hero: 'Genji', minutes: 2 })] });
+    const shares = heroTimeShares({ role: 'damage', heroes: ['Tracer', 'Genji'], perHero: [hero({ hero: 'Tracer', minutes: 6 }), hero({ hero: 'Genji', minutes: 2 })] });
     expect(shares.get('Tracer')).toBeCloseTo(0.75, 9);
     expect(shares.get('Genji')).toBeCloseTo(0.25, 9);
   });
@@ -241,13 +241,13 @@ describe('heroTimeShares', () => {
   it('gives a hero with no played time no credit, rather than equal-splitting the match', () => {
     // A swap that lived entirely inside a setup phase clips to zero played
     // minutes and keeps no `minutes`, but survives as a row when a stat moved.
-    const shares = heroTimeShares({ heroes: ['Tracer', 'Genji'], perHero: [hero({ hero: 'Tracer', minutes: 6 }), hero({ hero: 'Genji' })] });
+    const shares = heroTimeShares({ role: 'damage', heroes: ['Tracer', 'Genji'], perHero: [hero({ hero: 'Tracer', minutes: 6 }), hero({ hero: 'Genji' })] });
     expect(shares.get('Tracer')).toBe(1);
     expect(shares.get('Genji')).toBe(0);
   });
 
   it('merges repeated heroes before splitting', () => {
-    const swapped = heroTimeShares({ heroes: ['Tracer', 'Genji'], perHero: [hero({ hero: 'Tracer', minutes: 3 }), hero({ hero: 'Genji', minutes: 2 }), hero({ hero: 'Tracer', minutes: 3 })] });
+    const swapped = heroTimeShares({ role: 'damage', heroes: ['Tracer', 'Genji'], perHero: [hero({ hero: 'Tracer', minutes: 3 }), hero({ hero: 'Genji', minutes: 2 }), hero({ hero: 'Tracer', minutes: 3 })] });
     expect(swapped.get('Tracer')).toBeCloseTo(0.75, 9);
     expect(swapped.size).toBe(2);
   });
@@ -257,11 +257,11 @@ describe('heroTimeShares', () => {
     // `perHero` as the feed sent it; the correction has to win, or the edit
     // changes nothing on the Heroes screen.
     const rows = [hero({ hero: 'Tracer', minutes: 6 }), hero({ hero: 'Genji', minutes: 2 })];
-    expect([...heroTimeShares({ heroes: ['Sojourn'], perHero: rows, factsEditedAt: 1 })]).toEqual([['Sojourn', 1]]);
+    expect([...heroTimeShares({ role: 'damage', heroes: ['Sojourn'], perHero: rows, factsEditedAt: 1 })]).toEqual([['Sojourn', 1]]);
     // Without that marker the recorded rows are the truth, whatever heroes[] says.
-    expect(heroTimeShares({ heroes: ['Sojourn'], perHero: rows }).get('Tracer')).toBeCloseTo(0.75, 9);
+    expect(heroTimeShares({ role: 'damage', heroes: ['Sojourn'], perHero: rows }).get('Tracer')).toBeCloseTo(0.75, 9);
     // Same heroes in a different order is not a correction.
-    expect(heroTimeShares({ heroes: ['Genji', 'Tracer'], perHero: rows, factsEditedAt: 1 }).get('Tracer')).toBeCloseTo(0.75, 9);
+    expect(heroTimeShares({ role: 'damage', heroes: ['Genji', 'Tracer'], perHero: rows, factsEditedAt: 1 }).get('Tracer')).toBeCloseTo(0.75, 9);
   });
 
   it('an overruled match pools its totals over the chosen heroes, stats and credit together', () => {
@@ -278,8 +278,8 @@ describe('heroTimeShares', () => {
   });
 
   it('uses the heroes list for manual logs and is empty with no heroes', () => {
-    const shares = heroTimeShares({ heroes: ['Ana', 'Kiriko'] });
+    const shares = heroTimeShares({ role: 'damage', heroes: ['Ana', 'Kiriko'] });
     expect(shares.get('Ana')).toBe(0.5);
-    expect(heroTimeShares({ heroes: [] }).size).toBe(0);
+    expect(heroTimeShares({ role: 'damage', heroes: [] }).size).toBe(0);
   });
 });

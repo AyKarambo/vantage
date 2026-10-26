@@ -39,8 +39,8 @@ describe('manualGameRecord', () => {
 
   it('makes a review from grades, a focus choice or a break mark — not from nothing', () => {
     const at = { matchId: 'x', now: NOW, account: 'Main' };
-    expect(manualGameRecord({ ...input, grades: { t1: 1 }, mental: { tilted: true } }, at).review)
-      .toEqual({ at: NOW, grades: { t1: 1 }, flags: { tilted: true } });
+    expect(manualGameRecord({ ...input, grades: { t1: 'hit' }, mental: { tilt: true } }, at).review)
+      .toEqual({ at: NOW, grades: { t1: 'hit' }, flags: { tilt: true } });
     expect(manualGameRecord({ ...input, focusTargetIds: [] }, at).review).toEqual({ at: NOW, grades: {}, flags: {}, focusTargetIds: [] });
     expect(manualGameRecord({ ...input, breakBefore: false }, at).review).toEqual({ at: NOW, grades: {}, flags: {}, breakBefore: false });
     expect(manualGameRecord({ ...input, grades: {} }, at).review).toBeUndefined();
@@ -58,9 +58,9 @@ describe('matchEditPatch', () => {
   });
 
   it('never counts the annotation layer as a fact', () => {
-    const patch = matchEditPatch(game(), { matchId: 'm1', srDelta: 18, performance: 4, mental: { tilted: true } }, NOW);
+    const patch = matchEditPatch(game(), { matchId: 'm1', srDelta: 18, performance: 4, mental: { tilt: true } }, NOW);
     expect(patch.factsEditedAt).toBeUndefined();
-    expect(patch).toMatchObject({ srDelta: 18, performance: 4, mental: { tilted: true } });
+    expect(patch).toMatchObject({ srDelta: 18, performance: 4, mental: { tilt: true } });
   });
 
   it('honours the played-at time on manual matches only, clamped to the past', () => {
@@ -75,12 +75,12 @@ describe('matchEditPatch', () => {
   });
 
   it('re-stamps an existing review so its flags follow the mental edit, keeping its marks', () => {
-    const reviewed = game({ review: { at: 1, grades: { t1: 1 }, flags: { tilted: true }, breakBefore: true }, mental: { tilted: true } });
+    const reviewed = game({ review: { at: 1, grades: { t1: 'hit' }, flags: { tilt: true }, breakBefore: true }, mental: { tilt: true } });
     expect(matchEditPatch(reviewed, { matchId: 'm1', mental: {} }, NOW).review)
-      .toEqual({ at: NOW, grades: { t1: 1 }, flags: {}, breakBefore: true });
+      .toEqual({ at: NOW, grades: { t1: 'hit' }, flags: {}, breakBefore: true });
   });
 
   it('never marks an unreviewed match reviewed without grades', () => {
-    expect(matchEditPatch(game(), { matchId: 'm1', mental: { tilted: true } }, NOW).review).toBeUndefined();
+    expect(matchEditPatch(game(), { matchId: 'm1', mental: { tilt: true } }, NOW).review).toBeUndefined();
   });
 });

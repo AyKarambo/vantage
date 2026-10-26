@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { selectMatches, matchesFilter, matchSearchFilter } from '../src/core/dashboardData';
 import type { GameRecord } from '../src/core/analytics';
 import type { Result } from '../src/core/model';
+import type { MapMode } from '../src/core/maps';
 
 let seq = 0;
 function game(timestamp: number, over: Partial<GameRecord> = {}): GameRecord {
@@ -48,7 +49,7 @@ describe('selectMatches (M1)', () => {
 });
 
 describe('matchesFilter (M2)', () => {
-  const mapModeOf = (map: string): string => (map === 'Ilios' ? 'Control' : map === 'Dorado' ? 'Escort' : 'Unknown');
+  const mapModeOf = (map: string): MapMode => (map === 'Ilios' ? 'Control' : map === 'Dorado' ? 'Escort' : 'Unknown');
 
   it('with no filter fields set, returns every game unchanged', () => {
     const games = [game(1000, { result: 'Win' }), game(2000, { result: 'Loss' })];

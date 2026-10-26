@@ -97,7 +97,7 @@ function auditProvider(): DataProvider {
       account: 'Karambo', timestamp: Date.parse('2026-06-02T12:00:00Z'), rosterCount: 10,
     }],
     manualTargets: (): AuthoredTarget[] => [
-      { id: TARGET_ID, name: 'Use cover', mode: 'self', rule: 'r' },
+      { id: TARGET_ID, name: 'Use cover', mode: 'self', rule: 'r', createdAt: 0, isActive: true },
     ],
     demoContext: () => ({ active: false, preference: 'off', hasRealHistory: true }),
     effectiveMasterData: () => DEFAULT_MASTER_DATA,

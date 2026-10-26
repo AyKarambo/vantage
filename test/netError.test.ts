@@ -46,13 +46,13 @@ describe('classifyNetworkError', () => {
 
   it('unwraps a nested cause (undici nests the real errno under fetch failed)', () => {
     const cause = Object.assign(new Error('request to https://example.com failed'), { code: 'ENOTFOUND' });
-    const err = new Error('fetch failed', { cause });
+    const err = Object.assign(new Error('fetch failed'), { cause });
     expect(classifyNetworkError(err)).toBe('offline');
   });
 
   it('unwraps cause even when the outer message does not itself say "fetch failed"', () => {
     const cause = Object.assign(new Error('inner'), { code: 'ECONNREFUSED' });
-    const err = new Error('outer wrapper', { cause });
+    const err = Object.assign(new Error('outer wrapper'), { cause });
     expect(classifyNetworkError(err)).toBe('offline');
   });
 

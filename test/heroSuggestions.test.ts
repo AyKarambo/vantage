@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mostPlayedHeroes } from '../src/core/analytics';
-import type { GameRecord, Result, Role } from '../src/core/analytics';
+import type { GameRecord } from '../src/core/analytics';
+import type { Result, Role } from '../src/core/model';
 
 function game(p: Partial<GameRecord> & { result: Result; role: Role; heroes: string[] }): GameRecord {
   return {

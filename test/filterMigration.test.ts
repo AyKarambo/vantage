@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete (globalThis as { localStorage?: MemoryStorage }).localStorage;
+  delete (globalThis as unknown as { localStorage?: MemoryStorage }).localStorage;
   vi.restoreAllMocks();
 });
 
@@ -167,6 +167,6 @@ describe('prefs.ts — filter preset + log-prefill migration (spec D4)', () => {
     const { prefs } = await import('../renderer/src/prefs');
     const prefill = prefs.get('logPrefill');
     expect(prefill).toEqual({ role: 'tank', account: 'Main' });
-    expect((prefill as Record<string, unknown>).mode).toBeUndefined();
+    expect((prefill as unknown as Record<string, unknown>).mode).toBeUndefined();
   });
 });

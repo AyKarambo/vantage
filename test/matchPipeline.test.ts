@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMatchPipeline, type MatchPipelineDeps } from '../src/main/matchPipeline';
-import type { AppConfig } from '../src/main/config';
+import { defaultConfig, type AppConfig } from '../src/main/config/schema';
 import type { GameRecord } from '../src/core/analytics';
 import type { MatchRecord, Result } from '../src/core/model';
 import type { PendingChangedPayload } from '../src/shared/contract';
@@ -8,8 +8,7 @@ import type { PendingChangedPayload } from '../src/shared/contract';
 /** A full AppConfig for the pipeline's getConfig() dep — no Electron involved. */
 function appConfig(p: Partial<AppConfig> = {}): AppConfig {
   return {
-    overwatchGameId: 10844,
-    runAtLogin: false,
+    ...defaultConfig(),
     sensor: 'gep',
     notion: { gametrackerDatabaseId: '', mapsDatabaseId: '', gametrackerUrl: '' },
     accounts: { 'Player#1234': 'Main' },

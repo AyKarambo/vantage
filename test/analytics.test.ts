@@ -100,7 +100,7 @@ describe('grouping', () => {
     expect(even.wins + even.losses + even.draws).toBe(1);
     expect(even.winrate).toBe(0.5);
     for (const w of [0.1, 0.25, 1 / 3, 0.5, 0.75, 0.9]) {
-      const wl = weightedWinLoss([{ game: win, weight: w }, { game: loss, weight: w }, { game: game({ result: 'Draw' }), weight: w }]);
+      const wl = weightedWinLoss([{ game: win, weight: w }, { game: loss, weight: w }, { game: game({ result: 'Draw', map: 'Ilios', role: 'damage' }), weight: w }]);
       expect(wl.wins + wl.losses + wl.draws).toBe(wl.games);
     }
   });

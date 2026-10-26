@@ -95,7 +95,7 @@ describe('placement runs — start and complete', () => {
     // With no surplus the window IS the counted ten, so this is the 10th match's
     // timestamp — competitiveComps (strictly after the anchor) then excludes
     // every placement match from the rank arithmetic.
-    expect(anchorNow().setAt).toBe(games[9].timestamp);
+    expect(anchorNow()?.setAt).toBe(games[9].timestamp);
     expect(anchorNow()).toMatchObject({ tier: 'Platinum', division: 2, progressPct: 0 });
   });
 
@@ -106,7 +106,7 @@ describe('placement runs — start and complete', () => {
     const { provider, anchorNow } = harness(games, anchor());
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
-    expect(anchorNow().setAt).toBe(games[12].timestamp);
+    expect(anchorNow()?.setAt).toBe(games[12].timestamp);
   });
 
   it('a surplus match\'s ±% is absorbed by the confirmed rank, never applied twice', () => {

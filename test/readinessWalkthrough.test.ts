@@ -18,7 +18,7 @@ function synthSummary(load: number, performance: number, subjective: number): Re
   const band = score <= 40 ? 'in-the-hole' : score >= 76 ? 'fresh' : 'loaded';
   return {
     band, score, confidence: 'high', confidenceGates: [], headline: '', recommendation: 'none', recommendationText: '',
-    signals: [], driver: 'neutral', regime: 'stats',
+    signals: [], driver: 'neutral', regime: 'stats', mainAccount: null,
     load: { acutePerDay: 0, chronicPerDay: 0, ratio: 1, consecutiveDays: 0, activeDaysPerWeek: 0, restDays: 0, lastSessionGames: 0, lastSessionMinutes: null },
     subscores: {
       load: { delta: load, available: true, coverage: 1 },

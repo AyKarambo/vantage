@@ -54,7 +54,7 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
 
 ## Build & Test
 - `npm test` — run the vitest suite once (`test:watch` for watch mode).
-- `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`), no emit.
+- `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`) + preview, MCP bridge and the `test/` suite (`tsconfig.test.json`), no emit.
 - `npm run build` — tsc (main) + esbuild (renderer bundle). `npm run watch:renderer` rebuilds on change.
 - `npm start` — build and run with the demo dataset.
 - `npm run preview` — bundle the browser harness, serve at http://localhost:5178 (no Overwolf runtime needed).

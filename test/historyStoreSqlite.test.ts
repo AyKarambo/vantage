@@ -513,7 +513,7 @@ describe('HistoryStore (SQLite) — all() caching (W8)', () => {
     expect(afterEdit).not.toBe(afterAdd);
     expect(afterEdit[0].srDelta).toBe(12);
 
-    h.setReview('a', { grades: {}, flags: {} });
+    h.setReview('a', { at: 1, grades: {}, flags: {} });
     const afterReview = h.all();
     expect(afterReview).not.toBe(afterEdit);
     expect(afterReview[0].review).toBeDefined();
@@ -555,7 +555,7 @@ describe('HistoryStore (SQLite) — revision()', () => {
     const afterEdit = h.revision();
     expect(afterEdit).not.toBe(afterAdd);
 
-    h.setReview('a', { grades: {}, flags: {} });
+    h.setReview('a', { at: 1, grades: {}, flags: {} });
     const afterReview = h.revision();
     expect(afterReview).not.toBe(afterEdit);
 

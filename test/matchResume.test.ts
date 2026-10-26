@@ -211,7 +211,7 @@ describe('matchPipeline — checkpoint persistence', () => {
   it('logs a failed write and keeps the pipeline running', () => {
     const h = harness();
     h.setRunning({ v: 1 });
-    (h.deps.checkpoints as { save: () => void }).save = () => { throw new Error('disk full'); };
+    h.deps.checkpoints!.save = () => { throw new Error('disk full'); };
     expect(() => h.feed(0, tick)).not.toThrow();
     expect(h.logs[0]).toEqual(['match checkpoint failed', 'Error: disk full']);
   });

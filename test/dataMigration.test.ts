@@ -354,8 +354,8 @@ describe('migrateDataFolder — adopt', () => {
     fs.writeFileSync(path.join(b, DB_FILE), 'existing-db-bytes');
     const calls: Array<{ op: string; dir: string }> = [];
     const history: AdoptableStore = {
-      relocate: (dir) => calls.push({ op: 'relocate', dir }),
-      adopt: (dir) => calls.push({ op: 'adopt', dir }),
+      relocate: (dir) => { calls.push({ op: 'relocate', dir }); },
+      adopt: (dir) => { calls.push({ op: 'adopt', dir }); },
     };
 
     let persisted: string | undefined;
