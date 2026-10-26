@@ -48,3 +48,6 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# visual regression run output (actual captures + diffs on failure; baselines ARE committed)
+test/visual/output/

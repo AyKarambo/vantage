@@ -17,7 +17,8 @@ npm install
 
 ```bash
 npm test                 # vitest suite, one shot (npm run test:watch for watch mode)
-npm run typecheck        # tsc, no emit — checks main AND renderer tsconfigs
+npm run typecheck        # tsc, no emit — main, renderer, preview, MCP bridge and test/ tsconfigs
+npm run test:visual      # screenshot every screen from the preview, diff against baselines
 npm run build            # tsc (main → dist/) + esbuild (renderer → renderer/dist/dashboard.js)
 npm run watch:renderer   # rebuild the renderer bundle on change
 npm start                # build + launch the app via ow-electron

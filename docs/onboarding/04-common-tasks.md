@@ -85,6 +85,31 @@ Conventions ([`test/`](../../test), vitest, node environment):
 
 Run `npm run test:watch` while developing.
 
+## Visual regression (renderer changes)
+
+The renderer has its own safety net: `npm run test:visual` bundles the browser preview,
+opens it in ow-electron at the app's 1300×840 spec size and captures every sidebar
+screen, the intro tour, the Log Match dialog, a match's detail page and its editor, and
+an expanded Review card. Each PNG is compared pixel by pixel (pixelmatch) against the
+committed baselines in [`test/visual/baselines/`](../../test/visual/baselines).
+
+It is deterministic by construction: the clock is pinned with the preview's
+`?now=<epoch ms>` switch, the seeded sample season is on (`?demo=on`), storage starts
+empty, and the window runs in UTC / en-US at scale factor 1 with animations and the
+caret disabled. The driver is
+[`scripts/capture-screenshots.cjs`](../../scripts/capture-screenshots.cjs) (`--visual`
+mode; its default mode makes the store screenshots).
+
+- **A failure** writes the actual capture and a `*.diff.png` (changed pixels in red)
+  to `test/visual/output/` (git-ignored) and exits non-zero. Open the diff first.
+- **An intended change** (you meant to move pixels): `npm run test:visual -- --update`
+  rewrites the baselines and drops any no longer captured. Commit them with the change
+  and look at the PNG diff in the PR — that *is* the review of the visual change.
+- **A refactor** (you meant to move no pixels) must pass without `--update`.
+- Font rasterisation differs between machines/GPU drivers; baselines are made on the
+  maintainer's Windows machine with hardware acceleration off. `VISUAL_MAX_DIFF=<n>`
+  tolerates up to *n* differing pixels per screen if you must run elsewhere.
+
 ## Debugging the live pipeline without the game
 
 1. Have someone (or a past you) run `OW_SYNC_RECORD=1 npm start` during real matches —
