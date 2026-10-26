@@ -10,8 +10,11 @@
  *
  * Query switches: ?demo=on|off|unset, ?gep=connected|live|stale|no-game|cycle|
  * down|degraded|staged|outdated, ?devmode=off|pending|ok|failed|cycle,
- * ?firstRunData=1, ?players=N. Drive a match from the console with `previewLive`.
+ * ?firstRunData=1, ?players=N, ?now=<epoch ms> (pins the clock — see frozenClock.ts).
+ * Drive a match from the console with `previewLive`.
  */
+// First: pins the clock (?now=) before any other module reads the time.
+import { pinnedNow } from './frozenClock';
 import type {
   AppUiSettings, DataLocationResult, DevModeAuthStatusPayload, GameLoggedPayload, GepHealthState, GepStatusPayload,
   LiveMatchPayload, LogEntry, LogLevel, NotionDatabaseSummary, NotionPageSummary, NotionStatus, OwStatsApi,
@@ -112,7 +115,9 @@ const appendLog = (e: LogEntry): void => {
   logEntries.emit(e);
 };
 let logTick = 0;
-setInterval(() => {
+// A pinned clock is a still frame: no trickle, so the Logs screen is the same
+// however long a capture takes to reach it.
+if (pinnedNow === undefined) setInterval(() => {
   appendLog({
     ts: Date.now(),
     level: logLevel === 'debug' && logTick % 2 === 0 ? 'debug' : 'info',

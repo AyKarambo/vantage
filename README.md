@@ -814,6 +814,11 @@ the full app in a plain browser:
 npm run preview        # bundles the harness and serves it at http://localhost:5178
 ```
 
+Query switches shape what it shows — e.g. `?demo=on|off|unset`, `?gep=live|stale|…`,
+`?devmode=ok|failed|…`, `?players=N`, and `?now=<epoch ms>`, which pins the clock
+(`Date.now()` and `new Date()`) so every screen renders identically on any day. The full list is
+in the header of [`renderer/preview/preview.ts`](renderer/preview/preview.ts).
+
 ### Optional: AI coaching over MCP
 
 Vantage can expose your stats to an **MCP** client — Claude Desktop or Claude Code — so an
