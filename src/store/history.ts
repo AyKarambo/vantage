@@ -5,6 +5,7 @@ import type { GameRecord, MatchReview } from '../core/analytics';
 import type { MatchRecord } from '../core/model';
 import { mergeImportedIntoLocal } from '../core/notionMerge';
 import { resolveMapId } from '../core/resolvers/mapId';
+import { applyManualPatch, type ManualPatch } from '../core/manualPatch';
 
 /**
  * Reconstruct a {@link GameRecord} from its stored `data` blob, normalizing a
@@ -208,21 +209,10 @@ export class HistoryStore {
    * patch. `timestamp` has no `null` form (L5) — every match keeps SOME instant,
    * and `editMatch` already gates it to hand-logged matches before it ever reaches here.
    */
-  editManual(
-    matchId: string,
-    patch: Partial<Pick<GameRecord, 'result' | 'role' | 'map' | 'heroes' | 'gameType' | 'timestamp' | 'mental' | 'review'>> &
-      { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null;
-        playedMinutesOverride?: number | null;
-        party?: GameRecord['party'] | null;
-        rankAtStart?: GameRecord['rankAtStart'] | null },
-  ): boolean {
+  editManual(matchId: string, patch: ManualPatch): boolean {
     const game = this.getOne(matchId);
     if (!game) return false;
-    const target = game as unknown as Record<string, unknown>;
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === null) delete target[k];
-      else if (v !== undefined) target[k] = v;
-    }
+    applyManualPatch(game, patch);
     this.updateStmt.run(...updateValues(game));
     return true;
   }

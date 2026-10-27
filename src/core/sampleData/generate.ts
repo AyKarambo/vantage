@@ -1,6 +1,7 @@
 import type { GameRecord, HeroStat, MatchMental } from '../analytics';
 import type { Result, Role, RosterPlayer } from '../model';
 import { ACCOUNT_WR, ACCOUNTS, HEROES, MAPS, PLAYER_POOL, ROLE_WR, ROLES, ROSTER_ROLES } from './fixtures';
+import { clamp } from '../num';
 
 /**
  * Generates a realistic season of games (deterministic, seeded) so the dashboard
@@ -239,4 +240,3 @@ function statLine(hero: string, role: Role, minutes: number, between: (lo: numbe
 }
 
 const r = (n: number) => Math.round(n);
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));

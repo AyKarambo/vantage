@@ -6,7 +6,7 @@
  * winrate falls off — the "stop before game N" coach signal.
  */
 import type { GameRecord, Group } from './types';
-import { winLoss } from './grouping';
+import { winLoss, decided } from './grouping';
 
 /** Day-part buckets in display order. Bounds are [from, to) local hours. */
 const DAY_PARTS: Array<{ key: string; from: number; to: number }> = [
@@ -112,12 +112,12 @@ const FADE_DROP = 0.08;
  */
 export function sessionFade(positions: Group[], minGames = 8): SessionFade | null {
   const early = positions.filter((p) => p.key === '1' || p.key === '2');
-  const earlyDecided = early.reduce((n, p) => n + p.wins + p.losses, 0);
+  const earlyDecided = early.reduce((n, p) => n + decided(p), 0);
   if (earlyDecided < minGames) return null;
   const baseline = early.reduce((n, p) => n + p.wins, 0) / earlyDecided;
   for (const p of positions) {
     if (p.key === '1' || p.key === '2') continue;
-    if (p.wins + p.losses >= minGames && p.winrate <= baseline - FADE_DROP) {
+    if (decided(p) >= minGames && p.winrate <= baseline - FADE_DROP) {
       return { position: p.key, winrate: p.winrate, baseline };
     }
   }

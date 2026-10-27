@@ -1,7 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { Role } from '../core/model';
 import { rankKey, type RankAnchor, type RankAnchorMap } from '../core/rank';
+import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 /** A stored anchor plus the (account, role) it belongs to. */
 export interface AnchorRecord extends RankAnchor {
@@ -12,18 +11,15 @@ export interface AnchorRecord extends RankAnchor {
 /**
  * Durable per-(account, role) rank anchors — the one-time "this is my rank now"
  * reading the calculated-rank engine replays SR deltas from. Same shape as the
- * other stores: a single JSON file with atomic writes, dir-injected and
+ * other stores: a single JSON file with atomic writes, location-injected and
  * Electron-free so it stays unit-testable.
  */
 export class RankAnchorStore {
-  private file: string;
-  private tmp: string;
+  private readonly doc: JsonDoc;
   private state: Record<string, AnchorRecord>;
 
-  constructor(dir: string) {
-    fs.mkdirSync(dir, { recursive: true });
-    this.file = path.join(dir, 'rankAnchors.json');
-    this.tmp = path.join(dir, 'rankAnchors.tmp.json');
+  constructor(docs: JsonDocs) {
+    this.doc = docs('rankAnchors.json');
     this.state = this.load();
   }
 
@@ -104,15 +100,13 @@ export class RankAnchorStore {
    * `rankAnchors.json` before calling this; `relocate` just repoints and re-reads.
    */
   relocate(newDir: string): void {
-    fs.mkdirSync(newDir, { recursive: true });
-    this.file = path.join(newDir, 'rankAnchors.json');
-    this.tmp = path.join(newDir, 'rankAnchors.tmp.json');
+    this.doc.relocate(newDir);
     this.state = this.load();
   }
 
   private load(): Record<string, AnchorRecord> {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Record<string, AnchorRecord>;
+      const parsed = (this.doc.read() ?? {}) as Record<string, AnchorRecord>;
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch {
       return {};
@@ -120,7 +114,6 @@ export class RankAnchorStore {
   }
 
   private save(): void {
-    fs.writeFileSync(this.tmp, JSON.stringify(this.state, null, 2), 'utf8');
-    fs.renameSync(this.tmp, this.file);
+    this.doc.write(this.state);
   }
 }

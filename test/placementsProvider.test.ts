@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createDataProvider, type DataProviderDeps } from '../src/main/dataProvider';
-import { currentRank, rankKey, type RankAnchor, type RankAnchorMap } from '../src/core/rank';
+import { providerHarness } from './providerFixtures';
+import { currentRank, type RankAnchor } from '../src/core/rank';
 import { suppressedMatchIds, type PlacementRun } from '../src/core/placements';
 import { DEFAULT_MASTER_DATA } from '../src/core/masterData';
 import type { GameRecord } from '../src/core/analytics';
@@ -38,65 +38,24 @@ const anchor = (over: Partial<RankAnchor> = {}): RankAnchor & { account: string;
 });
 
 function harness(games: GameRecord[], initialAnchor?: ReturnType<typeof anchor>) {
-  const history = [...games];
-  const anchors: Record<string, ReturnType<typeof anchor>> = {};
-  if (initialAnchor) anchors[rankKey(initialAnchor.account, initialAnchor.role)] = initialAnchor;
-  const runs: Record<string, PlacementRun> = {};
-  const declined: Record<string, number[]> = {};
-  let recordedGames = 0;
+  const { provider, history, rankAnchors, placements } = providerHarness({ games });
+  if (initialAnchor) rankAnchors.set(initialAnchor);
+  const revisionBefore = history.revision();
 
-  const deps = {
-    history: {
-      all: () => history,
-      add: () => { recordedGames++; },
-      editManual: () => { recordedGames++; },
-    },
-    rankAnchors: {
-      all: () => Object.values(anchors),
-      get: (a: string, r: Role) => anchors[rankKey(a, r)],
-      map: (): RankAnchorMap => {
-        const out: RankAnchorMap = {};
-        for (const x of Object.values(anchors)) {
-          out[rankKey(x.account, x.role)] = { tier: x.tier, division: x.division, progressPct: x.progressPct, setAt: x.setAt };
-        }
-        return out;
-      },
-      set: (rec: ReturnType<typeof anchor>) => { anchors[rankKey(rec.account, rec.role)] = rec; return rec; },
-      remove: (a: string, r: Role) => delete anchors[rankKey(a, r)],
-      relabel: () => 0,
-      removeAccount: () => 0,
-    },
-    placements: {
-      allRuns: () => Object.values(runs),
-      getRun: (a: string, r: Role) => runs[rankKey(a, r)],
-      setRun: (run: PlacementRun) => { runs[rankKey(run.account, run.role)] = run; return run; },
-      removeRun: (a: string, r: Role) => delete runs[rankKey(a, r)],
-      declinedFor: (a: string, r: Role) => declined[rankKey(a, r)] ?? [],
-      addDeclined: (a: string, r: Role, seasonStart: number) => {
-        const key = rankKey(a, r);
-        const list = declined[key] ?? [];
-        if (!list.includes(seasonStart)) declined[key] = [...list, seasonStart];
-      },
-      relabel: () => 0,
-      removeAccount: () => 0,
-    },
-    masterDataStore: { all: () => ({ heroes: {}, maps: {}, seasons: {} }) },
-    getConfig: () => ({ accounts: {} }),
-  } as unknown as DataProviderDeps;
-
-  const provider = createDataProvider(deps);
-  const rankNow = () => currentRank(history, deps.rankAnchors.map(), ACCOUNT, ROLE);
+  const rankNow = () => currentRank(history.all(), rankAnchors.map(), ACCOUNT, ROLE);
   // What every rank SURFACE renders while a run is open: the same read-time mask
   // the dashboard applies. `rankNow` is the unsuppressed view — the two must
   // agree whenever no run is open, and only the masked one is meaningful while
   // one is.
   const rankShown = () => currentRank(
-    history, deps.rankAnchors.map(), ACCOUNT, ROLE, undefined,
-    suppressedMatchIds(history, Object.values(runs)),
+    history.all(), rankAnchors.map(), ACCOUNT, ROLE, undefined,
+    suppressedMatchIds(history.all(), placements.allRuns()),
   );
-  const anchorNow = () => anchors[rankKey(ACCOUNT, ROLE)];
-  const runNow = (): PlacementRun | undefined => runs[rankKey(ACCOUNT, ROLE)];
-  return { provider, rankNow, rankShown, anchorNow, runNow, runs, history, recorded: () => recordedGames };
+  const anchorNow = () => rankAnchors.get(ACCOUNT, ROLE);
+  const runNow = (): PlacementRun | undefined => placements.getRun(ACCOUNT, ROLE);
+  /** Whether anything wrote to match history since the harness was built. */
+  const historyWritten = () => history.revision() !== revisionBefore;
+  return { provider, rankNow, rankShown, anchorNow, runNow, history, historyWritten };
 }
 
 /** Ten placement matches, each carrying a delta that must stay dormant while the run is open. */
@@ -199,12 +158,12 @@ describe('placement runs — start and complete', () => {
 
   it('reset on an awaiting run leaves the surplus deltas untouched and writes no match', () => {
     const games = [...tenMatches(), g(11, { srDelta: 20 })];
-    const { provider, history, recorded } = harness(games, anchor());
+    const { provider, history, historyWritten } = harness(games, anchor());
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     const [summary] = provider.resetPlacementRun({ ...track });
     expect(summary).toMatchObject({ counted: 10, completed: false, awaitingRank: true });
-    expect(history.find((x) => x.matchId === 'm-11')?.srDelta).toBe(20);
-    expect(recorded()).toBe(0);
+    expect(history.all().find((x) => x.matchId === 'm-11')?.srDelta).toBe(20);
+    expect(historyWritten()).toBe(false);
   });
 
   it('the ten placement matches do not move the post-placement rank', () => {
@@ -281,20 +240,20 @@ describe('placement runs — reversibility', () => {
 
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     // The stored records are untouched — suppression is a read-time concern.
-    expect(history.map((x) => x.srDelta)).toEqual([22, -19]);
+    expect(history.all().map((x) => x.srDelta)).toEqual([22, -19]);
 
     provider.cancelPlacementRun(track);
     expect(rankNow()).toEqual(withDeltas);
   });
 
   it('no placement operation writes or edits a match record', () => {
-    const { provider, recorded } = harness(tenMatches(), anchor());
+    const { provider, historyWritten } = harness(tenMatches(), anchor());
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     provider.setPlacementPrediction({ ...track, matchId: 'm-1', prediction: { tier: 'Gold', division: 2 } });
     provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
     provider.resetPlacementRun(track);
     provider.cancelPlacementRun(track);
-    expect(recorded()).toBe(0);
+    expect(historyWritten()).toBe(false);
   });
 
   it('restarting a completed run keeps the ORIGINAL pre-run anchor as the undo target', () => {
@@ -434,7 +393,7 @@ describe('placement runs — drift and recount', () => {
     provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
     const completedAnchor = anchorNow();
 
-    history.splice(history.findIndex((x) => x.matchId === 'm-5'), 1);
+    history.deleteMatch('m-5');
     const [summary] = provider.getPlacements();
     expect(summary).toMatchObject({ completed: true, drifted: true });
     // Held, not silently withdrawn — no rank change without confirmation.
@@ -448,7 +407,7 @@ describe('placement runs — drift and recount', () => {
     provider.startPlacementRun({ ...track, fromMatchId: 'm-1' });
     provider.completePlacementRun({ ...track, tier: 'Platinum', division: 2 });
 
-    history.splice(history.findIndex((x) => x.matchId === 'm-5'), 1);
+    history.deleteMatch('m-5');
     const [summary] = provider.recountPlacementRun(track);
     expect(summary).toMatchObject({ counted: 9, completed: false, drifted: false });
     // The ANCHOR is the thing withdrawn. Asserting on `currentRank` here would
@@ -466,8 +425,8 @@ describe('placement runs — drift and recount', () => {
     const completedAnchor = anchorNow();
 
     // Swap one match for another on the same track — still ten.
-    history.splice(history.findIndex((x) => x.matchId === 'm-5'), 1);
-    history.push(g(11, { srDelta: 20 }));
+    history.deleteMatch('m-5');
+    history.add(g(11, { srDelta: 20 }));
     const [summary] = provider.recountPlacementRun(track);
     expect(summary).toMatchObject({ counted: 10, completed: true, drifted: false });
     expect(anchorNow()).toEqual(completedAnchor);

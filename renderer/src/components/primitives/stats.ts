@@ -2,14 +2,12 @@
  * Numeric/statistical display primitives — KPI tiles, progress bars, plain
  * stat boxes, and the activity heatmap. All pure functions of their data.
  */
-import { h, applyStyle } from '../../dom';
+import { h, applyStyle, type Child } from '../../dom';
 import type { CalendarDay } from '../../../../src/shared/contract';
 import { pct } from '../../format';
 import { PALETTE, wrColor } from '../../theme';
 import { tooltipLayer } from '../../charts/tooltip';
 import { button } from './controls';
-
-type Child = Node | string | number | null | undefined | false;
 
 /** Options for {@link kpiCard}; `accent` highlights a headline metric. */
 export interface KpiOpts {

@@ -28,6 +28,7 @@ import type {
   ReadinessSummary,
   ReadinessTrendPoint,
 } from './types';
+import { round1 } from '../num';
 
 export type {
   ReadinessBand,
@@ -111,7 +112,6 @@ function toSubscores(state: StateAt): ReadinessSubscores {
   };
 }
 
-const round1 = (n: number): number => Math.round(n * 10) / 10;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**

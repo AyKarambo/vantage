@@ -1,7 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { battleTagName } from '../core/model';
 import type { FriendEntry } from '../shared/contract';
+import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 /** One stored friend, keyed by {@link battleTagName}. */
 interface StoredFriend {
@@ -16,17 +15,14 @@ interface StoredFriend {
  * `#`, lowercased) so `Alice#1234` and `Alice` are the same friend, matching
  * `PlayerListRow.key`. Local-only by design — friends are never exported to
  * Notion (guardrail 5). Same on-disk shape as the other stores: one JSON file,
- * atomic tmp+rename writes, dir-injected and Electron-free.
+ * atomic tmp+rename writes, location-injected and Electron-free.
  */
 export class FriendStore {
-  private file: string;
-  private tmp: string;
+  private readonly doc: JsonDoc;
   private state: Record<string, StoredFriend>;
 
-  constructor(dir: string, private readonly now: () => number = () => Date.now()) {
-    fs.mkdirSync(dir, { recursive: true });
-    this.file = path.join(dir, 'friends.json');
-    this.tmp = path.join(dir, 'friends.tmp.json');
+  constructor(docs: JsonDocs, private readonly now: () => number = () => Date.now()) {
+    this.doc = docs('friends.json');
     this.state = this.load();
   }
 
@@ -74,15 +70,13 @@ export class FriendStore {
    * contract as the other stores' `relocate`.
    */
   relocate(newDir: string): void {
-    fs.mkdirSync(newDir, { recursive: true });
-    this.file = path.join(newDir, 'friends.json');
-    this.tmp = path.join(newDir, 'friends.tmp.json');
+    this.doc.relocate(newDir);
     this.state = this.load();
   }
 
   private load(): Record<string, StoredFriend> {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      const parsed = this.doc.read() ?? {};
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
       const out: Record<string, StoredFriend> = {};
       for (const [key, v] of Object.entries(parsed as Record<string, Partial<StoredFriend>>)) {
@@ -95,7 +89,6 @@ export class FriendStore {
   }
 
   private save(): void {
-    fs.writeFileSync(this.tmp, JSON.stringify(this.state, null, 2), 'utf8');
-    fs.renameSync(this.tmp, this.file);
+    this.doc.write(this.state);
   }
 }

@@ -17,5 +17,7 @@
   // which this project must never compile — `types: []` above is what keeps the
   // renderer bundle CSP-friendly and Node-free. Anything the renderer genuinely
   // imports is still pulled in transitively, so this narrows the seed set only.
-  "include": ["src/**/*", "preview/**/*", "../src/shared/contract/**/*"]
+  // The browser preview harness has its own project (preview/tsconfig.json): it
+  // runs main-side modules, which this Node-free project must never pull in.
+  "include": ["src/**/*", "../src/shared/contract/**/*"]
 }

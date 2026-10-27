@@ -7,6 +7,7 @@ import { resolveDataSourceId } from './dataSourceResolver';
 import { queryDataSourcePages } from './pageScan';
 import { effectiveMatchId, groupByEffectiveMatchId, pickCanonicalRow, rowRefOf } from './dedup';
 import { mapWithConcurrency } from './concurrency';
+import { pageTitle, plainText, type NotionPage, type NotionPropertyValue } from './pages';
 
 /**
  * How many `stampMatchIds` writes run at once. Notion's API budget is an
@@ -179,7 +180,7 @@ export class NotionImporter {
    * defeating the "one `databases.retrieve` per configured id" guarantee
    * (see `resolvedIds`).
    */
-  private async queryAll(id: string): Promise<any[]> {
+  private async queryAll(id: string): Promise<NotionPage[]> {
     const dataSourceId = await this.resolve(id);
     return queryDataSourcePages(this.client, dataSourceId);
   }
@@ -195,7 +196,7 @@ export class NotionImporter {
 
   private async loadMapNames(mapsSourceId: string): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
-    for (const page of await this.queryAll(mapsSourceId)) out[page.id] = titleOf(page);
+    for (const page of await this.queryAll(mapsSourceId)) out[page.id] = pageTitle(page);
     return out;
   }
 
@@ -229,7 +230,7 @@ export class NotionImporter {
  * whether the row needs its id stamped back (write-back never touches a row
  * that already had one, and never touches a row dropped as a duplicate).
  */
-function toGame(page: any, mapsById: Record<string, string>): { game: GameRecord | null; hadMatchIdText: boolean } {
+function toGame(page: NotionPage, mapsById: Record<string, string>): { game: GameRecord | null; hadMatchIdText: boolean } {
   const props = page?.properties ?? {};
 
   const result = RESULTS.find((r) => r === pickSelect(props['Result']));
@@ -316,29 +317,31 @@ function toGame(page: any, mapsById: Record<string, string>): { game: GameRecord
 
 // --- Notion property readers (inverse of notionWriter's builders) -------------
 
-function pickSelect(prop: any): string | undefined {
+type Prop = NotionPropertyValue | undefined;
+
+function pickSelect(prop: Prop): string | undefined {
   return prop?.select?.name ?? undefined;
 }
-function pickMulti(prop: any): string[] {
-  return Array.isArray(prop?.multi_select) ? prop.multi_select.map((o: any) => o.name).filter(Boolean) : [];
+function pickMulti(prop: Prop): string[] {
+  return (prop?.multi_select ?? []).map((o) => o.name).filter((n): n is string => !!n);
 }
-function pickNumber(prop: any): number | undefined {
+function pickNumber(prop: Prop): number | undefined {
   return typeof prop?.number === 'number' ? prop.number : undefined;
 }
-function pickText(prop: any): string {
-  return (prop?.rich_text ?? []).map((t: any) => t.plain_text ?? t.text?.content ?? '').join('').trim();
+function pickText(prop: Prop): string {
+  return plainText(prop?.rich_text);
 }
-function pickRelationId(prop: any): string | undefined {
-  return Array.isArray(prop?.relation) && prop.relation.length ? prop.relation[0].id : undefined;
+function pickRelationId(prop: Prop): string | undefined {
+  return prop?.relation?.[0]?.id;
 }
 /** A Notion date property → epoch ms, or undefined when unset/unparseable. */
-function pickDate(prop: any): number | undefined {
+function pickDate(prop: Prop): number | undefined {
   const start = prop?.date?.start;
   if (!start) return undefined;
   const ms = Date.parse(start);
   return Number.isNaN(ms) ? undefined : ms;
 }
-function pickCheckbox(prop: any): boolean {
+function pickCheckbox(prop: Prop): boolean {
   return prop?.checkbox === true;
 }
 /**
@@ -348,7 +351,7 @@ function pickCheckbox(prop: any): boolean {
  * `banter`). Undefined when the row flagged nothing, so blank rows don't carry
  * an empty mental object.
  */
-function mentalFrom(props: any): MatchMental | undefined {
+function mentalFrom(props: Record<string, Prop>): MatchMental | undefined {
   const mental: MatchMental = {};
   const leaver = pickSelect(props['Leaver']);
   if (leaver === 'team') mental.leaverMyTeam = true;
@@ -366,18 +369,9 @@ function commsFrom(value: string | undefined): CommsTone | undefined {
   if (value === 'banther') return 'banter';
   return undefined;
 }
-function titleOf(page: any): string {
-  for (const value of Object.values<any>(page?.properties ?? {})) {
-    if (value?.type === 'title') {
-      const text = (value.title ?? []).map((t: any) => t.plain_text ?? '').join('').trim();
-      if (text) return text;
-    }
-  }
-  return '';
-}
 /** Fallback: the row title is "who · role · mapName · result" — pull the map part. */
-function mapFromTitle(prop: any): string | undefined {
-  const title = (prop?.title ?? []).map((t: any) => t.plain_text ?? '').join('').trim();
+function mapFromTitle(prop: Prop): string | undefined {
+  const title = plainText(prop?.title);
   const parts = title.split(' · ');
   return parts.length >= 4 ? parts[parts.length - 2] : undefined;
 }

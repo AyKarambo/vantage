@@ -2,7 +2,7 @@
 import { h, render } from '../dom';
 import type { DashboardFilters, MatchFlagKey, MatchRow, Result, TargetGrade } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { aggregateGrade, dayKey, groupByDay, groupBySitting, UNKNOWN_MAP } from '../../../src/core/analytics';
+import { aggregateGrade, dayKey, groupByDay, groupBySitting, UNKNOWN_MAP, decided } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
 import { pct, prettyDay, rankLabel, relTime, roleLabel, signed, time } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
@@ -467,8 +467,8 @@ function tallyText(g: { wins: number; losses: number; draws: number; srNet?: num
  * winrate moved into the header's title instead of a third inline number.
  */
 function dayHeader(label: string, g: { wins: number; losses: number; draws: number; srNet?: number }): HTMLElement {
-  const decided = g.wins + g.losses;
-  const title = decided > 0 ? `${pct(g.wins / decided)} winrate` : undefined;
+  const n = decided(g);
+  const title = n > 0 ? `${pct(g.wins / n)} winrate` : undefined;
   return h('div', { class: 'day-header', title },
     h('span', { class: 'day-header-label' }, prettyDay(label)),
     h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, winLossText(g)),

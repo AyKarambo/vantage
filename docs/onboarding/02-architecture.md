@@ -136,8 +136,10 @@ One contract, three mechanical layers — you should never write a stringly-type
    iterating `IPC_CHANNELS` — one `ipcRenderer.invoke` wrapper per entry — and exposes
    it as `window.owstats`. A method missing a channel entry is a compile error.
 3. **[`src/main/dashboard/ipcHandlers.ts`](../../src/main/dashboard/ipcHandlers.ts)**
-   registers one thin `ipcMain.handle` per channel, each forwarding to a
-   `DataProvider` method.
+   registers one `ipcMain.handle` per channel, each dispatching to the Electron-free
+   handler table in [`handlers.ts`](../../src/main/dashboard/handlers.ts): the
+   filter-scoped reads composed over the provider, and every other method forwarded to
+   the `DataProvider` method of the same name.
 
 On the renderer side, [`renderer/src/bridge.ts`](../../renderer/src/bridge.ts) is a
 property-forwarding proxy over `window.owstats` — which is what lets the browser

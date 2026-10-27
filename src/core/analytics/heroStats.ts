@@ -23,7 +23,8 @@
  */
 import type { GameRecord, HeroSummary, HeroStat } from './types';
 import { heroCredits, heroPlayedMinutes, playedTimeOf, type MapModeResolver } from '../playedTime';
-import { roundCredit } from './grouping';
+import { roundCredit, decided } from './grouping';
+import { round1 } from '../num';
 
 export interface HeroStatsOptions {
   /** Map name → mode for the played-time estimate on captures without rounds (defaults to the built-in table). */
@@ -71,14 +72,14 @@ export function heroStats(games: GameRecord[], opts: HeroStatsOptions = {}): Her
 
   return [...totals.values()]
     .map((t) => {
-      const decided = t.wins + t.losses;
+      const n = decided(t);
       const per10 = t.minutes > 0 ? scale(t, 10 / t.minutes) : null;
       return {
         hero: t.hero,
         role: t.role,
         // Rounded together so the parts add up (see roundCredit).
         ...roundCredit({ games: t.games, wins: t.wins, losses: t.losses, draws: t.draws }),
-        winrate: decided ? t.wins / decided : 0,
+        winrate: n ? t.wins / n : 0,
         creditedGames: t.games,
         creditedWins: t.wins,
         creditedLosses: t.losses,
@@ -109,4 +110,3 @@ function scale(t: HeroStat, f: number) {
     mitigation: Math.round(t.mitigation * f),
   };
 }
-const round1 = (n: number) => Math.round(n * 10) / 10;

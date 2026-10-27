@@ -211,19 +211,3 @@ export function viewHead(title: string, sub: string | Node, actions?: Node | Nod
     actions ? h('div', { class: 'view-actions' }, ...(Array.isArray(actions) ? actions : [actions])) : null,
   );
 }
-
-/** Trim a long map name for compact chips/labels. */
-export function shorten(name: string): string {
-  const SHORT: Record<string, string> = {
-    'Watchpoint: Gibraltar': 'Watchpoint',
-    'Watchpoint: Grímsvötn': 'Grímsvötn',
-    'Antarctic Peninsula': 'Antarctic',
-    'Shambali Monastery': 'Shambali',
-    'New Queen Street': 'NQ Street',
-    'New Junk City': 'NJ City',
-    'Blizzard World': 'Blizz World',
-    'Lijiang Tower': 'Lijiang',
-    'Circuit Royal': 'Circuit',
-  };
-  return SHORT[name] ?? name;
-}

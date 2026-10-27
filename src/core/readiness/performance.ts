@@ -40,7 +40,7 @@ import type { GameRecord, TargetGrade } from '../analytics';
 import type { AuthoredTarget } from '../targets/types';
 import type { RankAnchorMap, RankPosition } from '../rank/types';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
-import { winLoss } from '../analytics';
+import { winLoss, decided } from '../analytics';
 import { UNKNOWN_ACCOUNT } from '../accountsManage';
 import { rankToPoints } from '../rank/scalar';
 import { READINESS_TUNING as T } from './constants';
@@ -53,7 +53,6 @@ import {
   METRIC_KEYS,
   roleKey,
   type MetricKey,
-  type QualifyingGame,
 } from './baselines';
 import { clamp, winsorizedZ } from './stats';
 import { blendFor } from './regime';
@@ -458,7 +457,7 @@ export function perfState(
   let dipVarWeighted = 0; // Σ (acuteDecided² · SE²) — the pooled dip's sampling variance, same weights as the dip
   for (const account of perAccount.keys()) {
     const acuteWl = winLoss(acuteGames.filter((g) => g.account === account));
-    const acuteDecided = acuteWl.wins + acuteWl.losses;
+    const acuteDecided = decided(acuteWl);
     if (acuteDecided < T.wrMinDecidedAcute) continue;
     const baseGames = games.filter((g) => {
       if (g.account !== account) return false;
@@ -466,7 +465,7 @@ export function perfState(
       return ord >= baseStart && ord < acuteStart; // uncoupled: baseline excludes the acute window
     });
     const baseWl = winLoss(baseGames);
-    const baseDecided = baseWl.wins + baseWl.losses;
+    const baseDecided = decided(baseWl);
     if (baseDecided < T.wrMinDecidedBase) continue;
     // Two-sample standard error of the dip under "nothing changed" (one pooled winrate for both
     // windows): how big a dip pure coin flips produce at these sample sizes.

@@ -21,6 +21,7 @@ import { dataTable, type Column } from '../components/table';
 import { prefs } from '../prefs';
 import { wrColor } from '../theme';
 import { scopeCaption, viewHead, type ViewContext } from './view';
+import { decided, winrateOf } from '../../../src/core/analytics';
 
 /** The minimum-games chip steps, mirroring the Heroes screen's idiom. */
 const MIN_GAMES_STEPS = [1, 2, 5, 10] as const;
@@ -77,7 +78,7 @@ function relationPref(): PlayerRelation {
 const WL_SORT_TITLE = 'Sorted by winrate; players with no decided games sink to the bottom';
 
 const wl = (w: { wins: number; losses: number }): HTMLElement => {
-  const n = w.wins + w.losses;
+  const n = decided(w);
   if (!n) return h('span', { class: 'u-muted', title: 'No decided games on that side.' }, '–');
   return h('span', { style: { color: wrColor(w.wins / n) } },
     `${w.wins}W ${w.losses}L `,
@@ -96,8 +97,7 @@ function columns(): Array<Column<PlayerListRow>> {
   // but it returns the same quantity `selectPlayers` ranks by (a winrate for the
   // record columns, not a win count), so a future caller that did sort locally
   // would at least get the same order rather than a subtly different one.
-  const rate = (w: { wins: number; losses: number }): number | null =>
-    w.wins + w.losses ? w.wins / (w.wins + w.losses) : null;
+  const rate = winrateOf;
   return [
     {
       key: 'name', label: 'Player', get: (r) => r.name,

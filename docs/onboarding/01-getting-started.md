@@ -37,10 +37,12 @@ npm run preview          # → http://localhost:5178
 ```
 
 No Electron, no Overwolf, no game. [`renderer/preview/preview.ts`](../../renderer/preview/preview.ts)
-installs a fake `window.owstats` bridge that runs the *real* pure core
-(`generateSampleGames()` + `computeDashboard()`) and persists your clicks to
-localStorage. This is the fastest loop for any UI or analytics work, because the browser
-preview and the real app share all of `src/core/` and all of `renderer/src/`.
+installs a `window.owstats` bridge that runs the app's *real* data layer — the
+`DataProvider`, the dashboard handler table and the match pipeline — over the sample
+season and stores kept in localStorage, so your clicks persist across reloads. Only what
+has no browser equivalent (Notion, GEP status, file dialogs, the live match) is simulated.
+This is the fastest loop for any UI or analytics work, because the browser preview and the
+real app share all of `src/core/`, the provider and all of `renderer/src/`.
 
 ### 2. Desktop app with demo data
 

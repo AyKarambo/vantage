@@ -1,6 +1,8 @@
 import { Client } from '@notionhq/client';
 import { buildMapIndex, resolveMap, type MapMatch } from '../core/resolvers/map';
 import { resolveDataSourceId } from './dataSourceResolver';
+import { queryDataSourcePages } from './pageScan';
+import { pageTitle } from './pages';
 
 /**
  * Loads the Maps database once (page Name → page id) and resolves GEP map names
@@ -41,19 +43,10 @@ export class MapsCache {
       this.resolvedSourceId = await resolveDataSourceId(this.client, this.mapsDatabaseId);
     }
     const rows: Array<{ pageId: string; name: string }> = [];
-    let cursor: string | undefined;
-    do {
-      const res: any = await this.client.dataSources.query({
-        data_source_id: this.resolvedSourceId,
-        start_cursor: cursor,
-        page_size: 100,
-      });
-      for (const page of res.results ?? []) {
-        const name = extractTitle(page);
-        if (name) rows.push({ pageId: page.id, name });
-      }
-      cursor = res.has_more ? res.next_cursor ?? undefined : undefined;
-    } while (cursor);
+    for (const page of await queryDataSourcePages(this.client, this.resolvedSourceId)) {
+      const name = pageTitle(page);
+      if (name) rows.push({ pageId: page.id, name });
+    }
     this.index = buildMapIndex(rows);
     this.loadedAt = Date.now();
   }
@@ -68,16 +61,4 @@ export class MapsCache {
     }
     return match;
   }
-}
-
-/** Extract the plain-text value of a page's title property. */
-function extractTitle(page: any): string | undefined {
-  const props = page?.properties ?? {};
-  for (const value of Object.values<any>(props)) {
-    if (value?.type === 'title') {
-      const text = (value.title ?? []).map((t: any) => t.plain_text ?? '').join('').trim();
-      return text || undefined;
-    }
-  }
-  return undefined;
 }

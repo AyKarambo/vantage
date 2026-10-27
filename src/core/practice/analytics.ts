@@ -1,9 +1,10 @@
-import { dayKey, dayPartAt, winLoss, type GameRecord, type TargetGrade } from '../analytics';
+import { dayKey, dayPartAt, winLoss, type GameRecord, type TargetGrade, decided } from '../analytics';
 import type { SessionCheckIn } from '../checkIn';
 import { DEFAULT_COACHING, type CoachingSettings } from '../coachingSettings';
 import { isTilted } from '../mental';
 import { COST_MIN_SAMPLE, type TiltBucket } from '../mentalAnalytics';
 import { gameContexts, PRACTICE_SITTING_GAP_MINUTES, sittingsOf, type GameContext } from './sittings';
+import { round1 } from '../num';
 
 /**
  * Practice reads for Mental and Review (issue #321): how often the player did
@@ -158,7 +159,7 @@ function factorRow(key: string, games: readonly GameRecord[], selfIds: ReadonlyS
     avgRating: rated.length ? round1(rated.reduce((a, g) => a + g.performance!, 0) / rated.length) : null,
     rated: rated.length,
     winrate: wl.winrate,
-    decided: wl.wins + wl.losses,
+    decided: decided(wl),
   };
 }
 
@@ -413,5 +414,3 @@ export interface PracticeSummary {
   /** What Log Match pre-selects for a game logged right now (stickiness + check-in, like an inbox row's `suggestedFocus`). */
   nextFocus: string[];
 }
-
-const round1 = (n: number): number => Math.round(n * 10) / 10;

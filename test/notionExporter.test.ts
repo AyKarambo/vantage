@@ -9,6 +9,7 @@ import { NotionImporter } from '../src/notion/notionImporter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets';
 import { OutboxStore } from '../src/store/outbox';
 import type { GameRecord, MatchReview } from '../src/core/analytics';
+import { jsonFiles } from '../src/store/jsonFiles';
 
 function game(matchId: string, overrides: Partial<GameRecord> = {}): GameRecord {
   return {
@@ -47,7 +48,7 @@ function stubMaps() {
 describe('NotionExporter validation short-circuit', () => {
   it('returns an error and calls neither the writer nor the maps cache when shape issues are cached', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const writer = stubWriter();
     const maps = stubMaps();
 
@@ -68,7 +69,7 @@ describe('NotionExporter validation short-circuit', () => {
   // later sync skip them, leaving Notion permanently wrong. Refusing is recoverable.
   it('refuses to export when the shape could not be verified, and writes nothing', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const writer = stubWriter();
     const maps = stubMaps();
 
@@ -93,7 +94,7 @@ describe('NotionExporter validation short-circuit', () => {
 
   it('exports normally when no shape issues are cached', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const writer = stubWriter();
     const maps = stubMaps();
 
@@ -108,7 +109,7 @@ describe('NotionExporter validation short-circuit', () => {
 
   it('skips games already in the ledger with an unchanged signature (idempotent re-sync)', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     outbox.recordExport('gep-123', { pageId: 'page-1', signature: JSON.stringify({ grade: null, flags: [] }) });
     const writer = stubWriter();
     const maps = stubMaps();
@@ -133,7 +134,7 @@ describe('NotionExporter — DoD regression: aggregate grade + positiveComms rea
   // derivation via `aggregateImprovementGrade`) makes it pass.
   it('a single authored target graded hit + positiveComms → create writes Improvement Target=hit, Comms=positive', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'new-page-id' });
     const client = { pages: { create } } as any;
     const SUBJECTIVE = new Set(['Comms', 'Improvement Target']);
@@ -156,7 +157,7 @@ describe('NotionExporter — DoD regression: aggregate grade + positiveComms rea
 
   it('three targets hit/hit/missed → create writes Improvement Target=partially', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'new-page-id' });
     const client = { pages: { create } } as any;
     const writer = new NotionWriter(client, 'db', false, new Set(['Improvement Target']));
@@ -184,7 +185,7 @@ describe('NotionExporter — authoredTargetIds is read live per export() call', 
   // picked up without reconstructing it.
   it('a target authored between two export() calls is honored on the second call without rebuilding the exporter', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'page-id' });
     const update = vi.fn().mockResolvedValue(undefined);
     const client = { pages: { create, update } } as any;
@@ -219,7 +220,7 @@ describe('NotionExporter — authoredTargetIds is read live per export() call', 
 describe('NotionExporter — update on sync', () => {
   it('already-exported match with a changed signature → updateMatchPage called once, createMatchPage not, updated:1', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     outbox.recordExport('gep-3', { pageId: 'existing-page', signature: JSON.stringify({ grade: null, flags: [] }) });
     const writer = stubWriter();
     const maps = stubMaps();
@@ -242,7 +243,7 @@ describe('NotionExporter — update on sync', () => {
 
   it('removing positiveComms and syncing sends Comms: { select: null } on the update', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     // Baseline: previously exported with positiveComms set.
     const withComms = JSON.stringify({ grade: null, flags: ['positiveComms'] });
     outbox.recordExport('gep-4', { pageId: 'existing-page', signature: withComms });
@@ -268,7 +269,7 @@ describe('NotionExporter — update on sync', () => {
 
   it('idempotency: two syncs with no local change → second sync writes 0 updates', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'page-a' });
     const update = vi.fn().mockResolvedValue(undefined);
     const client = { pages: { create, update } } as any;
@@ -304,7 +305,7 @@ describe('NotionExporter — page-gone recreate', () => {
 
   it('object_not_found (permanently deleted/unshared) → recreates, recreated:1', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     outbox.recordExport('gep-6', { pageId: 'gone-page', signature: JSON.stringify({ grade: null, flags: [] }) });
     const update = vi.fn().mockRejectedValue(apiError(APIErrorCode.ObjectNotFound));
     const create = vi.fn().mockResolvedValue({ id: 'recreated-page' });
@@ -325,7 +326,7 @@ describe('NotionExporter — page-gone recreate', () => {
 
   it('validation_error + retrieve reports in_trash:true (archived/UI-deleted row) → recreates, recreated:1', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     outbox.recordExport('gep-7', { pageId: 'trashed-page', signature: JSON.stringify({ grade: null, flags: [] }) });
     const update = vi.fn().mockRejectedValue(apiError(APIErrorCode.ValidationError));
     const create = vi.fn().mockResolvedValue({ id: 'recreated-page-2' });
@@ -349,7 +350,7 @@ describe('NotionExporter — page-gone recreate', () => {
 
   it('validation_error on a live page (e.g. bad property) → failed, no recreate', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     outbox.recordExport('gep-8', { pageId: 'live-page', signature: JSON.stringify({ grade: null, flags: [] }) });
     const update = vi.fn().mockRejectedValue(apiError(APIErrorCode.ValidationError));
     const create = vi.fn();
@@ -375,10 +376,10 @@ describe('NotionExporter — page-gone recreate', () => {
 describe('NotionExporter — legacy backfill', () => {
   it('legacy processed row: hand row (empty Match ID) found by scan → updateMatchPage once + stamped, createMatchPage not, updated:1, ledger recorded (AC3)', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     // Simulate a pre-ledger outbox.json: only the old processed[] list, no records.
     fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['manual-notion-abc123abc123abc123abc123abc123ab'] }));
-    const reloaded = new OutboxStore(dir);
+    const reloaded = new OutboxStore(jsonFiles(dir));
 
     const create = vi.fn();
     const update = vi.fn().mockResolvedValue(undefined);
@@ -420,9 +421,9 @@ describe('NotionExporter — legacy backfill', () => {
 
   it('legacy processed row: scan finds nothing relevant → createMatchPage called, recreated:1', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-legacy-2'] }));
-    const reloaded = new OutboxStore(dir);
+    const reloaded = new OutboxStore(jsonFiles(dir));
 
     const create = vi.fn().mockResolvedValue({ id: 'new-legacy-page' });
     const update = vi.fn();
@@ -447,9 +448,9 @@ describe('NotionExporter — legacy backfill', () => {
 
   it('legacy processed row whose page already carries Match ID text → updated in place, no stamp', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-legacy-texted'] }));
-    const reloaded = new OutboxStore(dir);
+    const reloaded = new OutboxStore(jsonFiles(dir));
 
     const create = vi.fn();
     const update = vi.fn().mockResolvedValue(undefined);
@@ -485,7 +486,7 @@ describe('NotionExporter — legacy backfill', () => {
 describe('NotionExporter — create-guard (no blind creates for unledgered matches)', () => {
   it('AC4: unledgered manual-notion match found by its embedded page id (id-less row) → adopted (update, no create), stamped', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir); // no ledger record at all — as after ledger loss
+    const outbox = new OutboxStore(jsonFiles(dir)); // no ledger record at all — as after ledger loss
     const matchId = 'manual-notion-abc123abc123abc123abc123abc123ab';
     const pageId = 'abc123ab-c123-abc1-23ab-c123abc123ab';
 
@@ -517,7 +518,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('AC5: unledgered GEP match found by Match ID text → adopted (update, no create), NOT stamped', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir); // no ledger record — as after ledger loss
+    const outbox = new OutboxStore(jsonFiles(dir)); // no ledger record — as after ledger loss
     const matchId = 'gep-lost-1';
     const pageId = 'existing-gep-page';
 
@@ -551,7 +552,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('adopting an id-less row with NOTHING to push (empty signature) only stamps Match ID — never blanks the row\'s subjective cells', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir); // ledger lost — the spec\'s motivating case
+    const outbox = new OutboxStore(jsonFiles(dir)); // ledger lost — the spec\'s motivating case
     const matchId = 'manual-notion-abc123abc123abc123abc123abc123ab';
     const pageId = 'abc123ab-c123-abc1-23ab-c123abc123ab';
 
@@ -585,7 +586,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('adopting a texted row with nothing to push writes nothing at all — ledger baseline only', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const matchId = 'gep-lost-empty';
     const pageId = 'existing-gep-page-2';
 
@@ -616,7 +617,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('AC6: nothing found in the scan → createPage runs as today', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'brand-new-page' });
     const update = vi.fn();
     const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
@@ -640,7 +641,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('the scan runs at most once per export() call, even across several unledgered games', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'p-new' });
     const update = vi.fn().mockResolvedValue(undefined);
     const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
@@ -665,7 +666,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('the index is rebuilt on a second export() call, not reused stale from the first', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockResolvedValue({ id: 'p-new' });
     const update = vi.fn();
     const query = vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null });
@@ -688,7 +689,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('AC12: ledgered + unchanged signature → skipped, the scan is never run', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const emptySig = JSON.stringify({ grade: null, flags: [] });
     outbox.recordExport('gep-unchanged', { pageId: 'page-unchanged', signature: emptySig });
 
@@ -715,7 +716,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('no legacyLookup supplied → the guard is skipped entirely, blind-creates as before (documented degradation)', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const writer = stubWriter();
     const maps = stubMaps();
 
@@ -732,7 +733,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('scan failure on an unledgered match → counted as failed, never falls back to create (a duplicate is worse than a retryable failure)', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn();
     const update = vi.fn();
     const query = vi.fn().mockRejectedValue(new Error('network error'));
@@ -758,7 +759,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 
   it('W6: every per-game failure is collected in order, not just the first (error still carries only the first reason)', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockRejectedValue(new Error('write failed'));
     const client = { pages: { create }, dataSources: { query: vi.fn().mockResolvedValue({ results: [], has_more: false, next_cursor: null }) } } as any;
     const writer = new NotionWriter(client, 'db', false, new Set());
@@ -782,7 +783,7 @@ describe('NotionExporter — create-guard (no blind creates for unledgered match
 describe('NotionExporter — progress tick accounting', () => {
   it('tick includes updated+recreated, so an update-heavy sync reaches done === total by the last tick', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const emptySig = JSON.stringify({ grade: null, flags: [] });
     outbox.recordExport('gep-u1', { pageId: 'p1', signature: emptySig });
     outbox.recordExport('gep-u2', { pageId: 'p2', signature: emptySig });
@@ -810,9 +811,9 @@ describe('NotionExporter — progress tick accounting', () => {
 
   it('a legacy-backfilled match is not reprocessed (or re-ticked) by the main loop — no double-count', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-legacy-3'] }));
-    const reloaded = new OutboxStore(dir);
+    const reloaded = new OutboxStore(jsonFiles(dir));
 
     const create = vi.fn().mockResolvedValue({ id: 'fresh-page-1' });
     const update = vi.fn().mockResolvedValue(undefined);
@@ -851,10 +852,10 @@ describe('NotionExporter — progress tick accounting', () => {
 
   it('a legacy id with no matching game is not attempted and does not inflate total', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     // 'gep-gone' was legacy-processed but is no longer in the tracked set at all.
     fs.writeFileSync(path.join(dir, 'outbox.json'), JSON.stringify({ processed: ['gep-gone'] }));
-    const reloaded = new OutboxStore(dir);
+    const reloaded = new OutboxStore(jsonFiles(dir));
     const writer = stubWriter();
     const maps = stubMaps();
 
@@ -877,7 +878,7 @@ describe('NotionExporter — progress tick accounting', () => {
 describe('NotionExporter — ledger database affinity', () => {
   it('a ledger record from the previously-configured database is not reused after switching databases: creates fresh + re-stamps', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     // Exported into the OLD database.
     outbox.recordExport('gep-db1', { pageId: 'old-db-page', signature: 'old-sig', databaseId: 'db-old' });
     const writer = stubWriter();
@@ -903,7 +904,7 @@ describe('NotionExporter — ledger database affinity', () => {
 
   it('a ledger record with no stamped databaseId (pre-migration) still updates in place against the current database', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     // Pre-migration record: no databaseId at all.
     outbox.recordExport('gep-legacy-db', { pageId: 'existing-page', signature: JSON.stringify({ grade: null, flags: [] }) });
     const writer = stubWriter();
@@ -924,7 +925,7 @@ describe('NotionExporter — ledger database affinity', () => {
 
   it('same database on every sync → ordinary update-in-place behavior is unaffected', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     outbox.recordExport('gep-same-db', { pageId: 'stable-page', signature: 'old-sig', databaseId: 'db-1' });
     const writer = stubWriter();
     const maps = stubMaps();
@@ -1164,7 +1165,7 @@ describe('gameToMatchRecord — carried scalar fields', () => {
 describe('NotionExporter — captures the first per-game failure reason (no silent "0 synced, N failed")', () => {
   it('classifies an offline failure and exposes a friendly, non-String(err) reason while still counting every failure', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
     const client = { pages: { create } } as any;
     const writer = new NotionWriter(client, 'db', false, new Set());
@@ -1189,7 +1190,7 @@ describe('NotionExporter — captures the first per-game failure reason (no sile
 
   it('keeps the FIRST failure\'s reason even when a later failure is a different kind', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi
       .fn()
       .mockRejectedValueOnce(new TypeError('fetch failed')) // g1: offline
@@ -1211,7 +1212,7 @@ describe('NotionExporter — captures the first per-game failure reason (no sile
 
   it('a successful export alongside a failed one still reports the failure reason without hiding the successes', async () => {
     const dir = tmpDir();
-    const outbox = new OutboxStore(dir);
+    const outbox = new OutboxStore(jsonFiles(dir));
     const create = vi
       .fn()
       .mockResolvedValueOnce({ id: 'page-ok' })

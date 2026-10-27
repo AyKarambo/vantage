@@ -1,4 +1,5 @@
 import type { RankAnchor, RankMatchInput, RankPosition, RankState } from './types';
+import { clamp } from '../num';
 
 /**
  * The pure ladder engine: apply logged skill-rating deltas to an anchor and get
@@ -21,7 +22,6 @@ const TOP = TIERS.length - 1;
 /** Champion 1, 100% — the top of the ladder in {@link ladderPoints} units. */
 const MAX_POINTS = TOP * 500 + 400 + 100;
 
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const tierIdx = (tier: string) => {
   const i = TIERS.indexOf(tier);
   return i < 0 ? 0 : i;

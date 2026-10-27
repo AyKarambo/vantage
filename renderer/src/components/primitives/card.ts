@@ -3,9 +3,7 @@
  * Composition-first: callers nest arbitrary children rather than the card
  * knowing about their content.
  */
-import { h, type Props } from '../../dom';
-
-type Child = Node | string | number | null | undefined | false;
+import { h, type Props, type Child } from '../../dom';
 
 /** Options for the {@link card} shell; title/actions form an optional header row. */
 export interface CardOpts {

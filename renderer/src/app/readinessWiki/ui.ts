@@ -3,10 +3,8 @@
  * sub-headings, and inline navigation links, so articles/personalized/scenario
  * views read consistently. Pure DOM composition over {@link h}.
  */
-import { h } from '../../dom';
+import { h, type Child } from '../../dom';
 import { inlineLink } from '../../components/inlineLink';
-
-type Child = Node | string | number | null | undefined | false;
 
 /** A readable body paragraph (not the muted `.hint` used for asides). */
 export function wikiPara(...content: Array<Child | Child[]>): HTMLElement {

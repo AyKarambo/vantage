@@ -6,6 +6,7 @@ import { HistoryStore } from '../src/store/history';
 import { RankAnchorStore } from '../src/store/rankAnchors';
 import { CheckInStore } from '../src/store/checkIns';
 import type { GameRecord } from '../src/core/analytics';
+import { jsonFiles } from '../src/store/jsonFiles';
 
 let dir: string;
 const opened: HistoryStore[] = [];
@@ -149,15 +150,15 @@ describe('HistoryStore.relocate — deferDelete', () => {
 
 describe('RankAnchorStore', () => {
   it('sets, reads and maps anchors by account+role', () => {
-    const s = new RankAnchorStore(dir);
+    const s = new RankAnchorStore(jsonFiles(dir));
     s.set({ account: 'Main', role: 'tank', tier: 'Gold', division: 3, progressPct: 40, setAt: 100 });
     expect(s.get('Main', 'tank')).toMatchObject({ tier: 'Gold', division: 3 });
     expect(s.map()['Main::tank']).toEqual({ tier: 'Gold', division: 3, progressPct: 40, setAt: 100 });
-    expect(new RankAnchorStore(dir).get('Main', 'tank')).toBeTruthy(); // persisted
+    expect(new RankAnchorStore(jsonFiles(dir)).get('Main', 'tank')).toBeTruthy(); // persisted
   });
 
   it('relabel moves anchors to the new account label and re-keys them', () => {
-    const s = new RankAnchorStore(dir);
+    const s = new RankAnchorStore(jsonFiles(dir));
     s.set({ account: 'Main', role: 'tank', tier: 'Gold', division: 3, progressPct: 40, setAt: 1 });
     s.set({ account: 'Main', role: 'support', tier: 'Silver', division: 2, progressPct: 10, setAt: 1 });
     s.set({ account: 'Alt', role: 'damage', tier: 'Bronze', division: 5, progressPct: 0, setAt: 1 });
@@ -169,7 +170,7 @@ describe('RankAnchorStore', () => {
   });
 
   it('removeAccount drops every anchor for an account across roles, leaving others (F3)', () => {
-    const s = new RankAnchorStore(dir);
+    const s = new RankAnchorStore(jsonFiles(dir));
     s.set({ account: 'Rando#4521', role: 'tank', tier: 'Gold', division: 3, progressPct: 40, setAt: 1 });
     s.set({ account: 'Rando#4521', role: 'damage', tier: 'Silver', division: 2, progressPct: 10, setAt: 1 });
     s.set({ account: 'Karambo', role: 'support', tier: 'Bronze', division: 5, progressPct: 0, setAt: 1 });
@@ -178,12 +179,12 @@ describe('RankAnchorStore', () => {
     expect(s.get('Rando#4521', 'damage')).toBeUndefined();
     expect(s.get('Karambo', 'support')).toBeTruthy();
     // Persisted, and removing an absent account is a no-op.
-    expect(new RankAnchorStore(dir).get('Karambo', 'support')).toBeTruthy();
+    expect(new RankAnchorStore(jsonFiles(dir)).get('Karambo', 'support')).toBeTruthy();
     expect(s.removeAccount('Ghost')).toBe(0);
   });
 
   it('relocate re-points and reloads from the new dir', () => {
-    const s = new RankAnchorStore(dir);
+    const s = new RankAnchorStore(jsonFiles(dir));
     s.set({ account: 'Main', role: 'tank', tier: 'Gold', division: 3, progressPct: 40, setAt: 1 });
 
     const newDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-store-anchors-new-'));
@@ -193,10 +194,10 @@ describe('RankAnchorStore', () => {
 
       expect(s.get('Main', 'tank')).toMatchObject({ tier: 'Gold' });
       s.set({ account: 'Alt', role: 'damage', tier: 'Bronze', division: 5, progressPct: 0, setAt: 2 });
-      expect(new RankAnchorStore(newDir).get('Alt', 'damage')).toBeTruthy();
+      expect(new RankAnchorStore(jsonFiles(newDir)).get('Alt', 'damage')).toBeTruthy();
       // relocate itself doesn't touch the old dir's file (copy/delete is the
       // migration executor's job).
-      expect(new RankAnchorStore(dir).get('Alt', 'damage')).toBeUndefined();
+      expect(new RankAnchorStore(jsonFiles(dir)).get('Alt', 'damage')).toBeUndefined();
     } finally {
       fs.rmSync(newDir, { recursive: true, force: true });
     }
@@ -205,24 +206,24 @@ describe('RankAnchorStore', () => {
 
 describe('CheckInStore (S10 phase 2)', () => {
   it('appends and reads back in oldest-first order, persisted across a reopen', () => {
-    const s = new CheckInStore(dir);
+    const s = new CheckInStore(jsonFiles(dir));
     s.add({ at: 200, mood: 'edgy' });
     s.add({ at: 100, mood: 'calm' }); // added second but earlier — must still sort oldest-first
     expect(s.all()).toEqual([{ at: 100, mood: 'calm' }, { at: 200, mood: 'edgy' }]);
-    expect(new CheckInStore(dir).all()).toEqual([{ at: 100, mood: 'calm' }, { at: 200, mood: 'edgy' }]);
+    expect(new CheckInStore(jsonFiles(dir)).all()).toEqual([{ at: 100, mood: 'calm' }, { at: 200, mood: 'edgy' }]);
   });
 
   it('add returns the stored entry', () => {
-    const s = new CheckInStore(dir);
+    const s = new CheckInStore(jsonFiles(dir));
     expect(s.add({ at: 1, mood: 'tilted' })).toEqual({ at: 1, mood: 'tilted' });
   });
 
   it('starts empty for a fresh directory', () => {
-    expect(new CheckInStore(dir).all()).toEqual([]);
+    expect(new CheckInStore(jsonFiles(dir)).all()).toEqual([]);
   });
 
   it('trims the oldest entries once past the retention cap', () => {
-    const s = new CheckInStore(dir);
+    const s = new CheckInStore(jsonFiles(dir));
     for (let i = 0; i < 500; i++) s.add({ at: i, mood: 'calm' });
     expect(s.all()).toHaveLength(500);
     s.add({ at: 500, mood: 'tilted' });
@@ -233,7 +234,7 @@ describe('CheckInStore (S10 phase 2)', () => {
   });
 
   it('relocate re-points and reloads from the new dir, leaving the old dir untouched', () => {
-    const s = new CheckInStore(dir);
+    const s = new CheckInStore(jsonFiles(dir));
     s.add({ at: 1, mood: 'calm' });
 
     const newDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-store-checkins-new-'));
@@ -243,10 +244,10 @@ describe('CheckInStore (S10 phase 2)', () => {
 
       expect(s.all()).toEqual([{ at: 1, mood: 'calm' }]);
       s.add({ at: 2, mood: 'tilted' });
-      expect(new CheckInStore(newDir).all()).toEqual([{ at: 1, mood: 'calm' }, { at: 2, mood: 'tilted' }]);
+      expect(new CheckInStore(jsonFiles(newDir)).all()).toEqual([{ at: 1, mood: 'calm' }, { at: 2, mood: 'tilted' }]);
       // relocate itself doesn't touch the old dir's file (copy/delete is the
       // migration executor's job).
-      expect(new CheckInStore(dir).all()).toEqual([{ at: 1, mood: 'calm' }]);
+      expect(new CheckInStore(jsonFiles(dir)).all()).toEqual([{ at: 1, mood: 'calm' }]);
     } finally {
       fs.rmSync(newDir, { recursive: true, force: true });
     }

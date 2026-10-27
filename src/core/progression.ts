@@ -1,4 +1,5 @@
 import { winLoss, type GameRecord } from './analytics';
+import { clamp } from './num';
 
 /**
  * Rank progression — a heuristic. The sanctioned Overwolf feed does not expose
@@ -59,5 +60,3 @@ export function progression(games: GameRecord[]): Progression {
 
   return { tier, division, progressPct, delta };
 }
-
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));

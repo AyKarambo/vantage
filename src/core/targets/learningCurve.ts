@@ -21,6 +21,7 @@ import type { AuthoredTarget, TargetMode } from './types';
 import { targetTimeline } from './timeline';
 import { DEFAULT_PARTIAL_MARGIN } from './measured';
 import { wilson } from './wilson';
+import { round1 } from '../num';
 
 /** Trailing decided games backing each rolling-winrate point. */
 export const ROLL_WINDOW = 10;
@@ -106,7 +107,6 @@ const winrateOf = (arr: Array<{ result: Result }>): number => {
   if (!dec.length) return 0;
   return dec.filter((a) => a.result === 'Win').length / dec.length;
 };
-const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 /**
  * Compute a target's learning curve from the full game history. See the module

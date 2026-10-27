@@ -217,25 +217,14 @@ export function migrateDataFolder(req: DataMigrationRequest): DataMigrationResul
  * thunk is needed (or returned) on that path.
  */
 function relocateAll(stores: DataMigrationStores, toDir: string, opts: { adopt: boolean } = { adopt: false }): (() => boolean) | undefined {
+  const { history, ...sideStores } = stores;
+  const others = Object.values(sideStores).filter((s): s is Relocatable => s !== undefined);
   if (opts.adopt) {
-    adoptOrRelocate(stores.history, toDir);
-    if (stores.manualLog) adoptOrRelocate(stores.manualLog, toDir);
-    if (stores.outbox) adoptOrRelocate(stores.outbox, toDir);
-    if (stores.rankAnchors) adoptOrRelocate(stores.rankAnchors, toDir);
-    if (stores.placements) adoptOrRelocate(stores.placements, toDir);
-    if (stores.checkIns) adoptOrRelocate(stores.checkIns, toDir);
-    if (stores.friends) adoptOrRelocate(stores.friends, toDir);
-    if (stores.masterData) adoptOrRelocate(stores.masterData, toDir);
+    for (const store of [history, ...others]) adoptOrRelocate(store, toDir);
     return undefined;
   }
-  const deleteHistoryOriginal = stores.history.relocate(toDir, { deferDelete: true }) ?? undefined;
-  if (stores.manualLog) stores.manualLog.relocate(toDir);
-  if (stores.outbox) stores.outbox.relocate(toDir);
-  if (stores.rankAnchors) stores.rankAnchors.relocate(toDir);
-  if (stores.placements) stores.placements.relocate(toDir);
-  if (stores.checkIns) stores.checkIns.relocate(toDir);
-  if (stores.friends) stores.friends.relocate(toDir);
-  if (stores.masterData) stores.masterData.relocate(toDir);
+  const deleteHistoryOriginal = history.relocate(toDir, { deferDelete: true }) ?? undefined;
+  for (const store of others) store.relocate(toDir);
   return deleteHistoryOriginal;
 }
 

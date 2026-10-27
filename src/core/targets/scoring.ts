@@ -1,4 +1,4 @@
-import { winLoss, type GameRecord, type TargetGrade } from '../analytics';
+import { winLoss, type GameRecord, type TargetGrade, decided } from '../analytics';
 import { sampleTargets } from './sampleTargets';
 import { NOTION_IMPROVEMENT_TARGET_ID } from './notionBookkeeping';
 import { DEFAULT_PARTIAL_MARGIN, evaluateMeasured } from './measured';
@@ -68,8 +68,8 @@ function authoredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     winWhenHit: hitGames.length ? hitWL.winrate : base,
     winWhenMissed: missGames.length ? missWL.winrate : base,
     // Decided (Win/Loss) games only — a Draw moves neither number (R6).
-    hitDecided: hitWL.wins + hitWL.losses,
-    missDecided: missWL.wins + missWL.losses,
+    hitDecided: decided(hitWL),
+    missDecided: decided(missWL),
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,
@@ -117,8 +117,8 @@ function measuredSummary(t: AuthoredTarget, games: GameRecord[], base: number, m
     winWhenHit: hitGames.length ? hitWL.winrate : base,
     winWhenMissed: missGames.length ? missWL.winrate : base,
     // Decided (Win/Loss) games only — a Draw moves neither number (R6).
-    hitDecided: hitWL.wins + hitWL.losses,
-    missDecided: missWL.wins + missWL.losses,
+    hitDecided: decided(hitWL),
+    missDecided: decided(missWL),
     spark: gradeSpark(grades),
     isActive: t.isActive,
     archivedAt: t.archivedAt,

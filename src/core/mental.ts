@@ -1,4 +1,4 @@
-import { winLoss, type GameRecord } from './analytics';
+import { winLoss, type GameRecord, decided } from './analytics';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isPositiveComms, isAbusiveComms } from './comms';
 
@@ -96,8 +96,8 @@ export function mentalSummary(games: GameRecord[]): MentalSummary {
     flags,
     winWhenCalm: calmResult.winrate,
     winWhenTilted: tiltedResult.winrate,
-    tiltedDecided: tiltedResult.wins + tiltedResult.losses,
-    calmDecided: calmResult.wins + calmResult.losses,
+    tiltedDecided: decided(tiltedResult),
+    calmDecided: decided(calmResult),
   };
 }
 

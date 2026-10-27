@@ -18,7 +18,7 @@
     "mcp": "node dist/mcp/stdio.js",
     "build:preview": "node scripts/build-preview.mjs",
     "preview": "node scripts/build-preview.mjs && node scripts/preview-server.mjs",
-    "typecheck": "node scripts/build-changelog.mjs && tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json && tsc -p tsconfig.mcp.json",
+    "typecheck": "node scripts/build-changelog.mjs && tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json && tsc -p renderer/preview/tsconfig.json && tsc -p tsconfig.mcp.json",
     "make-icon": "node scripts/make-tray-icon.mjs",
     "assets:store": "node scripts/make-store-assets.mjs",
     "assets:screens": "npm run build:preview && ow-electron scripts/capture-screenshots.cjs",

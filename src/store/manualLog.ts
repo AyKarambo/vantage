@@ -1,7 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { AuthoredTarget, TargetMode } from '../core/targets';
 import type { Role } from '../core/model';
+import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 interface ManualState {
   /** Improvement targets the player authored in the builder. */
@@ -15,17 +14,14 @@ interface ManualState {
  * feed every dashboard stat, including the mental composite via `GameRecord.mental`).
  *
  * Same shape as HistoryStore/OutboxStore: a single JSON file with atomic writes,
- * dir-injected and Electron-free so it stays unit-testable.
+ * location-injected and Electron-free so it stays unit-testable.
  */
 export class ManualStore {
-  private file: string;
-  private tmp: string;
+  private readonly doc: JsonDoc;
   private state: ManualState;
 
-  constructor(dir: string) {
-    fs.mkdirSync(dir, { recursive: true });
-    this.file = path.join(dir, 'manual.json');
-    this.tmp = path.join(dir, 'manual.tmp.json');
+  constructor(docs: JsonDocs) {
+    this.doc = docs('manual.json');
     this.state = this.load();
   }
 
@@ -112,15 +108,13 @@ export class ManualStore {
    * before calling this; `relocate` just repoints and re-reads.
    */
   relocate(newDir: string): void {
-    fs.mkdirSync(newDir, { recursive: true });
-    this.file = path.join(newDir, 'manual.json');
-    this.tmp = path.join(newDir, 'manual.tmp.json');
+    this.doc.relocate(newDir);
     this.state = this.load();
   }
 
   private load(): ManualState {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<ManualState>;
+      const parsed = (this.doc.read() ?? {}) as Partial<ManualState>;
       const targets = Array.isArray(parsed.targets) ? parsed.targets : [];
       // Legacy records predate the active flag (→ active) and the activatedAt
       // stamp (→ their creation time, so the staleness clock has a starting point).
@@ -138,7 +132,6 @@ export class ManualStore {
   }
 
   private save(): void {
-    fs.writeFileSync(this.tmp, JSON.stringify(this.state, null, 2), 'utf8');
-    fs.renameSync(this.tmp, this.file);
+    this.doc.write(this.state);
   }
 }

@@ -1,0 +1,14 @@
+{
+  // The preview harness runs the main process's Electron-free data layer
+  // (provider, pipeline, stores) in the browser, so — unlike the renderer
+  // bundle, which must stay Node-free — it typechecks against those modules
+  // and the Node/Electron types their (type-only) imports pull in.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "electron": ["../../node_modules/@overwolf/ow-electron/electron"]
+    }
+  },
+  "include": ["./**/*", "../src/**/*", "../../src/shared/contract/**/*"]
+}

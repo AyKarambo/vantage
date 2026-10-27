@@ -88,6 +88,7 @@ import { OutboxStore } from '../src/store/outbox';
 import { matchExportSignature } from '../src/core/targets';
 import type { GameRecord } from '../src/core/analytics';
 import type { SubjectiveColumnDiag } from '../src/shared/contract';
+import { jsonFiles } from '../src/store/jsonFiles';
 
 /** A minimal competitive GameRecord for the unsynced-count fixtures. */
 function game(matchId: string, overrides: Partial<GameRecord> = {}): GameRecord {
@@ -138,7 +139,7 @@ function tmpDir(): string {
 }
 
 function baseDeps(overrides: Partial<NotionRuntimeDeps> = {}): NotionRuntimeDeps {
-  const outbox = new OutboxStore(tmpDir());
+  const outbox = new OutboxStore(jsonFiles(tmpDir()));
   return {
     outbox,
     config: () => ({
@@ -346,7 +347,7 @@ describe('NotionRuntime — authored ids + ledger reach the exporter', () => {
       provisionPlan: { toCreate: {}, blocked: [] },
     });
 
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     // Pre-seed the ledger so a real exporter would see an existing pageId for
     // this match (Decision A.1: matchId -> pageId persistence reused for
     // `pages.update`) — proves the *same* outbox instance reaches the exporter.
@@ -409,7 +410,7 @@ describe('NotionRuntime — authored ids + ledger reach the exporter', () => {
 
 describe('NotionRuntime.status — unsynced + competitive counts (spec E3)', () => {
   it('counts never-exported OR changed-since-export competitive games against the configured db, ignoring filters', () => {
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     const currentSig = matchExportSignature(game('probe'), undefined); // blank match signature
     // synced: ledgered with the CURRENT signature → not unsynced.
     outbox.recordExport('synced-1', { pageId: 'p-synced', signature: currentSig, databaseId: 'db-1' });
@@ -434,7 +435,7 @@ describe('NotionRuntime.status — unsynced + competitive counts (spec E3)', () 
   });
 
   it('reports 0 unsynced but a positive competitive count when everything is synced (→ "up to date")', () => {
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     const currentSig = matchExportSignature(game('probe'), undefined);
     outbox.recordExport('a', { pageId: 'pa', signature: currentSig, databaseId: 'db-1' });
     outbox.recordExport('b', { pageId: 'pb', signature: currentSig, databaseId: 'db-1' });
@@ -462,7 +463,7 @@ describe('NotionRuntime.status — unsynced + competitive counts (spec E3)', () 
 
 describe('NotionRuntime.clearExports', () => {
   it('drops each matchId\'s ledger record via outbox.clearExport', () => {
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     outbox.recordExport('a', { pageId: 'page-a', signature: 'sig-a' });
     outbox.recordExport('b', { pageId: 'page-b', signature: 'sig-b' });
 
@@ -474,7 +475,7 @@ describe('NotionRuntime.clearExports', () => {
   });
 
   it('is a no-op for matchIds with no ledger record', () => {
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     const runtime = new NotionRuntime(baseDeps({ outbox }));
 
     expect(() => runtime.clearExports(['never-exported'])).not.toThrow();
@@ -497,7 +498,7 @@ describe('NotionRuntime.import — ledger-aware canonical dedupe', () => {
       next_cursor: null,
     });
 
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     const runtime = await connectedRuntime({ outbox });
     const result = await runtime.import();
 
@@ -518,7 +519,7 @@ describe('NotionRuntime.import — ledger-aware canonical dedupe', () => {
       next_cursor: null,
     });
 
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     const runtime = await connectedRuntime({ outbox });
     const result = await runtime.import();
 
@@ -559,7 +560,7 @@ describe('NotionRuntime.cleanupDuplicates', () => {
       next_cursor: null,
     });
 
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     // Ledger previously pointed at the redundant copy (e.g. import ledgered it
     // before this dedup pass existed) — `repointExport` only ever moves an
     // EXISTING record, so seed one to exercise that re-pointing.
@@ -680,7 +681,7 @@ describe('NotionRuntime.cleanupDuplicates', () => {
       next_cursor: null,
     });
 
-    const outbox = new OutboxStore(tmpDir());
+    const outbox = new OutboxStore(jsonFiles(tmpDir()));
     vi.spyOn(outbox, 'repointExport').mockImplementation(() => {
       throw new Error('EBUSY: outbox.json locked');
     });

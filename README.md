@@ -806,8 +806,9 @@ Enable **Run at login** from the tray to keep it in the background.
 
 ### Preview the UI in a browser
 
-You don't need the Overwolf runtime to see the interface. The preview harness mocks
-the IPC bridge with the sample season and renders the full app in a plain browser:
+You don't need the Overwolf runtime to see the interface. The preview harness runs the
+app's real data layer over the sample season (writes persist in localStorage) and renders
+the full app in a plain browser:
 
 ```bash
 npm run preview        # bundles the harness and serves it at http://localhost:5178

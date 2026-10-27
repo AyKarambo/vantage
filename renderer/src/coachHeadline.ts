@@ -23,7 +23,7 @@
  * inventing a cross-domain number nobody could sanity-check.
  */
 import type { DashboardData, FocusEntry } from '../../src/shared/contract';
-import { sessionFade } from '../../src/core/analytics';
+import { sessionFade, decided } from '../../src/core/analytics';
 import { RANK_MOVEMENT_NEUTRAL_THRESHOLD } from '../../src/core/rankDisplay';
 import { roleLabel } from './format';
 import type { ViewId, ViewParams } from './store';
@@ -54,7 +54,7 @@ function rankMovementHeadline(d: DashboardData): CoachHeadline | undefined {
   // Attribute to whichever role is dragging/carrying the range, when one
   // clearly is — "Tank is carrying it" needs a real deficit/surplus behind
   // it, not just whichever role happens to sort first.
-  const roles = d.byRole.filter((g) => g.wins + g.losses >= 8);
+  const roles = d.byRole.filter((g) => decided(g) >= 8);
   const standout = roles.length
     ? [...roles].sort((a, b) => Math.abs(b.wins - b.losses) - Math.abs(a.wins - a.losses))[0]
     : undefined;

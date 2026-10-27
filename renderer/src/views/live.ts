@@ -22,7 +22,7 @@
  */
 import { h, render } from '../dom';
 import type { DashboardData, LiveMatchPayload, PlayerRecord, TargetSummary } from '../../../src/shared/contract';
-import { dayPartAt } from '../../../src/core/analytics';
+import { dayPartAt, decided } from '../../../src/core/analytics';
 import { clockElapsedMs, liveTrueDamage, liveTeamKills } from '../../../src/core/liveMatch';
 import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
@@ -404,8 +404,8 @@ function beforeYouQueueCard(d: DashboardData, ctx: ViewContext): HTMLElement {
         )
       : h('div', { class: 'hint' }, 'No games yet today — this fills in once you’ve logged your first.'),
     h('div', { class: 'hint', style: { marginTop: '10px', lineHeight: '1.5' } },
-      window && window.wins + window.losses >= 5
-        ? `It’s ${dayPart.toLowerCase()} — you’re ${pct(window.winrate)} over ${window.wins + window.losses} decided ${dayPart.toLowerCase()} games.`
+      window && decided(window) >= 5
+        ? `It’s ${dayPart.toLowerCase()} — you’re ${pct(window.winrate)} over ${decided(window)} decided ${dayPart.toLowerCase()} games.`
         : `It’s ${dayPart.toLowerCase()} — not enough ${dayPart.toLowerCase()} games yet to say how you do then.`),
     h('div', { style: { marginTop: '10px' } }, checkInPrompt(ctx)),
     stopRuleLine(ctx),
@@ -588,10 +588,10 @@ function knownPlayersCard(
 function playerRow(r: PlayerRecord, withYou: boolean | undefined, currentHero: string | undefined, ctx: ViewContext): HTMLElement {
   const wl = (s: { wins: number; losses: number }): string => `${s.wins}W ${s.losses}L`;
   const stats: Node[] = [];
-  if (r.sameTeam.wins + r.sameTeam.losses > 0) {
+  if (decided(r.sameTeam) > 0) {
     stats.push(pill(`with ${wl(r.sameTeam)}`, withYou === true ? 'accent' : undefined));
   }
-  if (r.enemyTeam.wins + r.enemyTeam.losses > 0) {
+  if (decided(r.enemyTeam) > 0) {
     stats.push(pill(`vs ${wl(r.enemyTeam)}`, withYou === false ? 'accent' : undefined));
   }
   if (!stats.length) {

@@ -9,6 +9,15 @@ import { heroTimeShares, parseScore, ROUND_TALLY_MODES, type MapModeResolver } f
 
 // --- core aggregation -------------------------------------------------------
 
+/** Decided games: wins plus losses — a draw never moves a winrate. */
+export const decided = (wl: { wins: number; losses: number }): number => wl.wins + wl.losses;
+
+/** Winrate over decided games, or null when nothing was decided (never a fabricated 0). */
+export function winrateOf(wl: { wins: number; losses: number }): number | null {
+  const n = decided(wl);
+  return n ? wl.wins / n : null;
+}
+
 /** Tally wins/losses/draws and the winrate (0..1, draws excluded) over a set of games. */
 export function winLoss(games: GameRecord[]): WinLoss {
   let wins = 0;
@@ -186,7 +195,7 @@ export function modeGroups(maps: readonly Group[], mapModeOf: MapModeResolver): 
     }
   }
   return [...buckets.values()]
-    .map((g) => ({ ...g, winrate: g.wins + g.losses ? g.wins / (g.wins + g.losses) : 0 }))
+    .map((g) => ({ ...g, winrate: winrateOf(g) ?? 0 }))
     .sort((a, b) => b.games - a.games);
 }
 
@@ -357,7 +366,7 @@ export function windowCompare(games: GameRecord[], now: number, days = 7): Momen
   const between = (start: number, end: number) => games.filter((g) => g.timestamp > start && g.timestamp <= end);
   const recent = winLoss(between(now - windowMs, now));
   const previous = winLoss(between(now - 2 * windowMs, now - windowMs));
-  if (recent.wins + recent.losses < MOMENTUM_MIN_DECIDED || previous.wins + previous.losses < MOMENTUM_MIN_DECIDED) {
+  if (decided(recent) < MOMENTUM_MIN_DECIDED || decided(previous) < MOMENTUM_MIN_DECIDED) {
     return null;
   }
   return { days, recent, previous, deltaPts: Math.round((recent.winrate - previous.winrate) * 100) };

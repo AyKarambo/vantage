@@ -13,6 +13,7 @@
 
 import { READINESS_TUNING as T } from './constants';
 import type { ReadinessBand, ReadinessConfidence, ReadinessRegime, ReadinessSummary } from './types';
+import { clamp } from '../num';
 
 export type PullFamily = 'load' | 'performance' | 'subjective';
 export type PullDirection = 'up' | 'down' | 'flat';
@@ -46,7 +47,6 @@ export interface WalkthroughDerivation {
   };
 }
 
-const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
 function directionOf(delta: number): PullDirection {
   if (delta >= 1) return 'up';

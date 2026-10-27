@@ -6,6 +6,7 @@ import {
   validateGametrackerShape, type ColumnProvisionPlan, type ShapeValidation,
 } from './gametrackerSchema';
 import type { NotionDatabaseSummary, NotionPageSummary, SubjectiveColumnDiag } from '../shared/contract';
+import { pageTitle, plainText, type NotionPage, type NotionRichText } from './pages';
 export type { NotionDatabaseSummary, NotionPageSummary };
 
 /** Result of `createGametracker` — ids/urls for the two databases it provisions. */
@@ -209,23 +210,12 @@ function firstDataSourceId(db: any, label: string): string {
   return id;
 }
 
-// Near-duplicate of mapsCache's extractTitle — kept separate deliberately (dedupe would
-// couple admin to the exporter for ~10 lines); this documents the duplication instead of "fixing" it.
-
 /** Database objects carry their title as rich-text directly on `.title`. */
-function titleOfDatabase(db: any): string {
-  const text = (db?.title ?? []).map((t: any) => t.plain_text ?? '').join('').trim();
-  return text || 'Untitled';
+function titleOfDatabase(db: { title?: NotionRichText[] }): string {
+  return plainText(db?.title) || 'Untitled';
 }
 
 /** Page titles live inside a `title`-type property. */
-function titleOfPage(page: any): string {
-  const props = page?.properties ?? {};
-  for (const value of Object.values<any>(props)) {
-    if (value?.type === 'title') {
-      const text = (value.title ?? []).map((t: any) => t.plain_text ?? '').join('').trim();
-      if (text) return text;
-    }
-  }
-  return 'Untitled';
+function titleOfPage(page: NotionPage): string {
+  return pageTitle(page) || 'Untitled';
 }

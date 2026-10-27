@@ -207,3 +207,19 @@ export function greeting(now = new Date()): string {
   if (h < 18) return 'Afternoon';
   return 'Evening';
 }
+
+/** Trim a long map name for compact chips/labels. */
+export function shortMapName(name: string): string {
+  const SHORT: Record<string, string> = {
+    'Watchpoint: Gibraltar': 'Watchpoint',
+    'Watchpoint: Grímsvötn': 'Grímsvötn',
+    'Antarctic Peninsula': 'Antarctic',
+    'Shambali Monastery': 'Shambali',
+    'New Queen Street': 'NQ Street',
+    'New Junk City': 'NJ City',
+    'Blizzard World': 'Blizz World',
+    'Lijiang Tower': 'Lijiang',
+    'Circuit Royal': 'Circuit',
+  };
+  return SHORT[name] ?? name;
+}

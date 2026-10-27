@@ -1,8 +1,9 @@
-import { dayKey, dayPartAt, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts } from './analytics';
+import { dayKey, dayPartAt, sessionPositionGroups, winLoss, type GameRecord, type SessionPositionOpts, decided } from './analytics';
 import type { SessionCheckIn } from './checkIn';
 import { isAbusiveComms, isPositiveComms } from './comms';
 import { leaverFlags, mergeLeaver } from './leaver';
 import { isTilted } from './mental';
+import { round1 } from './num';
 
 /**
  * Mental-impact analytics (issue #70): what tilt, comms tone, toxic teammates
@@ -318,7 +319,7 @@ export function tiltByMap(games: GameRecord[], min = 3): TiltBucket[] {
 
 function winrateSide(games: GameRecord[]): WinrateSide {
   const wl = winLoss(games);
-  return { winrate: wl.winrate, decided: wl.wins + wl.losses };
+  return { winrate: wl.winrate, decided: decided(wl) };
 }
 
 function ratedSide(games: GameRecord[]): RatedSide {
@@ -328,5 +329,3 @@ function ratedSide(games: GameRecord[]): RatedSide {
     rated: rated.length,
   };
 }
-
-const round1 = (n: number): number => Math.round(n * 10) / 10;

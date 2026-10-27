@@ -124,8 +124,10 @@ tokens — the source of truth for color/type/radius), `base.css`, `components.c
 `app.css`. Components reference tokens via `var(--…)`.
 
 [`renderer/preview/`](../../renderer/preview) is the browser harness: `preview.ts`
-mocks `window.owstats` with the real core + localStorage. Dev-only, excluded from the
-packaged app.
+backs `window.owstats` with the real `DataProvider` over localStorage-backed stores, and
+simulates only Notion, GEP status, file dialogs and the live match. It has its own
+`tsconfig.json`, since it compiles main-side modules the Node-free renderer project must
+not. Dev-only, excluded from the packaged app.
 
 ## `scripts/`
 

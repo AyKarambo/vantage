@@ -1,11 +1,11 @@
 /** Home / Overview — priority maps at a glance, the way you locked it in. */
 import { h, render } from '../dom';
 import type { DashboardData, Group, LiveMatchPayload, PlacementRunSummary, SessionDebrief } from '../../../src/shared/contract';
-import { dayKey, dayPartAt, MAP_MIN_GAMES, splitUnknownMap } from '../../../src/core/analytics';
+import { dayKey, dayPartAt, MAP_MIN_GAMES, splitUnknownMap, decided } from '../../../src/core/analytics';
 import { COST_MIN_SAMPLE } from '../../../src/core/mentalAnalytics';
 import { READINESS_TUNING } from '../../../src/core/readiness';
 import { isStale } from '../../../src/core/staleness';
-import { dateLong, greeting, int, pct, relTime, roleLabel, signed, streakText } from '../format';
+import { dateLong, greeting, int, pct, relTime, roleLabel, shortMapName, signed, streakText } from '../format';
 import { placementParts, rankParts } from '../../../src/core/rankDisplay';
 import { PALETTE, wrColor, wrHsl } from '../theme';
 import { scatterChart, sparkline, type ScatterPoint } from '../charts/plots';
@@ -21,7 +21,7 @@ import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { bridge } from '../bridge';
 import { prefs } from '../prefs';
 import { store } from '../store';
-import { viewHead, shorten, type ViewContext } from './view';
+import { viewHead, type ViewContext } from './view';
 import { coachHeadline } from '../coachHeadline';
 
 export function overview(ctx: ViewContext): HTMLElement {
@@ -260,7 +260,7 @@ function recapCard(ctx: ViewContext): HTMLElement | null {
       statBox(h('span', { class: r.net >= 0 ? 'is-win' : 'is-loss' }, `${r.wins}–${r.losses}`), `${signed(r.net)} net`),
       statBox(pct(r.winrate), 'winrate'),
       ...(r.srDelta !== undefined ? [statBox(`${signed(Math.round(r.srDelta))}%`, 'SR change')] : []),
-      ...(r.bestMap ? [statBox(shorten(r.bestMap), 'best map')] : []),
+      ...(r.bestMap ? [statBox(shortMapName(r.bestMap), 'best map')] : []),
       ...(r.targetHitRate !== undefined ? [statBox(pct(r.targetHitRate), 'targets hit')] : []),
     ].slice(0, 4);
     render(host, card({
@@ -334,8 +334,8 @@ function kpiRow(ctx: ViewContext): HTMLElement {
   // few days up or down from this range's own average". Winrate needs
   // decided games on both sides to mean anything; the games count doesn't.
   const prev = d.previous;
-  const prevDecided = prev ? prev.overall.wins + prev.overall.losses : 0;
-  const curDecided = d.overall.wins + d.overall.losses;
+  const prevDecided = prev ? decided(prev.overall) : 0;
+  const curDecided = decided(d.overall);
   const winrateSub = prev && prevDecided && curDecided
     ? `vs ${prev.label}: ${signed(Math.round((d.overall.winrate - prev.overall.winrate) * 1000) / 10)} pts`
     : undefined;
@@ -739,7 +739,7 @@ function toScatter(byMap: Group[]): ScatterPoint[] {
       const net = m.losses - m.wins;
       return {
         name: m.key,
-        short: shorten(m.key),
+        short: shortMapName(m.key),
         winrate: m.winrate,
         volume: m.games,
         wins: m.wins,
