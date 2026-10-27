@@ -90,9 +90,11 @@ export class TrayController {
   private healthIcon(state: GepHealthState): Electron.NativeImage {
     const cached = this.healthIcons.get(state);
     if (cached) return cached;
-    const file = state === 'no-game'
+    // A silent feed is the same warning as a stale one: no data while it should flow.
+    const variant = state === 'silent' ? 'stale' : state;
+    const file = variant === 'no-game'
       ? this.iconPath
-      : path.join(path.dirname(this.iconPath), `tray-${state}.png`);
+      : path.join(path.dirname(this.iconPath), `tray-${variant}.png`);
     let img = nativeImage.createEmpty();
     try {
       if (fs.existsSync(file)) img = nativeImage.createFromPath(file);
@@ -199,6 +201,7 @@ function healthTooltip(state: GepHealthState): string {
   switch (state) {
     case 'no-game': return 'Vantage — no game detected';
     case 'connected': return 'Vantage — connected, waiting for events';
+    case 'silent': return 'Vantage — ⚠ no game data since Overwatch started, restart Vantage';
     case 'live': return 'Vantage — receiving data';
     case 'stale': return 'Vantage — ⚠ match running but no data arriving';
   }

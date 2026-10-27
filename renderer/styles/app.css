@@ -1297,7 +1297,8 @@
 .status-dot.is-live {
   background: var(--win);
 }
-.status-dot.is-stale {
+.status-dot.is-stale,
+.status-dot.is-silent {
   background: var(--loss);
   animation: gep-pulse 1.2s ease-in-out infinite;
 }

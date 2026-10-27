@@ -1,6 +1,6 @@
 /**
- * Watches the GEP feed's *liveness* and publishes the four-state connection
- * status (no-game / connected / live / stale) whenever it changes. The state
+ * Watches the GEP feed's *liveness* and publishes the connection status
+ * (no-game / connected / silent / live / stale) whenever it changes. The state
  * rules live in `core/gepHealth` (pure, tested); this edge folds the raw
  * signals, runs the staleness clock, and fans changes out to the dashboard
  * push channel, the tray icon, and the release log.
@@ -125,8 +125,8 @@ export function createGepStatusMonitor(deps: GepStatusMonitorDeps): GepStatusMon
     },
     current: payload,
     start() {
-      // Only staleness can change without a signal; the tick exists to catch
-      // the 60s deadline. Detection latency is bounded by TICK_MS.
+      // Only staleness and silence can change without a signal; the tick exists
+      // to catch their deadlines. Detection latency is bounded by TICK_MS.
       const timer = setInterval(evaluate, TICK_MS);
       timer.unref?.();
       return () => clearInterval(timer);
