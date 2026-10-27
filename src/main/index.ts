@@ -23,6 +23,7 @@ import { fetchOverfast } from './masterDataUpdate';
 import { fetchServiceStatus } from './statusFeed';
 import { createGepServicePoller } from './gepServicePoller';
 import { decideGepNotification, decideOutdatedNotification, nextNotifyBaseline, type ServiceStatus } from '../core/gepService';
+import { decideSilentNotification, type GepHealthState } from '../core/gepHealth';
 import { DEFAULT_MASTER_DATA, makeMapMode, mergeMasterData } from '../core/masterData';
 import { GepService, type GepStatus } from './gep';
 import { MatchAggregator } from '../core/matchAggregator';
@@ -668,6 +669,7 @@ function main(): void {
   // The tray reads three of them too.
   let prevService: ServiceStatus | null = null;
   let prevOutdated = false;
+  let prevHealth: GepHealthState | null = null;
   events.on('onGepStatus', (p) => {
     tray.setHealth(p.state);
     // Notify on a service down/recovery transition (banner always shows; only the
@@ -691,6 +693,13 @@ function main(): void {
       if (note) tray.notify(note.title, note.body);
     }
     prevOutdated = outdated;
+    // And once when an attached feed has stayed event-less (GEP's game plugin
+    // failed to load): only a Vantage restart brings it back.
+    if (config.ui.gepNotifications) {
+      const note = decideSilentNotification(prevHealth, p.state);
+      if (note) tray.notify(note.title, note.body);
+    }
+    prevHealth = p.state;
   });
   events.on('onGameLogged', (payload) => {
     // The tray's "This sitting" read (S5) — scoped to whichever account the

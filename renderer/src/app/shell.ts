@@ -1092,7 +1092,9 @@ export class App {
    * package is staged, a "GEP update needed" warning when the loaded package is
    * below Overwolf's required minimum (the "No game" while Overwatch runs case),
    * an outage explanation while Overwolf's service is
-   * degraded/down, or — lowest priority, since the other two are the more
+   * degraded/down, a "Restart Vantage" prompt when the feed has sent nothing
+   * since Overwatch was detected (GEP's game plugin failed to load), or — lowest
+   * priority, since the others are the more
    * actionable Overwolf-side reads — a heads-up that the feed has gone quiet
    * mid-match (S6), so a stalled scoreboard on Live doesn't read as broken.
    * Hidden when none of that applies — an outage is never asserted without an
@@ -1103,8 +1105,9 @@ export class App {
     const outage = s?.serviceStatus === 'down' || s?.serviceStatus === 'degraded';
     const staged = Boolean(s?.updateStaged);
     const stale = s?.state === 'stale';
+    const silent = s?.state === 'silent';
     const outdated = Boolean(s?.gepOutdated);
-    if (!outage && !staged && !stale && !outdated) {
+    if (!outage && !staged && !stale && !silent && !outdated) {
       this.gepBanner.className = 'gep-banner hidden';
       render(this.gepBanner);
       return;
@@ -1151,6 +1154,21 @@ export class App {
           title: 'Open Overwolf’s game-events status page',
           on: { click: () => void bridge.openExternal('https://support.overwolf.com/support/solutions/9000115816') },
         }, 'Overwolf status ↗'),
+      );
+      return;
+    }
+    // Attached but not one event since: GEP's game plugin failed to load, and
+    // only a restart reloads it. Below an outage, where a restart can't help.
+    if (silent) {
+      this.gepBanner.className = 'gep-banner is-update';
+      render(this.gepBanner,
+        h('span', { class: 'gep-banner-text' },
+          'Overwatch is running, but no game data has arrived since it started. Restart Vantage to reconnect. '
+          + 'Overwatch can stay open.'),
+        h('button', {
+          class: 'gep-banner-action',
+          on: { click: () => void bridge.applyGepUpdate() },
+        }, 'Restart Vantage'),
       );
       return;
     }
@@ -1549,6 +1567,7 @@ function gepLabelText(s: GepStatusPayload | null): string {
   switch (s.state) {
     case 'no-game': return 'No game';
     case 'connected': return 'Connected — waiting for events';
+    case 'silent': return '⚠ No game data';
     case 'live': return 'Receiving data';
     case 'stale': {
       const secs = s.lastEventAt ? Math.round((Date.now() - s.lastEventAt) / 1000) : 0;

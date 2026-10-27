@@ -122,15 +122,15 @@ setInterval(() => {
 }, 4000);
 
 // Simulated connection status (?gep=…, default connected; `cycle` rotates).
-const GEP_STATES: GepHealthState[] = ['no-game', 'connected', 'live', 'stale'];
+const GEP_STATES: GepHealthState[] = ['no-game', 'connected', 'silent', 'live', 'stale'];
 const gepParam = params.get('gep') ?? 'connected';
 let gepState: GepHealthState = (GEP_STATES as string[]).includes(gepParam) ? (gepParam as GepHealthState) : 'connected';
 const gepPayload = (): GepStatusPayload => ({
   state: gepState,
   sensor: 'gep',
   attachedAt: gepState === 'no-game' ? null : Date.now() - 300_000,
-  lastEventAt: gepState === 'no-game' ? null : Date.now() - (gepState === 'stale' ? 90_000 : 4_000),
-  eventsThisSession: gepState === 'no-game' ? 0 : 128,
+  lastEventAt: gepState === 'no-game' || gepState === 'silent' ? null : Date.now() - (gepState === 'stale' ? 90_000 : 4_000),
+  eventsThisSession: gepState === 'no-game' || gepState === 'silent' ? 0 : 128,
   matchInProgress: gepState === 'live' || gepState === 'stale',
   gepPackageVersion: '309.0.0',
   ...(gepParam === 'down' ? { serviceStatus: 'down', serviceMessage: 'Events are disabled' } : {}),

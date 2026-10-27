@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  INITIAL_GEP_TRACK, STALE_AFTER_MS, gepHealth, gepSignalOf, reduceGepSignal,
+  INITIAL_GEP_TRACK, SILENT_AFTER_ATTACH_MS, STALE_AFTER_MS, decideSilentNotification, gepHealth, gepSignalOf,
+  reduceGepSignal,
   type GepHealthTrack, type GepSignal,
 } from '../src/core/gepHealth';
 import type { GepMessage } from '../src/core/model';
@@ -83,6 +84,51 @@ describe('gepHealth derivation', () => {
 
   it('pins the spec threshold at 60 seconds', () => {
     expect(STALE_AFTER_MS).toBe(60_000);
+  });
+});
+
+describe('gepHealth — silent feed (game plugin never loaded)', () => {
+  it('attached with zero events stays connected under the threshold, flips silent at it', () => {
+    const t = fold([['attached', 100]]);
+    expect(gepHealth(t, 100 + SILENT_AFTER_ATTACH_MS - 1)).toBe('connected');
+    expect(gepHealth(t, 100 + SILENT_AFTER_ATTACH_MS)).toBe('silent');
+  });
+
+  it('one event ever means the feed is alive — a quiet menu never reads silent', () => {
+    const t = fold([['attached', 0], ['event', 6_000]]);
+    expect(gepHealth(t, SILENT_AFTER_ATTACH_MS * 10)).toBe('connected');
+  });
+
+  it('the first event recovers silent → connected immediately', () => {
+    let t = fold([['attached', 0]]);
+    expect(gepHealth(t, SILENT_AFTER_ATTACH_MS)).toBe('silent');
+    t = reduceGepSignal(t, { kind: 'event' }, SILENT_AFTER_ATTACH_MS + 1);
+    expect(gepHealth(t, SILENT_AFTER_ATTACH_MS + 2)).toBe('connected');
+  });
+
+  it('a re-attach (new game launch) restarts the clock', () => {
+    const t = fold([['attached', 0], ['detached', SILENT_AFTER_ATTACH_MS * 2], ['attached', SILENT_AFTER_ATTACH_MS * 3]]);
+    expect(gepHealth(t, SILENT_AFTER_ATTACH_MS * 3 + 1000)).toBe('connected');
+  });
+
+  it('pins the threshold at 2 minutes', () => {
+    expect(SILENT_AFTER_ATTACH_MS).toBe(120_000);
+  });
+});
+
+describe('decideSilentNotification', () => {
+  it('notifies once on the transition into silent', () => {
+    const n = decideSilentNotification('connected', 'silent');
+    expect(n?.title).toMatch(/no game data/);
+    expect(n?.body).toMatch(/Restart Vantage/);
+    expect(decideSilentNotification(null, 'silent')).not.toBeNull();
+  });
+
+  it('stays quiet while silent, on recovery, and for every other state', () => {
+    expect(decideSilentNotification('silent', 'silent')).toBeNull();
+    expect(decideSilentNotification('silent', 'connected')).toBeNull();
+    expect(decideSilentNotification('live', 'stale')).toBeNull();
+    expect(decideSilentNotification('no-game', 'connected')).toBeNull();
   });
 });
 

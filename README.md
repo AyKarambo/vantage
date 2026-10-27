@@ -1065,11 +1065,15 @@ published; the rest of `docs/` is maintainer material.
 
 ## Live connection status
 
-The status bar (and the tray icon) shows a four-state feed indicator that never conflates
+The status bar (and the tray icon) shows a feed indicator that never conflates
 *attached* with *alive*: **No game** · **Connected — waiting for events** (GEP attached, nothing
 flowing — e.g. in menus) · **Receiving data** (events demonstrably arriving) · **⚠ Stale** (a match
 is running but the feed has been silent for 60s — the "says connected but nothing updates" failure,
-surfaced instead of hidden). Click the indicator for details: last event time, events this session,
+surfaced instead of hidden) · **⚠ No game data** (Overwatch detected 2 minutes ago and not one event
+since). That last one is GEP's game plugin failing to load (`failed to load plugin 'start-error'` in
+`%APPDATA%\ow-electron\<app-uid>\logs\gep\gep.log`) while GEP still reports the game as detected;
+only a restart of Vantage reloads it, so the app-wide banner offers a **one-click "Restart Vantage"**
+(Overwatch can stay open) and a one-time notification fires under **GEP alerts**. Click the indicator for details: last event time, events this session,
 match state, attach time. In demo mode it always reads "No live feed". State transitions are
 written to the debug log.
 

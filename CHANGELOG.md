@@ -56,6 +56,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
+- **Vantage tells you when it gets no game data.** Sometimes Overwolf fails to connect to Overwatch when the
+  game starts. The Live board then stayed empty and the status still said "Connected", so matches went
+  unrecorded without warning. If nothing arrives in the first 2 minutes after Overwatch starts, the status now
+  reads **No game data** and a banner offers **Restart Vantage**. Overwatch can stay open.
 - **"Restart to apply" now covers every game-data update.** Overwolf sometimes updates a helper package that
   game events depend on while Vantage is running. Vantage didn't ask for a restart then, so the next time you
   started Overwatch the Live board stayed empty and the match wasn't recorded. Now the restart banner shows

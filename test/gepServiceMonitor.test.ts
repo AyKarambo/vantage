@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { SILENT_AFTER_ATTACH_MS } from '../src/core/gepHealth';
 import { createGepStatusMonitor } from '../src/main/gepStatusMonitor';
 import type { GepStatusPayload } from '../src/shared/contract';
 
@@ -41,6 +42,28 @@ describe('gepStatusMonitor — service status + staged-update dimensions', () =>
 
     m.setGepPackageVersion('310.0.0');
     expect(published.at(-1)?.gepPackageVersion).toBe('310.0.0');
+  });
+});
+
+describe('gepStatusMonitor — silent feed', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('the staleness tick publishes silent after an event-less attach, and one event clears it', () => {
+    vi.useFakeTimers();
+    let clock = 1000;
+    const published: GepStatusPayload[] = [];
+    const m = createGepStatusMonitor({ sensor: 'gep', log: () => {}, publish: (p) => published.push(p), now: () => clock });
+    const stop = m.start();
+    m.setAttached(true);
+    expect(published.at(-1)?.state).toBe('connected');
+
+    clock += SILENT_AFTER_ATTACH_MS;
+    vi.advanceTimersByTime(15_000); // no signal arrives — only the tick can notice
+    expect(published.at(-1)?.state).toBe('silent');
+
+    m.message({ kind: 'info', feature: 'game_info', key: 'party_player_count', value: 1 });
+    expect(published.at(-1)?.state).toBe('connected');
+    stop();
   });
 });
 
