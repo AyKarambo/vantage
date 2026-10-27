@@ -9,7 +9,7 @@ const base: GameRecord = {
   account: 'Acct#1234',
   role: 'damage',
   map: 'Kings Row',
-  result: 'win',
+  result: 'Win',
   gameType: 'Competitive',
   heroes: ['Tracer'],
 };

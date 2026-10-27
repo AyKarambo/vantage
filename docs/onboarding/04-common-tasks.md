@@ -70,7 +70,7 @@ can't read CSS custom properties, which is why the palette is mirrored in JS.
 
 ## Adding a test
 
-Conventions ([`test/`](../../test), vitest, node environment):
+Conventions ([`test/`](../../test), vitest, node environment — except `test/dom/`, below):
 
 - **Constructor injection over module mocks.** Units take their dependencies as
   parameters, so tests pass `vi.fn()` fakes — you'll rarely need `vi.mock()`. See
@@ -84,6 +84,48 @@ Conventions ([`test/`](../../test), vitest, node environment):
   wrong layer.
 
 Run `npm run test:watch` while developing.
+
+## Renderer DOM tests (`test/dom/`)
+
+`test/dom/**` runs in its own vitest project on **happy-dom** (everything else stays on
+node), in UTC with an en-US default locale (see [`test/dom/setup.ts`](../../test/dom/setup.ts)).
+[`test/dom/appHarness.ts`](../../test/dom/appHarness.ts) mounts the **real shell** over
+the **real data layer** — `providerHarness` (real stores in memory) behind
+`dashboardHandlers`, wired like the browser preview — with `Date` pinned, and records
+every bridge call (`app.callsTo('logMatch')`).
+
+They are *characterization* tests: they pin what the Log Match dialog, the match
+editor and the expanded Review card send today (`logMatch` / `editMatch` /
+`saveReview`, plus the rank-anchor and placement calls around them) and how the shell
+navigates (sidebar, Back / Escape, the params-only re-render). A refactor of those
+files must keep them passing unchanged; when you *mean* to change a payload, update
+the pinned value (`npx vitest run test/dom -u` refreshes the inline snapshots) and
+say why in the PR. Mount one app per file — the shell binds window-level keys.
+
+## Visual regression (renderer changes)
+
+The renderer has its own safety net: `npm run test:visual` bundles the browser preview,
+opens it in ow-electron at the app's 1300×840 spec size and captures every sidebar
+screen, the intro tour, the Log Match dialog, a match's detail page and its editor, and
+an expanded Review card. Each PNG is compared pixel by pixel (pixelmatch) against the
+committed baselines in [`test/visual/baselines/`](../../test/visual/baselines).
+
+It is deterministic by construction: the clock is pinned with the preview's
+`?now=<epoch ms>` switch, the seeded sample season is on (`?demo=on`), storage starts
+empty, and the window runs in UTC / en-US at scale factor 1 with animations and the
+caret disabled. The driver is
+[`scripts/capture-screenshots.cjs`](../../scripts/capture-screenshots.cjs) (`--visual`
+mode; its default mode makes the store screenshots).
+
+- **A failure** writes the actual capture and a `*.diff.png` (changed pixels in red)
+  to `test/visual/output/` (git-ignored) and exits non-zero. Open the diff first.
+- **An intended change** (you meant to move pixels): `npm run test:visual -- --update`
+  rewrites the baselines and drops any no longer captured. Commit them with the change
+  and look at the PNG diff in the PR — that *is* the review of the visual change.
+- **A refactor** (you meant to move no pixels) must pass without `--update`.
+- Font rasterisation differs between machines/GPU drivers; baselines are made on the
+  maintainer's Windows machine with hardware acceleration off. `VISUAL_MAX_DIFF=<n>`
+  tolerates up to *n* differing pixels per screen if you must run elsewhere.
 
 ## Debugging the live pipeline without the game
 

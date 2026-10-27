@@ -90,7 +90,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(28, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -101,7 +101,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = [...span(0, 24, { perDay: 4 }), ...span(25, 27, { perDay: 10 })];
       const now = ts(30, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -112,7 +112,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = span(0, 30, { perDay: 4 });
       const now = ts(38, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -124,7 +124,7 @@ const SCENARIOS: Scenario[] = [
       const weekendDays = [5, 6, 12, 13, 19, 20, 26, 27];
       const games = weekendDays.flatMap((d) => span(d, d, { perDay: 5, mental: CALM }));
       const now = ts(27, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -135,7 +135,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = span(0, 9, { perDay: 2 });
       const now = ts(9, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -147,7 +147,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = [5, 6, 12, 13, 19, 20, 26, 27].flatMap((d) => span(d, d, { perDay: 5 }));
       const now = ts(27, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -162,7 +162,7 @@ const SCENARIOS: Scenario[] = [
         games.push(...span(d, d, { perDay: 3, mental: CALM }));
       }
       const now = ts(24, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -173,7 +173,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = statSpan(0, 34, { perDay: 10 });
       const now = ts(34, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -184,7 +184,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = span(0, 34, { perDay: 8 });
       const now = ts(35, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -195,7 +195,7 @@ const SCENARIOS: Scenario[] = [
     fixture: () => {
       const games = span(0, 34, { perDay: 8 });
       const now = ts(37, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -210,7 +210,7 @@ const SCENARIOS: Scenario[] = [
         ...span(29, 35, { perDay: 4 }).map((g) => ({ ...g, performance: 50 })),
       ];
       const now = ts(35, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -224,7 +224,7 @@ const SCENARIOS: Scenario[] = [
         ...span(29, 35, { perDay: 4 }).map((g) => ({ ...g, performance: 40 })),
       ];
       const now = ts(35, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -238,7 +238,7 @@ const SCENARIOS: Scenario[] = [
         ...span(28, 34, { perDay: 4, result: 'Loss', mental: TILT }),
       ];
       const now = ts(34, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -253,7 +253,7 @@ const SCENARIOS: Scenario[] = [
         ...statSpan(28, 34, { perDay: 3, hero: 'Tracer', result: 'Loss', damage: 8000, deaths: 5, elims: 20 }),
       ];
       const now = ts(34, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -267,7 +267,7 @@ const SCENARIOS: Scenario[] = [
         ...span(29, 35, { perDay: 8, result: 'Draw', mental: CALM }),
       ];
       const now = ts(35, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -281,7 +281,7 @@ const SCENARIOS: Scenario[] = [
         ...statSpan(28, 34, { perDay: 3, hero: 'Tracer', damage: 5600, deaths: 4, elims: 20 }),
       ];
       const now = ts(34, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },
@@ -296,7 +296,7 @@ const SCENARIOS: Scenario[] = [
         ...statSpan(28, 34, { perDay: 3, hero: 'Tracer', damage: 8000, deaths: 4, elims: 20 }),
       ];
       const now = ts(34, 20);
-      const targets = [];
+      const targets: AuthoredTarget[] = [];
       return { games, now, targets };
     },
   },

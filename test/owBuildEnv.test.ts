@@ -5,7 +5,7 @@ import * as path from 'path';
 import { resolveBuildKey, resolveBuildEnv } from '../scripts/ow-build-env.mjs';
 
 // All fixtures live under a temp dir — never the real ~/.ow-cli — and are passed
-// in via the buildKeyFiles/credentialFiles/devKeyFiles override params, which is
+// in via the buildKeyFiles/credentialFiles override params, which is
 // the whole point of resolveBuildEnv() staying pure. This machine genuinely has
 // no ~/.ow-cli directory, but these tests must not depend on that either way.
 let dir: string;
@@ -79,7 +79,6 @@ describe('resolveBuildEnv', () => {
     const result = resolveBuildEnv({
       env: { OW_CLI_EMAIL: 'a@b.com', OW_CLI_API_KEY: 'api-key', OW_BUILD_KEY: 'build-key' },
       credentialFiles: [],
-      devKeyFiles: [],
       buildKeyFiles: [],
     });
     expect(result).toEqual({
@@ -95,7 +94,6 @@ describe('resolveBuildEnv', () => {
     const result = resolveBuildEnv({
       env: { OW_CLI_EMAIL: 'a@b.com', OW_CLI_API_KEY: 'api-key' },
       credentialFiles: [],
-      devKeyFiles: [],
       buildKeyFiles: [keyFile],
     });
     expect(result).toEqual({
@@ -111,7 +109,6 @@ describe('resolveBuildEnv', () => {
     const result = resolveBuildEnv({
       env: { OW_CLI_EMAIL: 'a@b.com', OW_CLI_API_KEY: 'api-key', OW_BUILD_KEY: 'env-build-key' },
       credentialFiles: [],
-      devKeyFiles: [],
       buildKeyFiles: [keyFile],
     });
     expect(result.buildKey).toBe('env-build-key');
@@ -122,7 +119,6 @@ describe('resolveBuildEnv', () => {
     const result = resolveBuildEnv({
       env: { OW_CLI_EMAIL: 'a@b.com', OW_CLI_API_KEY: 'api-key' },
       credentialFiles: [],
-      devKeyFiles: [],
       buildKeyFiles: [path.join(dir, 'missing')],
     });
     expect(result.missing).toEqual(['OW_BUILD_KEY']);
@@ -136,14 +132,12 @@ describe('resolveBuildEnv', () => {
       resolveBuildEnv({
         env: {},
         credentialFiles: [path.join(dir, 'missing-creds')],
-        devKeyFiles: [path.join(dir, 'missing-devkey')],
         buildKeyFiles: [path.join(dir, 'missing-buildkey')],
       })
     ).not.toThrow();
     const result = resolveBuildEnv({
       env: {},
       credentialFiles: [path.join(dir, 'missing-creds')],
-      devKeyFiles: [path.join(dir, 'missing-devkey')],
       buildKeyFiles: [path.join(dir, 'missing-buildkey')],
     });
     expect(result).toEqual({ missing: ['OW_CLI_EMAIL', 'OW_CLI_API_KEY', 'OW_BUILD_KEY'] });
@@ -155,7 +149,6 @@ describe('resolveBuildEnv', () => {
     const result = resolveBuildEnv({
       env: {},
       credentialFiles: [credFile],
-      devKeyFiles: [],
       buildKeyFiles: [keyFile],
     });
     expect(result.email).toBeUndefined();
@@ -205,7 +198,6 @@ describe('resolveBuildEnv', () => {
     const result = resolveBuildEnv({
       env: {},
       credentialFiles: [credFile],
-      devKeyFiles: [devKeyFile],
       buildKeyFiles: [keyFile],
     });
     expect(result.missing).toEqual([]);
@@ -236,14 +228,12 @@ describe('resolveBuildEnv', () => {
           resolveBuildEnv({
             env: { OW_CLI_EMAIL: 'a@b.com', OW_CLI_API_KEY: 'api-key' },
             credentialFiles: [],
-            devKeyFiles: [],
             buildKeyFiles,
           })
         ).not.toThrow();
         const result = resolveBuildEnv({
           env: { OW_CLI_EMAIL: 'a@b.com', OW_CLI_API_KEY: 'api-key' },
           credentialFiles: [],
-          devKeyFiles: [],
           buildKeyFiles,
         });
         expect(result.buildKey).toBeUndefined();

@@ -51,7 +51,7 @@ function fakeAppInfo(): AppInfo {
     version: '1.2.3',
     supportEmail: 'timo.seikel@gmail.com',
     electron: 'e', chromium: 'c', node: 'n', v8: 'v8',
-    platform: 'win32', osRelease: 'os', packaged: false, devMode: false, gepPackageVersion: 'g',
+    platform: 'win32', osRelease: 'os', packaged: false, devMode: false, devModeAttempted: false, gepPackageVersion: 'g', mcpBridgePath: '',
   };
 }
 

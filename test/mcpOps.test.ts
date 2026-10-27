@@ -39,7 +39,7 @@ function pending(matchId: string): PendingMatch {
 }
 
 function target(id: string): AuthoredTarget {
-  return { id, name: 'Use cover', mode: 'manual' as AuthoredTarget['mode'], rule: 'stay behind cover' };
+  return { id, name: 'Use cover', mode: 'manual' as AuthoredTarget['mode'], rule: 'stay behind cover', createdAt: 0, isActive: true };
 }
 
 /** Records every provider call so a test can assert what was (and wasn't) hit. */
@@ -74,8 +74,8 @@ function setup(over: {
     getRanks: () => { note('getRanks'); return []; },
     getGepStatus: () => { note('getGepStatus'); return { state: 'idle' } as never; },
     logMatch: (input) => { note(`logMatch:${input.result}:${input.role}:${input.map}`); return { matchId: 'new-1' }; },
-    editMatch: () => note('editMatch'),
-    saveReview: () => note('saveReview'),
+    editMatch: () => { note('editMatch'); return { saved: true }; },
+    saveReview: () => { note('saveReview'); return { saved: true }; },
     clearReview: () => note('clearReview'),
     saveTarget: () => note('saveTarget'),
     updateTarget: () => note('updateTarget'),

@@ -28,7 +28,7 @@ function uniquePath(): string {
 }
 
 /** A server whose dispatcher echoes the op, or throws whatever the test asks for. */
-function makeServer(dispatch = (op: string, args: unknown) => ({ op, args })): {
+function makeServer(dispatch: (op: string, args: unknown) => unknown = (op, args) => ({ op, args })): {
   server: PipeServer; path: string;
 } {
   const path = uniquePath();

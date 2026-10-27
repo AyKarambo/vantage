@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete (globalThis as { localStorage?: MemoryStorage }).localStorage;
+  delete (globalThis as unknown as { localStorage?: MemoryStorage }).localStorage;
   vi.restoreAllMocks();
 });
 

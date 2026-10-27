@@ -28,8 +28,8 @@ async function connect(handler: Handler): Promise<Client> {
 }
 
 /** Tool results are JSON-in-text; parse the first text block back out. */
-function payload(res: { content?: unknown }): unknown {
-  const first = (res.content as { type: string; text: string }[])[0];
+function payload(res: object): unknown {
+  const first = ((res as { content?: unknown }).content as { type: string; text: string }[])[0];
   return JSON.parse(first.text);
 }
 
@@ -127,12 +127,12 @@ describe('the dashboard resource', () => {
   it('returns the snapshot including the demo flag', async () => {
     const client = await connect(() => ({ demo: true, data: { games: 12 } }));
     const res = await client.readResource({ uri: 'vantage://dashboard' });
-    expect(JSON.parse(res.contents[0].text as string)).toEqual({ demo: true, data: { games: 12 } });
+    expect(JSON.parse((res.contents[0] as { text: string }).text)).toEqual({ demo: true, data: { games: 12 } });
   });
 
   it('explains itself rather than blowing up when the app is down', async () => {
     const client = await connect(() => { throw new McpBridgeError('not-running', 'Vantage is not running.'); });
     const res = await client.readResource({ uri: 'vantage://dashboard' });
-    expect(res.contents[0].text).toMatch(/not running/i);
+    expect((res.contents[0] as { text: string }).text).toMatch(/not running/i);
   });
 });

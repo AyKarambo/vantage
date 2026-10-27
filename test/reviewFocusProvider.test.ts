@@ -11,7 +11,7 @@ const game = (review?: MatchReview): GameRecord => ({
 
 describe('saveReview — focus & break mark', () => {
   function harness() {
-    const setReview = vi.fn(() => true);
+    const setReview = vi.fn((_matchId: string, _review: MatchReview) => true);
     const deps = {
       history: { setReview, editManual: vi.fn() },
       getConfig: () => ({ accounts: { main: 'Main' } }),
@@ -37,7 +37,7 @@ describe('saveReview — focus & break mark', () => {
       matchId: 'm1', grades: {}, flags: {},
       focusTargetIds: ['t-1', 7, null] as unknown as string[], breakBefore: 'yes' as unknown as boolean,
     });
-    const review = setReview.mock.calls[0][1] as MatchReview;
+    const review = setReview.mock.calls[0][1];
     expect(review.focusTargetIds).toEqual(['t-1']);
     expect(review).not.toHaveProperty('breakBefore');
   });
@@ -45,7 +45,7 @@ describe('saveReview — focus & break mark', () => {
   it('adds neither key when absent', () => {
     const { provider, setReview } = harness();
     provider.saveReview({ matchId: 'm1', grades: {}, flags: {} });
-    const review = setReview.mock.calls[0][1] as MatchReview;
+    const review = setReview.mock.calls[0][1];
     expect(review).not.toHaveProperty('focusTargetIds');
     expect(review).not.toHaveProperty('breakBefore');
   });

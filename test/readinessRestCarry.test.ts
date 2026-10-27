@@ -15,7 +15,7 @@ import { ts, statSpan, span } from './readinessFixtures';
 import type { GameRecord } from '../src/core/analytics';
 
 /** Score after each of the first `n` games of `day` (index 0 = before the first game). */
-function scoresThroughDay(history: GameRecord[], day: number, n: number, opts: Parameters<typeof statSpan>[2] = {}): number[] {
+function scoresThroughDay(history: GameRecord[], day: number, n: number, opts: Omit<Parameters<typeof statSpan>[2], 'perDay'> = {}): number[] {
   const today = statSpan(day, day, { perDay: n, ...opts });
   const out: number[] = [];
   for (let k = 0; k <= n; k += 1) {

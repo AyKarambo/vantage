@@ -53,11 +53,15 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
   guidance. If the server isn't connected, say so and fall back to `Read` / `Grep` — don't guess.
 
 ## Build & Test
-- `npm test` — run the vitest suite once (`test:watch` for watch mode).
-- `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`), no emit.
+- `npm test` — run the vitest suite once (`test:watch` for watch mode). `test/dom/**` runs on
+  happy-dom: characterization tests that mount the real renderer and pin the payloads its
+  forms send — keep them passing unchanged through renderer refactors.
+- `npm run typecheck` — tsc for main (`tsconfig.json`) + renderer (`renderer/tsconfig.json`) + preview, MCP bridge and the `test/` suite (`tsconfig.test.json`), no emit.
 - `npm run build` — tsc (main) + esbuild (renderer bundle). `npm run watch:renderer` rebuilds on change.
 - `npm start` — build and run with the demo dataset.
 - `npm run preview` — bundle the browser harness, serve at http://localhost:5178 (no Overwolf runtime needed).
+- `npm run test:visual` — screenshot every screen + key dialogs from the preview (pinned clock) and
+  pixel-diff against `test/visual/baselines/`; `-- --update` rewrites them. Run it for renderer changes.
 - `npm run release` — ow-electron-builder → `release/Vantage-Setup-<ver>.exe`.
 - Dev-only env flags: `OW_SYNC_SIMULATE=1`, `OW_SYNC_SENSOR=gep|counterwatch`,
   `OW_SYNC_RECORD=1`, `OW_SYNC_REPLAY=<file>`, `OW_SYNC_SIM_SPEED=<multiplier>` (simulation

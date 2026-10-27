@@ -26,14 +26,14 @@ function exercise(h: HistoryPort): unknown[] {
   out.push(h.addMany([game('b', { account: 'Alt' }), game('a'), game('c', { importedAt: 5, importSource: 'file' })]));
   out.push(h.addMany([game('d', { importedAt: 7 })]));
   out.push(h.editManual('a', { srDelta: 12, performance: 3 }), h.editManual('a', { performance: null }), h.editManual('zz', { srDelta: 1 }));
-  out.push(h.setReview('b', { at: 1, grades: { t: 1 }, flags: {} }), h.setReview('zz', { at: 1, grades: {}, flags: {} }));
+  out.push(h.setReview('b', { at: 1, grades: { t: 'hit' }, flags: {} }), h.setReview('zz', { at: 1, grades: {}, flags: {} }));
   out.push(h.setReviews([
     { matchId: 'b', review: { at: 2, grades: {}, flags: {} } },
     { matchId: 'c', review: { at: 2, grades: {}, flags: {} } },
     { matchId: 'zz', review: { at: 2, grades: {}, flags: {} } },
   ]));
   out.push(h.clearReview('c'), h.clearReview('c'));
-  out.push(h.mergeImported([game('a', { mental: { tilted: true } }), game('zz')]));
+  out.push(h.mergeImported([game('a', { mental: { tilt: true } }), game('zz')]));
   out.push(h.relabelAccount('Alt', 'Alt2'), h.relabelAccount('Nope', 'X'));
   out.push(h.importedCount('file'), h.importedCount('notion'), h.lastImportedAt('file'), h.lastImportedAt('notion'));
   out.push(h.removeImported('notion').map((g) => g.matchId));

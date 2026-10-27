@@ -1,0 +1,20 @@
+{
+  // Typecheck-only project for the vitest suite (vitest runs `test/` straight
+  // from source, so nothing here is ever emitted). It extends the main project
+  // for the same strictness, but the suite spans every edge — main-side
+  // modules, the DOM renderer and the MCP bridge — so it widens to their
+  // settings: the DOM lib for renderer tests, and `Bundler` resolution (as in
+  // tsconfig.mcp.json) to read @modelcontextprotocol/sdk's "exports" map.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "rootDir": ".",
+    // Some tests exercise the plain-JS build scripts; read their inferred types.
+    "allowJs": true,
+    "noEmit": true
+  },
+  "include": ["test/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

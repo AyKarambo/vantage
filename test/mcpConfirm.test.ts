@@ -36,7 +36,7 @@ function setup() {
     gameType: 'Competitive', heroes: ['Tracer'], result: 'Win', map: 'A', role: 'damage',
   }];
   const targets: AuthoredTarget[] = [
-    { id: TARGET_ID, name: 'Use cover', mode: 'manual' as AuthoredTarget['mode'], rule: 'r' },
+    { id: TARGET_ID, name: 'Use cover', mode: 'manual' as AuthoredTarget['mode'], rule: 'r', createdAt: 0, isActive: true },
   ];
   const pendingList: PendingMatch[] = [{
     matchId: PENDING_ID, map: 'A', heroes: ['Tracer'], role: 'damage',
@@ -62,8 +62,8 @@ function setup() {
     getRanks: () => [],
     getGepStatus: () => ({ state: 'idle' }) as never,
     logMatch: (() => { mutations.push('logMatch'); return { matchId: 'x' }; }) as never,
-    editMatch: note('editMatch'),
-    saveReview: note('saveReview'),
+    editMatch: () => { note('editMatch')(); return { saved: true }; },
+    saveReview: () => { note('saveReview')(); return { saved: true }; },
     clearReview: note('clearReview'),
     saveTarget: note('saveTarget'),
     updateTarget: note('updateTarget'),

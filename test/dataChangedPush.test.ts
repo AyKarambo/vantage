@@ -58,7 +58,7 @@ describe('DataProvider — onDataChanged announcement', () => {
     const announceChange = vi.fn();
     const provider = createDataProvider(makeDeps(announceChange));
 
-    provider.setRankAnchor({ account: 'You', role: 'Tank', tier: 'Gold', division: 3, progressPct: 40 });
+    provider.setRankAnchor({ account: 'You', role: 'tank', tier: 'Gold', division: 3, progressPct: 40 });
 
     expect(announceChange).toHaveBeenCalledTimes(1);
   });

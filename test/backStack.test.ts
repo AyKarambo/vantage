@@ -30,13 +30,13 @@ const resolvesNone: Resolver = () => false;
 
 describe('routeParams / sameParams / sameEntry', () => {
   const full: ViewParams = {
-    matchId: 'm1', day: '2026-08-01', flag: 'tilted', playerName: 'Nova#1111', targetId: 't1',
+    matchId: 'm1', day: '2026-08-01', flag: 'tilt', playerName: 'Nova#1111', targetId: 't1',
     highlight: 'Ilios', prefillName: 'Aim', editTargetId: 't9',
   };
 
   it('keeps route params and drops effect params', () => {
     expect(routeParams(full)).toEqual({
-      matchId: 'm1', day: '2026-08-01', flag: 'tilted', playerName: 'Nova#1111', targetId: 't1',
+      matchId: 'm1', day: '2026-08-01', flag: 'tilt', playerName: 'Nova#1111', targetId: 't1',
     });
   });
 

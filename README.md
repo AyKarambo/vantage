@@ -814,6 +814,11 @@ the full app in a plain browser:
 npm run preview        # bundles the harness and serves it at http://localhost:5178
 ```
 
+Query switches shape what it shows — e.g. `?demo=on|off|unset`, `?gep=live|stale|…`,
+`?devmode=ok|failed|…`, `?players=N`, and `?now=<epoch ms>`, which pins the clock
+(`Date.now()` and `new Date()`) so every screen renders identically on any day. The full list is
+in the header of [`renderer/preview/preview.ts`](renderer/preview/preview.ts).
+
 ### Optional: AI coaching over MCP
 
 Vantage can expose your stats to an **MCP** client — Claude Desktop or Claude Code — so an
@@ -984,8 +989,11 @@ New to the codebase? Start with the **[onboarding guide](docs/onboarding/README.
 setup, architecture, a folder-by-folder tour, and recipes for common changes.
 
 ```bash
-npm test           # vitest — analytics, aggregator, resolvers, store, and the Vantage models
-npm run typecheck  # tsc for the main process, the renderer, and the MCP bridge
+npm test           # vitest — analytics, aggregator, resolvers, store, the Vantage models, and
+                   # renderer DOM characterization tests (test/dom, happy-dom)
+npm run typecheck  # tsc for the main process, the renderer, the MCP bridge, and the test suite
+npm run test:visual  # screenshot every screen from the preview and diff against test/visual/baselines
+                     # (-- --update rewrites the baselines; see docs/onboarding/04-common-tasks.md)
 npm run build      # tsc (main) + esbuild (renderer bundle + MCP bridge)
 npm run build:mcp  # just the MCP bridge → dist/mcp/stdio.js
 npm run watch:renderer   # rebuild the renderer bundle on change
