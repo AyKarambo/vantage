@@ -17,6 +17,8 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+## 0.42.0 — 27 October 2026
+
 ### Added
 
 - **Fix a match's played time.** **Edit match** now has a **Played time** field (`mm:ss`, e.g. `20:06`). Use it
