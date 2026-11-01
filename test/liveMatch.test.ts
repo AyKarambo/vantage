@@ -648,21 +648,25 @@ describe('liveClock â€” the match clock runs only inside rounds, like the gameâ€
     expect(clockElapsedMs(liveClock(s), 29_000)).toBe(0); // the old wall clock read 0:28 here
   });
 
-  it('runs from round_start, stops between rounds, and banks each round', () => {
+  it('runs from the doors, stops between rounds, and banks each round', () => {
     let s = live(0);
     s = reduceLiveMatch(s, roundStart, 28_000);
-    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 28_000 });
-    expect(clockElapsedMs(liveClock(s), 88_000)).toBe(60_000);
-    s = reduceLiveMatch(s, roundEnd, 328_000);
+    // Captured 2026-10-31: the first round's setup lock is inside it too.
+    expect(liveClock(s)).toEqual({ phase: 'hero-select', bankedMs: 0, runningSince: 28_000 + DOORS_FALLBACK_MS });
+    s = reduceLiveMatch(s, enemyReveal, 68_000);
+    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 68_000 });
+    expect(clockElapsedMs(liveClock(s), 128_000)).toBe(60_000);
+    s = reduceLiveMatch(s, roundEnd, 368_000);
     expect(liveClock(s)).toEqual({ phase: 'between-rounds', bankedMs: 300_000 });
     expect(clockElapsedMs(liveClock(s), 999_000)).toBe(300_000); // stopped
-    s = reduceLiveMatch(s, roundStart, 329_000);
-    s = reduceLiveMatch(s, enemyReveal, 378_000);
-    expect(clockElapsedMs(liveClock(s), 438_000)).toBe(360_000); // round change + hero select not counted
+    s = reduceLiveMatch(s, roundStart, 369_000);
+    s = reduceLiveMatch(s, enemyReveal, 418_000);
+    expect(clockElapsedMs(liveClock(s), 478_000)).toBe(360_000); // round change + hero select not counted
   });
 
   it('closes a round whose round_end was lost when the next one starts', () => {
     let s = reduceLiveMatch(live(0), roundStart, 0);
+    s = reduceLiveMatch(s, enemyReveal, 0);
     s = reduceLiveMatch(s, roundStart, 60_000);
     expect(liveClock(s)).toEqual({ phase: 'between-rounds', bankedMs: 60_000, runningSince: 60_000 + DOORS_FALLBACK_MS });
   });
@@ -672,6 +676,7 @@ describe('liveClock â€” the match clock runs only inside rounds, like the gameâ€
   describe('after a round change it waits for the doors', () => {
     const halftime = (): LiveMatchState => {
       let s = reduceLiveMatch(live(0), roundStart, 28_000);
+      s = reduceLiveMatch(s, enemyReveal, 28_000);
       s = reduceLiveMatch(s, roundEnd, 470_000);
       return reduceLiveMatch(s, roundStart, 471_000);
     };
@@ -722,9 +727,10 @@ describe('liveClock â€” the match clock runs only inside rounds, like the gameâ€
       expect(liveClock(s).bankedMs).toBe(442_000);
     });
 
-    it('the first round after match_start does not wait â€” its hero select came before it', () => {
+    it('the first round after match_start waits too, still labelled hero select', () => {
       const s = reduceLiveMatch(live(0), roundStart, 28_000);
-      expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 28_000 });
+      expect(liveClock(s)).toEqual({ phase: 'hero-select', bankedMs: 0, runningSince: 28_000 + DOORS_FALLBACK_MS });
+      expect(clockElapsedMs(liveClock(s), 60_000)).toBe(0);
     });
   });
 
@@ -743,6 +749,8 @@ describe('liveClock â€” the match clock runs only inside rounds, like the gameâ€
   it('joined in hero select: the first round_start shows that was no play, and drops it', () => {
     let s = reduceLiveMatch(INITIAL_LIVE_MATCH, info('game_info', 'game_state', 'match_in_progress'), 10_000);
     s = reduceLiveMatch(s, roundStart, 25_000);
-    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 25_000 });
+    expect(liveClock(s)).toEqual({ phase: 'hero-select', bankedMs: 0, runningSince: 25_000 + DOORS_FALLBACK_MS });
+    s = reduceLiveMatch(s, enemyReveal, 65_000);
+    expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 65_000 });
   });
 });

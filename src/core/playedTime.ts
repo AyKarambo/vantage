@@ -15,7 +15,8 @@
  * Two paths, one answer:
  *  - MEASURED: newer captures carry {@link GameRecord.playedMinutes} (and the
  *    rounds it came from), computed by the aggregator from the round events
- *    with the per-mode setup lock already removed ({@link playWindowsOf}).
+ *    with each round's setup phase already removed — up to the observed doors,
+ *    else the per-mode lock ({@link playWindowsOf}).
  *  - ESTIMATED: older GEP captures only have the wall clock. The same phases
  *    are subtracted as calibrated constants ({@link PLAYED_TIME_ESTIMATE}) plus
  *    the mode's setup locks for a typical competitive round count, so old and
@@ -61,23 +62,23 @@ export const PLAYED_TIME_ESTIMATE = {
 
 /**
  * Seconds INSIDE a round during which nobody can fight, per game mode:
- * `first` for the opening round, `later` for every round after it. Only phases
- * where the fight is physically impossible count — free-roam unlock timers
- * (Control's 30 s point unlock, Push's robot lock, Flashpoint/Clash captures)
- * are fightable and stay in.
- *  - Escort/Hybrid: the 45 s setup lock (attackers behind doors); a later round
- *    also carries the 25 s side-switch "Assemble" inside the GEP round.
- *  - Control: doors open at round start; later rounds begin behind the ~15 s
- *    round-change overlay.
- * Sources: Overwatch wiki mode pages + the 2018-10-09 / 2020-02-25 patch notes.
+ * `first` for the opening round, `later` for every round after it. Only the
+ * fallback for a round whose doors were never seen — a round with `doorsAt`
+ * is cut off there instead ({@link playWindowsOf}).
+ *
+ * Measured from real captures (2026-10-31): in EVERY mode the opponents' heroes
+ * first appear 37–47 s after `round_start` — first round included — and no
+ * kill lands before that. Escort/Hybrid 46–47 s (Eichenwalde, all four rounds),
+ * Control 38–40 s (Samoa), Push 37 s (New Queen Street, Esperança), Flashpoint
+ * 40 s (Aatlis). Clash was not captured and is assumed to match its siblings.
  */
 export const ROUND_SETUP_SECONDS: Record<MapMode, { first: number; later: number }> = {
-  Escort: { first: 45, later: 70 },
-  Hybrid: { first: 45, later: 70 },
-  Control: { first: 0, later: 15 },
-  Push: { first: 0, later: 0 },
-  Flashpoint: { first: 0, later: 0 },
-  Clash: { first: 0, later: 0 },
+  Escort: { first: 45, later: 47 },
+  Hybrid: { first: 45, later: 47 },
+  Control: { first: 40, later: 40 },
+  Push: { first: 40, later: 40 },
+  Flashpoint: { first: 40, later: 40 },
+  Clash: { first: 40, later: 40 },
   Unknown: { first: 0, later: 0 },
 };
 
@@ -110,15 +111,16 @@ export function setupMinutes(mode: MapMode, rounds: number): number {
 }
 
 /**
- * The fightable window of every round: the round minus its setup lock. Rounds
- * shorter than their lock (a forfeit, a bad capture) contribute nothing rather
- * than a negative span. This is what the aggregator sums into `playedMinutes`
- * and clips hero segments against.
+ * The fightable window of every round: from the doors opening (measured, or the
+ * round start plus its mode's setup lock when no reveal was seen) to the round
+ * end. Rounds shorter than their lock (a forfeit, a bad capture) contribute
+ * nothing rather than a negative span. This is what the aggregator sums into
+ * `playedMinutes` and clips hero segments against.
  */
 export function playWindowsOf(rounds: ReadonlyArray<RoundSpan>, mode: MapMode): RoundSpan[] {
   const out: RoundSpan[] = [];
   rounds.forEach((r, i) => {
-    const startedAt = r.startedAt + roundSetupSeconds(mode, i) * 1000;
+    const startedAt = r.doorsAt ?? r.startedAt + roundSetupSeconds(mode, i) * 1000;
     if (r.endedAt > startedAt) out.push({ startedAt, endedAt: r.endedAt });
   });
   return out;

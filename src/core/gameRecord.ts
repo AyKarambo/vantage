@@ -45,6 +45,7 @@ export function matchToGame(
     // absent on captures without round events, where read-time estimates it.
     ...(record.playedMinutes != null ? { playedMinutes: record.playedMinutes } : {}),
     ...(record.rounds?.length ? { rounds: record.rounds } : {}),
+    ...(record.joinedLate ? { joinedLate: true } : {}),
     heroes: record.heroes,
     perHero,
     finalScore: record.finalScore,

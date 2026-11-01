@@ -44,9 +44,24 @@ describe('playWindowsOf / setup locks', () => {
     const escort = playWindowsOf(rounds, 'Escort');
     expect(escort[0]).toEqual({ startedAt: ROUND_SETUP_SECONDS.Escort.first * 1000, endedAt: 10 * MIN });
     expect(escort[1]).toEqual({ startedAt: 11 * MIN + ROUND_SETUP_SECONDS.Escort.later * 1000, endedAt: 20 * MIN });
+    // Captured 2026-10-31: every mode locks the first round too (doors 37–47 s in).
     const control = playWindowsOf(rounds, 'Control');
-    expect(control[0]).toEqual({ startedAt: 0, endedAt: 10 * MIN }); // doors open at round start
-    expect(control[1].startedAt).toBe(11 * MIN + 15_000);
+    expect(control[0]).toEqual({ startedAt: 40_000, endedAt: 10 * MIN });
+    expect(control[1].startedAt).toBe(11 * MIN + 40_000);
+    expect(playWindowsOf(rounds, 'Push')[0].startedAt).toBe(40_000);
+    expect(playWindowsOf(rounds, 'Flashpoint')[0].startedAt).toBe(40_000);
+  });
+
+  it('starts a round at its OBSERVED doors instead of the mode constant', () => {
+    const rounds = [
+      { startedAt: 0, endedAt: 10 * MIN, doorsAt: 37_000 },
+      { startedAt: 11 * MIN, endedAt: 20 * MIN }, // no reveal seen → constant
+    ];
+    const w = playWindowsOf(rounds, 'Hybrid');
+    expect(w[0]).toEqual({ startedAt: 37_000, endedAt: 10 * MIN });
+    expect(w[1].startedAt).toBe(11 * MIN + ROUND_SETUP_SECONDS.Hybrid.later * 1000);
+    // A late attach sees the doors at once — nothing is cut that was watched.
+    expect(playWindowsOf([{ startedAt: 0, endedAt: 5 * MIN, doorsAt: 2_000 }], 'Control')[0].startedAt).toBe(2_000);
   });
 
   it('drops a round shorter than its lock instead of producing a negative window', () => {
@@ -54,9 +69,10 @@ describe('playWindowsOf / setup locks', () => {
   });
 
   it('setupMinutes accepts fractional round counts for estimates', () => {
-    expect(setupMinutes('Control', 2.5)).toBeCloseTo((0 + 1.5 * 15) / 60, 6);
-    expect(setupMinutes('Escort', 2)).toBeCloseTo((45 + 70) / 60, 6);
-    expect(setupMinutes('Push', 1)).toBe(0);
+    expect(setupMinutes('Control', 2.5)).toBeCloseTo((40 + 1.5 * 40) / 60, 6);
+    expect(setupMinutes('Escort', 2)).toBeCloseTo((45 + 47) / 60, 6);
+    expect(setupMinutes('Push', 1)).toBeCloseTo(40 / 60, 6);
+    expect(setupMinutes('Unknown', 3)).toBe(0);
     expect(setupMinutes('Escort', 0)).toBe(0);
   });
 
@@ -179,7 +195,7 @@ describe('playedTimeOf', () => {
     const two = playedTimeOf(game({ durationMinutes: 12, finalScore: '2–0' }))!;
     const three = playedTimeOf(game({ durationMinutes: 12, finalScore: '2–1' }))!;
     expect(two.minutes).toBeGreaterThan(three.minutes);
-    expect(two.minutes - three.minutes).toBeCloseTo(15 / 60, 6);
+    expect(two.minutes - three.minutes).toBeCloseTo(ROUND_SETUP_SECONDS.Control.later / 60, 6);
   });
 
   it('ESTIMATED: never drops below the floor on a very short match', () => {
@@ -202,7 +218,7 @@ describe('playedTimeOf', () => {
   it('accepts a custom map-mode resolver (the user-editable catalog)', () => {
     const asEscort = playedTimeOf(game({ map: 'Somewhere New', durationMinutes: 12 }), () => 'Escort')!;
     const asPush = playedTimeOf(game({ map: 'Somewhere New', durationMinutes: 12 }), () => 'Push')!;
-    expect(asPush.minutes - asEscort.minutes).toBeCloseTo(setupMinutes('Escort', 2), 6);
+    expect(asPush.minutes - asEscort.minutes).toBeCloseTo(setupMinutes('Escort', 2) - setupMinutes('Push', 1), 6);
   });
 });
 

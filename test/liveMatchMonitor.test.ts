@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createLiveMatchMonitor, PUBLISH_INTERVAL_MS, toPayload } from '../src/main/liveMatchMonitor';
 import { INITIAL_LIVE_MATCH, reduceLiveMatch } from '../src/core/liveMatch';
+import { DOORS_FALLBACK_MS } from '../src/core/roundClock';
 import type { GepMessage } from '../src/core/model';
 import type { LiveMatchPayload } from '../src/shared/contract';
 
@@ -191,7 +192,8 @@ describe('liveMatchMonitor — round clock', () => {
     monitor.message(info('roster', 'roster_0', JSON.stringify({ battle_tag: 'A#1', kills: 0 })));
     at(28_200); // < PUBLISH_INTERVAL_MS after the last push
     monitor.message(event('round_start', null));
-    expect(published.at(-1)?.clock).toEqual({ phase: 'round', bankedMs: 0, runningSince: 28_200 });
+    // The first round waits for its doors too: stopped, carrying the fallback start.
+    expect(published.at(-1)?.clock).toEqual({ phase: 'hero-select', bankedMs: 0, runningSince: 28_200 + DOORS_FALLBACK_MS });
   });
 
   it('carries the clock only while live', () => {

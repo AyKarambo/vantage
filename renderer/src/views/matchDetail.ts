@@ -166,6 +166,21 @@ function sections(d: MatchDetail, ctx: ViewContext): Node[] {
 
 // --- header (always renders — derives from fields every record has) ----------
 
+/**
+ * Vantage caught this match mid-way, so its clock misses the start. Asks for the
+ * scoreboard time until the player has entered one in the editor.
+ */
+function joinedLateNotice(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
+  if (!d.joinedLate || d.playedMinutesEdited) return null;
+  return h('div', { class: 'hint', style: { marginTop: '8px' } },
+    'Vantage joined this match late, so its time is short. ',
+    inlineLink('Enter the time from the scoreboard', {
+      title: 'Open the editor and set the played time',
+      onClick: () => openMatchEditor(ctx, d),
+    }),
+    '.');
+}
+
 function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
   const state = RESULT_STATE[d.result];
   // Vantage is competitive-only, so the mode reads "RANKED" on every match —
@@ -201,6 +216,7 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
       ),
       meta,
       mentalFlags(d),
+      joinedLateNotice(d, ctx),
       h('div', { style: { marginTop: '10px', display: 'flex', gap: '8px' } },
         button('✎ Edit match', {
           variant: 'soft',
@@ -236,9 +252,9 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
     ),
     h('div', { class: 'detail-head-side' },
       d.finalScore ? statBox(h('span', { class: 'mono' }, d.finalScore), 'Round score') : null,
-      // Duration is the wall clock (match start → end); Played is the time the
-      // player could actually fight — the divisor behind every per-10 stat.
-      d.durationMinutes != null ? statBox(`${d.durationMinutes}m`, 'Duration') : null,
+      // Duration is the match clock (round time, as the game counts it); Played
+      // is the time the player could actually fight — the per-10 divisor.
+      d.durationMinutes != null ? statBox(formatPlayedTime(d.durationMinutes), 'Duration') : null,
       d.playedMinutes != null ? statBox(`${d.playedMinutes.toFixed(1)}m`, d.playedSource === 'estimated' ? 'Played (est.)' : 'Played') : null,
       d.heroes.length
         ? h('div', { class: 'detail-heroes' },

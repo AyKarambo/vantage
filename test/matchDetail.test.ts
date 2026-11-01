@@ -285,6 +285,15 @@ describe('matchDetail degradation contract', () => {
     expect((graded.measuredGrades!.t as { value: number }).value).toBe(Math.round(16 * 10 / played * 10) / 10);
   });
 
+  it('flags a late-joined capture so the header can ask for the scoreboard time', () => {
+    expect(matchDetail([full()], 'full-1')!.joinedLate).toBeUndefined();
+    const late = { ...full(), joinedLate: true };
+    expect(matchDetail([late], 'full-1')!.joinedLate).toBe(true);
+    // A hand correction is what the notice asks for — the flag stays, the editor marks it fixed.
+    const fixed = matchDetail([{ ...late, playedMinutesOverride: 12.5 }], 'full-1')!;
+    expect(fixed).toMatchObject({ joinedLate: true, playedMinutesEdited: true, playedMinutes: 12.5 });
+  });
+
   it('a hand-logged match takes its typed duration as played time ("reported")', () => {
     const manual = minimal({ matchId: 'manual-7', source: 'manual', durationMinutes: 12, heroes: ['Ana'] });
     const d = matchDetail([manual], 'manual-7')!;

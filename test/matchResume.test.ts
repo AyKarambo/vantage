@@ -37,6 +37,7 @@ function playUntilRestart(at: (ms: number, m: GepMessage) => unknown): void {
   at(5, info('game_info', 'battle_tag', 'Karambo#21442'));
   at(10_000, roster({ battlenet_tag: 'Karambo#21442', is_local: true, hero_name: 'CASSIDY', hero_role: 'DAMAGE', kills: 0, deaths: 0, damage: 0 }));
   at(28_000, event('round_start'));
+  at(68_000, opponentReveal); // doors open 40 s into the first round
   at(28_000 + 8 * MIN, event('round_end'));
   at(29_000 + 8 * MIN, event('round_start'));
   at(77_000 + 8 * MIN, opponentReveal); // doors open 48 s into the round
@@ -93,9 +94,10 @@ describe('MatchAggregator — resume after a restart', () => {
     expect(rec.matchId).toBe('3858793788');
     expect(rec.startedAt).toBe(0);
     expect(rec.rounds).toHaveLength(3);
-    // The match clock 8 + 6:12 + 4:12 min ≈ 18 (rounds 2 and 3 wait 48 s for
-    // their doors) — not the ~2 min seen after the restart.
-    expect(rec.durationMinutes).toBe(18);
+    // The match clock 7:20 + 6:12 + 4:12 ≈ 17:44 (round 1 waits 40 s, rounds
+    // 2 and 3 wait 48 s for their doors) — not the ~2 min seen after the restart.
+    expect(rec.durationMinutes).toBeCloseTo((8 * MIN - 40_000 + 7 * MIN - 48_000 + 5 * MIN + 3 - 48_000) / MIN, 9);
+    expect(rec.joinedLate).toBeUndefined();
     expect(rec.eliminations).toBe(26);
     expect(rec.perHero?.[0]).toMatchObject({ hero: 'Cassidy', eliminations: 26, deaths: 11 });
   });

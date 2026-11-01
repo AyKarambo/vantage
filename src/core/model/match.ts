@@ -57,11 +57,14 @@ export interface HeroStat {
  * One GEP round (`round_start` → `round_end`), absolute epoch ms. Real captures
  * show the between-round setup phase lives INSIDE the next round (round_end →
  * round_start is ~1 s), so a round's span still includes its own setup lock;
- * {@link ../playedTime} subtracts that per game mode.
+ * {@link ../playedTime} cuts it off at `doorsAt` when that was observed, and
+ * subtracts a per-mode constant otherwise.
  */
 export interface RoundSpan {
   startedAt: number;
   endedAt: number;
+  /** ms epoch the doors opened (the opponents' heroes first appeared). Absent on older captures or when no reveal came. */
+  doorsAt?: number;
 }
 
 /**
@@ -100,10 +103,11 @@ export interface MatchRecord {
   startedAt?: number;
   endedAt?: number;
   /**
-   * The displayed match length in whole minutes: the summed GEP round time, the
-   * way the game's own clock counts it (stopped in hero select and between
-   * rounds). Captures without round events fall back to the wall clock
-   * `match_start` → `match_end`.
+   * The displayed match length in minutes: the summed GEP round time from each
+   * round's doors, the way the game's own clock counts it (stopped in hero
+   * select, setup and between rounds). Captures without round events fall back
+   * to the wall clock `match_start` → `match_end`. Fractional on newer captures
+   * (shown as mm:ss); whole minutes on older ones and hand logs.
    */
   durationMinutes?: number;
   /** Every GEP round observed, in order. Absent when the feed sent no round events. */
@@ -115,6 +119,14 @@ export interface MatchRecord {
    * Absent without round events — {@link ../playedTime} then estimates it.
    */
   playedMinutes?: number;
+  /**
+   * The feed's `match_start` came late, with the match already being fought:
+   * GEP attached mid-match (the app or the game client started late) and sent
+   * a `match_start` of its own. The cumulative stats are whole, but the clock
+   * and played time miss everything before the attach — the player is asked
+   * to correct the time from the scoreboard. See {@link MatchAggregator}.
+   */
+  joinedLate?: boolean;
   /** Signed competitive SR change for this match (percentage points of a division). */
   srDelta?: number;
 }
