@@ -661,13 +661,18 @@ auto-extrapolating on its usual cadence between edits.
 Every per-10-minute stat — the Heroes table and drawer, the per-hero card on a match, the
 readiness decline detector and measured ⚡ target grades — divides by the time you could actually
 **play**, not the wall-clock match length. A match's clock includes stretches nobody can fight in:
-the hero-select phase before the first round, each round's setup lock (attackers behind the doors
-on Escort/Hybrid, the round-change overlay on Control) and the Victory/Defeat lineup, Play of the
-Game and scoreboard at the end. Dividing by all of that understates every rate against what the
-game's own career profile shows. So:
+the hero-select phase before the first round, each round's setup lock (both teams behind their
+spawn doors — about 40 s in every mode, the first round included) and the Victory/Defeat lineup,
+Play of the Game and scoreboard at the end. Dividing by all of that understates every rate against
+what the game's own career profile shows. So:
 
 - **Measured** — matches captured with the game feed's round events carry their played time
-  exactly (the rounds, minus each mode's setup lock).
+  exactly: each round counts from the moment its doors open (when the opponents' heroes first
+  show up in the feed), or from its mode's typical setup lock when that moment wasn't seen. The
+  match's **Duration** is the same round time, shown as `mm:ss`.
+- **Joined late** — if Vantage (or the game feed) only caught a match after it had started, the
+  match page says so and asks for the time from the in-game scoreboard; enter it as **Played
+  time** in **Edit match**.
 - **Estimated** — older captures without round events subtract the same phases as calibrated
   constants (28 s of hero select, 40 s of scoreboard, the mode's typical setup locks, floored so a
   short stomp is still mostly play), so old and new games stay comparable inside one baseline.

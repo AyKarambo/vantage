@@ -283,14 +283,12 @@ function applyRoundBoundary(state: LiveMatchState, start: boolean, now: number):
   const open = last && last.endedAt === undefined ? last : undefined;
   if (start) {
     // A join's implicit round ended by a round_start (no round_end before it)
-    // was the opening hero select, so this round is the match's first.
-    const joinedInHeroSelect = Boolean(open?.implicit);
+    // was the opening hero select or a round change, not play: drop it.
     if (open?.implicit) rounds.pop();
     else if (open) rounds[rounds.length - 1] = { ...open, endedAt: now };
-    // Every round but a match's first begins behind a round change: hero
-    // select and setup run inside it, so the clock waits for the doors.
-    const first = rounds.length === 0 && (!state.joinedMidMatch || joinedInHeroSelect);
-    rounds.push(first ? { startedAt: now } : { startedAt: now, waitsForDoors: true });
+    // Every round — the first one too — begins behind its setup lock, so the
+    // clock waits for the doors (see roundClock).
+    rounds.push({ startedAt: now, waitsForDoors: true });
     return { ...state, rounds };
   }
   if (!open) return state;
@@ -312,7 +310,7 @@ function noteRoundDoors(state: LiveMatchState, value: unknown, now: number): Liv
 
 /** Where the match clock stands — what the board shows instead of a wall clock. */
 export interface LiveClock {
-  /** Before the first round (hero select), inside a round, or in a round change. */
+  /** Before the first round's doors (hero select and setup), inside a round, or in a round change. */
   phase: 'hero-select' | 'round' | 'between-rounds';
   /** Round time banked from the rounds already closed, in ms. */
   bankedMs: number;
@@ -333,8 +331,10 @@ export function liveClock(state: Pick<LiveMatchState, 'rounds'>): LiveClock {
   const last = rounds[rounds.length - 1];
   if (!last) return { phase: 'hero-select', bankedMs };
   if (last.endedAt !== undefined) return { phase: 'between-rounds', bankedMs };
-  // Still behind the round change: stopped, carrying the fallback start.
-  const phase = last.waitsForDoors && last.doorsAt === undefined ? 'between-rounds' : 'round';
+  // Still behind the doors: stopped, carrying the fallback start. Before the
+  // first round's doors that is still the opening setup, not a round change.
+  const behindDoors = last.waitsForDoors && last.doorsAt === undefined;
+  const phase = !behindDoors ? 'round' : rounds.length === 1 ? 'hero-select' : 'between-rounds';
   return { phase, bankedMs, runningSince: clockStartOf(last) };
 }
 

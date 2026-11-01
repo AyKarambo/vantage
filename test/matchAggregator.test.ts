@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MatchAggregator, isRoundEndMessage, isRoundStartMessage, parseRoster, partyCountFromInfo } from '../src/core/matchAggregator';
+import { LATE_ROUND_START_MS, MatchAggregator, isRoundEndMessage, isRoundStartMessage, parseRoster, partyCountFromInfo } from '../src/core/matchAggregator';
 import type { GepMessage } from '../src/core/model';
 import { resolveRole } from '../src/core/resolvers/role';
 import { resolveResult } from '../src/core/resolvers/result';
@@ -270,9 +270,10 @@ describe('MatchAggregator round timing (played time)', () => {
     // round_end → next round_start ~1 s; outcome 3 ms before the final
     // round_end; match_end ~40 s after it (POTG + scoreboard).
     const { at } = clocked();
-    start(at, 'Ilios', 'rt-1'); // Control: doors open at round start, ~15 s overlay before a later round
+    start(at, 'Ilios', 'rt-1'); // Control
     at(10_000, info('roster', 'roster_0', { name: 'P#1', hero: 'Tracer', role: 'damage', kills: 0, deaths: 0, assists: 0, damage: 0 }));
     at(28_000, round('round_start'));
+    at(68_000, info('roster', 'roster_5', { is_teammate: false, team: 0, hero_id: 9 })); // doors open, 40 s in
     at(28_000 + 5 * MIN, round('round_end'));
     at(29_000 + 5 * MIN, round('round_start'));
     at(44_000 + 5 * MIN, info('roster', 'roster_5', { is_teammate: false, team: 0, hero_id: 9 })); // doors open
@@ -282,16 +283,17 @@ describe('MatchAggregator round timing (played time)', () => {
     const rec = at(69_003 + 10 * MIN, event('match_end'))!;
 
     expect(rec.rounds).toEqual([
-      { startedAt: 28_000, endedAt: 28_000 + 5 * MIN },
-      { startedAt: 29_000 + 5 * MIN, endedAt: 29_003 + 10 * MIN },
+      { startedAt: 28_000, endedAt: 28_000 + 5 * MIN, doorsAt: 68_000 },
+      { startedAt: 29_000 + 5 * MIN, endedAt: 29_003 + 10 * MIN, doorsAt: 44_000 + 5 * MIN },
     ]);
-    // Round 1 fully fightable (5 min); round 2 minus the 15 s round-change overlay.
-    const played = (5 * MIN + (5 * MIN + 3 - 15_000)) / MIN;
+    // Each round counts from its observed doors: 4:20 + 4:45.
+    const played = ((5 * MIN - 40_000) + (5 * MIN + 3 - 15_000)) / MIN;
     expect(rec.playedMinutes).toBeCloseTo(played, 9);
-    // The displayed duration is the match clock — hero select, the round
-    // change until the doors open and the scoreboard tail excluded:
-    // 5 min + 4:45 → 10, where the wall clock would read ~11.15.
-    expect(rec.durationMinutes).toBe(10);
+    // The displayed duration is the match clock — hero select, every round's
+    // setup until the doors open and the scoreboard tail excluded: 9:05,
+    // unrounded, where the wall clock would read ~11:09.
+    expect(rec.durationMinutes).toBeCloseTo(played, 9);
+    expect(rec.joinedLate).toBeUndefined();
     // The single hero's minutes are the played minutes (its segment ran from
     // match start to match end, clipped to the play windows).
     expect(rec.perHero).toHaveLength(1);
@@ -322,7 +324,8 @@ describe('MatchAggregator round timing (played time)', () => {
     at(500_000, info('match_info', 'match_outcome', 'victory'));
     const rec = at(540_000, event('match_end'))!; // 40 s of scoreboard must not count
     expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 500_000 }]);
-    expect(rec.playedMinutes).toBeCloseTo((500_000 - 28_000) / MIN, 9);
+    // No reveal seen → the Control lock stands in for the doors.
+    expect(rec.playedMinutes).toBeCloseTo((500_000 - 28_000 - ROUND_SETUP_SECONDS.Control.first * 1000) / MIN, 9);
   });
 
   it('closes a round whose round_end never arrived at match_end when there was no outcome either', () => {
@@ -331,7 +334,7 @@ describe('MatchAggregator round timing (played time)', () => {
     at(28_000, round('round_start'));
     const rec = at(300_000, event('match_end'))!;
     expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 300_000 }]);
-    expect(rec.playedMinutes).toBeCloseTo((300_000 - 28_000) / MIN, 9);
+    expect(rec.playedMinutes).toBeCloseTo((300_000 - 28_000 - ROUND_SETUP_SECONDS.Control.first * 1000) / MIN, 9);
   });
 
   it('a round_start while a round is still open closes the open one; a stray round_end is ignored', () => {
@@ -386,7 +389,7 @@ describe('MatchAggregator round timing (played time)', () => {
     // The hero minutes sum to the match's played minutes.
     expect(ph.Tracer.minutes! + ph.Genji.minutes!).toBeCloseTo(rec.playedMinutes!, 9);
     expect(rec.playedMinutes).toBeCloseTo((328_003 - windowStart) / MIN, 9);
-    expect(rec.durationMinutes).toBe(5); // round time 5.0 min (the wall clock was 6.13)
+    expect(rec.durationMinutes).toBeCloseTo(rec.playedMinutes!, 9); // the clock from the doors (the wall clock was 6.13)
   });
 
   it('a swap while a round is still open clips against the open round too (setup offset applied)', () => {
@@ -440,7 +443,7 @@ describe('MatchAggregator round timing (played time)', () => {
     };
     expect(run().playedMinutes).toBeCloseTo(300_003 / MIN, 9); // unknown map → no lock
     expect(run(() => 'Escort').playedMinutes).toBeCloseTo((300_003 - 45_000) / MIN, 9);
-    expect(run(() => 'Push').playedMinutes).toBeCloseTo(300_003 / MIN, 9);
+    expect(run(() => 'Push').playedMinutes).toBeCloseTo((300_003 - 40_000) / MIN, 9);
   });
 
   it('leaves playedMinutes absent when every round is shorter than its setup lock', () => {
@@ -450,6 +453,46 @@ describe('MatchAggregator round timing (played time)', () => {
     const rec = at(40_000, event('match_end'))!; // 12 s "round" — a forfeit in setup
     expect(rec.rounds).toEqual([{ startedAt: 28_000, endedAt: 40_000 }]);
     expect(rec.playedMinutes).toBeUndefined();
+  });
+
+  describe('a late attach (GEP sends its own match_start into a running match)', () => {
+    // Real capture (2026-11-01, Oasis): match_start, then the roster with every
+    // slot already scored, then round_start 1 s later — the match had been
+    // fought for a minute or two before the feed attached.
+    it('is flagged when the first roster already shows fights, before any round', () => {
+      const { at } = clocked();
+      start(at, 'Oasis', 'late-1');
+      at(400, info('roster', 'roster_4', { name: 'Enemy#1', is_teammate: false, team: 0, hero_id: 0, kills: 3, deaths: 1, damage: 794 }));
+      at(1_400, round('round_start'));
+      at(200_000, info('match_info', 'match_outcome', 'defeat'));
+      at(200_003, round('round_end'));
+      const rec = at(240_000, event('match_end'))!;
+      expect(rec.joinedLate).toBe(true);
+      expect(matchToGame(rec, {})!.joinedLate).toBe(true);
+    });
+
+    it('is flagged when the first round_start follows match_start within seconds', () => {
+      const { at } = clocked();
+      start(at, 'Oasis', 'late-2');
+      at(1_000, round('round_start'));
+      at(200_000, info('match_info', 'match_outcome', 'victory'));
+      const rec = at(240_000, event('match_end'))!;
+      expect(rec.joinedLate).toBe(true);
+      expect(LATE_ROUND_START_MS).toBe(5_000);
+    });
+
+    it('is not flagged on a real start: zeroed roster and the ~28 s hero select', () => {
+      const { at } = clocked();
+      start(at, 'Oasis', 'late-3');
+      at(27_000, info('roster', 'roster_4', { name: 'Enemy#1', is_teammate: false, team: 0, hero_id: 0, kills: 0, deaths: 0, damage: 0 }));
+      at(28_000, round('round_start'));
+      // Fights after the doors are normal play, not a late attach.
+      at(90_000, info('roster', 'roster_4', { name: 'Enemy#1', is_teammate: false, team: 0, hero_id: 9, kills: 2, deaths: 1, damage: 600 }));
+      at(200_000, info('match_info', 'match_outcome', 'victory'));
+      const rec = at(240_000, event('match_end'))!;
+      expect(rec.joinedLate).toBeUndefined();
+      expect(matchToGame(rec, {})!.joinedLate).toBeUndefined();
+    });
   });
 
   it('recognizes the round events with the same tolerance as match_start (event kind, key or feature)', () => {
@@ -474,7 +517,7 @@ describe('MatchAggregator round timing (played time)', () => {
     expect(rec!.rounds).toEqual([{ startedAt: SIM_TIMING.roundStartMs, endedAt: SIM_TIMING.roundEndMs }]);
     expect(rec!.playedMinutes).toBeCloseTo((roundMs - ROUND_SETUP_SECONDS.Hybrid.first * 1000) / MIN, 9);
     expect(rec!.perHero![0].minutes).toBeCloseTo(rec!.playedMinutes!, 9);
-    expect(rec!.durationMinutes).toBe(Math.round(roundMs / MIN)); // round time, not the wall clock
+    expect(rec!.durationMinutes).toBeCloseTo(rec!.playedMinutes!, 9); // round time from the doors, not the wall clock
     expect(rec!.outcome).toBe('Victory');
     // The bare message list keeps match_end last (the roster-retention test slices it off).
     const messages = buildCompetitiveMatch({ battleTag: 'Karambo#21234', map: "King's Row" }, 'sim-rt');

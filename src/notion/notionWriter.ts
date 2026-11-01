@@ -90,7 +90,8 @@ export class NotionWriter {
     putNumber(props, 'Damage', r.damage);
     putNumber(props, 'Healing', r.healing);
     putNumber(props, 'Mitigation', r.mitigation);
-    putNumber(props, 'Match Duration (min)', r.durationMinutes);
+    // Fractional on newer captures — two decimals keep the column readable.
+    putNumber(props, 'Match Duration (min)', r.durationMinutes != null ? Math.round(r.durationMinutes * 100) / 100 : undefined);
     putNumber(props, 'Group Size', r.groupSize);
 
     if (r.gameType) props['Game Type'] = select(gameTypeLabel(r.gameType));

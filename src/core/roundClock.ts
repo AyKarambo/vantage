@@ -8,9 +8,11 @@ import { asBool, asNumber, asObject } from './matchAggregator/gepValues';
  * select / setup that follows lives INSIDE the new round: real captures
  * (2026-10-25) show 37–53 s of silence after every later `round_start`, ended by
  * a roster burst in which the opponents' heroes appear for the first time — the
- * moment the doors open. The clock stays stopped until then. The FIRST round of
- * a match is different: its hero select falls before `round_start` (the 28 s
- * after `match_start`), so its clock starts at `round_start` as before.
+ * moment the doors open. The clock stays stopped until then. The FIRST round
+ * is no different: its hero select falls before `round_start` (the 28 s after
+ * `match_start`), but the setup lock does not — captures (2026-10-31, every
+ * mode) show the doors opening 37–47 s after the first `round_start` too, and
+ * no kill before them. So every round waits for its doors.
  *
  * Pure and Electron-free (guardrail #3).
  */
@@ -26,7 +28,11 @@ export const DOORS_FALLBACK_MS = 75_000;
 export interface ClockRound {
   startedAt: number;
   endedAt?: number;
-  /** The round began behind a round change: the clock waits for the doors. */
+  /**
+   * The clock waits for the doors. Set on every round since the first one
+   * waits too; a checkpoint written before that may still hold a first round
+   * without it, whose clock then starts at `startedAt` as it did back then.
+   */
   waitsForDoors?: boolean;
   /** ms epoch the opponents' heroes first appeared in this round (doors open). */
   doorsAt?: number;

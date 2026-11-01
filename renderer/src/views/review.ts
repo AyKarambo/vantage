@@ -23,7 +23,7 @@ import type { MatchMental, MatchRow, PendingMatch, PlacementRunSummary, RankEntr
 import { matchInTargetScope, parseMeasuredRule } from '../../../src/core/targets';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { dayKey, groupByDay, type DayGroup } from '../../../src/core/analytics';
-import { prettyDay, relTime, roleLabel } from '../format';
+import { formatPlayedTime, prettyDay, relTime, roleLabel } from '../format';
 import { badge, button, card, chip, confirmButton, emptyState, resultPill } from '../components/primitives';
 import { targetGradeRow, mentalFlagsRow, quickGradeChip, type BoolFlagKey } from '../components/reviewControls';
 import { srDeltaInput, srModeToggle, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
@@ -900,7 +900,7 @@ function expanded(
   // fact the player would otherwise have to open the match to see.
   const metaExtra = [
     m.finalScore ? m.finalScore : null,
-    m.durationMinutes != null ? `${m.durationMinutes} min` : null,
+    m.durationMinutes != null ? formatPlayedTime(m.durationMinutes) : null,
   ].filter((s): s is string => s != null).join(' · ');
 
   const el = card({ variant: 'raised', class: 'review-card' },

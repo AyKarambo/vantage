@@ -251,7 +251,7 @@ export interface MatchDetail {
    * rather than derived.
    */
   rankAtStart?: RankPosition;
-  /** Wall-clock match length in whole minutes — the header's "Duration", not a per-10 divisor. */
+  /** Match-clock length in minutes (may be fractional; shown as mm:ss) — the header's "Duration", not a per-10 divisor. */
   durationMinutes?: number;
   /**
    * Minutes the player could actually fight — the per-10 divisor behind the
@@ -267,6 +267,11 @@ export interface MatchDetail {
   playedSource?: 'measured' | 'estimated' | 'reported';
   /** True when `playedMinutes` is a hand correction from the match editor. */
   playedMinutesEdited?: boolean;
+  /**
+   * True when Vantage only caught the match mid-way (GEP attached late): the
+   * duration and played time are short. The header asks for the scoreboard time.
+   */
+  joinedLate?: boolean;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */

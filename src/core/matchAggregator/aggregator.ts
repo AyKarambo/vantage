@@ -15,7 +15,7 @@ import { asNumber, asString, parseRoster } from './gepValues';
 import { resolveMapId } from '../resolvers/mapId';
 import { mapMode as staticMapMode } from '../maps';
 import { overlapMinutes, playWindowsOf, windowMinutes, type MapModeResolver } from '../playedTime';
-import { noteDoors, roundClockMs, type ClockRound } from '../roundClock';
+import { noteDoors, type ClockRound } from '../roundClock';
 
 export interface MatchAggregatorOptions {
   /**
@@ -142,16 +142,17 @@ export class MatchAggregator {
 
     // Round boundaries. Real captures: `round_start` fires ~28 s after
     // `match_start` (after hero select) and `round_end` → next `round_start` is
-    // ~1 s, so the between-round setup lives INSIDE the next round; the mode's
-    // setup lock is removed from each round by `playWindowsOf` downstream.
+    // ~1 s, so the setup lock lives INSIDE every round — the first one too.
+    // Each round's clock and play window start at its doors (see roundClock).
     if (isRoundStartMessage(msg)) {
       const now = this.now();
       const open = openRound(this.current.rounds);
       if (open) open.endedAt = now; // a missed round_end: close it as the next round begins
-      // Only the round right after match_start has its hero select outside it;
-      // every other round's clock waits for the doors (see roundClock).
-      const first = this.current.rounds.length === 0 && this.current.record.startedAt != null;
-      this.current.rounds.push(first ? { startedAt: now } : { startedAt: now, waitsForDoors: true });
+      const started = this.current.record.startedAt;
+      if (this.current.rounds.length === 0 && started != null && now - started < LATE_ROUND_START_MS) {
+        this.current.record.joinedLate = true;
+      }
+      this.current.rounds.push({ startedAt: now, waitsForDoors: true });
       return null;
     }
     if (isRoundEndMessage(msg)) {
@@ -249,6 +250,11 @@ export class MatchAggregator {
 
     const player = parseRoster(value);
     if (!player) return;
+    // Before the first round nobody can have fought — a real start reports
+    // every slot at zero. Scores here mean GEP attached to a running match.
+    if (rounds.length === 0 && this.current.record.startedAt != null && hasFought(player)) {
+      this.current.record.joinedLate = true;
+    }
     // As the scoreboard tears down at match end, GEP resets each roster slot to
     // an empty object (`roster_N = {}`) — observed in a real capture, arriving
     // BEFORE match_end fires. Such a snapshot carries no identity, hero, or stat;
@@ -382,10 +388,10 @@ export class MatchAggregator {
     const endedAt = this.now();
     rec.endedAt = endedAt;
     if (rec.startedAt != null) {
-      // Wall clock, rounded — the displayed match length for a feed that sent
-      // no rounds; the round time below replaces it when rounds were seen.
-      // NOT the per-10 divisor.
-      rec.durationMinutes = Math.max(0, Math.round((endedAt - rec.startedAt) / 60000));
+      // Wall clock — the displayed match length for a feed that sent no
+      // rounds; the round time below replaces it when rounds were seen.
+      // NOT the per-10 divisor. Unrounded: the views show it as mm:ss.
+      rec.durationMinutes = Math.max(0, (endedAt - rec.startedAt) / 60000);
     }
 
     // Prefer roster-derived local stats; fall back to match-level counters.
@@ -409,17 +415,24 @@ export class MatchAggregator {
     if (this.current.rounds.length) {
       const open = openRound(this.current.rounds);
       if (open) open.endedAt = this.current.outcomeAt ?? endedAt;
-      rounds = this.current.rounds.map((r) => ({ startedAt: r.startedAt, endedAt: r.endedAt ?? endedAt }));
+      rounds = this.current.rounds.map((r) => ({
+        startedAt: r.startedAt,
+        endedAt: r.endedAt ?? endedAt,
+        ...(r.doorsAt !== undefined ? { doorsAt: r.doorsAt } : {}),
+      }));
       rec.rounds = rounds;
       const played = windowMinutes(playWindowsOf(rounds, this.mapModeOf(rec.mapName ?? '')));
-      if (played > 0) rec.playedMinutes = played;
-      // The displayed match length is the match CLOCK, the same one the live
-      // board shows: stopped through hero select (~28 s before the first
-      // round), through each round change until the doors open, and after the
-      // last round (the post-match scoreboard). The per-10 divisor above is
-      // separate and stays as it was.
-      const clockMs = this.current.rounds.reduce((ms, r) => ms + roundClockMs({ ...r, endedAt: r.endedAt ?? endedAt }), 0);
-      if (clockMs > 0) rec.durationMinutes = Math.round(clockMs / 60000);
+      if (played > 0) {
+        rec.playedMinutes = played;
+        // The displayed match length is the match CLOCK, the same one the live
+        // board shows: stopped through hero select (~28 s before the first
+        // round), through every round's setup until the doors open, and after
+        // the last round (the post-match scoreboard) — exactly the play
+        // windows. A round whose doors went unseen falls back to its mode's
+        // lock here, which beats the live board's mode-blind fallback.
+        // Unrounded — the views show it as mm:ss, like the in-game clock.
+        rec.durationMinutes = played;
+      }
     }
 
     this.closeCurrentHeroSegment(endedAt);
@@ -502,6 +515,18 @@ export function isMatchEndMessage(msg: GepMessage): boolean {
 }
 
 // --- internal mutable state ---------------------------------------------------
+
+/**
+ * A first `round_start` this soon after `match_start` means the feed attached
+ * to a match already under way: a real start puts the ~28 s hero select between
+ * the two (captures: 27–38 s), an attach sends both within ~1 s (2026-11-01).
+ */
+export const LATE_ROUND_START_MS = 5_000;
+
+/** True when a roster row shows any fight already scored. */
+function hasFought(p: RosterPlayer): boolean {
+  return (p.kills ?? 0) > 0 || (p.deaths ?? 0) > 0 || (p.damage ?? 0) > 0;
+}
 
 /** How old a checkpoint may be and still be the match running now — longer than any real match. */
 export const RESUME_MAX_AGE_MS = 90 * 60_000;

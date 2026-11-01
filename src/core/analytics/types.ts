@@ -124,8 +124,9 @@ export interface GameRecord {
    */
   rankAtStart?: RankPosition;
   /**
-   * Match length in whole minutes (the displayed "Duration"): round time on
-   * captures with round events (older records: the wall clock). Not a per-10
+   * Match length in minutes (the displayed "Duration"): round time on captures
+   * with round events (older records: the wall clock). Fractional on newer
+   * captures, whole minutes on older ones and hand logs. Not a per-10
    * divisor — see {@link playedMinutes}.
    */
   durationMinutes?: number;
@@ -145,6 +146,11 @@ export interface GameRecord {
   playedMinutesOverride?: number;
   /** The GEP rounds behind {@link playedMinutes}, when the feed reported them. */
   rounds?: RoundSpan[];
+  /**
+   * The capture began mid-match (see `MatchRecord.joinedLate`): its duration
+   * and played time are short until {@link playedMinutesOverride} fixes them.
+   */
+  joinedLate?: boolean;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   heroes: string[];

@@ -17,6 +17,17 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Fixed
+
+- **Match time is closer to the in-game clock.** Every round now counts from the moment the doors open,
+  the first round included. Before, about 40 seconds of setup in the first round were counted as play,
+  which made match length and per-10 stats slightly off on Push, Control, Flashpoint and Clash.
+- **Duration shows minutes and seconds.** Match pages, the Matches list and Review show `mm:ss` instead of
+  whole minutes.
+- **A match Vantage joined late is marked.** If the app or the game feed only caught a match after it had
+  started, the match page now says its time is short and links straight to **Played time** in **Edit
+  match**, so you can type in the time from the scoreboard.
+
 ## 0.42.0 — 27 October 2026
 
 ### Added

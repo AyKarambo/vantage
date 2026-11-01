@@ -4,7 +4,7 @@ import type { DashboardFilters, MatchFlagKey, MatchRow, Result, TargetGrade } fr
 import { bridge } from '../bridge';
 import { aggregateGrade, dayKey, groupByDay, groupBySitting, UNKNOWN_MAP, decided } from '../../../src/core/analytics';
 import { matchInTargetScope } from '../../../src/core/targets';
-import { pct, prettyDay, rankLabel, relTime, roleLabel, signed, time } from '../format';
+import { formatPlayedTime, pct, prettyDay, rankLabel, relTime, roleLabel, signed, time } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
@@ -508,7 +508,7 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext, mode: Mat
           }, `${(mode === 'column' ? shortRankLabelOf : rankLabel)(m.rankAtStart.tier, m.rankAtStart.division)} · ${Math.round(m.rankAtStart.progressPct)}%`)
         : null;
     case 'duration':
-      return m.durationMinutes != null ? document.createTextNode(`${m.durationMinutes}m`) : null;
+      return m.durationMinutes != null ? document.createTextNode(formatPlayedTime(m.durationMinutes)) : null;
     case 'finalScore':
       return m.finalScore ? document.createTextNode(m.finalScore) : null;
     case 'performance':
