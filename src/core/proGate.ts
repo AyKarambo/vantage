@@ -25,8 +25,8 @@ export function gateDashboard(full: DashboardData, empty: DashboardData, access:
     practice: empty.practice,
     targets: keepTargets ? full.targets : empty.targets,
     focusItems: full.focusItems.map((e) => withoutKey(e, 'progress')),
-    matches: full.matches.map(stripRow),
-    reviewInbox: full.reviewInbox.map(stripRow),
+    matches: full.matches.map(stripMatchRow),
+    reviewInbox: full.reviewInbox.map(stripMatchRow),
     mentalCosts: empty.mentalCosts,
     tiltTrend: empty.tiltTrend,
     tiltBySession: empty.tiltBySession,
@@ -41,7 +41,7 @@ export function gateDashboard(full: DashboardData, empty: DashboardData, access:
 }
 
 /** A match row without the target/practice layer. */
-function stripRow(row: MatchRow): MatchRow {
+export function stripMatchRow(row: MatchRow): MatchRow {
   const { measuredGrades: _m, targetGrades: _t, suggestedFocus: _s, autoBreak: _b, ...rest } = row;
   return rest;
 }

@@ -37,6 +37,9 @@ import { PlacementStore } from '../../src/store/placements';
 import { CheckInStore } from '../../src/store/checkIns';
 import { FriendStore } from '../../src/store/friends';
 import { MasterDataStore } from '../../src/store/masterData';
+import { parseProSimulation } from '../../src/core/entitlement';
+import { createEntitlementService } from '../../src/main/entitlement/service';
+import { simulatedSource } from '../../src/main/entitlement/source';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 import { localDocs } from './localDocs';
@@ -92,6 +95,13 @@ const saveConfig = (): void => configDoc.write(config);
 // prompt (unset) and the honest empty states (off) without Electron.
 const demoParam = params.get('demo');
 if (demoParam === 'on' || demoParam === 'off' || demoParam === 'unset') config.ui.demoPreference = demoParam as DemoPreference;
+
+// ?pro=free|trial|pro|lapsed previews the Vantage Pro tiers (#337) through the
+// same simulator OW_PRO_SIMULATE drives in the app. Absent = ungated, as before.
+const proRecord = parseProSimulation({ OW_PRO_SIMULATE: params.get('pro') ?? undefined }, Date.now());
+const entitlement = proRecord
+  ? createEntitlementService({ source: simulatedSource(proRecord), doc: { read: () => proRecord, write: () => {} } })
+  : undefined;
 
 const appUiSettings = (): AppUiSettings => ({ ...config.ui, runAtLogin: config.runAtLogin });
 
@@ -287,6 +297,7 @@ const pipeline = createMatchPipeline({
 
 const provider = createDataProvider({
   history,
+  ...(entitlement ? { entitlement } : {}),
   manual: new ManualStore(docs),
   rankAnchors: new RankAnchorStore(docs),
   placements: new PlacementStore(docs),

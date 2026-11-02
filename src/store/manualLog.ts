@@ -30,6 +30,24 @@ export class ManualStore {
     return [...this.state.targets];
   }
 
+  /**
+   * Re-stamp every active target's activation through `shift` in one write —
+   * the Vantage Pro lapse→resume pause, so time without access never counts
+   * toward a target going stale (#337, `resumeActivation`).
+   */
+  shiftActivations(shift: (activatedAt: number) => number): void {
+    let changed = false;
+    for (const t of this.state.targets) {
+      if (!t.isActive || t.archivedAt) continue;
+      const next = shift(t.activatedAt ?? t.createdAt);
+      if (next !== t.activatedAt) {
+        t.activatedAt = next;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+  }
+
   /** Upsert a target by id (edit if it already exists, else append). */
   addTarget(target: AuthoredTarget): AuthoredTarget {
     const idx = this.state.targets.findIndex((t) => t.id === target.id);
