@@ -1,5 +1,5 @@
 import {
-  NO_ENTITLEMENT, nextRecord, proAccess, resolveTier,
+  NO_ENTITLEMENT, nextRecord, nextTierChange, proAccess, resolveTier,
   type Entitlement, type EntitlementRecord, type ProAccess,
 } from '../../core/entitlement';
 import type { ProAction, ProActionResult } from '../../shared/contract';
@@ -25,6 +25,10 @@ export interface EntitlementService {
   /** Re-check the source now; resolves with the (possibly unchanged) entitlement. */
   refresh(): Promise<Entitlement>;
   action(kind: ProAction): Promise<ProActionResult>;
+  /** Announce a tier change that time alone caused (no check needed) — call on a timer. */
+  tick(): void;
+  /** When the tier next changes by time alone, if it will. */
+  nextChange(): number | undefined;
 }
 
 /**
@@ -40,8 +44,19 @@ export function createEntitlementService(deps: EntitlementServiceDeps): Entitlem
   let record: EntitlementRecord = readRecord(deps.doc.read());
 
   const tierOf = (r: EntitlementRecord) => resolveTier(r, now()).tier;
+  // The tier the app was last told about — time alone can move it (a trial or
+  // the offline grace running out), and `tick` announces that.
+  let announced = tierOf(record);
+  const announceIfChanged = (): void => {
+    const tier = tierOf(record);
+    if (tier === announced) return;
+    announced = tier;
+    deps.onChange?.();
+  };
 
   return {
+    tick: announceIfChanged,
+    nextChange: () => nextTierChange(record, now()),
     entitlement: () => resolveTier(record, now()),
     access: (demoActive) => proAccess(resolveTier(record, now()), demoActive, deps.source.kind),
     refresh: async () => {
@@ -53,12 +68,11 @@ export function createEntitlementService(deps: EntitlementServiceDeps): Entitlem
       }
       if (fresh) {
         const at = now();
-        const before = tierOf(record);
         const next = nextRecord(record, fresh, at);
         record = next.record;
         deps.doc.write(record);
         if (next.resumedFrom !== undefined) deps.onResume?.(next.resumedFrom, at);
-        if (tierOf(record) !== before) deps.onChange?.();
+        announceIfChanged();
       }
       return resolveTier(record, now());
     },

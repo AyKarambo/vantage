@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  NO_ENTITLEMENT, PRO_GRACE_MS, TRIAL_MS, nextRecord, parseProSimulation, proAccess, resolveTier,
+  NO_ENTITLEMENT, PRO_GRACE_MS, TRIAL_MS, nextRecord, nextTierChange, parseProSimulation, proAccess, resolveTier,
   resumeActivation,
 } from '../src/core/entitlement';
 
@@ -115,5 +115,25 @@ describe('resumeActivation — staleness pauses while lapsed', () => {
 
   it('never moves backwards', () => {
     expect(resumeActivation(NOW, NOW - DAY, NOW - 2 * DAY)).toBe(NOW);
+  });
+});
+
+describe('lapses caused by time alone (review fixes)', () => {
+  it('dates an unannounced grace lapse from the record, and pauses staleness from there', () => {
+    const prev = { plan: 'pro' as const, lastCheckedAt: NOW - 20 * DAY, everPro: true };
+    const { resumedFrom } = nextRecord(prev, { plan: 'pro', lastCheckedAt: NOW }, NOW);
+    expect(resumedFrom).toBe(NOW - 20 * DAY + PRO_GRACE_MS);
+  });
+
+  it('dates an unannounced period end from validUntil', () => {
+    const prev = { plan: 'pro' as const, validUntil: NOW - 3 * DAY, lastCheckedAt: NOW - 4 * DAY, everPro: true };
+    const { record } = nextRecord(prev, { plan: 'none', lastCheckedAt: NOW }, NOW);
+    expect(record.lapsedSince).toBe(NOW - 3 * DAY);
+  });
+
+  it('nextTierChange names the trial end or the grace end, whichever is next', () => {
+    expect(nextTierChange({ plan: 'trial', validUntil: NOW + DAY, lastCheckedAt: NOW }, NOW)).toBe(NOW + DAY);
+    expect(nextTierChange({ plan: 'pro', lastCheckedAt: NOW }, NOW)).toBe(NOW + PRO_GRACE_MS);
+    expect(nextTierChange({ plan: 'none' }, NOW)).toBeUndefined();
   });
 });

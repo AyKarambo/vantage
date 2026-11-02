@@ -21,7 +21,8 @@ export function gateDashboard(full: DashboardData, empty: DashboardData, access:
   return {
     ...full,
     pro: access,
-    readiness: empty.readiness,
+    // The verdict is withheld; the main-account pick (free — Settings › Accounts) is kept.
+    readiness: { ...empty.readiness, mainAccount: full.readiness.mainAccount },
     practice: empty.practice,
     targets: keepTargets ? full.targets : empty.targets,
     focusItems: full.focusItems.map((e) => withoutKey(e, 'progress')),

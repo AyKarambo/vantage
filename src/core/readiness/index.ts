@@ -48,7 +48,7 @@ export type {
 export { DEFAULT_READINESS, normalizeReadiness, READINESS_TUNING } from './constants';
 export { detectSessions } from './sessions';
 export { localDayKey, dayOrdinal } from './day';
-export { EMPTY_CONTEXT } from './performance';
+export { EMPTY_CONTEXT, mainAccountOf } from './performance';
 export type { ReadinessContext } from './performance';
 // Readiness help wiki (readiness-help-docs) — curated scenario library, the
 // nearest-scenario matcher, and the personalized score walkthrough. Pure data +

@@ -419,13 +419,22 @@ function main(): void {
   const simulatedPro = app.isPackaged ? undefined : parseProSimulation(process.env, Date.now());
   const entitlement = createEntitlementService({
     source: simulatedPro ? simulatedSource(simulatedPro) : noneSource,
-    doc: jsonFiles(app.getPath('userData'))('entitlement.json'),
+    // A simulation never touches the real cache — it would otherwise leave a
+    // sticky `everPro` behind and turn the next unsimulated run into "lapsed".
+    doc: simulatedPro
+      ? { read: () => simulatedPro, write: () => {} }
+      : jsonFiles(app.getPath('userData'))('entitlement.json'),
     onChange: () => events.emit('onDataChanged', undefined),
     onResume: (lapsedSince, resumedAt) =>
       manual.shiftActivations((at) => resumeActivation(at, lapsedSince, resumedAt)),
     log: (message, fields) => log.info('pro', message, fields),
   });
   void entitlement.refresh();
+  // Re-check every few hours (so a running Pro app never coasts into the
+  // offline grace), and look each minute for a tier change time alone caused —
+  // a trial or grace period ending mid-session refreshes the open windows.
+  setInterval(() => void entitlement.refresh(), 6 * 60 * 60_000).unref();
+  setInterval(() => entitlement.tick(), 60_000).unref();
 
   const dataProvider = createDataProvider({
     history,

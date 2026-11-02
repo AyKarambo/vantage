@@ -16,6 +16,8 @@ export class ProRequiredError extends Error {
 export const PRO_TARGET_WRITES = [
   'saveTarget', 'updateTarget', 'setTargetActive', 'setTargetArchived', 'deleteTarget',
   'deactivateAllTargets', 'suggestThreshold',
+  // Settings only Pro screens read — the Readiness/Mental demo preview must not write the real ones.
+  'setReadiness', 'setStaleness', 'setGrading',
 ] as const satisfies readonly (keyof DataProvider)[];
 
 /**
@@ -43,7 +45,7 @@ export function proGuarded(provider: DataProvider): DataProvider {
   return out;
 }
 
-/** A review re-saved without Pro carries the match's already-stored grades and focus, untouched. */
+/** A review re-saved without Pro carries the match's already-stored grades, focus and break mark, untouched. */
 function keepStoredTargetLayer(provider: DataProvider, input: ReviewInput): ReviewInput {
   const stored = provider.games().find((g) => g.matchId === input.matchId)?.review;
   const { focusTargetIds: _drop, ...rest } = input;
@@ -51,6 +53,8 @@ function keepStoredTargetLayer(provider: DataProvider, input: ReviewInput): Revi
     ...rest,
     grades: stored?.grades ?? {},
     ...(stored?.focusTargetIds ? { focusTargetIds: stored.focusTargetIds } : {}),
+    // The break mark is a practice-mode control, so a free card never sends one.
+    ...(rest.breakBefore === undefined && stored?.breakBefore !== undefined ? { breakBefore: stored.breakBefore } : {}),
   };
 }
 

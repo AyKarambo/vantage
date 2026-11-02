@@ -10,7 +10,7 @@ import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
 import { enteringRanks, rankKey } from '../../core/rank';
-import { safeReadiness, type ReadinessSummary } from '../../core/readiness';
+import { mainAccountOf, safeReadiness, type ReadinessSummary } from '../../core/readiness';
 import { gateDashboard, stripMatchRow } from '../../core/proGate';
 import type { AuthoredTarget } from '../../core/targets';
 import type {
@@ -146,7 +146,8 @@ export function dashboardRead(
     provider.demoContext(),
     {
       ...manualData(provider),
-      readinessSummary: empty ? empty.readiness : memoizedReadiness(all, provider),
+      // The main-account pick is free (Settings › Accounts orders by it); only the verdict is Pro.
+      readinessSummary: empty ? { ...empty.readiness, mainAccount: mainAccountOf(all) } : memoizedReadiness(all, provider),
     },
     provider.effectiveMasterData(),
     // Held "needs result" matches ride on the same payload the Review screen
@@ -240,7 +241,7 @@ export function matchDetailRead(
   // Same active-measured set + partial margin the dashboard rows use, so the
   // match-detail Grades card shows calculated grades identically.
   const activeMeasured = gradableMeasured(provider);
-  return matchDetail(
+  const detail = matchDetail(
     games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured,
     provider.getGrading().partialMargin,
     resetBoundaryFor(provider, games, matchId),
@@ -248,6 +249,10 @@ export function matchDetailRead(
     // report a per-match rank built from ±% every other surface is holding back.
     suppressedMatchIds(games, provider.placementRuns()),
   );
+  // Without Pro the stored self-grades and focus stay on disk but out of the payload (#337).
+  if (!detail?.review || provider.proAccess().full) return detail;
+  const { grades: _g, focusTargetIds: _f, ...review } = detail.review;
+  return { ...detail, review: { ...review, grades: {} } };
 }
 
 /**

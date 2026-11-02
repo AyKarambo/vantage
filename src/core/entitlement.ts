@@ -145,10 +145,32 @@ export function nextRecord(
   const nowFull = isProTier(resolveTier({ ...fresh, everPro }, now).tier);
   const base: EntitlementRecord = { ...fresh, everPro, lastCheckedAt: fresh.lastCheckedAt ?? now };
   delete base.lapsedSince;
-  if (!nowFull) return { record: { ...base, lapsedSince: prev.lapsedSince ?? (wasFull || everPro ? now : undefined) } };
-  return prev.lapsedSince !== undefined && !wasFull
-    ? { record: base, resumedFrom: prev.lapsedSince }
+  // Access can run out with no check in between (grace or paid period ended
+  // while the app sat idle): date that lapse from the record itself, not `now`.
+  const lapsedFrom = prev.lapsedSince ?? (wasFull ? undefined : expiredAt(prev));
+  if (!nowFull) return { record: { ...base, lapsedSince: lapsedFrom ?? (wasFull || everPro ? now : undefined) } };
+  return lapsedFrom !== undefined && !wasFull
+    ? { record: base, resumedFrom: lapsedFrom }
     : { record: base };
+}
+
+/** When a cached paid plan stopped granting access by itself — period end or grace end, whichever came first. */
+function expiredAt(r: EntitlementRecord): number | undefined {
+  if (r.plan !== 'pro') return undefined;
+  const grace = r.lastCheckedAt !== undefined ? r.lastCheckedAt + PRO_GRACE_MS : undefined;
+  const ends = [r.validUntil, grace].filter((t): t is number => t !== undefined);
+  return ends.length ? Math.min(...ends) : undefined;
+}
+
+/**
+ * The next moment the tier changes by time alone (trial/period end, grace
+ * end), so a running app can re-render then instead of at the next check.
+ */
+export function nextTierChange(record: EntitlementRecord, now: number): number | undefined {
+  const at = [record.validUntil, record.plan === 'pro' && record.lastCheckedAt !== undefined
+    ? record.lastCheckedAt + PRO_GRACE_MS : undefined]
+    .filter((t): t is number => t !== undefined && t > now);
+  return at.length ? Math.min(...at) : undefined;
 }
 
 /**

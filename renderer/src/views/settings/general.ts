@@ -92,12 +92,14 @@ export function generalTab(ctx: ViewContext): HTMLElement {
           hint: full
             ? 'Lead Mental and Review with your targets, the optional check-in questions, and how breaks are read.'
             : 'The optional check-in questions, and how breaks are read.',
-          jump: { label: 'See it on Mental →', view: 'mental' },
+          // Mental is Pro (#337): no jump into a lock page from a free setting.
+          ...(full ? { jump: { label: 'See it on Mental →', view: 'mental' as const } } : {}),
         }, coachingSettingsEditor(ctx, { proFocus: full })),
         coachingBlock(ctx, {
           title: 'Break reminder',
           hint: 'A tray nudge after N losses in a row, so a tilt spiral does not run unnoticed.',
-          jump: { label: 'See it on Mental →', view: 'mental' },
+          // Mental is Pro (#337): no jump into a lock page from a free setting.
+          ...(full ? { jump: { label: 'See it on Mental →', view: 'mental' as const } } : {}),
         }, breakReminderEditor(ctx)),
         full ? coachingBlock(ctx, {
           title: 'Readiness coach',

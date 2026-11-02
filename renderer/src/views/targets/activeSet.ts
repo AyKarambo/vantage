@@ -29,7 +29,7 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
 
   const activeChips = active.length
     ? active.map((t) => readOnly
-        ? readOnlyChip(t, now, ctx)
+        ? readOnlyChip(t)
         : activeChip(t, now, ctx, () => refreshAfter(bridge.setTargetActive(t.id, false))))
     : [h('span', { class: 'u-dim', style: { fontSize: '12px' } }, readOnly ? 'No active targets.' : 'No active targets — add one below to start grading.')];
 
@@ -80,12 +80,12 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
 }
 
 /** Read-only twin of `activeChip`: same look and stale marker, but not clickable. */
-function readOnlyChip(t: TargetSummary, now: number, ctx: ViewContext): HTMLElement {
-  const stale = isStale(t.activatedAt, t.matchesSinceActive, now, ctx.data.staleness);
-  return h('span', { class: stale ? 'chip is-on chip--stale' : 'chip is-on' },
-    t.name,
-    stale ? h('span', { style: { marginLeft: '6px', opacity: '0.85' } }, '· stale') : null,
-  );
+/**
+ * A read-only active target. No stale cue: the staleness clock is paused while
+ * Pro is lapsed (#337) and catches up on renewal, so 'stale' here would be wrong.
+ */
+function readOnlyChip(t: TargetSummary): HTMLElement {
+  return h('span', { class: 'chip is-on' }, t.name);
 }
 
 /** One active target as a removable chip, with a staleness nudge when it's overdue for rotation. */

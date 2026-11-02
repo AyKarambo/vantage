@@ -134,3 +134,20 @@ describe('ManualStore.shiftActivations — the lapse pause', () => {
     expect(by).toEqual({ a: 150, b: 100, c: 100 });
   });
 });
+
+describe('EntitlementService.tick — time-only tier changes', () => {
+  it('announces once when the grace runs out with no check', () => {
+    let now = NOW;
+    const onChange = vi.fn();
+    const svc = createEntitlementService({
+      source: noneSource, doc: memDoc({ plan: 'pro', lastCheckedAt: NOW, everPro: true }), now: () => now, onChange,
+    });
+    svc.tick();
+    expect(onChange).not.toHaveBeenCalled();
+    now = NOW + 8 * DAY;
+    svc.tick();
+    svc.tick();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(svc.nextChange()).toBeUndefined();
+  });
+});

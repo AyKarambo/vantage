@@ -8,6 +8,7 @@ import type { EntitlementRecord } from '../src/core/entitlement';
 import type { GameRecord } from '../src/core/analytics';
 import { generateSampleGames } from '../src/core/sampleData';
 import { providerHarness } from './providerFixtures';
+import { dashboardRead, matchDetailRead } from '../src/main/dashboard/reads';
 
 const NOW = Date.now();
 const FREE: EntitlementRecord = { plan: 'none', lastCheckedAt: NOW };
@@ -87,5 +88,37 @@ describe('MCP pro-required guard', () => {
   it('pro: reads are served', async () => {
     const dispatch = createDispatcher(harness(PRO).provider);
     await expect(Promise.resolve(dispatch('dashboard', {}))).resolves.toBeDefined();
+  });
+});
+
+describe('review-fix regressions', () => {
+  it('lapsed: re-saving keeps a stored break mark', () => {
+    const games = generateSampleGames(40, 3);
+    const id = games[0].matchId;
+    games[0] = { ...games[0], review: { at: 1, grades: {}, flags: {}, breakBefore: true } };
+    const { provider, history } = harness(LAPSED, games);
+    provider.saveReview({ matchId: id, grades: {}, flags: { tilt: true } });
+    expect(history.all().find((x) => x.matchId === id)!.review?.breakBefore).toBe(true);
+  });
+
+  it('free: Pro-only settings writes are refused', () => {
+    const { provider } = harness(FREE);
+    expect(() => provider.setStaleness({ staleAfterDays: 3, staleAfterMatches: 3 })).toThrow(ProRequiredError);
+  });
+
+  it('free: match detail carries no stored self-grades', () => {
+    const games = generateSampleGames(40, 3);
+    games[0] = { ...games[0], review: { at: 1, grades: { t1: 'hit' }, flags: { tilt: true }, focusTargetIds: ['t1'] } };
+    const { provider } = harness(FREE, games);
+    const d = matchDetailRead(provider, games[0].matchId, {});
+    expect(d?.review?.grades).toEqual({});
+    expect(d?.review?.focusTargetIds).toBeUndefined();
+    expect(d?.review?.flags).toEqual({ tilt: true });
+  });
+
+  it('free: the main-account pick survives the readiness gate', () => {
+    const { provider } = harness(FREE);
+    const d = dashboardRead(provider, {});
+    expect(d.readiness.mainAccount).not.toBeNull();
   });
 });

@@ -602,7 +602,7 @@ function bottomRow(ctx: ViewContext): HTMLElement {
     h('div', { class: 'hint', style: { marginTop: '11px', lineHeight: '1.45' } },
       r.enabled
         ? h('span', null, 'Break reminder is ', h('span', { class: 'is-win' }, 'on'), ` after ${r.afterLosses} losses.`)
-        : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Mental.')),
+        : h('span', { class: 'u-dim' }, 'Break reminder is off — turn it on in Settings › Coaching.')),
     stopRuleLine(ctx),
   );
 
