@@ -22,6 +22,7 @@ import {
   CHECK_IN_SLEEP_LABELS, type CheckInInput, type CheckInMood,
 } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
+import { gradableTargets, practiceOn } from '../proData';
 
 export function checkInPrompt(ctx: ViewContext): HTMLElement | null {
   // A mood check-in about a sample season means nothing, and would otherwise
@@ -39,8 +40,8 @@ export function checkInPrompt(ctx: ViewContext): HTMLElement | null {
   }
 
   const q = ctx.data.coachingSettings.checkInQuestions;
-  const focusTargets = ctx.data.practice.on
-    ? ctx.data.targets.filter((t) => t.isActive && !t.archivedAt && t.mode !== 'measured')
+  const focusTargets = practiceOn(ctx.data)
+    ? gradableTargets(ctx.data).filter((t) => t.mode !== 'measured')
     : [];
   const extended = q.sleep || q.energy || q.ate || focusTargets.length > 0;
 

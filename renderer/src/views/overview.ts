@@ -607,7 +607,7 @@ function bottomRow(ctx: ViewContext): HTMLElement {
   );
 
   return h('div', { class: 'overview-bottom' },
-    activityCard(ctx), mental, readinessCard(ctx), activeTargetsCard(ctx), overviewHeroesCard(ctx));
+    activityCard(ctx), mental, readinessCard(ctx), d.pro.full ? activeTargetsCard(ctx) : null, overviewHeroesCard(ctx));
 }
 
 /**
@@ -708,7 +708,8 @@ const READINESS_META: Record<string, { label: string; color: string }> = {
  *  screen. Exported for the Live screen's idle "before you queue" briefing (S1). */
 export function readinessCard(ctx: ViewContext): HTMLElement | null {
   const d = ctx.data;
-  if (!d.readinessSettings.enabled) return null;
+  // Readiness is Vantage Pro (#337): no teaser without access — the nav badge is the only hint.
+  if (!d.pro.full || !d.readinessSettings.enabled) return null;
   const r = d.readiness;
   const meta = READINESS_META[r.band] ?? READINESS_META['insufficient-data'];
   const showScore = r.score !== null && r.confidence !== 'low';
