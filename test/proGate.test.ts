@@ -29,7 +29,7 @@ describe('gateDashboard', () => {
     expect(full.targets.length).toBeGreaterThan(0); // the fixture really has Pro data to strip
     const d = gateDashboard(full, empty, free);
     expect(d.pro).toBe(free);
-    expect(d.readiness).toEqual(empty.readiness);
+    expect(d.readiness).toEqual({ ...empty.readiness, mainAccount: full.readiness.mainAccount });
     expect(d.practice).toEqual(empty.practice);
     expect(d.targets).toEqual([]);
     expect(d.mentalCosts).toEqual(empty.mentalCosts);
@@ -66,7 +66,7 @@ describe('gateDashboard', () => {
   it('lapsed keeps the targets list (read-only) but withholds the rest', () => {
     const d = gateDashboard(full, empty, lapsed);
     expect(d.targets).toBe(full.targets);
-    expect(d.readiness).toEqual(empty.readiness);
+    expect(d.readiness).toEqual({ ...empty.readiness, mainAccount: full.readiness.mainAccount });
     expect(d.practice).toEqual(empty.practice);
   });
 });
