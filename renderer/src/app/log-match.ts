@@ -37,6 +37,7 @@ import type {
   AccountSummary, MatchMental, PlacementRunSummary, RankEntryPreview, RankSummary, Result, Role, TargetGrade, TargetSummary,
 } from '../../../src/shared/contract';
 import type { ViewContext } from '../views/view';
+import { gradableTargets, practiceOn } from '../proData';
 
 const ROLE_LABELS: Record<string, Role> = { Tank: 'tank', Damage: 'damage', Support: 'support', 'Open Queue': 'openQ' };
 
@@ -230,7 +231,7 @@ function buildForm(
   };
 
   const grades: Record<string, TargetGrade> = {};
-  const activeTargets = ctx.data.targets.filter((t) => t.isActive && !t.archivedAt);
+  const activeTargets = gradableTargets(ctx.data);
   // Set once the targets block exists; role / hero / map changes call it to re-scope the targets.
   let repaintTargets = (): void => {};
 
@@ -647,7 +648,7 @@ function buildForm(
   // Practice mode (#321): the same "What did you work on this game?" chooser
   // Review uses — only the chosen self-rated targets get graded (measured
   // ones grade themselves from stats), plus the break mark.
-  const practice = ctx.data.practice.on;
+  const practice = practiceOn(ctx.data);
   // Role / hero / map-scoped targets follow the form, like Review: a Genji
   // target isn't on offer for a Sojourn game. Heroes and map only narrow once
   // picked, so a scoped target doesn't vanish before you've said who you played.
@@ -797,7 +798,7 @@ function buildForm(
         h('div', { class: 'log-col' },
           field('Result', resultRow), mapField, roleField, heroField, rankHost),
         h('div', { class: 'log-col' },
-          performanceBlock, commsBlock, flagsBlock, partyBlock, targetsBlock, playedField),
+          performanceBlock, commsBlock, flagsBlock, partyBlock, ctx.data.pro.full ? targetsBlock : null, playedField),
       ),
     ),
     actions,

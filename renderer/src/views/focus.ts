@@ -34,7 +34,8 @@ export function focus(ctx: ViewContext): HTMLElement {
     card({ variant: 'glow', title: 'Build a focus routine' },
       h('p', { class: 'hint', style: { lineHeight: '1.6', margin: '0 0 12px' } },
         'Practice your bottom three before ranked and review one replay each. Small, repeatable — that is how the deficit closes.'),
-      button('Start a routine →', { variant: 'primary', onClick: () => ctx.navigate('targets') }),
+      // Targets are Vantage Pro (#337): the advice stays free, the jump into the builder doesn't.
+      d.pro.full ? button('Start a routine →', { variant: 'primary', onClick: () => ctx.navigate('targets') }) : null,
     ),
   );
 }

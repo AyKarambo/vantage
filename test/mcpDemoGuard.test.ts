@@ -1,3 +1,4 @@
+import { FULL_PRO_ACCESS } from '../src/core/entitlement';
 import { describe, it, expect } from 'vitest';
 import { createDispatcher, McpOpError } from '../src/main/mcp/dispatch';
 import { READ_OPS, ADDITIVE_WRITE_OPS, DESTRUCTIVE_OPS, type McpOp } from '../src/shared/mcp/ops';
@@ -29,6 +30,7 @@ function provider(demo: boolean): { p: DataProvider; mutations: string[] } {
     pendingMatches: () => [],
     manualTargets: () => [],
     demoContext: () => ({ active: demo, preference: demo ? 'on' : 'off', hasRealHistory: !demo }),
+    proAccess: () => FULL_PRO_ACCESS,
     isSample: () => demo,
     historyRevision: () => 'rev-1',
     effectiveMasterData: () => DEFAULT_MASTER_DATA,

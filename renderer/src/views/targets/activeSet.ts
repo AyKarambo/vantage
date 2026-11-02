@@ -11,6 +11,7 @@ import { isStale } from '../../../../src/core/staleness';
 import { button, card, select } from '../../components/primitives';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
+import { targetsReadOnly } from '../../proAccess';
 import type { ViewContext } from '../view';
 
 /** More active targets than this gets the soft "1–2 work best" hint (#321). */
@@ -23,13 +24,16 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
   const active = live.filter((t) => t.isActive);
   const inactive = live.filter((t) => !t.isActive);
   const now = Date.now();
+  const readOnly = targetsReadOnly(ctx.data.pro);
   const refreshAfter = (p: Promise<void>): void => { void p.then(() => ctx.refresh()); };
 
   const activeChips = active.length
-    ? active.map((t) => activeChip(t, now, ctx, () => refreshAfter(bridge.setTargetActive(t.id, false))))
-    : [h('span', { class: 'u-dim', style: { fontSize: '12px' } }, 'No active targets — add one below to start grading.')];
+    ? active.map((t) => readOnly
+        ? readOnlyChip(t)
+        : activeChip(t, now, ctx, () => refreshAfter(bridge.setTargetActive(t.id, false))))
+    : [h('span', { class: 'u-dim', style: { fontSize: '12px' } }, readOnly ? 'No active targets.' : 'No active targets — add one below to start grading.')];
 
-  const controls = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', flexWrap: 'wrap' } },
+  const controls = readOnly ? null : h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', flexWrap: 'wrap' } },
     inactive.length
       ? select(
           [{ value: '', label: '＋ add a target…' }, ...inactive.map((t) => ({ value: t.id, label: t.name }))],
@@ -73,6 +77,15 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
       : null,
     controls,
   );
+}
+
+/** Read-only twin of `activeChip`: same look and stale marker, but not clickable. */
+/**
+ * A read-only active target. No stale cue: the staleness clock is paused while
+ * Pro is lapsed (#337) and catches up on renewal, so 'stale' here would be wrong.
+ */
+function readOnlyChip(t: TargetSummary): HTMLElement {
+  return h('span', { class: 'chip is-on' }, t.name);
 }
 
 /** One active target as a removable chip, with a staleness nudge when it's overdue for rotation. */

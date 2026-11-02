@@ -121,6 +121,8 @@ export type McpErrorCode =
   | 'needs-confirmation'
   /** Demo/sample data is active, so writes are refused. */
   | 'demo-mode'
+  /** The user has no Vantage Pro access (free or lapsed) — the MCP server is a Pro feature (#337). */
+  | 'pro-required'
   /** Anything else — an actual bug, surfaced honestly rather than as user error. */
   | 'internal';
 

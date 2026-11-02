@@ -220,7 +220,8 @@ export function matches(ctx: ViewContext): HTMLElement {
     // override, never written back to the stored pref, so leaving the
     // drill-down restores whatever the player actually configured.
     const storedColumns = prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT;
-    const columns = flag ? { ...storedColumns, flags: 'inline' as const } : storedColumns;
+    const visibleColumns = withProColumns(storedColumns, ctx.data.pro.full);
+    const columns = flag ? { ...visibleColumns, flags: 'inline' as const } : visibleColumns;
 
     // Honesty (M1): `matches` itself silently caps at MATCHES_PAGE_SIZE rows,
     // so the header used to claim a count that could flatly disagree with
@@ -253,7 +254,7 @@ export function matches(ctx: ViewContext): HTMLElement {
 
     const headActions: Node[] = [];
     if (!day) headActions.push(groupingToggle(grouping));
-    headActions.push(customizeViewButton());
+    headActions.push(customizeViewButton(ctx.data.pro.full));
     render(headHost, viewHead('Matches', headline, headActions));
 
     render(scopeHost, day || flag || map ? drillDownChip(ctx, day, flag, map, allMatches) : null);
@@ -356,18 +357,18 @@ function groupingToggle(value: 'day' | 'sitting'): HTMLElement {
 }
 
 /** "Customize view" affordance — opens the per-field hidden/inline/column popover (spec F1). */
-function customizeViewButton(): HTMLElement {
+function customizeViewButton(pro: boolean): HTMLElement {
   const btn = button('Customize view', { variant: 'soft' });
-  btn.addEventListener('click', () => openCustomizeViewPopover(btn));
+  btn.addEventListener('click', () => openCustomizeViewPopover(btn, pro));
   return btn;
 }
 
-function openCustomizeViewPopover(anchor: HTMLElement): void {
+function openCustomizeViewPopover(anchor: HTMLElement, pro: boolean): void {
   openPopover(anchor, () => {
     const current = { ...MATCH_COLUMNS_DEFAULT, ...(prefs.get('matchColumns') ?? MATCH_COLUMNS_DEFAULT) };
     return h('div', { class: 'stack', style: { gap: '10px', minWidth: '260px' } },
       h('div', { class: 'gep-popover-title' }, 'Customize view'),
-      ...FIELD_ORDER.map((key) => customizeViewRow(key, current)),
+      ...FIELD_ORDER.filter((key) => pro || key !== 'measuredGrades').map((key) => customizeViewRow(key, current)),
     );
   });
 }
@@ -629,6 +630,15 @@ function heroLinks(m: MatchRow, ctx: ViewContext): HTMLElement {
       onClick: (e) => { e.stopPropagation(); openHeroDrawer(ctx, hero); },
     }),
   ]));
+}
+
+/**
+ * The "Target grades" field is Vantage Pro (#337): without access it's hidden
+ * for this render only — the stored preference is untouched, so it comes back
+ * as the player set it once Pro does.
+ */
+function withProColumns(columns: MatchColumnsPref, pro: boolean): MatchColumnsPref {
+  return pro ? columns : { ...columns, measuredGrades: 'hidden' };
 }
 
 function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTMLElement {

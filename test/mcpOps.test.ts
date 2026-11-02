@@ -1,3 +1,4 @@
+import { FULL_PRO_ACCESS } from '../src/core/entitlement';
 import { describe, it, expect } from 'vitest';
 import { createDispatcher, McpOpError } from '../src/main/mcp/dispatch';
 import type { DataProvider } from '../src/main/dashboard/provider';
@@ -59,6 +60,7 @@ function setup(over: {
     pendingMatches: () => over.pending ?? [],
     manualTargets: () => over.targets ?? [],
     demoContext: () => ({ active: over.demo ?? false, preference: 'off', hasRealHistory: true }),
+    proAccess: () => FULL_PRO_ACCESS,
     isSample: () => over.demo ?? false,
     historyRevision: () => 'rev-1',
     effectiveMasterData: () => master,

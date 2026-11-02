@@ -15,6 +15,8 @@ import { builderCard } from './builder';
 import { activeSetCard } from './activeSet';
 import { libraryCard } from './library';
 import { libraryBrowserCard } from './libraryBrowser';
+import { targetsReadOnly } from '../../proAccess';
+import { purchaseButtons, purchaseHint } from '../../components/proLock';
 
 /** Params objects already applied to the builder. `setView` builds a fresh
  *  params object per navigation while data refreshes keep the same reference,
@@ -30,7 +32,29 @@ const consumedEditParams = new WeakSet<ViewParams>();
  */
 let builderManuallyOpened = false;
 
+/** Read-only Targets (lapsed Pro, or the demo preview): the list and hit rates, no builder or lifecycle controls. */
+function readOnlyTargets(ctx: ViewContext): HTMLElement {
+  const access = ctx.data.pro;
+  const lapsed = !access.demo;
+  const live = ctx.data.targets.filter((t) => !t.archivedAt);
+  return h('div', { class: 'view view--narrow' },
+    viewHead('Targets', 'Self-rated by default, measurable if you want — pick per target'),
+    lapsed
+      ? card({ variant: 'raised' },
+          h('div', null, 'Read-only — your Vantage Pro access ended. Your targets and their history are kept; renew to edit and grade them again.'),
+          h('div', { style: { display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' } }, ...purchaseButtons(access)),
+          purchaseHint(access),
+        )
+      : null,
+    activeSetCard(ctx),
+    live.length
+      ? libraryCard(ctx)
+      : card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' }, emptyState('No targets saved.', true)),
+  );
+}
+
 export function targets(ctx: ViewContext): HTMLElement {
+  if (targetsReadOnly(ctx.data.pro)) return readOnlyTargets(ctx);
   // Real mode with no authored targets shows an honest empty state (not the
   // demo sample library, and not an empty "Your targets" shell) — and is the
   // only case that still opens the builder first: a returning player with a

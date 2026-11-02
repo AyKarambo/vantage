@@ -382,6 +382,46 @@
   background: var(--accent-soft);
   color: var(--accent-text-2);
 }
+.badge--pro {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+/* Vantage Pro lock page + demo-preview strip (#337). */
+.pro-lock {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pro-lock-head {
+  font-size: 16px;
+  font-weight: 600;
+}
+.pro-lock-points {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+}
+.pro-lock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pro-preview-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--warn-border);
+  background: var(--warn-soft);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
 .badge--auto {
   background: var(--win-soft);
   color: var(--win-text);

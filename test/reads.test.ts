@@ -1,3 +1,4 @@
+import { FULL_PRO_ACCESS } from '../src/core/entitlement';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   competitiveOnly, seasonStarts, filteredCompetitiveGames,
@@ -49,6 +50,7 @@ function fakeProvider(
   const partial: Partial<DataProvider> = {
     games: () => { calls.games += 1; return over.games ?? []; },
     demoContext: () => ({ active: false, preference: 'off', hasRealHistory: true }),
+    proAccess: () => FULL_PRO_ACCESS,
     manualTargets: () => [],
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,
     getStaleness: () => DEFAULT_STALENESS,

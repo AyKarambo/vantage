@@ -10,7 +10,9 @@ import { makeMapMode } from '../../core/masterData';
 import { isCompetitive } from '../../core/matchFilter';
 import { resetBoundaries, suppressedMatchIds } from '../../core/placements';
 import { enteringRanks, rankKey } from '../../core/rank';
-import { safeReadiness, type ReadinessSummary } from '../../core/readiness';
+import { mainAccountOf, safeReadiness, type ReadinessSummary } from '../../core/readiness';
+import { gateDashboard, stripMatchRow } from '../../core/proGate';
+import type { AuthoredTarget } from '../../core/targets';
 import type {
   DashboardFilters, DashboardData, HeroDetail, MatchDetail, MatchRow, PlayerList, PlayerListQuery,
   PlayerMatchHistory, PlayerRecord,
@@ -133,28 +135,79 @@ export function dashboardRead(
   // not a second parse, and lets memoizedReadiness reuse the same array
   // instead of re-reading the table itself (W8).
   const all = competitiveOnly(provider.games());
-  return computeDashboard(
+  const access = provider.proAccess();
+  // Vantage Pro (#337): without full access the coaching layer is withheld —
+  // its fields carry the values an empty history yields (type-safe neutral
+  // values), and the ~80ms readiness walk is skipped entirely.
+  const empty = access.full ? undefined : neutralDashboard(provider, filters);
+  const full = computeDashboard(
     all,
     filters ?? {},
     provider.demoContext(),
     {
-      targets: provider.manualTargets(),
-      breakReminder: provider.getBreakReminder(),
-      staleness: provider.getStaleness(),
-      readiness: provider.getReadiness(),
-      readinessSummary: memoizedReadiness(all, provider),
-      sessionSettings: provider.getSessionSettings(),
-      coaching: provider.getCoaching(),
-      grading: provider.getGrading(),
-      rankAnchors: provider.rankAnchorMap(),
-      placementRuns: provider.placementRuns(),
-      checkIns: provider.getCheckIns(),
+      ...manualData(provider),
+      // The main-account pick is free (Settings › Accounts orders by it); only the verdict is Pro.
+      readinessSummary: empty ? { ...empty.readiness, mainAccount: mainAccountOf(all) } : memoizedReadiness(all, provider),
     },
     provider.effectiveMasterData(),
     // Held "needs result" matches ride on the same payload the Review screen
     // reads — sourced from the SEPARATE pending store, never from history.
     provider.pendingMatches(),
   );
+  return gateDashboard(full, empty ?? full, access);
+}
+
+/** The manual-layer inputs every dashboard composition shares. */
+function manualData(provider: DataProvider, targets: AuthoredTarget[] = provider.manualTargets()) {
+  return {
+    targets,
+    breakReminder: provider.getBreakReminder(),
+    staleness: provider.getStaleness(),
+    readiness: provider.getReadiness(),
+    sessionSettings: provider.getSessionSettings(),
+    coaching: provider.getCoaching(),
+    grading: provider.getGrading(),
+    rankAnchors: provider.rankAnchorMap(),
+    placementRuns: provider.placementRuns(),
+    checkIns: provider.getCheckIns(),
+  };
+}
+
+/** The snapshot of NO games (demo off, no targets) — the neutral values a gated payload carries. */
+function neutralDashboard(provider: DataProvider, filters: DashboardFilters | undefined): DashboardData {
+  return computeDashboard(
+    [], filters ?? {}, { ...provider.demoContext(), active: false },
+    { ...manualData(provider, []), checkIns: [] },
+    provider.effectiveMasterData(), [],
+  );
+}
+
+/**
+ * "View with demo data" on a Pro lock page (#337): the full dashboard over the
+ * demo dataset, whatever the user's real history. Its access is full (every
+ * Pro screen renders) but targets read-only — it is a preview, and the demo
+ * targets aren't the user's to edit.
+ */
+export function proPreviewRead(provider: DataProvider, filters: DashboardFilters | undefined): DashboardData {
+  const data = computeDashboard(
+    competitiveOnly(provider.sampleGames()),
+    filters ?? {},
+    { ...provider.demoContext(), active: true },
+    { ...manualData(provider, []), checkIns: [] },
+    provider.effectiveMasterData(),
+    [],
+  );
+  return { ...data, pro: { ...provider.proAccess(), full: true, targets: 'read-only', demo: true } };
+}
+
+/** The active measured targets a row or detail may grade against — none without Pro. */
+function gradableMeasured(provider: DataProvider) {
+  return provider.proAccess().full ? activeMeasuredTargets(provider.manualTargets()) : [];
+}
+
+/** A match row as the viewer's Pro access allows. */
+function rowFor(provider: DataProvider): (row: MatchRow) => MatchRow {
+  return provider.proAccess().full ? (row) => row : stripMatchRow;
 }
 
 /** One hero's drilldown over the filtered, competitive-only history. */
@@ -187,8 +240,8 @@ export function matchDetailRead(
   const filtered = applyFilters(games, filters ?? {}, master.seasons.map((s) => s.start));
   // Same active-measured set + partial margin the dashboard rows use, so the
   // match-detail Grades card shows calculated grades identically.
-  const activeMeasured = activeMeasuredTargets(provider.manualTargets());
-  return matchDetail(
+  const activeMeasured = gradableMeasured(provider);
+  const detail = matchDetail(
     games, matchId, filtered, provider.rankAnchorMap(), mapModeOf, activeMeasured,
     provider.getGrading().partialMargin,
     resetBoundaryFor(provider, games, matchId),
@@ -196,6 +249,10 @@ export function matchDetailRead(
     // report a per-match rank built from ±% every other surface is holding back.
     suppressedMatchIds(games, provider.placementRuns()),
   );
+  // Without Pro the stored self-grades and focus stay on disk but out of the payload (#337).
+  if (!detail?.review || provider.proAccess().full) return detail;
+  const { grades: _g, focusTargetIds: _f, ...review } = detail.review;
+  return { ...detail, review: { ...review, grades: {} } };
 }
 
 /**
@@ -213,7 +270,7 @@ export function matchesPageRead(
 ): MatchRow[] {
   const masterData = provider.effectiveMasterData();
   const mapModeOf = makeMapMode(masterData.maps);
-  const activeMeasured = activeMeasuredTargets(provider.manualTargets());
+  const activeMeasured = gradableMeasured(provider);
   const margin = provider.getGrading().partialMargin;
   const suppressed = suppressedMatchIds(competitiveOnly(provider.games()), provider.placementRuns());
   // The in-list filter row (M2, `input.text`) narrows WHICH games are
@@ -225,7 +282,7 @@ export function matchesPageRead(
     ? matchesFilter(filteredCompetitiveGames(provider, input.filters), mapModeOf, input.text)
     : filteredCompetitiveGames(provider, input.filters);
   const { rows } = selectMatches(games, { before: input.before, limit: input.limit });
-  return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
+  return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)).map(rowFor(provider));
 }
 
 /**
@@ -240,12 +297,12 @@ export function searchMatchesRead(
 ): MatchRow[] {
   const masterData = provider.effectiveMasterData();
   const mapModeOf = makeMapMode(masterData.maps);
-  const activeMeasured = activeMeasuredTargets(provider.manualTargets());
+  const activeMeasured = gradableMeasured(provider);
   const margin = provider.getGrading().partialMargin;
   const suppressed = suppressedMatchIds(competitiveOnly(provider.games()), provider.placementRuns());
   const games = matchSearchFilter(filteredCompetitiveGames(provider, input.filters), input.q);
   const { rows } = selectMatches(games, { limit: input.limit });
-  return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
+  return rows.map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed)).map(rowFor(provider));
 }
 
 /**

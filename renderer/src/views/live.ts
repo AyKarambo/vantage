@@ -36,6 +36,7 @@ import { readinessCard } from './overview';
 import { stopRuleLine } from '../components/stopRuleLine';
 import { checkInPrompt } from '../components/checkInPrompt';
 import { viewHead, type ViewContext } from './view';
+import { gradableTargets } from '../proData';
 
 export function live(ctx: ViewContext): HTMLElement {
   const host = h('div', { class: 'view' });
@@ -191,10 +192,10 @@ function briefingCard(p: LiveMatchPayload, ctx: ViewContext): HTMLElement | null
   // heroScope first (the more specific match); falls back to every active
   // target when nothing scopes to this hero/role — better a full list than
   // an empty briefing.
-  const scoped = d.targets.filter((t) => t.isActive
-    && (t.heroScope?.length ? Boolean(local?.hero && t.heroScope.includes(local.hero))
+  const gradable = gradableTargets(d);
+  const scoped = gradable.filter((t) => (t.heroScope?.length ? Boolean(local?.hero && t.heroScope.includes(local.hero))
       : t.roleScope ? t.roleScope === local?.role : false));
-  const active = scoped.length ? scoped : d.targets.filter((t) => t.isActive);
+  const active = scoped.length ? scoped : gradable;
 
   return card({ variant: 'raised' },
     h('div', { class: 'review-section-label' }, 'Briefing'),
@@ -389,7 +390,7 @@ function preQueueCards(ctx: ViewContext): HTMLElement[] {
 /** This sitting, the time-of-day read, and the targets worth executing tonight. */
 function beforeYouQueueCard(d: DashboardData, ctx: ViewContext): HTMLElement {
   const s = d.session;
-  const active = d.targets.filter((t) => t.isActive);
+  const active = gradableTargets(d);
   const dayPart = dayPartAt(new Date().getHours());
   const window = d.timeOfDay.find((g) => g.key === dayPart);
 

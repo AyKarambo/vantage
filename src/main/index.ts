@@ -35,6 +35,9 @@ import { createDevModeAuthMonitor } from './devModeAuthMonitor';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
+import { parseProSimulation, resumeActivation } from '../core/entitlement';
+import { createEntitlementService } from './entitlement/service';
+import { noneSource, simulatedSource } from './entitlement/source';
 import { currentSession } from '../core/analytics';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -409,9 +412,34 @@ function main(): void {
     publish: (p) => events.emit('onDevModeAuthStatus', p),
   });
 
+  // Vantage Pro (#337). Release builds have no purchase source yet (the
+  // Overwolf/Tebex one waits on DevRel) and resolve to free; OW_PRO_SIMULATE
+  // drives the tier in dev. The cache lives in userData (per machine), and the
+  // source is the only thing that may ever talk to the network for it.
+  const simulatedPro = app.isPackaged ? undefined : parseProSimulation(process.env, Date.now());
+  const entitlement = createEntitlementService({
+    source: simulatedPro ? simulatedSource(simulatedPro) : noneSource,
+    // A simulation never touches the real cache — it would otherwise leave a
+    // sticky `everPro` behind and turn the next unsimulated run into "lapsed".
+    doc: simulatedPro
+      ? { read: () => simulatedPro, write: () => {} }
+      : jsonFiles(app.getPath('userData'))('entitlement.json'),
+    onChange: () => events.emit('onDataChanged', undefined),
+    onResume: (lapsedSince, resumedAt) =>
+      manual.shiftActivations((at) => resumeActivation(at, lapsedSince, resumedAt)),
+    log: (message, fields) => log.info('pro', message, fields),
+  });
+  void entitlement.refresh();
+  // Re-check every few hours (so a running Pro app never coasts into the
+  // offline grace), and look each minute for a tier change time alone caused —
+  // a trial or grace period ending mid-session refreshes the open windows.
+  setInterval(() => void entitlement.refresh(), 6 * 60 * 60_000).unref();
+  setInterval(() => entitlement.tick(), 60_000).unref();
+
   const dataProvider = createDataProvider({
     history,
     manual,
+    entitlement,
     rankAnchors,
     placements,
     checkIns,
@@ -815,7 +843,8 @@ function main(): void {
   // Readiness launch nudge (opt-in, off by default): one tray toast when the
   // player is grinding into the hole. A post-hoc read of stored history only —
   // never touches the game (guardrail 1).
-  if (config.readiness.enabled && config.readiness.launchToast) {
+  // Readiness is Vantage Pro (#337): the toast stays silent without full access.
+  if (config.readiness.enabled && config.readiness.launchToast && dataProvider.proAccess().full) {
     // Competitive-only, matching the dashboard's readiness feed (dashboardData.ts:51)
     // — previously this read the RAW history and could disagree with the dashboard
     // verdict for quickplay-heavy histories. Active targets feed the dampener.

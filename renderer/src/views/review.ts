@@ -45,6 +45,7 @@ import { maybeOfferPlacements } from '../app/placementOffer';
 import { srEntryMode } from '../../../src/core/placements';
 import { scopeBadge, scopeLabel } from './targets/shared';
 import { viewHead, type ViewContext } from './view';
+import { gradableTargets, practiceOn } from '../proData';
 
 /**
  * Keyboard grading: while a grading card is open on the Review screen, H/P/M
@@ -95,7 +96,7 @@ export function review(ctx: ViewContext): HTMLElement {
   if (ctx.params.matchId && ctx.params.matchId !== lastParamMatchId) forceOpenMatchId = ctx.params.matchId;
   lastParamMatchId = ctx.params.matchId;
 
-  const active = d.targets.filter((t) => t.isActive && !t.archivedAt);
+  const active = gradableTargets(d);
   const pending = d.reviewInbox.filter((m) => !gradedThisSession.has(m.matchId));
   // The subtitle states the TRUE, uncapped backlog (R1) — `pending.length` is
   // capped at reviewInbox's 150 rows, which would silently understate a
@@ -116,7 +117,7 @@ export function review(ctx: ViewContext): HTMLElement {
   const demoNotice = d.isSample ? demoNoticeCard() : null;
   // The sitting recap (#321): practice mode only, and only once you've just
   // finished reading that sitting here — not an old sitting on every visit.
-  const recap = d.practice.on && d.practice.recap
+  const recap = practiceOn(d) && d.practice.recap
     && d.practice.recap.matchIds.some((id) => gradedThisSession.has(id))
     && !dismissedRecaps.has(d.practice.recap.startedAt)
     ? sittingRecapCard(d.practice.recap, () => { dismissedRecaps.add(d.practice.recap!.startedAt); store.rerender(); })
@@ -127,7 +128,7 @@ export function review(ctx: ViewContext): HTMLElement {
       head,
       demoNotice,
       recap,
-      activeStrip(active),
+      d.pro.full ? activeStrip(active) : null,
       needsResultSection,
       card({ variant: 'raised' }, emptyState('All caught up — every tracked game has your read. 🎯', true)),
     );
@@ -167,7 +168,7 @@ export function review(ctx: ViewContext): HTMLElement {
     head,
     demoNotice,
     recap,
-    activeStrip(active),
+    d.pro.full ? activeStrip(active) : null,
     needsResultSection,
     h('div', { class: 'stack', style: { gap: '10px' } },
       ...dayGroups.flatMap((g) => daySection(g, itemByMatchId))),
@@ -581,7 +582,7 @@ function collapsed(ctx: ViewContext, m: MatchRow, active: TargetSummary[], onOpe
   // pre-selected as this game's focus — grading every active target would
   // count the parked ones as attempts. With no pre-selection, the choice
   // belongs to the full card ("Grade").
-  const practice = ctx.data.practice.on;
+  const practice = practiceOn(ctx.data);
   const selfTargets = practice ? inScope.filter((t) => m.suggestedFocus?.includes(t.id)) : inScope;
   const grades: Record<string, TargetGrade> = {};
   const flags: MatchMental = {};
@@ -702,7 +703,7 @@ function expanded(
   const measuredTargets = active.filter((t) => t.mode === 'measured');
   // Practice mode (#321): "What did you work on this game?" replaces the
   // grade-every-active-target list — only the chosen targets get a row.
-  const practice = ctx.data.practice.on;
+  const practice = practiceOn(ctx.data);
   let onRowsChanged = (): void => {};
   const chooser: FocusChooser | null = practice && selfTargets.length
     ? focusTargetChooser({
@@ -919,7 +920,7 @@ function expanded(
         onClick: () => ctx.navigate('matchDetail', { matchId: m.matchId }),
       }),
     ),
-    section(practice ? 'What did you work on this game?' : 'Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
+    !ctx.data.pro.full ? null : section(practice ? 'What did you work on this game?' : 'Your active targets', h('div', { class: 'stack', style: { gap: '11px' } },
       ...(targetEls.length
         ? targetEls
         : [h('div', { class: 'hint' }, 'No active targets yet — add some on the Targets page to grade them here.')]),

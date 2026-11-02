@@ -11,6 +11,9 @@ import { normalizeSessionSettings } from '../core/sessionSettings';
 import { normalizeCoachingSettings } from '../core/coachingSettings';
 import { normalizeGradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
+import { FULL_PRO_ACCESS } from '../core/entitlement';
+import type { EntitlementService } from './entitlement/service';
+import { proGuarded } from './entitlement/guard';
 import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
 import { redactForExport } from '../core/logRedaction';
@@ -121,6 +124,11 @@ export interface DataProviderDeps {
   announceChange?(): void;
   /** Demo dataset shown until the first real game is tracked. */
   sampleGames(): GameRecord[];
+  /**
+   * Vantage Pro entitlement (#337). Optional: tests and the browser preview
+   * omit it and the provider stays ungated, exactly as it was before.
+   */
+  entitlement?: Pick<EntitlementService, 'access' | 'refresh' | 'action'>;
   /** The release log: viewer ring, session level, renderer error sink. */
   logger: Pick<Logger, 'entries' | 'getLevel' | 'setLevel' | 'error'>;
   /**
@@ -216,6 +224,15 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       preference: demoPref(),
       hasRealHistory: deps.history.count() > 0,
     }),
+    sampleGames: () => deps.sampleGames(),
+    proAccess: () =>
+      deps.entitlement?.access(effectiveDemo(demoPref(), deps.history.count())) ?? FULL_PRO_ACCESS,
+    refreshEntitlement: async () => {
+      await deps.entitlement?.refresh();
+      return provider.proAccess();
+    },
+    proAction: async (kind) =>
+      deps.entitlement ? deps.entitlement.action(kind) : { ok: false, reason: 'unavailable' },
     exportToNotion: (games) => deps.notion.export(games),
     notionStatus: () => deps.notion.status(),
     setNotionToken: (token) => deps.notion.setToken(token),
@@ -847,7 +864,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     getMasterDataConfig: () => deps.getConfig().masterData,
   };
-  return deps.announceChange ? announcing(provider, deps.announceChange) : provider;
+  // Pro guard outermost, so a refused write never announces a change it didn't make.
+  return proGuarded(deps.announceChange ? announcing(provider, deps.announceChange) : provider);
 }
 
 /**

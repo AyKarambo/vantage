@@ -192,7 +192,7 @@ function heroDetail(ctx: ViewContext, d: HeroDetail, close: () => void): HTMLEle
         roleIcon(s?.role),
         h('h3', { style: { fontSize: '18px' } }, d.hero),
       ),
-      targetButton(ctx, d.hero, close),
+      ctx.data.pro.full ? targetButton(ctx, d.hero, close) : null,
     ),
     h('p', { class: 'u-muted', style: { fontSize: '12px', margin: '2px 0 2px' } },
       `${d.overall.games} games · ${pct(d.overall.winrate)} winrate · ${d.overall.wins}W ${d.overall.losses}L`),
