@@ -1,3 +1,4 @@
+import { FULL_PRO_ACCESS } from '../src/core/entitlement';
 import { describe, it, expect, afterEach } from 'vitest';
 import * as net from 'node:net';
 import { createMcpBridge, pipePath, type PipeServer } from '../src/main/mcp';
@@ -40,6 +41,7 @@ function setup(over: { demo?: boolean; games?: GameRecord[] } = {}) {
       hasRealHistory: !over.demo,
     }),
     isSample: () => over.demo ?? false,
+    proAccess: () => FULL_PRO_ACCESS,
     historyRevision: () => 'rev-1',
     effectiveMasterData: () => DEFAULT_MASTER_DATA,
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,

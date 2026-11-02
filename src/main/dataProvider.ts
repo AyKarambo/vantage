@@ -13,6 +13,7 @@ import { normalizeGradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { FULL_PRO_ACCESS } from '../core/entitlement';
 import type { EntitlementService } from './entitlement/service';
+import { proGuarded } from './entitlement/guard';
 import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
 import { redactForExport } from '../core/logRedaction';
@@ -863,7 +864,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     },
     getMasterDataConfig: () => deps.getConfig().masterData,
   };
-  return deps.announceChange ? announcing(provider, deps.announceChange) : provider;
+  // Pro guard outermost, so a refused write never announces a change it didn't make.
+  return proGuarded(deps.announceChange ? announcing(provider, deps.announceChange) : provider);
 }
 
 /**
