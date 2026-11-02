@@ -61,6 +61,9 @@ export interface ProAccess {
   source: EntitlementSourceKind;
 }
 
+/** Ungated access — what `computeDashboard` stamps before the edge narrows it. */
+export const FULL_PRO_ACCESS: ProAccess = { tier: 'pro', full: true, targets: 'full', demo: false, source: 'none' };
+
 /** The empty record a fresh install starts from — resolves to `free`. */
 export const NO_ENTITLEMENT: EntitlementRecord = { plan: 'none' };
 
