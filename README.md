@@ -697,6 +697,25 @@ endpoint is configurable in `appsettings.json` (`masterData.overfastBaseUrl`). S
 by hand only — no public API exposes their dates. Your edits live in `masterData.json` alongside
 the rest of your data and travel with it when you relocate the data folder.
 
+## Vantage Pro
+
+Overwolf only approves apps that use Overwolf monetization, so Vantage has a small, ad-free
+subscription instead of ads.
+
+- **Free, forever:** live tracking, manual logging, import, Notion export, and every stats screen —
+  Overview, Matches, Maps, Heroes, Players, Trends and Focus. Review keeps the result, SR, "How you
+  played" and "How it felt", and mood check-ins and the break reminder stay free. Those inputs keep
+  being recorded, so Pro starts with your full history.
+- **Pro:** Readiness, Targets (grading, practice focus, sitting recap, live-briefing targets),
+  the Mental analytics, and the Vantage MCP server. €1.49/month or €9.99/year, 14-day trial.
+- **When Pro ends:** nothing is deleted. Targets stay visible read-only, everything still exports,
+  and renewing restores it as it was. Pro keeps working offline for 7 days after the last check.
+
+Purchases go through Overwolf (Tebex as merchant of record). The check sends only your Overwolf
+account token — never match data. **Status:** the gating ships first; the Overwolf purchase
+connection lands once Overwolf DevRel registers the app's sign-in client. Until then a release
+build is free-only.
+
 ## Account safety
 
 The live data source is **Overwolf's Game Events Provider (GEP)** — the sanctioned
@@ -1001,7 +1020,8 @@ npm run start:dev  # always forces Dev Mode on, ignoring the Settings toggle
 Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pipeline — with
 round events, paced at 60× real time; `OW_SYNC_SIM_SPEED=1` runs it at real speed so the measured
 played-time path is exercised like a live match; `OW_SYNC_SENSOR=gep|counterwatch` switches the
-sensor.
+sensor; `OW_PRO_SIMULATE=free|trial|pro|lapsed` previews a Vantage Pro tier (dev builds only —
+`npm run preview` takes `?pro=` the same way).
 
 ## Importing match history
 

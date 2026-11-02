@@ -131,6 +131,23 @@ function faqTopics(email: string): FaqTopic[] {
       ],
     },
     {
+      topic: 'Vantage Pro',
+      entries: [
+        {
+          q: 'What is free and what is Vantage Pro?',
+          a: 'Tracking, manual logging, import, Notion export and every stats screen (Overview, Matches, Maps, ' +
+            'Heroes, Players, Trends, Focus) are free, for good. Readiness, Targets, the Mental analytics and the ' +
+            'MCP server are Vantage Pro. Mood check-ins and “How it felt” keep being recorded on the free tier, so ' +
+            'Pro starts with your whole history. Every Pro screen has a “View with demo data” preview.',
+        },
+        {
+          q: 'What happens to my data if Pro ends?',
+          a: 'Nothing is deleted. Your targets stay visible read-only, everything still exports, and renewing ' +
+            'brings it all back as it was. Pro also keeps working offline for 7 days after the last check.',
+        },
+      ],
+    },
+    {
       topic: 'Your data',
       entries: [
         {
