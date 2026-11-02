@@ -20,6 +20,7 @@ type SettingsTab = 'general' | 'masterData';
  * carries (`general.ts`).
  */
 const SETTINGS_SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
+  { key: 'pro', label: 'Vantage Pro' },
   { key: 'accounts', label: 'Accounts' },
   { key: 'quickLog', label: 'Quick Log' },
   { key: 'coaching', label: 'Coaching' },

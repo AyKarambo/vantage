@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { proAccess } from '../src/core/entitlement';
 import {
-  daysLeft, isLockedView, proViewOf, purchaseAvailable, showsProBadge, targetsReadOnly, tierLabel,
+  daysLeft, isLockedView, proViewOf, purchaseAvailable, showsProBadge, targetsReadOnly, tierLabel, tierDetail,
 } from '../renderer/src/proAccess';
 
 const free = proAccess({ tier: 'free' }, false, 'none');
@@ -58,5 +58,13 @@ describe('renderer Pro access', () => {
     expect(tierLabel(trial, 0)).toBe('Vantage Pro trial · 3 days left');
     expect(tierLabel(free, 0)).toBe('Free');
     expect(tierLabel(lapsed, 0)).toMatch(/ended/);
+  });
+
+  it('words the tier detail line', () => {
+    expect(tierDetail(free)).toContain('Tracking, stats and matches stay free');
+    expect(tierDetail(lapsed)).toContain('kept');
+    expect(tierDetail(trial)).toMatch(/^Trial ends on /);
+    expect(tierDetail({ ...pro, until: 5 * 86_400_000 })).toMatch(/^Renews\/ends on /);
+    expect(tierDetail({ ...pro, until: undefined, graceEndsAt: 5 * 86_400_000 })).toMatch(/^Works offline until /);
   });
 });

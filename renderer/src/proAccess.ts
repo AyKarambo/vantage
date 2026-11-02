@@ -60,3 +60,20 @@ export function tierLabel(access: ProAccess, now: number): string {
     default: return 'Free';
   }
 }
+
+/** The Settings detail line under the tier: dates for pro/trial, the kept-data note for lapsed, what Pro adds for free. */
+export function tierDetail(access: ProAccess): string {
+  const date = (ms: number): string => new Date(ms).toLocaleDateString();
+  switch (access.tier) {
+    case 'pro':
+      if (access.until !== undefined) return `Renews/ends on ${date(access.until)}`;
+      if (access.graceEndsAt !== undefined) return `Works offline until ${date(access.graceEndsAt)} without a re-check`;
+      return 'Your subscription is active.';
+    case 'trial':
+      return access.until !== undefined ? `Trial ends on ${date(access.until)}` : 'Your trial is active.';
+    case 'lapsed':
+      return 'Your targets, grades and mental history are kept — renew to use them again.';
+    default:
+      return 'Readiness, Targets, Mental analytics and the MCP server. Tracking, stats and matches stay free.';
+  }
+}

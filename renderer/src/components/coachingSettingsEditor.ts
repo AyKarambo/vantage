@@ -13,7 +13,9 @@ import type { ViewContext } from '../views/view';
 
 const BREAK_PRESETS = [5, 10, 15, 20, 30];
 
-export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
+/** `proFocus: false` hides the Pro-only practice-focus options; break detection and check-in questions stay free. */
+export function coachingSettingsEditor(ctx: ViewContext, opts: { proFocus?: boolean } = {}): HTMLElement {
+  const proFocus = opts.proFocus ?? true;
   const s = ctx.data.coachingSettings;
   const set = (patch: Partial<CoachingSettings>): void => {
     void bridge.setCoaching({ ...s, ...patch }).then(() => ctx.refresh());
@@ -28,7 +30,7 @@ export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
       h('span', { class: 'hint' }, label), control);
 
   return h('div', { class: 'stack', style: { gap: '12px', marginTop: '12px' } },
-    row('Practice focus', segmented({
+    ...(proFocus ? [row('Practice focus', segmented({
       options: [
         { value: 'auto', label: 'Auto' },
         { value: 'on', label: 'Always on' },
@@ -48,7 +50,7 @@ export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
       ],
       value: s.focusStickiness,
       onChange: (focusStickiness) => set({ focusStickiness }),
-    })),
+    }))] : []),
     row('Breaks between games', segmented({
       options: [{ value: 'auto', label: 'Detect automatically' }, { value: 'manual', label: 'I mark them' }],
       value: s.breakDetection,
