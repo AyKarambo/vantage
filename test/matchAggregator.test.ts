@@ -289,10 +289,11 @@ describe('MatchAggregator round timing (played time)', () => {
     // Each round counts from its observed doors: 4:20 + 4:45.
     const played = ((5 * MIN - 40_000) + (5 * MIN + 3 - 15_000)) / MIN;
     expect(rec.playedMinutes).toBeCloseTo(played, 9);
-    // The displayed duration is the match clock — hero select, every round's
-    // setup until the doors open and the scoreboard tail excluded: 9:05,
-    // unrounded, where the wall clock would read ~11:09.
-    expect(rec.durationMinutes).toBeCloseTo(played, 9);
+    // The displayed duration is the summed round time like the game's own
+    // history list — setup lock included, hero select and the scoreboard tail
+    // excluded: 10:00, unrounded, where the wall clock would read ~11:09.
+    expect(rec.durationMinutes).toBeCloseTo((10 * MIN + 3) / MIN, 9);
+    expect(rec.durationMinutes!).toBeGreaterThan(rec.playedMinutes!);
     expect(rec.joinedLate).toBeUndefined();
     // The single hero's minutes are the played minutes (its segment ran from
     // match start to match end, clipped to the play windows).
@@ -389,7 +390,7 @@ describe('MatchAggregator round timing (played time)', () => {
     // The hero minutes sum to the match's played minutes.
     expect(ph.Tracer.minutes! + ph.Genji.minutes!).toBeCloseTo(rec.playedMinutes!, 9);
     expect(rec.playedMinutes).toBeCloseTo((328_003 - windowStart) / MIN, 9);
-    expect(rec.durationMinutes).toBeCloseTo(rec.playedMinutes!, 9); // the clock from the doors (the wall clock was 6.13)
+    expect(rec.durationMinutes).toBeCloseTo((328_003 - 28_000) / MIN, 9); // round time incl. setup (the wall clock was 6.13)
   });
 
   it('a swap while a round is still open clips against the open round too (setup offset applied)', () => {
@@ -517,7 +518,7 @@ describe('MatchAggregator round timing (played time)', () => {
     expect(rec!.rounds).toEqual([{ startedAt: SIM_TIMING.roundStartMs, endedAt: SIM_TIMING.roundEndMs }]);
     expect(rec!.playedMinutes).toBeCloseTo((roundMs - ROUND_SETUP_SECONDS.Hybrid.first * 1000) / MIN, 9);
     expect(rec!.perHero![0].minutes).toBeCloseTo(rec!.playedMinutes!, 9);
-    expect(rec!.durationMinutes).toBeCloseTo(rec!.playedMinutes!, 9); // round time from the doors, not the wall clock
+    expect(rec!.durationMinutes).toBeCloseTo(roundMs / MIN, 9); // round time incl. setup, not the wall clock
     expect(rec!.outcome).toBe('Victory');
     // The bare message list keeps match_end last (the roster-retention test slices it off).
     const messages = buildCompetitiveMatch({ battleTag: 'Karambo#21234', map: "King's Row" }, 'sim-rt');

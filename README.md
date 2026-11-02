@@ -669,7 +669,8 @@ what the game's own career profile shows. So:
 - **Measured** — matches captured with the game feed's round events carry their played time
   exactly: each round counts from the moment its doors open (when the opponents' heroes first
   show up in the feed), or from its mode's typical setup lock when that moment wasn't seen. The
-  match's **Duration** is the same round time, shown as `mm:ss`.
+  match's **Duration** is the summed round time *including* each round's setup — the number the
+  game's own History/Replays list shows, without hero select and the end scoreboard — as `mm:ss`.
 - **Joined late** — if Vantage (or the game feed) only caught a match after it had started, the
   match page says so and asks for the time from the in-game scoreboard; enter it as **Played
   time** in **Edit match**.

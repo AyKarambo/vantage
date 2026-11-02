@@ -94,9 +94,9 @@ describe('MatchAggregator — resume after a restart', () => {
     expect(rec.matchId).toBe('3858793788');
     expect(rec.startedAt).toBe(0);
     expect(rec.rounds).toHaveLength(3);
-    // The match clock 7:20 + 6:12 + 4:12 ≈ 17:44 (round 1 waits 40 s, rounds
-    // 2 and 3 wait 48 s for their doors) — not the ~2 min seen after the restart.
-    expect(rec.durationMinutes).toBeCloseTo((8 * MIN - 40_000 + 7 * MIN - 48_000 + 5 * MIN + 3 - 48_000) / MIN, 9);
+    // The summed round time 8:00 + 7:00 + 5:00 (setup included, like the game's
+    // history list) — not the ~2 min seen after the restart.
+    expect(rec.durationMinutes).toBeCloseTo((8 * MIN + 7 * MIN + 5 * MIN + 3) / MIN, 9);
     expect(rec.joinedLate).toBeUndefined();
     expect(rec.eliminations).toBe(26);
     expect(rec.perHero?.[0]).toMatchObject({ hero: 'Cassidy', eliminations: 26, deaths: 11 });
