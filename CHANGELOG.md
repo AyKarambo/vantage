@@ -19,9 +19,9 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Fixed
 
-- **Match time is closer to the in-game clock.** Every round now counts from the moment the doors open,
-  the first round included. Before, about 40 seconds of setup in the first round were counted as play,
-  which made match length and per-10 stats slightly off on Push, Control, Flashpoint and Clash.
+- **Match length matches the game's history list.** The duration is the summed round time with each
+  round's setup included, exactly what Overwatch shows under History → Replays. Per-10 stats still divide
+  by the played time, with every round's setup (about 40 s, 47 s on Escort/Hybrid) taken out.
 - **Duration shows minutes and seconds.** Match pages, the Matches list and Review show `mm:ss` instead of
   whole minutes.
 - **A match Vantage joined late is marked.** If the app or the game feed only caught a match after it had

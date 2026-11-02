@@ -424,14 +424,15 @@ export class MatchAggregator {
       const played = windowMinutes(playWindowsOf(rounds, this.mapModeOf(rec.mapName ?? '')));
       if (played > 0) {
         rec.playedMinutes = played;
-        // The displayed match length is the match CLOCK, the same one the live
-        // board shows: stopped through hero select (~28 s before the first
-        // round), through every round's setup until the doors open, and after
-        // the last round (the post-match scoreboard) — exactly the play
-        // windows. A round whose doors went unseen falls back to its mode's
-        // lock here, which beats the live board's mode-blind fallback.
-        // Unrounded — the views show it as mm:ss, like the in-game clock.
-        rec.durationMinutes = played;
+        // The displayed match length is what the game's own history/replay
+        // list shows: the summed round time, `round_start` → `round_end` of
+        // every round, setup lock INCLUDED (checked against five ranked games on
+        // 2026-11-02: the replay time exceeds the play windows by exactly each
+        // round's setup — ~40 s per round, 47 s on Escort/Hybrid). Hero select
+        // before round 1 and the post-match scoreboard stay out. The per-10
+        // divisor is `playedMinutes`, which cuts the setup off.
+        // Unrounded — the views show it as mm:ss.
+        rec.durationMinutes = rounds.reduce((ms, r) => ms + Math.max(0, r.endedAt - r.startedAt), 0) / 60000;
       }
     }
 

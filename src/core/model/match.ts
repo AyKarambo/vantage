@@ -103,9 +103,10 @@ export interface MatchRecord {
   startedAt?: number;
   endedAt?: number;
   /**
-   * The displayed match length in minutes: the summed GEP round time from each
-   * round's doors, the way the game's own clock counts it (stopped in hero
-   * select, setup and between rounds). Captures without round events fall back
+   * The displayed match length in minutes: the summed GEP round time
+   * (`round_start` → `round_end`, setup lock included), the way the game's own
+   * history list counts it — hero select and the post-match scoreboard are out.
+   * Not the per-10 divisor (see `playedMinutes`). Captures without round events fall back
    * to the wall clock `match_start` → `match_end`. Fractional on newer captures
    * (shown as mm:ss); whole minutes on older ones and hand logs.
    */
