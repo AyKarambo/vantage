@@ -17,6 +17,7 @@ import { phaseChip, targetTrend } from '../../components/targetTrend';
 import { GRADES } from '../../components/reviewControls';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
+import { targetsReadOnly } from '../../proAccess';
 import { backControl, type ViewContext } from '../view';
 import { winSplit, confirmDelete, scopeBadge } from './shared';
 
@@ -75,7 +76,7 @@ function headerCard(t: TargetSummary, ctx: ViewContext): HTMLElement {
     winSplit('when missed', t.winWhenMissed, t.missDecided, 'rgba(255,255,255,0.16)', PALETTE.muted),
     h('div', { class: 'hint', style: { marginTop: '6px' } },
       'Your winrate in games where you hit this target vs games where you didn’t.'),
-    actionsRow(t, ctx),
+    targetsReadOnly(ctx.data.pro) ? null : actionsRow(t, ctx),
   );
 }
 

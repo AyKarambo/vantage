@@ -11,6 +11,7 @@ import { isStale } from '../../../../src/core/staleness';
 import { button, card, select } from '../../components/primitives';
 import { toast } from '../../components/toast';
 import { bridge } from '../../bridge';
+import { targetsReadOnly } from '../../proAccess';
 import type { ViewContext } from '../view';
 
 /** More active targets than this gets the soft "1–2 work best" hint (#321). */
@@ -23,13 +24,16 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
   const active = live.filter((t) => t.isActive);
   const inactive = live.filter((t) => !t.isActive);
   const now = Date.now();
+  const readOnly = targetsReadOnly(ctx.data.pro);
   const refreshAfter = (p: Promise<void>): void => { void p.then(() => ctx.refresh()); };
 
   const activeChips = active.length
-    ? active.map((t) => activeChip(t, now, ctx, () => refreshAfter(bridge.setTargetActive(t.id, false))))
-    : [h('span', { class: 'u-dim', style: { fontSize: '12px' } }, 'No active targets — add one below to start grading.')];
+    ? active.map((t) => readOnly
+        ? readOnlyChip(t, now, ctx)
+        : activeChip(t, now, ctx, () => refreshAfter(bridge.setTargetActive(t.id, false))))
+    : [h('span', { class: 'u-dim', style: { fontSize: '12px' } }, readOnly ? 'No active targets.' : 'No active targets — add one below to start grading.')];
 
-  const controls = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', flexWrap: 'wrap' } },
+  const controls = readOnly ? null : h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', flexWrap: 'wrap' } },
     inactive.length
       ? select(
           [{ value: '', label: '＋ add a target…' }, ...inactive.map((t) => ({ value: t.id, label: t.name }))],
@@ -72,6 +76,15 @@ export function activeSetCard(ctx: ViewContext): HTMLElement | null {
           `${active.length} active targets — 1–${MAX_RECOMMENDED_ACTIVE} work best. You choose per game on Review which one you practised.`)
       : null,
     controls,
+  );
+}
+
+/** Read-only twin of `activeChip`: same look and stale marker, but not clickable. */
+function readOnlyChip(t: TargetSummary, now: number, ctx: ViewContext): HTMLElement {
+  const stale = isStale(t.activatedAt, t.matchesSinceActive, now, ctx.data.staleness);
+  return h('span', { class: stale ? 'chip is-on chip--stale' : 'chip is-on' },
+    t.name,
+    stale ? h('span', { style: { marginLeft: '6px', opacity: '0.85' } }, '· stale') : null,
   );
 }
 
