@@ -7,7 +7,7 @@
 import { h, render } from '../dom';
 import type { AppState, ViewId, ViewParams } from '../store';
 import { sameParams } from '../backStack';
-import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role } from '../../../src/shared/contract';
+import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, ProAccess, Role } from '../../../src/shared/contract';
 import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { demoTransition } from '../../../src/core/demoPreference';
@@ -63,6 +63,8 @@ import { about } from '../views/about';
 import { faq } from '../views/faq';
 import { filterBar, filterBarReason, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
+import { isLockedView, proViewOf, showsProBadge, type ProView } from '../proAccess';
+import { proLockView, proPreviewBanner } from '../components/proLock';
 import { prefs } from '../prefs';
 import { openLogMatch } from './log-match';
 import { openPalette } from './palette';
@@ -486,6 +488,54 @@ export class App {
     };
   }
 
+  /**
+   * A Pro screen shown over the demo dataset from its lock page (#337) — the
+   * one way a user with real history can see what Pro does. Held here, not in
+   * the store: it's a transient view mode, dropped on leaving the screen.
+   */
+  private proPreview: { view: ProView; data: DashboardData } | null = null;
+
+  /** The routed view, or — for a Pro screen without access — its lock page / demo preview. */
+  private renderView(state: AppState): HTMLElement {
+    const ctx = this.context();
+    const pro = proViewOf(state.view);
+    const locked = isLockedView(state.view, ctx.data.pro);
+    // Leaving the previewed screen (or gaining access) ends the preview.
+    if (this.proPreview && (this.proPreview.view !== pro || !locked)) this.proPreview = null;
+    if (pro && this.proPreview) {
+      const el = VIEWS[state.view]({ ...ctx, data: this.proPreview.data });
+      el.prepend(proPreviewBanner(() => this.endProPreview()));
+      return el;
+    }
+    if (pro && locked) return proLockView(ctx, pro, { onPreview: () => void this.startProPreview(pro) });
+    return VIEWS[state.view](ctx);
+  }
+
+  private async startProPreview(view: ProView): Promise<void> {
+    try {
+      const data = await bridge.getProPreview(store.get().filters);
+      this.proPreview = { view, data };
+      store.rerender();
+    } catch {
+      toast('The demo preview couldn’t load — try again in a moment.');
+    }
+  }
+
+  private endProPreview(): void {
+    this.proPreview = null;
+    store.rerender();
+  }
+
+  /** The "PRO" badge on the Pro screens' nav items, mutated in place like the Review badge. */
+  private updateProBadges(access: ProAccess | undefined): void {
+    for (const [id, btn] of this.navButtons) {
+      const show = !!access && showsProBadge(id, access);
+      const existing = btn.querySelector<HTMLElement>('.nav-badge--pro');
+      if (show && !existing) btn.append(h('span', { class: 'nav-badge nav-badge--pro', title: 'Part of Vantage Pro' }, 'PRO'));
+      else if (!show) existing?.remove();
+    }
+  }
+
   private migrated = false;
   private firstRunHandled = false;
   /** The `isSample` this shell last observed — `undefined` until the first snapshot, so that one never itself reads as a transition (F2). */
@@ -655,7 +705,7 @@ export class App {
     // refresh is seamless. Real navigation keeps both the animation and the
     // per-route scroll memory.
     const priorScroll = this.contentHost.scrollTop;
-    render(this.contentHost, VIEWS[state.view](this.context()));
+    render(this.contentHost, this.renderView(state));
     this.lastRendered = key;
     if (navigated) {
       this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.params)) ?? 0;
@@ -723,6 +773,7 @@ export class App {
     const activeNav: ViewId = DETAIL_PARENT[state.view as keyof typeof DETAIL_PARENT] ?? state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0, d?.isSample ?? false);
+    this.updateProBadges(d?.pro);
 
     render(this.sessionBody, this.sessionSummary(state));
   }
