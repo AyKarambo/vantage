@@ -27,6 +27,8 @@ import { partyPicker, loadPartyContext } from '../components/partyPicker';
 import { field, optionalLabel } from '../components/formField';
 import { srModeToggle, srDeltaInput, rankEntry, placementPicker, suggestedSrDelta, type SrMode } from '../components/srControls';
 import { toast } from '../components/toast';
+import { discardGuard } from '../components/discardGuard';
+import { enableRovingGroups } from '../components/rovingFocus';
 import { deleteMatch } from '../matchActions';
 import { maybeConfirmPlacementRank } from './placementComplete';
 import { maybeOfferPlacements } from './placementOffer';
@@ -110,9 +112,11 @@ export interface LogCarry {
 // Cheatsheet entries only — the dialog binds these keys itself (the global
 // dispatcher never fires over an open overlay), so `when` keeps them inert.
 const never = (): boolean => false;
-registerShortcut({ combo: 'w', description: 'Result: Win (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'l', description: 'Result: Loss (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
-registerShortcut({ combo: 'd', description: 'Result: Draw (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'w', description: 'Result: Win, then jump to Map (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'l', description: 'Result: Loss, then jump to Map (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'd', description: 'Result: Draw, then jump to Map (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'escape', description: 'Close the log / edit dialog (asks first if you changed anything)', group: 'Log match', when: never, run: () => {} });
+registerShortcut({ combo: 'arrowright', description: 'Move within a button group: role, heroes, flags, grades (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'enter', description: 'Save the match (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'ctrl+enter', description: 'Save & log another (log dialog) · save (edit dialog)', group: 'Log match', when: never, run: () => {} });
 registerShortcut({ combo: 'h', description: 'Grade a focused target: Hit (in the log / edit dialogs)', group: 'Log match', when: never, run: () => {} });
@@ -152,6 +156,10 @@ export function openLogMatch(ctx: ViewContext, carry?: LogCarry): void {
     ([accounts, ranks, mostPlayed, placements]) => {
       openModal((close) => buildForm(ctx, close, accounts, ranks, mostPlayed, placements, carry), {
         panelClass: 'modal-card--wide',
+        // #340: a stray click beside the card used to throw the whole form
+        // away. The form's own discard guard owns ✕ / Cancel / Escape instead.
+        dismissOnBackdrop: false,
+        dismissOnEscape: false,
       });
     },
   );
@@ -428,8 +436,10 @@ function buildForm(
     title: 'Log match',
     extra: [accountSelect],
     badge: timeBadgeHost,
-    onClose: close,
+    onClose: () => requestClose(),
   });
+  // Bound to the discard guard once the form exists (below).
+  let requestClose = (): void => close();
 
   const resultRow = resultChooser({
     value: state.result,
@@ -536,6 +546,8 @@ function buildForm(
   heroHost.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('button.chip')) repaintTargets();
   });
+  // …and so does a hero picked from the search box with Enter (#340).
+  heroHost.addEventListener('heroes-changed', () => repaintTargets());
   const heroField = field(optionalLabel('Heroes', '— tap all you played'), heroHost);
 
   /**
@@ -765,12 +777,15 @@ function buildForm(
   // not the last thing in the padded, scrolling body — Save/Save & next used
   // to end up below the fold on a card taller than the window, and a player
   // who didn't know Enter saves had to scroll every single time.
+  // #340: an explicit Cancel beside Save, since the backdrop no longer closes.
+  const cancelBtn = button('Cancel', { variant: 'ghost', onClick: () => requestClose() });
+  const footerContent = h('div', { style: { display: 'flex', gap: '10px', flex: '1' } }, saveBtn, saveNextBtn, cancelBtn);
   const actions = h('div', {
     style: {
       display: 'flex', gap: '10px', padding: '14px 20px', borderTop: '1px solid var(--border)',
       position: 'sticky', bottom: '0', background: 'var(--card)',
     },
-  }, saveBtn, saveNextBtn);
+  }, footerContent);
 
   // A hand-logged match has no roster: names are typed (friends suggest) or Solo.
   const party = partyPicker();
@@ -791,30 +806,38 @@ function buildForm(
   // Targets, out of the way of the common path.
   // tabindex -1: focusable via script (for the mount-time focus below) but not
   // part of the natural Tab order.
-  const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header,
-    h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
-      h('div', { class: 'log-grid' },
-        h('div', { class: 'log-col' },
-          field('Result', resultRow), mapField, roleField, heroField, rankHost),
-        h('div', { class: 'log-col' },
-          performanceBlock, commsBlock, flagsBlock, partyBlock, targetsBlock, playedField),
-      ),
+  const body = h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' } },
+    h('div', { class: 'log-grid' },
+      h('div', { class: 'log-col' },
+        field('Result', resultRow), mapField, roleField, heroField, rankHost),
+      h('div', { class: 'log-col' },
+        performanceBlock, commsBlock, flagsBlock, partyBlock, targetsBlock, playedField),
     ),
-    actions,
   );
+  const form = h('div', { tabindex: '-1', style: { outline: 'none' } }, header, body, actions);
 
-  // Keyboard flow: W/L/D pick the result when not typing (shared binding);
-  // Enter saves, Ctrl+Enter saves & logs another (shared with the match
-  // editor, L5 — see bindSaveKeys).
-  bindResultKeys(form, resultRow);
+  // #340: ✕ / Cancel / Escape close an untouched form at once and ask before
+  // throwing away a touched one (inline, in the footer).
+  const guard = discardGuard({ root: form, body, footerContent, close, noun: 'this match' });
+  actions.append(guard.confirmEl);
+  requestClose = guard.request;
+
+  // Keyboard flow: W/L/D pick the result when not typing (shared binding) and
+  // jump on to the map (#340); Enter saves, Ctrl+Enter saves & logs another
+  // (shared with the match editor, L5 — see bindSaveKeys). Button groups are
+  // one Tab stop each, ←/→ inside (rovingFocus).
+  const mapInput = mapField.querySelector('input');
+  bindResultKeys(form, resultRow, () => mapInput?.focus());
   bindSaveKeys(form, { save: saveAndClose, saveAndNext });
   bindTargetGradeKeys(form, () => (chooser ? chooser.rows() : targetRows));
+  enableRovingGroups(form);
 
   // Nothing moves focus into the dialog by default, which leaves W/L/D dead and
   // (worse) leaves focus on the opener button, so a stray Enter re-clicks it and
   // stacks a second dialog. openModal appends the form after buildForm returns,
-  // so defer the focus to the next frame once it's actually in the DOM.
-  requestAnimationFrame(() => form.focus());
+  // so defer the focus to the next frame once it's actually in the DOM. #340:
+  // it lands on the selected result, the first stop of the Tab order.
+  requestAnimationFrame(() => (resultRow.querySelector<HTMLElement>('button.is-active') ?? form).focus());
 
   return form;
 }

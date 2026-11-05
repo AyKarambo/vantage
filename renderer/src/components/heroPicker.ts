@@ -46,6 +46,18 @@ export function padShortlist(ranked: readonly string[], limit: number, eligible:
   return [...sliced, ...fill].slice(0, limit);
 }
 
+/**
+ * The hero Enter picks from a search (#340): a name that STARTS with the
+ * query beats one that merely contains it ("an" → Ana, not Hanzo), then
+ * alphabetical. `undefined` for a blank query or no match.
+ */
+export function searchTopHero(eligible: readonly string[], query: string): string | undefined {
+  const q = query.trim().toLowerCase();
+  if (!q) return undefined;
+  const hits = eligible.filter((h) => h.toLowerCase().includes(q)).sort((a, b) => a.localeCompare(b));
+  return hits.find((h) => h.toLowerCase().startsWith(q)) ?? hits[0];
+}
+
 function heroChip(hero: string, selected: Set<string>): HTMLElement {
   const el = h('button', { class: `chip${selected.has(hero) ? ' is-on' : ''}` }, hero);
   el.addEventListener('click', () => {
@@ -102,6 +114,20 @@ export function paintHeroChips(
     const matches = [...new Set<string>([...eligible.filter((h) => h.toLowerCase().includes(q)), ...selected])]
       .sort((a, b) => a.localeCompare(b));
     paintGrid(matches);
+  });
+  // #340: Enter in a non-empty search toggles the top match and clears the
+  // box, so "type gen ⏎" picks Genji without reaching for the mouse. An empty
+  // box lets Enter through to the dialog's Enter-to-save.
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !searchInput.value.trim()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const top = searchTopHero(eligible, searchInput.value);
+    if (top) selected.has(top) ? selected.delete(top) : selected.add(top);
+    searchInput.value = '';
+    paintGrid(currentBaseView());
+    // Let callers that re-scope on a chip click (log-match's targets) notice.
+    host.dispatchEvent(new CustomEvent('heroes-changed', { bubbles: true }));
   });
 
   render(host,
