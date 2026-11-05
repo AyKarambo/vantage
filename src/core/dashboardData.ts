@@ -28,6 +28,7 @@ import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import {
   autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
+  DEFAULT_SESSION_MODE, effectiveSessionMode, sessionTraining, type SessionMode, type SessionModeState, type SessionTraining,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
 import {
@@ -78,6 +79,8 @@ export interface ManualData {
   readinessSummary?: ReadinessSummary;
   /** Pre-session mood check-ins (S10 phase 2); empty when none have been logged. */
   checkIns?: SessionCheckIn[];
+  /** The persisted Stats / Training switch (issue #342); Stats when absent. */
+  sessionMode?: SessionModeState;
 }
 
 export function computeDashboard(
@@ -188,6 +191,14 @@ export function computeDashboard(
   const sessionSettings = manual?.sessionSettings ?? DEFAULT_SESSION_SETTINGS;
   const coaching = manual?.coaching ?? DEFAULT_COACHING;
   const checkIns = manual?.checkIns ?? [];
+  // Stats / Training (issue #342): the mode in effect now — Training may have
+  // lapsed by the opt-in auto-reset. Feeds practice focus and the toggles;
+  // never rank, readiness or Trends.
+  const modeState = manual?.sessionMode ?? DEFAULT_SESSION_MODE;
+  const sessionMode = effectiveSessionMode(modeState, {
+    autoReset: coaching.trainingAutoReset, gapMinutes: sessionSettings.gapMinutes, now,
+    matchTimes: all.map((g) => g.timestamp),
+  });
   const targets = withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all);
   // The practice reads (issue #321) run over a deterministic sample overlay on
   // demo data — focus choices, grades and extended check-ins the generated
@@ -281,7 +292,12 @@ export function computeDashboard(
     rankTrend,
     rankAdjustmentMarks,
     placements,
-    session: currentSession(sessionGames, now, sessionSettings.gapMinutes),
+    session: withSessionTraining(
+      currentSession(sessionGames, now, sessionSettings.gapMinutes),
+      sessionTraining(sessionGames, new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id)), {
+        now, gapMinutes: sessionSettings.gapMinutes, mode: sessionMode,
+      }),
+    ),
     // Every past sitting (S4), same account scope + gap as `session` above, capped like every other list.
     sessions: sessionHistory(sessionGames, sessionSettings.gapMinutes, suppressed).slice(0, ROW_CAP),
     byRole: byRole(games),
@@ -356,11 +372,11 @@ export function computeDashboard(
     tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: inRange }),
     tiltBySleep: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'sleep'),
     tiltByEnergy: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'energy'),
-    practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching),
+    practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching, sessionMode),
     checkIns,
     performance: performanceStats(games),
     targets,
-    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets))
+    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets, sessionMode))
       .map(({ g, extra }) => ({ ...toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed), ...extra })),
     pendingReviews: pending.length,
     pendingReviewsRecent: pendingReviewsRecent(pending, now),
@@ -384,6 +400,7 @@ export function computeDashboard(
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     sessionSettings,
     coachingSettings: coaching,
+    sessionMode: { mode: sessionMode, since: modeState.since },
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
@@ -659,6 +676,11 @@ function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMe
     .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }
 
+/** The Current session card's read, with its training read (issue #342) attached when the sitting is a training one. */
+function withSessionTraining<S extends object>(session: S | null, training: SessionTraining | null): (S & { training?: SessionTraining }) | null {
+  return session && training ? { ...session, training } : session;
+}
+
 export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow {
   const flags = rowFlags(g);
   const groupSize = effectiveGroupSize(g);
@@ -697,6 +719,7 @@ export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeas
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
     ...(targetGrades ? { targetGrades } : {}),
+    ...(g.sessionMode ? { sessionMode: g.sessionMode } : {}),
     reviewed: g.review != null,
   };
 }
@@ -739,6 +762,7 @@ function practiceOf(
   prevIds: ReadonlySet<string> | undefined,
   targets: TargetSummary[],
   coaching: CoachingSettings,
+  sessionMode: SessionMode = 'stats',
 ): PracticeSummary {
   const selfIds = new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id));
   const rangeGames = src.games.filter((g) => inRange.has(g.matchId));
@@ -756,7 +780,7 @@ function practiceOf(
     ? focusPreselection([...src.games, now], now, coaching.focusStickiness, src.checkIns, selectable)
     : [];
   return {
-    on: practiceFocusOn(coaching, targets),
+    on: practiceFocusOn(coaching, targets, sessionMode),
     execution,
     ...(prevExecution?.attempts ? { prevExecution } : {}),
     sittings: sittingExecution(src.games, inRange, selfIds),

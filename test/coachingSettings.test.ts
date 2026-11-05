@@ -9,6 +9,7 @@ describe('normalizeCoachingSettings', () => {
       focusStickiness: 'sitting',
       breakDetection: 'auto',
       breakMinutes: 15,
+      trainingAutoReset: false,
     });
     expect(normalizeCoachingSettings(undefined)).toEqual(DEFAULT_COACHING);
     expect(normalizeCoachingSettings({})).toEqual(DEFAULT_COACHING);

@@ -12,3 +12,8 @@ export {
   type ExecutionTally, type SittingExecution, type FactorKey, type FactorRow, type FactorEntry,
   type FactorHeadline, type WeakDay, type SittingRecap, type PracticeSummary,
 } from './analytics';
+export {
+  DEFAULT_SESSION_MODE, normalizeSessionMode, effectiveSessionMode, stampSessionMode, isTrainingMatch,
+  executionScore, trainingSummary, splitByMode, canTrain, sessionTraining,
+  type SessionMode, type SessionModeState, type TrainingSummary, type SessionTraining,
+} from './sessionMode';

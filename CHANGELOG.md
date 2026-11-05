@@ -19,6 +19,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **Training mode.** For sittings about drilling a target rather than winning, switch the session from
+  **Stats** to **Training** (sidebar, Matches header or Ctrl K). Matches you play while it's on show how well
+  you hit your targets — Hit / Partial / Missed per target, an execution score and a "Grade targets" shortcut —
+  with the result hidden until you click it. The sidebar's Current session card shows how many games hit your
+  targets instead of the win–loss. Wins and losses still count for rank, readiness and Trends, Stats
+  mode looks exactly as before, and any match or sitting can be re-marked from its ⋯ menu.
+
 - **Cheater compensation.** When Overwatch bans a cheater from one of your matches and gives back the rank
   you lost, add it in **Settings → Accounts → Manage ranks… → Cheater compensation** (or **Add cheater
   compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never

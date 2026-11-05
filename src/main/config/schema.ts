@@ -3,6 +3,7 @@ import { DEFAULT_STALENESS, type StalenessSettings } from '../../core/staleness'
 import { DEFAULT_READINESS, type ReadinessSettings } from '../../core/readiness';
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from '../../core/sessionSettings';
 import { DEFAULT_COACHING, type CoachingSettings } from '../../core/coachingSettings';
+import { DEFAULT_SESSION_MODE, type SessionModeState } from '../../core/practice/sessionMode';
 import { DEFAULT_GRADING_SETTINGS, type GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 
@@ -122,6 +123,8 @@ export interface AppConfig {
   grading: GradingSettings;
   /** Practice-focus / check-in / break-detection settings (issue #321). */
   coaching: CoachingSettings;
+  /** The Stats / Training session mode (issue #342), persisted until the player changes it. */
+  sessionMode: SessionModeState;
   /** Editable-master-data source config (the Update action's endpoint). */
   masterData: MasterDataConfig;
   /**
@@ -156,6 +159,7 @@ export function defaultConfig(): AppConfig {
     sessionSettings: { ...DEFAULT_SESSION_SETTINGS },
     grading: { ...DEFAULT_GRADING_SETTINGS },
     coaching: { ...DEFAULT_COACHING, checkInQuestions: { ...DEFAULT_COACHING.checkInQuestions } },
+    sessionMode: { ...DEFAULT_SESSION_MODE },
     masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
     ui: {
       closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true,

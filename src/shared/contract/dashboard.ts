@@ -19,6 +19,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { CoachingSettings } from '../../core/coachingSettings';
+import type { SessionModeState, SessionTraining } from '../../core/practice/sessionMode';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
@@ -43,6 +44,11 @@ export interface Session extends WinLoss {
   date: string;
   streak: Streak;
   topMaps: Group[];
+  /**
+   * Present only for a training sitting (issue #342): the card shows target
+   * execution instead of W–L. Absent = the stats read, exactly as before.
+   */
+  training?: SessionTraining;
 }
 
 /** One cell of the activity heatmap. */
@@ -120,6 +126,8 @@ export interface MatchRow {
    * one — this is what tells the two apart (R4).
    */
   reviewed: boolean;
+  /** Played as a Training match (issue #342) — Matches leads with target execution and hides the result. Absent = Stats. */
+  sessionMode?: 'training';
   /**
    * Review inbox rows only (issue #321): the self-rated targets the focus
    * chooser pre-selects for this game, by the player's stickiness setting
@@ -413,6 +421,12 @@ export interface DashboardData {
   sessionSettings: SessionSettings;
   /** Effective coaching settings (practice focus, check-in questions, break detection), so views render synchronously. */
   coachingSettings: CoachingSettings;
+  /**
+   * The Stats / Training session mode in effect now (issue #342) — `mode` is
+   * already the effective one (Training may have lapsed by the opt-in
+   * auto-reset); `since` is when the player last switched it.
+   */
+  sessionMode: SessionModeState;
   /** Effective measured-grade settings (partial-credit margin), so the Settings editor renders synchronously. */
   gradingSettings: GradingSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */

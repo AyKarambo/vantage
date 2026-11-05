@@ -2,6 +2,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { normalizeCoachingSettings } from '../../core/coachingSettings';
+import { normalizeSessionMode } from '../../core/practice/sessionMode';
 import type { ReadinessSettings } from '../../core/readiness';
 import { defaultConfig, type AppConfig, type NotionConfig, type Sensor, type UiConfig } from './schema';
 
@@ -53,6 +54,7 @@ export function loadConfig(): AppConfig {
     sessionSettings: { ...DEFAULTS.sessionSettings, ...(bundled.sessionSettings ?? {}), ...(local.sessionSettings ?? {}) },
     grading: { ...DEFAULTS.grading, ...(bundled.grading ?? {}), ...(local.grading ?? {}) },
     coaching: normalizeCoachingSettings({ ...DEFAULTS.coaching, ...(bundled.coaching ?? {}), ...(local.coaching ?? {}) }),
+    sessionMode: normalizeSessionMode(local.sessionMode ?? bundled.sessionMode),
     masterData: { ...DEFAULTS.masterData, ...(bundled.masterData ?? {}), ...(local.masterData ?? {}) },
     ui: { ...DEFAULTS.ui, ...(bundled.ui ?? {}), ...(local.ui ?? {}) },
   };

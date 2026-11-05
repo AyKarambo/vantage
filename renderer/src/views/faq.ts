@@ -123,6 +123,15 @@ function faqTopics(email: string): FaqTopic[] {
           link: { label: 'Open Coaching settings →', go: (ctx) => ctx.navigate('settings', { section: 'coaching' }) },
         },
         {
+          q: 'What is Training mode?',
+          a: 'Some sittings are about drilling one target, not winning — and losing more while you learn is normal. ' +
+            'Switch the session to Training (sidebar, Matches header or Ctrl K) and the matches you play are marked as ' +
+            'training: Matches shows how well you hit your targets instead of a wall of wins and losses, and keeps the ' +
+            'result one click away. The result still counts for your rank, readiness and Trends. Stats mode looks ' +
+            'exactly as before, and you can re-mark any match or sitting from its ⋯ menu.',
+          link: { label: 'Open Matches →', go: (ctx) => ctx.navigate('matches') },
+        },
+        {
           q: 'Why aren’t all my targets graded on Review?',
           a: 'You choose what you worked on in each game. Only the targets you pick get a Hit, Partial or Missed ' +
             'row, and a target you didn’t work on isn’t counted as a miss. Your choice can carry over to the next ' +
