@@ -9,6 +9,7 @@ import { normalizeStaleness } from '../core/staleness';
 import { normalizeReadiness } from '../core/readiness';
 import { normalizeSessionSettings } from '../core/sessionSettings';
 import { normalizeCoachingSettings } from '../core/coachingSettings';
+import { DEFAULT_SESSION_MODE, normalizeSessionMode } from '../core/practice/sessionMode';
 import { normalizeGradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { openIfAllowed } from '../core/externalLink';
@@ -60,7 +61,7 @@ import type { GameRecord } from '../core/analytics';
  */
 
 /** The config sections the Settings screen reads and writes as a whole. */
-type SettingsSection = 'breakReminder' | 'staleness' | 'readiness' | 'sessionSettings' | 'coaching' | 'grading';
+type SettingsSection = 'breakReminder' | 'staleness' | 'readiness' | 'sessionSettings' | 'coaching' | 'grading' | 'sessionMode';
 
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
@@ -703,6 +704,23 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     setReadiness: readiness.set,
     getSessionSettings: sessionSettings.get,
     setSessionSettings: sessionSettings.set,
+    getSessionMode: () => deps.getConfig().sessionMode ?? DEFAULT_SESSION_MODE,
+    setSessionMode: (mode) => {
+      // `since` is stamped here, not taken from the renderer, so the opt-in
+      // auto-reset measures from the real switch instant.
+      const value = normalizeSessionMode({ mode, since: Date.now() });
+      deps.getConfig().sessionMode = value;
+      deps.persistConfig({ sessionMode: value });
+      return value;
+    },
+    setMatchSessionMode: (input) => {
+      // Defensive at the edge: untyped IPC input — anything but 'training' reads as Stats.
+      const ids = Array.isArray(input?.matchIds) ? input.matchIds.filter((id): id is string => typeof id === 'string') : [];
+      const sessionMode = input?.mode === 'training' ? 'training' as const : null;
+      let updated = 0;
+      for (const id of new Set(ids)) if (deps.history.editManual(id, { sessionMode })) updated++;
+      return { updated };
+    },
     getCoaching: coaching.get,
     setCoaching: coaching.set,
     getGrading: grading.get,
@@ -870,7 +888,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
  */
 export const DASHBOARD_WRITES = [
   'saveReview', 'clearReview', 'importReviews', 'ignorePendingReviews', 'clearReviews',
-  'editMatch', 'deleteMatch', 'undoDeleteMatch',
+  'editMatch', 'deleteMatch', 'undoDeleteMatch', 'setMatchSessionMode',
   'setRankAnchor',
   'startPlacementRun', 'setPlacementPrediction', 'completePlacementRun',
   'resetPlacementRun', 'cancelPlacementRun', 'recountPlacementRun', 'declinePlacementRun',

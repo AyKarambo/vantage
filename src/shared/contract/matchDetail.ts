@@ -274,6 +274,8 @@ export interface MatchDetail {
   joinedLate?: boolean;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
+  /** Played as a Training match (issue #342): the performance indicator is the target execution score. Absent = Stats. */
+  sessionMode?: 'training';
   /** Round score, e.g. "2–1" (v2 capture); absent on older records. */
   finalScore?: string;
   heroes: string[];

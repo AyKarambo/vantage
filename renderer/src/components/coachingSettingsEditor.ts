@@ -9,6 +9,7 @@ import { h } from '../dom';
 import type { CoachingSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { segmented, toggleRow } from './primitives';
+import { infoTip } from './infoTip';
 import type { ViewContext } from '../views/view';
 
 const BREAK_PRESETS = [5, 10, 15, 20, 30];
@@ -40,6 +41,19 @@ export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
     h('div', { class: 'hint', style: { fontSize: '11px', lineHeight: '1.5', marginTop: '-4px' } },
       'Auto turns it on while you have active targets: Mental and Review then lead with “did I do what I planned?”, '
       + 'and win/loss becomes the small print.'),
+    // Training session mode (issue #342): the switch itself lives in the
+    // sidebar / Matches header; only its opt-in auto-reset is a setting.
+    h('div', { class: 'field-label', style: { marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' } },
+      'Training mode',
+      infoTip('Training is a session mode you switch on in the sidebar’s Current session card or the Matches header. '
+        + 'Matches played while it is on show how well you executed your targets instead of win/loss; '
+        + 'the result is still tracked for rank, readiness and Trends.', { label: 'What is Training mode?' })),
+    toggleRow({
+      label: 'Switch back to Stats when a new sitting starts',
+      hint: 'A new sitting starts after a pause longer than the Current session gap. Off: Training stays on until you switch it off.',
+      on: s.trainingAutoReset,
+      onChange: (trainingAutoReset) => set({ trainingAutoReset }),
+    }),
     row('Keep a focus target for', segmented({
       options: [
         { value: 'game', label: 'this game' },

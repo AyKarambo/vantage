@@ -3,6 +3,7 @@ import type { SessionCheckIn } from '../checkIn';
 import type { CoachingSettings, FocusStickiness } from '../coachingSettings';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 import { matchInTargetScope, type TargetScope } from '../targets/scope';
+import type { SessionMode } from './sessionMode';
 import { checkInForSitting, PRACTICE_SITTING_GAP_MINUTES, sittingsOf } from './sittings';
 
 /**
@@ -35,14 +36,17 @@ export function hasFocusChoice(review: MatchReview | undefined): boolean {
 
 /**
  * Whether Mental and Review lead with practice (target execution) instead of
- * win/loss: `on`/`off` force it; `auto` follows whether any SELF-RATED target
- * is active and not archived — measured targets grade every game by
- * themselves, so they give the player nothing to choose or practise here.
+ * win/loss: a Training session (issue #342) always does, as if the setting
+ * were `on`; otherwise `on`/`off` force it and `auto` follows whether any
+ * SELF-RATED target is active and not archived — measured targets grade every
+ * game by themselves, so they give the player nothing to choose or practise here.
  */
 export function practiceFocusOn(
   settings: Pick<CoachingSettings, 'practiceFocus'>,
   targets: ReadonlyArray<{ isActive: boolean; archivedAt?: number; mode?: string }>,
+  sessionMode: SessionMode = 'stats',
 ): boolean {
+  if (sessionMode === 'training') return true;
   if (settings.practiceFocus === 'on') return true;
   if (settings.practiceFocus === 'off') return false;
   return targets.some((t) => t.isActive && !t.archivedAt && t.mode !== 'measured');

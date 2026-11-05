@@ -71,6 +71,7 @@ import { openDataLocationPrompt } from './dataLocationPrompt';
 import { openWhatsNewPrompt } from './whatsNewPrompt';
 import { changelogSince, shouldShowWhatsNew } from '../../../src/core/whatsNew';
 import { CHANGELOG } from '../generated/changelog';
+import { sessionModeToggle, setSessionMode, trainingAvailable } from '../components/sessionModeToggle';
 
 // matchDetail, playerHistory and targetDetail are parameterized views: registered
 // here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
@@ -724,7 +725,11 @@ export class App {
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0, d?.isSample ?? false);
 
-    render(this.sessionBody, this.sessionSummary(state));
+    render(this.sessionBody,
+      this.sessionSummary(state),
+      // Stats ↔ Training (issue #342) — outside the summary's click-through so
+      // flipping the mode never also navigates to Matches.
+      d ? sessionModeToggle(this.context(), { compact: true }) : null);
   }
 
   /**
@@ -1258,6 +1263,12 @@ export class App {
           }))),
           actions: [
             { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
+            // Stats ↔ Training (issue #342): the palette names the mode it switches TO.
+            ctx.data.sessionMode.mode === 'training'
+              ? { label: 'Session mode: Stats', hint: 'Matches leads with win/loss again', run: () => setSessionMode(ctx, 'stats') }
+              : trainingAvailable(ctx)
+                ? { label: 'Session mode: Training', hint: 'judge this sitting by your targets, not the result', run: () => setSessionMode(ctx, 'training') }
+                : { label: 'Session mode: Training — pick a target first', hint: 'opens Targets', run: () => ctx.navigate('targets') },
             { label: 'Keyboard shortcuts', kbd: '?', run: () => this.openCheatsheet() },
             { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding() },
             { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },

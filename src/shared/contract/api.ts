@@ -10,6 +10,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { CoachingSettings } from '../../core/coachingSettings';
+import type { SessionMode, SessionModeState } from '../../core/practice/sessionMode';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { ThresholdSuggestion } from '../../core/targets';
 import type { DashboardFilters, DashboardData, HeroDetail, MatchRow, PendingChangedPayload } from './dashboard';
@@ -236,6 +237,18 @@ export interface OwStatsApi {
   getSessionSettings(): Promise<SessionSettings>;
   /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
   setSessionSettings(input: SessionSettings): Promise<SessionSettings>;
+  /**
+   * Switch the Stats / Training session mode (issue #342); persisted until
+   * changed. Matches recorded from now on are stamped with it. Returns the
+   * persisted state.
+   */
+  setSessionMode(mode: SessionMode): Promise<SessionModeState>;
+  /**
+   * Reclassify recorded matches as Training or Stats (a row's or a whole
+   * sitting's "Mark as training / stats"). Returns how many stored matches
+   * changed — a demo match is never in real history, so it counts 0.
+   */
+  setMatchSessionMode(input: { matchIds: string[]; mode: SessionMode }): Promise<{ updated: number }>;
   /** The currently persisted coaching (practice focus / check-in / break) settings. */
   getCoaching(): Promise<CoachingSettings>;
   /** Persist new coaching settings; returns the persisted (normalized) value. */
@@ -459,6 +472,8 @@ export const IPC_CHANNELS = {
   setReadiness: 'settings:set-readiness',
   getSessionSettings: 'settings:get-session',
   setSessionSettings: 'settings:set-session',
+  setSessionMode: 'settings:set-session-mode',
+  setMatchSessionMode: 'manual:set-match-session-mode',
   getCoaching: 'settings:get-coaching',
   setCoaching: 'settings:set-coaching',
   getGrading: 'settings:get-grading',

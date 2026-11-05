@@ -30,7 +30,7 @@ The home of the manual (◎) layer. Auto-tracking removes the "I'm logging this 
 
 ## Practice mode (#321)
 
-Active when practice focus is on (Settings › Coaching; `src/core/practice/focus.ts`, `practiceFocusOn`). Off, or with no active targets, the card is the layout above, unchanged. The chooser (`renderer/src/components/focusTargetChooser.ts`, with `breakChip.ts`) is shared with **Log Match** (`renderer/src/app/log-match.ts`).
+Active when practice focus is on (Settings › Coaching; `src/core/practice/focus.ts`, `practiceFocusOn`). Off, or with no active targets, the card is the layout above, unchanged. While the session mode is **Training** (#342), practice focus is on whatever the setting says (`practiceFocusOn`'s `sessionMode` argument), so the focus chooser and grades lead here too. The chooser (`renderer/src/components/focusTargetChooser.ts`, with `breakChip.ts`) is shared with **Log Match** (`renderer/src/app/log-match.ts`).
 
 - **Card order:** targets → How you played → How it felt (with the break chip) → Skill rating (SR). Target execution leads the card.
 - **"What did you work on this game?" chips** — one per active **self-rated** target, plus **Nothing specific** and **+ another target**. Only the chosen targets get Hit / Partial / Missed rows. Unchosen targets are **not** attempts and **not** misses. One choice per game is recommended by a hint; several are allowed. Keys `1`–`9` toggle the chips while the card is open.

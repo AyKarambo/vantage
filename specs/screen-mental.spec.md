@@ -30,7 +30,7 @@ Surface the signals the game never reports — self-logged tilt, comms quality, 
 
 ## Practice layout (#321)
 
-Shown when **practice focus** is on (Settings › Coaching: **Auto** — the default, on while any target is active — / **Always on** / **Off**; `src/core/practice/focus.ts`). The header button reads "Practice focus · Auto|On" and links to that setting. With it off, or with no targets, the page is the stats layout above, unchanged. Sittings on this layout use a **90-minute** gap.
+Shown when **practice focus** is on (Settings › Coaching: **Auto** — the default, on while any target is active — / **Always on** / **Off**; `src/core/practice/focus.ts`). The header button reads "Practice focus · Auto|On" and links to that setting. With it off, or with no targets, the page is the stats layout above, unchanged. A **Training** session (#342, Stats ↔ Training in the sidebar / Matches header) turns practice focus on regardless of this setting, as if it were Always on — `practiceFocusOn(settings, targets, sessionMode)` returns true while the effective session mode is Training. Sittings on this layout use a **90-minute** gap.
 
 - **Target execution** (the lead card) — hit = 1, partial = ½, averaged over the window; a delta against the previous window. Winrate is a secondary line that points to Trends.
 - **Session quality** — execution per sitting for the last 8 sittings, with a small W–L as context.

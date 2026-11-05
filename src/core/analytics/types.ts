@@ -174,6 +174,14 @@ export interface GameRecord {
   /** The saved Review-screen read (target grades + feel flags), if graded. */
   review?: MatchReview;
   /**
+   * Played as a Training match (issue #342): stamped when the game is
+   * persisted while the player's session mode is Training, or set later by
+   * reclassifying the row / sitting. Absent = a Stats match (every game
+   * recorded before the mode existed). Display-only — rank, readiness and
+   * Trends never read it.
+   */
+  sessionMode?: 'training';
+  /**
    * Epoch ms of the import that brought this record into local history — set
    * only on imported games (never on live-tracked or hand-logged ones). Flags
    * the record so an import can be wiped and re-run cleanly without touching real

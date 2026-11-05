@@ -17,6 +17,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Added
+
+- **Training mode.** For sittings about drilling a target rather than winning, switch the session from
+  **Stats** to **Training** (sidebar, Matches header or Ctrl K). Matches you play while it's on show how well
+  you hit your targets — Hit / Partial / Missed per target, an execution score and a "Grade targets" shortcut —
+  with the result hidden until you click it. Wins and losses still count for rank, readiness and Trends, Stats
+  mode looks exactly as before, and any match or sitting can be re-marked from its ⋯ menu.
+
 ### Fixed
 
 - **Match length matches the game's history list.** The duration is the summed round time with each

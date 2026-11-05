@@ -282,6 +282,18 @@ account's per-role lines beneath it.
   popover explaining what it creates before pre-filling the builder's hero/role/map scope, not
   just the name — and links back to a target scoped that way directly, not just by matching
   its name.
+- **Training mode** — a sitting about drilling a target rather than winning can be switched to
+  **Training** (Stats ↔ Training in the sidebar's Current session card, the Matches header, or the
+  palette; it needs an active self-rated target). Matches recorded while it is on are marked as
+  training, and Matches shows them by **target execution** — a Hit / Partial / Missed pill per focus
+  target, an execution score (Hit 1 · Partial ½ · Miss 0) in place of the W/L badge, a **Grade
+  targets** shortcut while ungraded, and a sitting header reading "Training · targets · 3 hit ·
+  1 partial · 2 miss" with an execution bar — while the result and ±% stay hidden until you click
+  "result hidden" (or turn on **Show results in training sittings** in Customize view). A row's or
+  a whole sitting's ⋯ menu re-marks it as training or stats. Win/loss is still tracked: rank,
+  readiness and Trends are unchanged. Training also turns practice focus on for Mental and Review.
+  Stats mode (the default) looks exactly as before; an opt-in Coaching setting switches back to
+  Stats when a new sitting starts.
 - **Mental** — in **practice focus** (Settings › Coaching: Auto, Always on or Off), it leads with
   **target execution** and a **"What shapes your performance"** table (sleep, energy, mood and food from
   your check-ins, breaks and game number in a sitting); with it off, the stats view leads with calm/tilt state and a **"What it costs you"** card (the tilt tax generalized:
@@ -626,7 +638,7 @@ different logged-in account), a **Master data**
 editor (see below), and a **Coaching** card whose six editors — Quick Log (how many most-played
 heroes the log-match hero picker suggests, folded in as the first row), break reminder, readiness
 coach, target rotation, current session, and grading margin — plus practice focus (Auto / Always on /
-Off), break detection and the optional check-in questions — each get their own heading, a
+Off), the Training-mode auto-reset, break detection and the optional check-in questions — each get their own heading, a
 one-line hint naming what they actually affect, and a "See it on X →" link to the screen they
 govern, plus close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, and rank anchors — to any folder,

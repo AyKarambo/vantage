@@ -10,6 +10,8 @@ import { classifyGameType, isCompetitive } from '../core/matchFilter';
 import { isConfiguredAccount } from '../core/accountsManage';
 import { sourceOf } from '../core/source';
 import { autoParty, carriedParty } from '../core/party';
+import { effectiveSessionMode, stampSessionMode, type SessionMode } from '../core/practice/sessionMode';
+import { DEFAULT_SESSION_SETTINGS } from '../core/sessionSettings';
 import type { GameLoggedPayload, PendingChangedPayload } from '../shared/contract';
 import {
   nextBreakReminder, INITIAL_BREAK_REMINDER_STATE, type BreakReminderState,
@@ -116,6 +118,18 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   dismissPending(matchId: string): boolean;
   feed(msg: GepMessage): void;
 } {
+  /** The Stats / Training mode in effect right now, honoring the opt-in auto-reset. */
+  function modeNow(): SessionMode {
+    const config = deps.getConfig();
+    if (config.sessionMode?.mode !== 'training') return 'stats';
+    return effectiveSessionMode(config.sessionMode, {
+      autoReset: config.coaching?.trainingAutoReset === true,
+      gapMinutes: config.sessionSettings?.gapMinutes ?? DEFAULT_SESSION_SETTINGS.gapMinutes,
+      now: Date.now(),
+      matchTimes: deps.history.all().map((g) => g.timestamp),
+    });
+  }
+
   // Lives in this closure — same lifetime as the pipeline (see recordGame JSDoc).
   let reminderState: BreakReminderState = INITIAL_BREAK_REMINDER_STATE;
 
@@ -129,8 +143,12 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
    * Returns whether the game was newly added (false = duplicate matchId or
    * non-competitive).
    */
-  function recordGame(game: GameRecord): boolean {
-    if (!isCompetitive(game.gameType)) return false;
+  function recordGame(input: GameRecord): boolean {
+    if (!isCompetitive(input.gameType)) return false;
+    // Session mode (issue #342): a game recorded while Training is on — live
+    // or hand-logged, both arrive here — is stamped now, at persist time, so
+    // Matches keeps showing it as training whatever the toggle says later.
+    const game = stampSessionMode(input, modeNow());
     if (!deps.history.add(game)) return false;
     // Announce the newly recorded match so the renderer can refresh the live
     // dashboard and follow onto the account just played. `configured` says whether
