@@ -26,6 +26,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   targets instead of the win–loss. Wins and losses still count for rank, readiness and Trends, Stats
   mode looks exactly as before, and any match or sitting can be re-marked from its ⋯ menu.
 
+- **Training mode is now a real view switch.** On Matches, **Training** shows only your training games and
+  grades each by ✓ Hit, ◐ Partial or ✕ Miss in the win / draw / loss colours instead of a number; **Stats**
+  brings every game back with its win/loss. The optional Performance field is now a Loss → Draw → Win meter
+  (the 0–100 sits in its tooltip).
+
 - **Cheater compensation.** When Overwatch bans a cheater from one of your matches and gives back the rank
   you lost, add it in **Settings → Accounts → Manage ranks… → Cheater refund** (or **Add cheater
   compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never

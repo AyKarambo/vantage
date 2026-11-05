@@ -52,8 +52,8 @@ export function sessionModeToggle(ctx: ViewContext, opts: { compact?: boolean } 
     onChange: (next) => setSessionMode(ctx, next),
   });
   control.title = mode === 'training'
-    ? 'Training: Matches leads with how well you executed your targets; win/loss stays tracked but hidden'
-    : 'Stats: Matches leads with win/loss. Switch to Training for a sitting about drilling a target';
+    ? 'Training: Matches shows only training games, by Hit / Partial / Miss on your targets; win/loss stays tracked but out of sight. Switch to Stats to see everything'
+    : 'Stats: Matches shows every game with win/loss. Switch to Training for a sitting about drilling a target';
   control.setAttribute('aria-label', 'Session mode');
   return h('div', { class: `session-mode${opts.compact ? ' session-mode--compact' : ''}` }, control);
 }

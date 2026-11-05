@@ -1543,12 +1543,69 @@ table.factor-table td.num {
 }
 
 /* Training sittings (issue #342) --------------------------------------------- */
-/* A training row's lead cell: the execution score (0-100), tinted inline on
-   the shared ramp; neutral background so it never reads as a W/L badge. */
-.match-result.is-training {
+/* A training row's lead cell: the Hit / Partial / Miss symbols (✓ ◐ ✕) in the
+   win / draw / loss colours — the training counterpart of the W/L/D chip. One
+   target reuses .match-result.is-win/-draw/-loss; several get a neutral cell
+   holding small symbols (or, from four, dots). */
+.match-result.grade-lead { font-size: 18px; line-height: 1; }
+.match-result.grade-lead--multi {
   background: var(--surface-3);
-  color: var(--muted);
-  font-size: 12px;
+  gap: 2px;
+  font-size: 14px;
+}
+.match-result.grade-lead--dots {
+  background: var(--surface-3);
+  display: grid;
+  grid-template-columns: repeat(3, 7px);
+  grid-auto-rows: 7px;
+  gap: 3px;
+  align-content: center;
+  justify-content: center;
+}
+.match-result.is-ungraded {
+  background: transparent;
+  border: 1px dashed var(--border-2);
+  color: var(--muted-2);
+  font-size: 14px;
+}
+.grade-g.is-win, .grade-dot.is-win { color: var(--win-text); }
+.grade-g.is-loss, .grade-dot.is-loss { color: var(--loss-text); }
+.grade-g.is-draw, .grade-dot.is-draw { color: var(--muted); }
+.grade-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: block; }
+/* Header split bar: Hit / Partial / Miss shares, win / draw / loss coloured. */
+.grade-split {
+  display: inline-flex;
+  width: 64px;
+  height: 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 1px;
+  align-self: center;
+}
+.grade-split-seg { display: block; height: 100%; flex-basis: 0; }
+.grade-split-seg.is-win { background: var(--win-text); }
+.grade-split-seg.is-loss { background: var(--loss-text); }
+.grade-split-seg.is-draw { background: var(--muted); }
+/* Self-rated performance meter: a Loss → Draw → Win track with a marker. */
+.perf-meter {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  width: 38px;
+  height: 5px;
+  margin-right: 7px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--loss-text), var(--muted), var(--win-text));
+  opacity: 0.9;
+}
+.perf-meter-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
 }
 /* Muted 'result hidden' / revealed result — a quiet secondary affordance. */
 .training-result {
