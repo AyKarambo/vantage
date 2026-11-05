@@ -357,7 +357,7 @@ export function openManageRanks(account: string, onChange: () => void): void {
       const status = roleStatus(rank, openRun, run?.completed === true);
       const statusEl = h('div', { class: 'rank-modal-status' },
         status.tone === 'empty' ? h('span', { class: 'u-dim' }, status.text) : pill(status.text, 'accent'),
-        status.tone === 'placed' ? h('span', { class: 'rank-modal-placed u-dim' }, 'placed') : null,
+        status.tone === 'placed' ? h('span', { class: 'rank-modal-placed u-dim' }, 'from placements') : null,
       );
 
       const actions: Node[] = [];
@@ -447,7 +447,7 @@ export function openManageRanks(account: string, onChange: () => void): void {
             onConfirm: (reset) => void bridge.resetPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
           }),
           confirmButton({
-            label: 'Remove placement record',
+            label: 'Remove record',
             confirmLabel: 'Remove — undo the confirmed rank?',
             variant: 'ghost',
             title: 'Undoes the confirmed rank and un-marks these matches as placements — for when this shouldn’t have been tracked as a run at all.',
@@ -466,9 +466,9 @@ export function openManageRanks(account: string, onChange: () => void): void {
       // Cheater compensation (#341) — a refund only moves a rank that exists,
       // so it is offered on every row that has one (an open run has none yet).
       if (rank && !openRun) {
-        actions.push(button('Cheater compensation', {
+        actions.push(button('Cheater refund', {
           variant: 'ghost',
-          title: 'Overwatch refunded rank after banning a cheater from one of your matches — add that % here.',
+          title: 'Cheater compensation: Overwatch refunded rank after banning a cheater from one of your matches — add that % here.',
           onClick: () => leaveFor(() => openRankAdjustment({ account, lockAccount: true, role, onChange, onReturn: reopen })),
         }));
       }

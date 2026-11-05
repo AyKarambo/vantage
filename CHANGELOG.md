@@ -27,7 +27,7 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   mode looks exactly as before, and any match or sitting can be re-marked from its ⋯ menu.
 
 - **Cheater compensation.** When Overwatch bans a cheater from one of your matches and gives back the rank
-  you lost, add it in **Settings → Accounts → Manage ranks… → Cheater compensation** (or **Add cheater
+  you lost, add it in **Settings → Accounts → Manage ranks… → Cheater refund** (or **Add cheater
   compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never
   counts as a game. Recent refunds are listed there so you can remove a typo, and the Trends rank chart marks them.
 

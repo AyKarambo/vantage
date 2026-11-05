@@ -115,7 +115,10 @@ export function infoTip(text: string, opts: InfoTipOpts): HTMLElement {
 
   btn.addEventListener('mouseenter', show);
   btn.addEventListener('mouseleave', releaseTransient);
-  btn.addEventListener('focusin', show);
+  // Keyboard focus only: a dialog that moves focus onto its first control on
+  // open (overlay.ts) must not pop the tip by itself — `:focus-visible` is
+  // false for script/mouse focus and true when the user Tabs here.
+  btn.addEventListener('focusin', () => { if (btn.matches(':focus-visible')) show(); });
   btn.addEventListener('focusout', releaseTransient);
   // Click PINS the panel open — the touch/no-hover path, and the one that
   // survives the pointer moving away — closed by a click anywhere else or
