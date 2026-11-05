@@ -479,7 +479,11 @@ account's per-role lines beneath it.
   already selected, not just a prefilled name, and Focus links its progress display back to that
   target by scope, not by guessing from its name.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
-  `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
+  `W`/`L`/`D` picks the result and jumps straight to the map; type a few letters and `Tab` takes
+  the top match and moves on. Each button group (role, heroes, flags, grades…) is a single Tab
+  stop with `←`/`→` inside it, and `Enter` in the hero search picks the top hero. The card only
+  closes on purpose (#340): a click beside it does nothing, and ✕ / Cancel / `Esc` ask
+  "Discard this match?" once you've entered anything. The **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still
   reachable by typing its name (shown muted, deprioritized), just not offered by default. The
   search is **fuzzy, not prefix-only** (L4) — a typo, a missing apostrophe or a missing accent
