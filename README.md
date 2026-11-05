@@ -285,11 +285,15 @@ account's per-role lines beneath it.
 - **Training mode** — a sitting about drilling a target rather than winning can be switched to
   **Training** (Stats ↔ Training in the sidebar's Current session card, the Matches header, or the
   palette; it needs an active self-rated target). Matches recorded while it is on are marked as
-  training, and Matches shows them by **target execution** — a Hit / Partial / Missed pill per focus
-  target, an execution score (Hit 1 · Partial ½ · Miss 0) in place of the W/L badge, a **Grade
+  training. The switch is a **view switch** on Matches: in **Training** it lists only training games,
+  by **target execution** — a Hit / Partial / Missed pill per focus target and, in place of the W/L
+  badge, a ✓ ◐ ✕ symbol in the win / draw / loss colours (one per target, dots from four), a **Grade
   targets** shortcut while ungraded, and a sitting header reading "Training · targets · 3 hit ·
-  1 partial · 2 miss" with an execution bar — while the result and ±% stay hidden until you click
-  "result hidden" (or turn on **Show results in training sittings** in Customize view). A row's or
+  1 partial · 2 miss" with a Hit / Partial / Miss split bar — while the result and ±% stay hidden
+  until you click "result hidden" (or turn on **Show results in training sittings** in Customize
+  view), and the result filter is gone. Switch to **Stats** and every game is back with its
+  win/loss (training ones keep a "Training" tag). The optional **Performance** field (Customize
+  view) is a Loss → Draw → Win meter, the 0–100 in its tooltip. A row's or
   a whole sitting's ⋯ menu re-marks it as training or stats. Win/loss is still tracked: rank,
   readiness and Trends are unchanged. The sidebar's Current session card follows suit in a training sitting, showing how many games hit your
   targets ("2/4 targets hit"), the execution % and what's left to grade instead of the W–L.

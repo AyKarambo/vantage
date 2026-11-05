@@ -8,7 +8,7 @@ import { formatPlayedTime, pct, prettyDay, rankLabel, relTime, roleLabel, signed
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleIcon } from '../components/roleIcon';
 import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, toggleRow, type PillState } from '../components/primitives';
-import { wrHsl } from '../theme';
+import { gradeLeadCell, gradeSplitBar, performanceMeter } from '../components/gradeGlyphs';
 import { openPopover } from '../components/popover';
 import { clickableRow } from '../components/clickableRow';
 import { inlineLink } from '../components/inlineLink';
@@ -19,8 +19,8 @@ import { store } from '../store';
 import { deleteMatch } from '../matchActions';
 import { openMatchEditorById } from './matchDetail';
 import { MATCHES_PAGE_SIZE } from '../../../src/core/dashboardData';
-import { executionScore, isTrainingMatch, splitByMode, trainingSummary } from '../../../src/core/practice/sessionMode';
-import { sessionModeToggle } from '../components/sessionModeToggle';
+import { isTrainingMatch, splitByMode, trainingSummary } from '../../../src/core/practice/sessionMode';
+import { sessionModeToggle, setSessionMode } from '../components/sessionModeToggle';
 import { toast } from '../components/toast';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
@@ -139,6 +139,11 @@ export function matches(ctx: ViewContext): HTMLElement {
   const hadFocus = outgoing instanceof HTMLInputElement && outgoing.classList.contains('matches-search-input');
   const caret = hadFocus ? outgoing.selectionStart : null;
 
+  // The Stats ↔ Training switch is a view switch: Training shows only training
+  // matches, by target execution, with no result filter to peek past it; Stats
+  // shows everything with win/loss.
+  const trainingView = ctx.data.sessionMode.mode === 'training';
+
   const host = h('div', { class: 'view view--wide' });
   const headHost = h('div');
   const scopeHost = h('div');
@@ -164,6 +169,7 @@ export function matches(ctx: ViewContext): HTMLElement {
   const resultChipsHost = h('div', { style: { display: 'flex', gap: '6px' } });
   const typeChipsHost = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } });
   const paintResultChips = (): void => {
+    if (trainingView) { render(resultChipsHost); return; }
     render(resultChipsHost, ...(['Win', 'Loss', 'Draw'] as Result[]).map((r) =>
       chip(RESULT_LETTER[r], matchResultFilter.has(r), () => {
         if (matchResultFilter.has(r)) matchResultFilter.delete(r); else matchResultFilter.add(r);
@@ -182,7 +188,7 @@ export function matches(ctx: ViewContext): HTMLElement {
       })));
   };
   const hasTextFilter = (): boolean =>
-    matchResultFilter.size > 0 || matchTypeFilter.size > 0 || matchSearch.trim() !== '';
+    (!trainingView && matchResultFilter.size > 0) || matchTypeFilter.size > 0 || matchSearch.trim() !== '';
   const clearLink = (): HTMLElement | null =>
     hasTextFilter()
       ? inlineLink('Clear filter', {
@@ -215,9 +221,12 @@ export function matches(ctx: ViewContext): HTMLElement {
           ? allMatches.filter((m) => m.map === map)
           : allMatches;
     const textActive = hasTextFilter();
-    const rows = textActive
-      ? textFilterRows(scoped, { results: matchResultFilter, mapTypes: matchTypeFilter, search: matchSearch })
+    const textRows = textActive
+      ? textFilterRows(scoped, { results: trainingView ? new Set<Result>() : matchResultFilter, mapTypes: matchTypeFilter, search: matchSearch })
       : scoped;
+    // Training view: only the matches played as training; the rest wait in Stats.
+    const rows = trainingView ? textRows.filter(isTrainingMatch) : textRows;
+    const statsHidden = textRows.length - rows.length;
 
     // By day / by sitting (S4) — a single-day drill-down (from the heatmap)
     // keeps calendar grouping; grouping any further by sitting inside one
@@ -263,6 +272,13 @@ export function matches(ctx: ViewContext): HTMLElement {
           : `${rows.length} games in range · newest first · click a match for details`;
     }
 
+    if (trainingView) {
+      // No W–L tally in the headline here: the training view leads with execution.
+      const where = day ? `on ${prettyDay(day)}` : flag || map ? 'in this scope' : 'in range';
+      headline = `${rows.length} training game${rows.length === 1 ? '' : 's'} ${where} · judged by target execution · click a match for details`
+        + (statsHidden ? ` · ${statsHidden} stats game${statsHidden === 1 ? '' : 's'} hidden — switch to Stats to see them` : '');
+    }
+
     const headActions: Node[] = [sessionModeToggle(ctx)];
     if (!day) headActions.push(groupingToggle(grouping));
     headActions.push(customizeViewButton());
@@ -281,6 +297,7 @@ export function matches(ctx: ViewContext): HTMLElement {
     const training: TrainingView = {
       selfIds: new Set(ctx.data.targets.filter((t) => t.mode !== 'measured').map((t) => t.id)),
       showResults: prefs.get('trainingShowResults') === true,
+      statsView: !trainingView,
       repaint,
     };
 
@@ -292,7 +309,7 @@ export function matches(ctx: ViewContext): HTMLElement {
             // grouping (all days, and every sitting).
             ...groups.flatMap((g) => [
               day ? null : groupHeader(g, ctx, training, bySitting),
-              ...g.items.map((m) => (isTrainingMatch(m)
+              ...g.items.map((m) => (isTrainingMatch(m) && trainingView
                 ? trainingRow(m, ctx, columns, training, sittingIds.get(m.matchId) ?? [m.matchId])
                 : matchRow(m, ctx, columns, sittingIds.get(m.matchId) ?? [m.matchId]))),
             ]),
@@ -311,7 +328,9 @@ export function matches(ctx: ViewContext): HTMLElement {
                 // makes the advice actionable.
                 moreToLoad ? showOlderRow(ctx, repaint) : null,
               )
-            : emptyActions(ctx),
+            : trainingView
+              ? trainingEmpty(ctx, statsHidden)
+              : emptyActions(ctx),
     );
   };
   repaint();
@@ -467,6 +486,16 @@ function dayStepButton(label: string, target: string | null, ctx: ViewContext, h
   });
 }
 
+/** Training view with nothing to show: say why, and offer the way back to everything. */
+function trainingEmpty(ctx: ViewContext, statsHidden: number): HTMLElement {
+  return h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-start' } },
+    emptyState('No training games in this range yet — matches you play in Training mode show up here.'),
+    statsHidden || ctx.data.matchesTotal
+      ? button('Switch to Stats', { variant: 'soft', onClick: () => setSessionMode(ctx, 'stats') })
+      : null,
+  );
+}
+
 /** Empty in range — offer the next step instead of a dead end. */
 function emptyActions(ctx: ViewContext): HTMLElement {
   const hasOlderGames = ctx.data.totalGamesAllTime > 0 && ctx.data.filters.days !== 'all';
@@ -548,11 +577,9 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext, mode: Mat
     case 'finalScore':
       return m.finalScore ? document.createTextNode(m.finalScore) : null;
     case 'performance':
-      // The 0-100 self-rating as a small stat, tinted with the same continuous
-      // ramp the performance slider uses, so the colour language matches.
-      return m.performance != null
-        ? h('span', { class: 'mono', title: 'Self-rated performance', style: { color: wrHsl(m.performance / 100) } }, String(m.performance))
-        : null;
+      // The 0-100 self-rating as a Loss → Draw → Win meter (win colour = 100,
+      // draw = 50, loss = 0); the number lives in its tooltip.
+      return m.performance != null ? performanceMeter(m.performance) : null;
     case 'measuredGrades':
       return gradePills(m, ctx);
     case 'flags':
@@ -698,7 +725,7 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref, sitt
   },
     h('div', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
     h('div', { class: 'row-main' },
-      h('div', { class: 'row-name' },
+      h('div', { class: 'row-name', ...(isTrainingMatch(m) ? { style: { display: 'flex', alignItems: 'center', gap: '8px' } } : {}) },
         // The Maps screen doesn't list the 'Unknown' placeholder, so there is nothing to find there.
         m.map === UNKNOWN_MAP
           ? m.map
@@ -707,6 +734,8 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref, sitt
               title: `Find ${m.map} on the Maps screen`,
               onClick: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); },
             }),
+        // Stats view: a training match keeps its result, plus the quiet tag.
+        isTrainingMatch(m) ? trainingBadge() : null,
       ),
       metaLine,
     ),
@@ -838,6 +867,8 @@ interface TrainingView {
   selfIds: ReadonlySet<string>;
   /** The "Show results in training sittings" view option. */
   showResults: boolean;
+  /** Stats view (the session-mode switch): every match shows its result, training ones included. */
+  statsView: boolean;
   repaint: () => void;
 }
 
@@ -868,26 +899,6 @@ function selfGradeEntries(m: MatchRow, ctx: ViewContext, selfIds: ReadonlySet<st
 /** Short target name for a pill / header — the full name stays in the title. */
 function shortName(name: string, max = 16): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
-}
-
-/** The execution score (0–100) tinted on the shared ramp, as a training row's lead cell. */
-function executionCell(score: number | null, attempts: number): HTMLElement {
-  return h('div', {
-    class: 'match-result is-training',
-    title: score == null
-      ? 'Not graded yet — grade your targets to see how well you executed them'
-      : `Execution ${pct(score)} over ${attempts} target grade${attempts === 1 ? '' : 's'} (Hit 1 · Partial ½ · Miss 0)`,
-    style: score == null ? {} : { color: wrHsl(score) },
-  }, score == null ? '—' : String(Math.round(score * 100)));
-}
-
-/** A thin execution bar plus its %, for a training header. */
-function executionBar(score: number | null): HTMLElement | null {
-  if (score == null) return null;
-  return h('span', { class: 'exec-bar-wrap', title: `Execution ${pct(score)} (Hit 1 · Partial ½ · Miss 0)` },
-    h('span', { class: 'exec-bar' },
-      h('span', { class: 'exec-bar-fill', style: { width: `${Math.round(score * 100)}%`, background: wrHsl(score) } })),
-    h('span', { class: 'mono', style: { fontSize: '11px', color: wrHsl(score) } }, pct(score)));
 }
 
 /** The subtle "Training" tag on a row / header. */
@@ -940,7 +951,6 @@ function trainingRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref, t
   const open = (): void => ctx.navigate('matchDetail', { matchId: m.matchId });
   const targetsById = new Map(ctx.data.targets.map((x) => [x.id, x]));
   const grades = selfGradeEntries(m, ctx, t.selfIds);
-  const score = executionScore(grades.map(([, g]) => g));
   const revealed = t.showResults || revealedRows.has(m.matchId);
   // The ±% only ever shows muted, inside the reveal (never in its tinted
   // field); the rank at start follows the reveal.
@@ -981,7 +991,10 @@ function trainingRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref, t
     style: { gridTemplateColumns: matchRowGridTemplate(columnKeys.length) },
     ...clickableRow(open),
   },
-    executionCell(score, grades.length),
+    gradeLeadCell(
+      grades.map(([id, grade]) => ({ name: targetsById.get(id)?.name ?? 'target', grade })),
+      'Not graded yet — grade your targets to see how well you executed them',
+    ),
     h('div', { class: 'row-main' },
       h('div', { class: 'row-name', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
         m.map === UNKNOWN_MAP
@@ -1057,6 +1070,24 @@ function groupHeader(
     : names.map((n) => shortName(n, 24)).join(', ');
   const ungraded = s.games - s.graded;
   const revealed = t.showResults || revealedGroups.has(g.key);
+  if (t.statsView) {
+    // Stats view: the normal W–L · ±% header for the whole group, then the
+    // training half (targets, Hit / Partial / Miss, split bar) beside it.
+    const header = dayHeader(g.label, g);
+    header.classList.add('day-header--training');
+    const extras: Array<Node | null> = [
+      trainingBadge(),
+      names.length ? h('span', { class: 'u-muted', style: { fontSize: '11px' }, title: names.join(', ') }, shownNames) : null,
+      s.attempts
+        ? h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${s.hits} hit · ${s.partials} partial · ${s.misses} miss`)
+        : null,
+      gradeSplitBar(s),
+      ungraded ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${ungraded} to grade`) : null,
+    ];
+    header.append(...extras.filter((n): n is Node => n != null));
+    if (bySitting) header.append(sittingMenuButton(ids, stats.length === 0));
+    return header;
+  }
   return h('div', { class: 'day-header day-header--training' },
     h('span', { class: 'day-header-label' }, prettyDay(g.label)),
     stats.length ? statsTallyPart(stats) : null,
@@ -1065,7 +1096,7 @@ function groupHeader(
     s.attempts
       ? h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${s.hits} hit · ${s.partials} partial · ${s.misses} miss`)
       : null,
-    executionBar(s.score),
+    gradeSplitBar(s),
     ungraded ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${ungraded} to grade`) : null,
     resultReveal({
       revealed,
