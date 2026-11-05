@@ -28,7 +28,7 @@ import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import {
   autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
-  DEFAULT_SESSION_MODE, effectiveSessionMode, type SessionMode, type SessionModeState,
+  DEFAULT_SESSION_MODE, effectiveSessionMode, sessionTraining, type SessionMode, type SessionModeState, type SessionTraining,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
 import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap } from './rank';
@@ -278,7 +278,12 @@ export function computeDashboard(
     accountActivity: accountLastPlayedAt(all),
     rankTrend,
     placements,
-    session: currentSession(sessionGames, now, sessionSettings.gapMinutes),
+    session: withSessionTraining(
+      currentSession(sessionGames, now, sessionSettings.gapMinutes),
+      sessionTraining(sessionGames, new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id)), {
+        now, gapMinutes: sessionSettings.gapMinutes, mode: sessionMode,
+      }),
+    ),
     // Every past sitting (S4), same account scope + gap as `session` above, capped like every other list.
     sessions: sessionHistory(sessionGames, sessionSettings.gapMinutes, suppressed).slice(0, ROW_CAP),
     byRole: byRole(games),
@@ -655,6 +660,11 @@ export function matchSearchFilter(games: readonly GameRecord[], q: string): Game
 function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow[] {
   return selectMatches(games, { limit: ROW_CAP }).rows
     .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
+}
+
+/** The Current session card's read, with its training read (issue #342) attached when the sitting is a training one. */
+function withSessionTraining<S extends object>(session: S | null, training: SessionTraining | null): (S & { training?: SessionTraining }) | null {
+  return session && training ? { ...session, training } : session;
 }
 
 export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow {

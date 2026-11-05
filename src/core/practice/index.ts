@@ -14,6 +14,6 @@ export {
 } from './analytics';
 export {
   DEFAULT_SESSION_MODE, normalizeSessionMode, effectiveSessionMode, stampSessionMode, isTrainingMatch,
-  executionScore, trainingSummary, splitByMode, canTrain,
-  type SessionMode, type SessionModeState, type TrainingSummary,
+  executionScore, trainingSummary, splitByMode, canTrain, sessionTraining,
+  type SessionMode, type SessionModeState, type TrainingSummary, type SessionTraining,
 } from './sessionMode';

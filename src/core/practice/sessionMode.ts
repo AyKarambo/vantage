@@ -152,3 +152,42 @@ export function splitByMode<T extends { sessionMode?: string }>(rows: readonly T
 export function canTrain(targets: ReadonlyArray<{ isActive: boolean; archivedAt?: number; mode?: string }>): boolean {
   return targets.some((t) => t.isActive && !t.archivedAt && t.mode !== 'measured');
 }
+
+/** The Current session card's training read: the sitting's execution, game by game. */
+export interface SessionTraining extends TrainingSummary {
+  /** Graded training games whose every focus target was a Hit (execution score 1). */
+  hitGames: number;
+}
+
+/**
+ * The training read for the sidebar's Current session card, or null when it
+ * should keep its stats read. Looks at the trailing sitting (the same gap rule
+ * as `currentSession`; null once it has closed) and answers when it has a
+ * training match and either its latest match was played in Training or
+ * Training is on now — so a stats sitting, and a Stats-mode session, read
+ * exactly as before.
+ */
+export function sessionTraining(
+  games: readonly GameRecord[],
+  selfIds: ReadonlySet<string>,
+  opts: { now: number; gapMinutes: number; mode: SessionMode },
+): SessionTraining | null {
+  if (!games.length) return null;
+  const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
+  const gapMs = opts.gapMinutes * 60_000;
+  let sitting: GameRecord[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].timestamp - sorted[i - 1].timestamp > gapMs) sitting = [];
+    sitting.push(sorted[i]);
+  }
+  const last = sitting[sitting.length - 1];
+  if (opts.now - last.timestamp > gapMs) return null;
+  if (!sitting.some(isTrainingMatch) || (!isTrainingMatch(last) && opts.mode !== 'training')) return null;
+  const rows = sitting.map((g) => ({ sessionMode: g.sessionMode, targetGrades: g.review?.grades }));
+  const hitGames = rows.filter((r) => {
+    if (!isTrainingMatch(r)) return false;
+    const grades = Object.entries(r.targetGrades ?? {}).filter(([id]) => selfIds.has(id)).map(([, g]) => g);
+    return executionScore(grades) === 1;
+  }).length;
+  return { ...trainingSummary(rows, selfIds), hitGames };
+}

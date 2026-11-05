@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   canTrain, DEFAULT_SESSION_MODE, effectiveSessionMode, executionScore, isTrainingMatch, normalizeSessionMode,
-  practiceFocusOn, splitByMode, stampSessionMode, trainingSummary,
+  practiceFocusOn, sessionTraining, splitByMode, stampSessionMode, trainingSummary,
 } from '../src/core/practice';
 import { computeDashboard } from '../src/core/dashboardData';
 import { DEFAULT_COACHING, normalizeCoachingSettings } from '../src/core/coachingSettings';
@@ -179,7 +179,9 @@ describe('computeDashboard — session mode (#342)', () => {
     expect(marked.rankTrend).toEqual(plain.rankTrend);
     expect(marked.accountRanks).toEqual(plain.accountRanks);
     expect(marked.readiness).toEqual(plain.readiness);
-    expect(marked.session).toEqual(plain.session);
+    // The session card's W–L read is the same; only its training read is added.
+    const { training: _t, ...markedSession } = marked.session!;
+    expect(markedSession).toEqual(plain.session);
     expect(marked.overall.games).toBe(2);
   });
 });
@@ -256,5 +258,43 @@ describe('data provider — setSessionMode / setMatchSessionMode', () => {
     expect(editManual).toHaveBeenCalledWith('a', { sessionMode: 'training' });
     provider.setMatchSessionMode({ matchIds: ['a'], mode: 'stats' });
     expect(editManual).toHaveBeenLastCalledWith('a', { sessionMode: null });
+  });
+});
+
+describe('sessionTraining — the Current session card read', () => {
+  const self = new Set(['a', 'b']);
+  const opts = { now: NOW, gapMinutes: 180, mode: 'stats' as const };
+  const at = (id: string, minAgo: number, p: Partial<GameRecord> = {}): GameRecord => ({
+    ...game(id, 0, p), timestamp: NOW - minAgo * MIN,
+  });
+
+  it('counts games whose every focus target was hit, the tally and what is left to grade', () => {
+    const games = [
+      at('old', 600, { sessionMode: 'training', review: review({ a: 'hit' }) }), // an earlier sitting
+      at('t1', 80, { sessionMode: 'training', review: review({ a: 'hit', b: 'hit' }) }),
+      at('t2', 60, { sessionMode: 'training', review: review({ a: 'hit', b: 'missed' }) }),
+      at('t3', 40, { sessionMode: 'training', review: review({ a: 'hit' }) }),
+      at('t4', 20, { sessionMode: 'training' }),
+    ];
+    const t = sessionTraining(games, self, opts)!;
+    expect(t).toMatchObject({ games: 4, graded: 3, hitGames: 2, hits: 4, partials: 0, misses: 1, attempts: 5 });
+    expect(t.score).toBeCloseTo(0.8);
+  });
+
+  it('stays null for a stats sitting, a closed sitting, and a stats game after training in Stats mode', () => {
+    expect(sessionTraining([at('s', 20)], self, opts)).toBeNull();
+    expect(sessionTraining([at('s', 20)], self, { ...opts, mode: 'training' })).toBeNull();
+    expect(sessionTraining([at('t', 400, { sessionMode: 'training' })], self, opts)).toBeNull();
+    const mixed = [at('t', 40, { sessionMode: 'training' }), at('s', 20)];
+    expect(sessionTraining(mixed, self, opts)).toBeNull();
+    expect(sessionTraining(mixed, self, { ...opts, mode: 'training' })).toMatchObject({ games: 1 });
+  });
+
+  it('computeDashboard attaches it to the session only for a training sitting', () => {
+    const stats = computeDashboard([game('s', 10)], { days: 'all' }, demo, { targets: [authored('a')] });
+    expect(stats.session).not.toBeNull();
+    expect('training' in stats.session!).toBe(false);
+    const tr = computeDashboard([game('t', 10, { sessionMode: 'training', review: review({ a: 'hit' }) })], { days: 'all' }, demo, { targets: [authored('a')] });
+    expect(tr.session!.training).toMatchObject({ games: 1, hitGames: 1, graded: 1 });
   });
 });

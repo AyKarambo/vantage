@@ -18,7 +18,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { CoachingSettings } from '../../core/coachingSettings';
-import type { SessionModeState } from '../../core/practice/sessionMode';
+import type { SessionModeState, SessionTraining } from '../../core/practice/sessionMode';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { MasterData } from './masterData';
@@ -43,6 +43,11 @@ export interface Session extends WinLoss {
   date: string;
   streak: Streak;
   topMaps: Group[];
+  /**
+   * Present only for a training sitting (issue #342): the card shows target
+   * execution instead of W–L. Absent = the stats read, exactly as before.
+   */
+  training?: SessionTraining;
 }
 
 /** One cell of the activity heatmap. */

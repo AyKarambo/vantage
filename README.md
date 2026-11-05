@@ -291,7 +291,9 @@ account's per-role lines beneath it.
   1 partial · 2 miss" with an execution bar — while the result and ±% stay hidden until you click
   "result hidden" (or turn on **Show results in training sittings** in Customize view). A row's or
   a whole sitting's ⋯ menu re-marks it as training or stats. Win/loss is still tracked: rank,
-  readiness and Trends are unchanged. Training also turns practice focus on for Mental and Review.
+  readiness and Trends are unchanged. The sidebar's Current session card follows suit in a training sitting, showing how many games hit your
+  targets ("2/4 targets hit"), the execution % and what's left to grade instead of the W–L.
+  Training also turns practice focus on for Mental and Review.
   Stats mode (the default) looks exactly as before; an opt-in Coaching setting switches back to
   Stats when a new sitting starts.
 - **Mental** — in **practice focus** (Settings › Coaching: Auto, Always on or Off), it leads with

@@ -7,7 +7,7 @@
 import { h, render } from '../dom';
 import type { AppState, ViewId, ViewParams } from '../store';
 import { sameParams } from '../backStack';
-import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role } from '../../../src/shared/contract';
+import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role, SessionTraining } from '../../../src/shared/contract';
 import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { demoTransition } from '../../../src/core/demoPreference';
@@ -27,7 +27,7 @@ import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
 import { matchClock, pct, relTime, roleLabel, signed, streakText } from '../format';
-import { getWinrateScheme, setWinrateScheme } from '../theme';
+import { getWinrateScheme, setWinrateScheme, wrHsl } from '../theme';
 import { WINRATE_SCHEME_OPTIONS } from '../winrateScheme';
 import { getDensity, setDensity, DENSITY_OPTIONS } from '../density';
 import { initZoom, zoomIn, zoomOut, zoomReset } from '../zoom';
@@ -1036,8 +1036,11 @@ export class App {
       // gap threshold is a real, user-configurable number nothing here used
       // to surface.
       return h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px', lineHeight: '1.4' }, title: tip },
-        `No games in the last ${gapText} — your next game starts a new sitting`);
+        state.data?.sessionMode.mode === 'training'
+          ? `No games in the last ${gapText} — your next game starts a training sitting`
+          : `No games in the last ${gapText} — your next game starts a new sitting`);
     }
+    if (s.training) return this.trainingSessionSummary(s.training, s.date, tip);
     const topMap = s.topMaps[0];
     return h('div', {
       style: { marginTop: '5px', cursor: 'pointer' },
@@ -1054,6 +1057,41 @@ export class App {
       h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '3px' } },
         h('span', { class: `mono ${s.streak.type === 'W' ? 'is-win' : s.streak.type === 'L' ? 'is-loss' : 'u-dim'}`, style: { fontSize: '11px' } }, streakText(s.streak)),
         topMap ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${topMap.key} ×${topMap.games}`) : null,
+      ),
+    );
+  }
+
+  /**
+   * The Current session card for a training sitting (issue #342): how many
+   * graded games hit every focus target, the sitting's execution and its
+   * Hit / Partial / Miss tally — in place of the W–L, which a training sitting
+   * isn't judged by (it still counts everywhere else).
+   */
+  private trainingSessionSummary(t: SessionTraining, date: string, tip: string): HTMLElement {
+    const ungraded = t.games - t.graded;
+    return h('div', {
+      class: 'session-training',
+      style: { marginTop: '5px', cursor: 'pointer' },
+      title: `${tip}
+A game counts as hit when every target you worked on in it was a Hit. Execution: Hit 1 · Partial ½ · Miss 0.`,
+      ...clickableRow(() => store.setView('matches', { day: date })),
+    },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
+        h('span', { class: 'mono', style: { fontSize: '17px', fontWeight: '600' } }, t.graded ? `${t.hitGames}/${t.graded}` : '—'),
+        h('span', { class: 'u-muted', style: { fontSize: '11px' } }, t.graded ? 'targets hit' : 'nothing graded yet'),
+        t.score != null
+          ? h('span', { class: 'mono', style: { fontSize: '11px', color: wrHsl(t.score) } }, `· ${pct(t.score)}`)
+          : null,
+      ),
+      t.score != null
+        ? h('span', { class: 'exec-bar session-training-bar' },
+            h('span', { class: 'exec-bar-fill', style: { width: `${Math.round(t.score * 100)}%`, background: wrHsl(t.score) } }))
+        : null,
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '3px', flexWrap: 'wrap' } },
+        t.attempts
+          ? h('span', { class: 'mono u-dim', style: { fontSize: '10.5px', whiteSpace: 'nowrap' } }, `${t.hits} hit · ${t.partials} partial · ${t.misses} miss`)
+          : null,
+        ungraded ? h('span', { style: { fontSize: '11px', color: 'var(--accent-text)' } }, `${ungraded} to grade`) : null,
       ),
     );
   }
