@@ -3,6 +3,7 @@ import type { Role } from '../model';
 import { classifyGameType } from '../matchFilter';
 import { applyMatch, stateFromAnchor } from './engine';
 import { pointsToRank, rankToPoints } from './scalar';
+import { adjustmentCursor } from './adjustments';
 import { rankKey, type RankAnchorMap, type RankPosition } from './types';
 
 /**
@@ -157,8 +158,12 @@ export function enteringRanks(
     // (3) FORWARD from the anchor: the state BEFORE a match is what it entered
     // on. Tied timestamps form ONE group sharing one entering value, because
     // `rankEnteringMatch` resolves through a STRICTLY-earlier previous match.
+    // Rank adjustments strictly before a group move what it entered on (same
+    // tie rule as `currentRank`: one sharing a match's instant lands after it).
     let state = stateFromAnchor(anchor);
+    const cursor = adjustmentCursor(anchor);
     for (let i = split; i < track.length; i++) {
+      state = cursor.until(state, track[i].timestamp);
       let j = i;
       while (j < track.length && track[j].timestamp === track[i].timestamp) j++;
       const cell: EnteringRank = {
@@ -229,10 +234,13 @@ export function enteringRankAt(
     // Forward: replay every comp match strictly between the anchor and the
     // target — identical to currentRank(untilTs = the latest match before it).
     let state = stateFromAnchor(anchor);
+    const cursor = adjustmentCursor(anchor);
     for (const g of track) {
       if (g.timestamp <= anchor.setAt || g.timestamp >= matchTs) continue;
+      state = cursor.until(state, g.timestamp);
       state = applyMatch(state, { result: g.result, srDelta: srInput(g, suppressed) });
     }
+    state = cursor.until(state, matchTs);
     return {
       note: 'calculated',
       position: { tier: state.tier, division: state.division, progressPct: state.progressPct },

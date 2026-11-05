@@ -1,9 +1,9 @@
 import type { CommsTone, GameRecord, MatchMental, MatchReview, TargetGrade } from './analytics';
 import type { Role } from './model';
 import type { AuthoredTarget, TargetMode } from './targets';
-import type { RankAnchorMap } from './rank';
+import type { RankAdjustment, RankAnchorMap } from './rank';
 import { resolveResult } from './resolvers/result';
-import { TIERS } from './rank';
+import { TIERS, parseRankAdjustment } from './rank';
 
 /**
  * Pure parser/validator for a "Vantage import file" — the neutral JSON envelope
@@ -77,6 +77,8 @@ export interface ParsedImport {
   rankAnchors?: ImportRankAnchor[];
   /** v2 only — the player's authored improvement targets, for a full backup restore. Absent on a v1 file. */
   targets?: AuthoredTarget[];
+  /** v2 only — rank adjustments (cheater compensation, manual corrections). Absent when the file has none. */
+  rankAdjustments?: RankAdjustment[];
 }
 
 /** Validate + normalize a parsed import envelope. `opts.now` (default `Date.now`) clamps future timestamps. */
@@ -119,6 +121,11 @@ export function parseVantageImport(raw: unknown, opts: { now?: () => number } = 
       .map((row, index) => toRankAnchor(row, (reason) => errors.push({ index: null, reason: `Rank anchor ${index}: ${reason}` })))
       .filter((a): a is ImportRankAnchor => a !== null)
     : undefined;
+  const rankAdjustments = Array.isArray(raw.rankAdjustments)
+    ? raw.rankAdjustments
+      .map((row, index) => toRankAdjustment(row, (reason) => errors.push({ index: null, reason: `Rank adjustment ${index}: ${reason}` })))
+      .filter((a): a is RankAdjustment => a !== null)
+    : undefined;
   const targets = Array.isArray(raw.targets)
     ? raw.targets
       .map((row, index) => toTarget(row, (reason) => errors.push({ index: null, reason: `Target ${index}: ${reason}` })))
@@ -132,8 +139,23 @@ export function parseVantageImport(raw: unknown, opts: { now?: () => number } = 
     ...(accounts ? { accounts } : {}),
     ...(rankAnchors ? { rankAnchors } : {}),
     ...(targets ? { targets } : {}),
+    ...(rankAdjustments ? { rankAdjustments } : {}),
     errors,
   };
+}
+
+/** Validate one backup rank-adjustment row (same rules as a fresh entry, plus its id). */
+function toRankAdjustment(raw: unknown, reject: (reason: string) => void): RankAdjustment | null {
+  if (!isRecord(raw) || typeof raw.id !== 'string' || !raw.id.trim()) {
+    reject('missing id.');
+    return null;
+  }
+  const parsed = parseRankAdjustment(raw);
+  if (!parsed.ok) {
+    reject(parsed.reason);
+    return null;
+  }
+  return { id: raw.id.trim(), ...parsed.value };
 }
 
 /** Validate one game row into a {@link GameRecord}, or `null` (and a reported reason) when it can't be imported. */
@@ -349,6 +371,8 @@ export interface BackupData {
   /** Configured accounts only (battleTag → label) — detected/unlabelled ones are re-derived from `games` on import. */
   accounts: ImportAccount[];
   rankAnchors: RankAnchorMap;
+  /** Rank adjustments (cheater compensation…); optional so older callers keep compiling. */
+  rankAdjustments?: RankAdjustment[];
   targets: AuthoredTarget[];
 }
 
@@ -358,6 +382,7 @@ export interface VantageBackupEnvelope {
   exportedAt: number;
   accounts: ImportAccount[];
   rankAnchors: ImportRankAnchor[];
+  rankAdjustments: RankAdjustment[];
   targets: AuthoredTarget[];
   games: GameRecord[];
 }
@@ -386,6 +411,7 @@ export function buildImportEnvelope(data: BackupData, opts: { now?: () => number
         return { account: key.slice(0, key.length - role.length - 2), role, tier: a.tier, division: a.division, progressPct: a.progressPct, setAt: a.setAt };
       })
       .filter((a): a is ImportRankAnchor => a !== null),
+    rankAdjustments: data.rankAdjustments ?? [],
     targets: data.targets,
     games: data.games,
   };

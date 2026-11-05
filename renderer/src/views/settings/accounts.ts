@@ -4,6 +4,7 @@ import { bridge } from '../../bridge';
 import { button, card, confirmButton, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
 import { openPlacementComplete, maybeConfirmPlacementRank } from '../../app/placementComplete';
+import { openRankAdjustment } from '../../app/rankAdjustment';
 import { inlineLink } from '../../components/inlineLink';
 import { infoTip } from '../../components/infoTip';
 import { roleLabel } from '../../format';
@@ -460,6 +461,16 @@ export function openManageRanks(account: string, onChange: () => void): void {
             button('Recount', { variant: 'ghost', onClick: () => void bridge.recountPlacementRun({ account, role }).then(afterWrite) }),
           );
         }
+      }
+
+      // Cheater compensation (#341) — a refund only moves a rank that exists,
+      // so it is offered on every row that has one (an open run has none yet).
+      if (rank && !openRun) {
+        actions.push(button('Cheater compensation', {
+          variant: 'ghost',
+          title: 'Overwatch refunded rank after banning a cheater from one of your matches — add that % here.',
+          onClick: () => leaveFor(() => openRankAdjustment({ account, lockAccount: true, role, onChange, onReturn: reopen })),
+        }));
       }
 
       return h('div', { class: 'rank-modal-row' },

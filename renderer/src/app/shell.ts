@@ -36,6 +36,7 @@ import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
 import { maybeOfferPlacements } from './placementOffer';
+import { openRankAdjustment } from './rankAdjustment';
 import { roleStatus } from '../roleStatus';
 import { sidebarChip } from '../sidebarChip';
 import {
@@ -1263,6 +1264,17 @@ export class App {
           }))),
           actions: [
             { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
+            {
+              label: 'Add cheater compensation…',
+              hint: 'rank refund after a ban',
+              run: () => {
+                const f = store.get().filters;
+                openRankAdjustment({
+                  ...(f.account !== 'all' ? { account: f.account } : {}),
+                  ...(f.role !== 'all' ? { role: f.role as Role } : {}),
+                });
+              },
+            },
             { label: 'Keyboard shortcuts', kbd: '?', run: () => this.openCheatsheet() },
             { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding() },
             { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },

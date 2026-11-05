@@ -25,7 +25,7 @@ export interface ResultChooserOpts {
  * source of state. Shared by the quick-log card and the match-detail editor
  * (`scope` must be focusable so the keydown actually reaches it).
  */
-export function bindResultKeys(scope: HTMLElement, row: HTMLElement): void {
+export function bindResultKeys(scope: HTMLElement, row: HTMLElement, after?: () => void): void {
   scope.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
@@ -36,6 +36,9 @@ export function bindResultKeys(scope: HTMLElement, row: HTMLElement): void {
     row.querySelectorAll('button').forEach((b) => {
       if (b.dataset.value === pick) b.click();
     });
+    // #340: the result is the first thing picked, so W/L/D carries straight
+    // on to the next field (the map) instead of needing an extra Tab.
+    after?.();
   });
 }
 
@@ -62,7 +65,10 @@ export function bindSaveKeys(scope: HTMLElement, opts: SaveKeysOpts): void {
   scope.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     // e.repeat: ignore key-repeat from a held Enter — only a fresh keydown saves.
-    if (e.key !== 'Enter' || e.repeat || t instanceof HTMLButtonElement) return;
+    // A button inside a roving group (#340 — role, result, chips) selects with
+    // Space/arrows, so Enter there still saves rather than re-clicking it.
+    const plainButton = t instanceof HTMLButtonElement && t.dataset.roving === undefined;
+    if (e.key !== 'Enter' || e.repeat || plainButton) return;
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) (opts.saveAndNext ?? opts.save)();
     else opts.save();

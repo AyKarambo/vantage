@@ -1,7 +1,8 @@
 import type { Role } from '../model';
 import type { GameRecord } from '../analytics';
 import { classifyGameType } from '../matchFilter';
-import { computeRank } from './engine';
+import { applyMatch, computeRank, stateFromAnchor } from './engine';
+import { adjustmentCursor } from './adjustments';
 import { rankKey, type RankAnchor, type RankAnchorMap, type RankMatchInput, type RankState } from './types';
 
 /**
@@ -61,7 +62,29 @@ export function currentRank(
 ): RankState | null {
   const anchor = anchors[rankKey(account, role)];
   if (!anchor) return null;
-  return computeRank(anchor, competitiveComps(games, account, role, anchor.setAt, untilTs, suppressed));
+  if (!anchor.adjustments?.length) {
+    return computeRank(anchor, competitiveComps(games, account, role, anchor.setAt, untilTs, suppressed));
+  }
+  // Rank adjustments (cheater compensation…) interleave with the matches in time
+  // order; one tied with a match applies after it. They move the ladder but are
+  // never emitted as a comp — see ./adjustments.
+  const track = games
+    .filter(
+      (g) =>
+        g.account === account &&
+        g.role === role &&
+        classifyGameType(g.gameType) === 'competitive' &&
+        g.timestamp > anchor.setAt &&
+        (untilTs === undefined || g.timestamp <= untilTs),
+    )
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const cursor = adjustmentCursor(anchor);
+  let state = stateFromAnchor(anchor);
+  for (const g of track) {
+    state = cursor.until(state, g.timestamp);
+    state = applyMatch(state, { result: g.result, srDelta: suppressed?.has(g.matchId) ? undefined : g.srDelta });
+  }
+  return untilTs === undefined ? cursor.rest(state) : cursor.until(state, untilTs, true);
 }
 
 export type { RankAnchor };

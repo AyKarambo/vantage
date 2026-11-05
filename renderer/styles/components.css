@@ -2417,6 +2417,28 @@ table.data tbody tr:focus-visible {
   justify-content: flex-end;
 }
 
+/* Cheater-compensation quick dialog (#341): the recent-adjustments list —
+   date | role | ±% | Remove, one compact row each. */
+.rank-adj-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 52px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.rank-adj-row .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.rank-adj-error:empty {
+  display: none;
+}
+.rank-adj-error {
+  color: var(--loss-text);
+}
+
 /* In-view search box (the Players list). Deliberately not a filter-bar control:
    its text is view-local, never a route param or a store filter. */
 .search-input {
