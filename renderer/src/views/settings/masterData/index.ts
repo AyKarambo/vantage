@@ -15,8 +15,10 @@ import { openUpdatePreview } from './updatePreview';
 /** Past this age (or never checked) the "Last checked" line nudges toward a manual check (W1). */
 const STALE_CHECK_DAYS = 60;
 
-/** "Last checked 3 weeks ago · OverFast API (community mirror of Blizzard data) ·
- *  nothing about you is sent" (W1) — names the source and what leaves the
+/** The last "last checked" stamp read — a re-render repaints from it instead of "Checking…" (#339). `null` = not read yet. */
+let cachedLastChecked: number | undefined | null = null;
+
+/** "Last checked 3 weeks ago · OverFast API · nothing about you is sent" (W1) — names the source and what leaves the
  *  device, since "Update from online source" used to say neither, and adds a
  *  soft nudge once the check is old enough a new hero/map release could have
  *  slipped by. `null` while the first fetch of `lastCheckedAt` is in flight. */
@@ -25,7 +27,7 @@ function lastCheckedLine(lastCheckedAt: number | undefined | null): HTMLElement 
   const stale = lastCheckedAt == null || Date.now() - lastCheckedAt > STALE_CHECK_DAYS * 86400000;
   return h('div', { class: 'hint', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
     h('span', null,
-      `${lastCheckedAt != null ? `Last checked ${relTime(lastCheckedAt)}` : 'Never checked'} · OverFast API (community mirror of Blizzard data) · nothing about you is sent`),
+      `${lastCheckedAt != null ? `Last checked ${relTime(lastCheckedAt)}` : 'Never checked'} · OverFast API · nothing about you is sent`),
     stale ? h('span', { class: 'pill is-accent', style: { fontSize: '10.5px' } }, 'A new hero or map may be missing — check now') : null,
   );
 }
@@ -42,8 +44,12 @@ function lastCheckedLine(lastCheckedAt: number | undefined | null): HTMLElement 
 export function masterDataTab(ctx: ViewContext): HTMLElement {
   let data: MasterData = ctx.data.masterData;
   const body = h('div', { class: 'stack', style: { gap: '18px', marginTop: '4px' } });
-  const checkedHost = h('div', null, lastCheckedLine(null));
-  void bridge.getMasterDataCheck().then((c) => render(checkedHost, lastCheckedLine(c.lastCheckedAt ?? undefined)));
+  const checkedHost = h('div', null, lastCheckedLine(cachedLastChecked));
+  const showChecked = (at: number | undefined): void => {
+    cachedLastChecked = at;
+    render(checkedHost, lastCheckedLine(at));
+  };
+  void bridge.getMasterDataCheck().then((c) => showChecked(c.lastCheckedAt ?? undefined));
 
   /** Adopt fresh effective data, repaint, and propagate to the rest of the app. */
   const apply = (next: MasterData): void => {
@@ -65,7 +71,7 @@ export function masterDataTab(ctx: ViewContext): HTMLElement {
       // The fetch above is what stamps `lastCheckedAt` server-side — re-read it
       // so the line reflects "just now" the moment the check actually ran, not
       // only after the next full Settings remount.
-      void bridge.getMasterDataCheck().then((c) => render(checkedHost, lastCheckedLine(c.lastCheckedAt ?? undefined)));
+      void bridge.getMasterDataCheck().then((c) => showChecked(c.lastCheckedAt ?? undefined));
       const empty =
         !preview.heroes.additions.length && !preview.heroes.changes.length &&
         !preview.maps.additions.length && !preview.maps.changes.length;
@@ -91,7 +97,8 @@ export function masterDataTab(ctx: ViewContext): HTMLElement {
   return card(
     {
       title: 'Master data',
-      sub: 'Heroes, maps & seasons — edit them, or pull new ones from the online source',
+      info: 'Heroes, maps and seasons. Edit them here, or pull new heroes and maps from the online source — '
+        + 'the OverFast API, a community mirror of Blizzard data. Only the request for the list leaves your machine.',
       actions: updateBtn,
     },
     checkedHost,

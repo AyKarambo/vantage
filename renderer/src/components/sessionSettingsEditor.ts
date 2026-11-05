@@ -6,6 +6,7 @@ import { h } from '../dom';
 import type { SessionSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { segmented } from './primitives';
+import { infoTip } from './infoTip';
 import type { ViewContext } from '../views/view';
 
 const GAP_PRESETS: Array<{ minutes: number; label: string }> = [
@@ -30,16 +31,17 @@ export function sessionSettingsEditor(ctx: ViewContext): HTMLElement {
 
   return h('div', { class: 'stack', style: { gap: '10px', marginTop: '12px' } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
-      h('span', { class: 'hint' }, 'New session after a pause of'),
+      // S4: this threshold governs more than the sidebar card, and none of
+      // those surfaces said so — now behind the ⓘ rather than a paragraph (#339).
+      h('span', { class: 'hint' }, 'New session after a pause of',
+        infoTip('Governs the sidebar’s Current session card, the Overview last-session debrief, and Matches’ '
+          + '“By sitting” grouping. Readiness’s own fatigue-curve tuning is separate.',
+        { label: 'What does the session gap affect?' })),
       segmented({
         options: GAP_PRESETS.map((p) => ({ value: String(p.minutes), label: p.label })),
         value: String(s.gapMinutes),
         onChange: (v) => set({ gapMinutes: Number(v) }),
       }),
     ),
-    // S4: this threshold now governs more than the sidebar card, and none of
-    // those surfaces said so.
-    h('div', { class: 'hint', style: { fontSize: '11px', lineHeight: '1.5' } },
-      'Governs the sidebar’s Current session card, the Overview last-session debrief, and Matches’ “By sitting” grouping. Readiness’s own fatigue-curve tuning is separate.'),
   );
 }
