@@ -147,6 +147,7 @@ export function dashboardRead(
       coaching: provider.getCoaching(),
       grading: provider.getGrading(),
       rankAnchors: provider.rankAnchorMap(),
+      rankAdjustments: provider.listRankAdjustments(),
       placementRuns: provider.placementRuns(),
       checkIns: provider.getCheckIns(),
     },

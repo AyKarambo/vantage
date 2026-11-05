@@ -39,6 +39,28 @@ editable after the fact.
    SR %, target grades for all). On **Overwolf-tracked** matches, GEP-derived facts
    (result, map, hero, scoreboard, roster) stay **locked**; only the manual layer is
    editable.
+7. **Rank adjustments — cheater compensation (#341)** — when Overwatch bans a cheater from
+   one of your matches it refunds the rank % you lost. Since rank is anchor + per-match
+   deltas, a refund is an explicit **rank adjustment** event
+   `{ id, account, role, at, deltaPct, reason: 'cheater-compensation' | 'manual', note? }`
+   (`src/core/rank/types.ts`, logic in `src/core/rank/adjustments.ts`):
+   - one with `at > anchor.setAt` moves the running position in time order with the
+     matches exactly like a match ±% would (`applyAdjustment` — division/tier rollover,
+     paying down and clearing the rank-protection buffer); one tied with a match lands after it;
+   - one at/before the anchor is ignored — the anchor reading already includes it — so
+     re-anchoring keeps exactly the adjustments after the new anchor, without deleting any;
+   - it is **never a match**: no game, win, loss, winrate, readiness, streak or Matches row.
+     The readiness rank-trend gate keeps replaying matches only;
+   - stored beside the anchors in `rankAdjustments.json` (`RankAnchorStore`; moves with the
+     data folder, cascades on account relabel / detected-account delete), attached to each
+     anchor at read time so every forward replay (live rank, sidebar chip, Overview KPI,
+     Matches "Rank at start", match detail) honours it; included in the v2 backup envelope
+     (`rankAdjustments`) and restored on import, idempotent by id;
+   - IPC: `listRankAdjustments` / `addRankAdjustment` / `removeRankAdjustment` /
+     `restoreRankAdjustment`, validated in main by `parseRankAdjustment` (whole %-points,
+     non-zero, within ±200);
+   - the Trends rank chart draws each adjustment on its track as a hollow diamond marker,
+     not a match point (`DashboardData.rankAdjustmentMarks`).
 
 ## Out-of-Scope
 - Notion import/export changes (see the Notion specs).
@@ -98,6 +120,14 @@ editable after the fact.
 - Given I'm protected, When I log another Loss, Then the division drops by one and the
   overshoot carries into the new division as a negative buffer (shown as the rank-protection
   shield) rather than being guessed or re-anchored.
+
+**Rank adjustments (cheater compensation)**
+- Given an anchored role, When I add +X%, Then its computed rank moves by exactly X with the
+  same division rollover and protection handling as a match.
+- Given an adjustment from before the anchor, Then it is ignored; When I remove an
+  adjustment, Then the previous rank returns (and Undo puts it back).
+- Given an adjustment, Then games, winrate, readiness and the Matches list are unchanged.
+- Given adjustments, When I restart or export/import a v2 backup, Then they survive.
 
 **Edit any match**
 - Given any match on the Matches screen, When I click it, Then I can edit its manual layer

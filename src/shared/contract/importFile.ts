@@ -15,6 +15,8 @@ export interface ImportFileResult {
   accountsAdded: number;
   /** True when a rank anchor was set/updated from the file's `anchor`. */
   anchorSet: boolean;
+  /** v2 backup: rank adjustments (cheater compensation…) put back; absent when none were new. */
+  adjustmentsRestored?: number;
   /** Set when the user cancelled the file picker — nothing was read or written. */
   cancelled?: boolean;
   /** Set when the file could not be used at all (unreadable / not a valid envelope) — nothing was written. */

@@ -29,6 +29,42 @@ export interface RankPosition {
 export interface RankAnchor extends RankPosition {
   /** Epoch ms; the anchor reflects the rank as of this instant. */
   setAt: number;
+  /**
+   * Rank adjustments (cheater compensation, manual corrections) on this track
+   * strictly AFTER {@link setAt}, oldest first. Read-time only: the store
+   * attaches them via `attachAdjustments` (./adjustments) when it builds the
+   * engine's anchor map, so every rank surface that replays forward from an
+   * anchor sees them without a new parameter. Never persisted on the anchor
+   * itself — adjustments live in their own record list.
+   */
+  adjustments?: readonly RankAdjustmentStep[];
+}
+
+/** Why a rank adjustment was entered. */
+export type RankAdjustmentReason = 'cheater-compensation' | 'manual';
+
+/**
+ * A rank change that is NOT a match — e.g. the % Overwatch refunds when a
+ * cheater from one of your games is banned. Moves the ladder like a match's
+ * ±% would (division rollover, clearing the protection buffer), but never
+ * counts as a game, win or loss anywhere.
+ */
+export interface RankAdjustment {
+  id: string;
+  account: string;
+  role: Role;
+  /** Epoch ms the adjustment took effect. */
+  at: number;
+  /** Signed %-points (usually positive). */
+  deltaPct: number;
+  reason: RankAdjustmentReason;
+  note?: string;
+}
+
+/** The engine's view of one adjustment: when, and by how much. */
+export interface RankAdjustmentStep {
+  at: number;
+  deltaPct: number;
 }
 
 /** The computed live position for an (account, role), plus its protection state. */

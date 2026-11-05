@@ -6,6 +6,7 @@
  */
 import type { Role } from '../../core/model';
 import type { AccountKind } from '../../core/accountsManage';
+import type { RankAdjustment, RankAdjustmentReason } from '../../core/rank/types';
 
 /**
  * One row of the account manager. Beyond the configured `battleTag → label`
@@ -84,6 +85,28 @@ export interface RankEntryPreviewInput {
 export type RankEntryPreview =
   | { anchored: true; srDelta: number }
   | { anchored: false };
+
+/**
+ * A new rank adjustment — a rank change that is not a match, e.g. the % refunded
+ * when a cheater from one of your games is banned. `at` defaults to now; the
+ * main process validates every field (see core/rank parseRankAdjustment).
+ */
+export interface RankAdjustmentInput {
+  account: string;
+  role: Role;
+  /** Signed %-points (usually positive). Rounded to whole points; 0 is rejected. */
+  deltaPct: number;
+  reason: RankAdjustmentReason;
+  /** Epoch ms the refund landed; omitted means now. */
+  at?: number;
+  note?: string;
+}
+
+/** The answer to an adjustment write: the record touched (null when nothing was) and the refreshed ranks. */
+export interface RankAdjustmentResult {
+  adjustment: RankAdjustment | null;
+  ranks: RankSummary[];
+}
 
 /** The computed live rank for one anchored (account, role). */
 export interface RankSummary {

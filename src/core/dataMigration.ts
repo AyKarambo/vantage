@@ -8,6 +8,7 @@ export const HISTORY_DB_FILE = 'history.db';
 export const MANUAL_LOG_FILE = 'manual.json';
 export const OUTBOX_FILE = 'outbox.json';
 export const RANK_ANCHORS_FILE = 'rankAnchors.json';
+export const RANK_ADJUSTMENTS_FILE = 'rankAdjustments.json';
 export const PLACEMENTS_FILE = 'placements.json';
 export const CHECK_INS_FILE = 'checkIns.json';
 export const FRIENDS_FILE = 'friends.json';
@@ -31,6 +32,8 @@ export interface DataArtifactPresence {
   outbox: boolean;
   /** `rankAnchors.json`. */
   rankAnchors: boolean;
+  /** `rankAdjustments.json` — cheater compensation / manual rank corrections (optional; absent = none). */
+  rankAdjustments?: boolean;
   /** `placements.json`. */
   placements: boolean;
   /** `checkIns.json` — pre-session mood check-ins (S10 phase 2). */
@@ -90,6 +93,7 @@ export function planDataMigration(
   addFile(MANUAL_LOG_FILE, files.manualLog, true);
   addFile(OUTBOX_FILE, files.outbox, true);
   addFile(RANK_ANCHORS_FILE, files.rankAnchors, true);
+  addFile(RANK_ADJUSTMENTS_FILE, files.rankAdjustments ?? false, true);
   addFile(PLACEMENTS_FILE, files.placements, true);
   addFile(CHECK_INS_FILE, files.checkIns, true);
   addFile(FRIENDS_FILE, files.friends, true);

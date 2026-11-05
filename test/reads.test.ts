@@ -57,6 +57,7 @@ function fakeProvider(
     getCoaching: () => DEFAULT_COACHING,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    listRankAdjustments: () => [],
     placementRuns: () => [],
     getCheckIns: () => [],
     effectiveMasterData: () => master,

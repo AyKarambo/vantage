@@ -75,7 +75,10 @@ function rankTrendCard(ctx: ViewContext): HTMLElement | null {
   const multi = entries.length > 1;
   const series: RankSeries[] = entries.map(([key, points]) => {
     const [account, role] = key.split('::');
-    return { key, label: multi ? `${account} · ${roleLabel(role as Role)}` : roleLabel(role as Role), points };
+    return {
+      key, label: multi ? `${account} · ${roleLabel(role as Role)}` : roleLabel(role as Role), points,
+      marks: d.rankAdjustmentMarks?.[key],
+    };
   });
 
   const dateLabel = (ts: number): string => {

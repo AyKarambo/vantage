@@ -6,6 +6,7 @@
 import type { Role, Result, MatchParty } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
+import type { RankAdjustmentMark } from '../../core/rank/adjustments';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
@@ -272,6 +273,12 @@ export interface DashboardData {
    * start" column blanks them.
    */
   rankTrend: Record<string, RankSeriesPoint[]>;
+  /**
+   * Rank adjustments (cheater compensation, manual corrections) to mark on the
+   * rank chart, keyed like {@link rankTrend} and only for tracks it has — from
+   * that series' first point on. A marker, never a match point.
+   */
+  rankAdjustmentMarks: Record<string, RankAdjustmentMark[]>;
   /**
    * Open and completed placement runs across every track, so rank surfaces
    * can render `Placements N/10` instead of a rank the player does not have.
