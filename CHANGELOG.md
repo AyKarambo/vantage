@@ -17,6 +17,16 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ## Unreleased
 
+### Changed
+
+- **Log match works from the keyboard.** `W`/`L`/`D` picks the result and jumps to the map; type a few
+  letters and `Tab` takes the top map and moves on. Role, heroes, flags and grades are one Tab stop each,
+  with the arrow keys inside, and `Enter` in the hero search picks the top hero. A whole match can be
+  logged as `W`, map, `Tab`, `Enter`.
+- **Log match and Edit match no longer close by accident.** Clicking beside the dialog does nothing.
+  ✕, Cancel and `Esc` close it straight away when it's empty, and ask "Discard this match?" once you've
+  entered something.
+
 ### Fixed
 
 - **Match length matches the game's history list.** The duration is the summed round time with each
