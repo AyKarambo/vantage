@@ -44,7 +44,10 @@ function statsContent(stats: LogStats): HTMLElement {
 export function diagnosticsCard(): HTMLElement {
   // Version + build facts + support live on the About screen (single source of
   // truth); this card just links there.
-  return card({ title: 'Diagnostics', sub: 'the release debug log' },
+  return card({
+    title: 'Diagnostics',
+    info: 'Every build writes a rotating debug log — GEP lifecycle, match pipeline, sync results. Tokens are never logged.',
+  },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' } },
       logLevelToggle(),
       h('button', {
@@ -53,8 +56,6 @@ export function diagnosticsCard(): HTMLElement {
       }, 'Open log viewer'),
       statsLine(),
     ),
-    h('div', { class: 'hint', style: { marginTop: '8px' } },
-      'Every build writes a rotating log — GEP lifecycle, match pipeline, sync results. Tokens are never logged.'),
     h('div', { style: { marginTop: '10px' } },
       h('button', {
         class: 'btn btn--ghost',

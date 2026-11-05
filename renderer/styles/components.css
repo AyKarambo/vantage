@@ -1027,13 +1027,19 @@ table.data tbody tr:focus-visible {
   opacity: 1;
 }
 
-/* Info tip (K8) — a keyboard/touch-reachable replacement for a bare `title`
-   wherever a tooltip is the only carrier of meaning (column-header and
-   card-subtitle explanations). */
+/* Info tip (K8, restyled #339) — a keyboard/touch-reachable replacement for a
+   bare `title` wherever a tooltip is the only carrier of meaning (column-header
+   explanations, and every Settings "what does this do / why"). The panel is
+   portalled to <body> and positioned `fixed` by infoTip.ts, so nothing here may
+   depend on the trigger's ancestors. */
 .info-tip {
   position: relative;
   display: inline-flex;
-  vertical-align: middle;
+  align-items: baseline;
+  vertical-align: baseline;
+  /* Inside an uppercase field-label the glyph must not inherit the tracking. */
+  letter-spacing: normal;
+  text-transform: none;
 }
 .info-tip-btn {
   background: none;
@@ -1046,35 +1052,94 @@ table.data tbody tr:focus-visible {
      a column sort, closing the tip before it's even seen. */
   padding: 5px;
   margin: -5px -5px -5px -1px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
-  color: var(--dim);
+  color: var(--dim-2);
   cursor: help;
+  border-radius: 999px;
+  transition: color 120ms var(--ease);
 }
 .info-tip-btn:hover,
 .info-tip-btn:focus-visible {
-  color: var(--muted-2);
+  color: var(--text-2);
+}
+.info-tip-btn:focus-visible {
+  outline: 1px solid var(--border-strong);
+  outline-offset: -2px;
 }
 .info-tip-panel {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  top: 0;
+  left: 0;
   width: max-content;
-  max-width: 240px;
-  background: rgba(11, 11, 15, 0.98);
-  border: 1px solid var(--border-2);
-  border-radius: 8px;
-  padding: 8px 11px;
-  font-size: 11.5px;
+  max-width: min(300px, calc(100vw - 16px));
+  box-sizing: border-box;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 12px;
   font-weight: 400;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-2);
+  text-align: left;
   text-transform: none;
   letter-spacing: normal;
   white-space: normal;
-  box-shadow: var(--shadow-lg);
-  z-index: 20;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+  /* Above modals and drawers — a tip inside the manage-ranks modal must show. */
+  z-index: 1000;
+  pointer-events: none;
+  animation: info-tip-in 120ms var(--ease) both;
+}
+.info-tip-title {
+  font-weight: 600;
+  color: var(--text-hi);
+  margin-bottom: 3px;
+}
+/* A rotated square sharing the panel's surface + border; infoTip.ts sets its
+   `left` so it keeps pointing at the ⓘ when the panel shifts off an edge. */
+.info-tip-caret {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  transform: rotate(45deg);
+}
+.info-tip-panel[data-side='top'] .info-tip-caret {
+  bottom: -5px;
+  border-top: none;
+  border-left: none;
+}
+.info-tip-panel[data-side='bottom'] .info-tip-caret {
+  top: -5px;
+  border-bottom: none;
+  border-right: none;
+}
+@keyframes info-tip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .info-tip-panel { animation: none; }
+}
+:root[data-density='compact'] .info-tip-panel {
+  padding: 8px 10px;
+  font-size: 11.5px;
+}
+/* Visually hidden but still in the accessibility tree (aria-describedby targets). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Donut ---------------------------------------------------------------------- */
@@ -2350,6 +2415,28 @@ table.data tbody tr:focus-visible {
 .rank-modal-foot {
   display: flex;
   justify-content: flex-end;
+}
+
+/* Cheater-compensation quick dialog (#341): the recent-adjustments list —
+   date | role | ±% | Remove, one compact row each. */
+.rank-adj-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 52px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.rank-adj-row .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.rank-adj-error:empty {
+  display: none;
+}
+.rank-adj-error {
+  color: var(--loss-text);
 }
 
 /* In-view search box (the Players list). Deliberately not a filter-bar control:

@@ -8,7 +8,7 @@
 import { h } from '../dom';
 import type { CoachingSettings } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { segmented, toggleRow } from './primitives';
+import { fieldLabel, segmented, toggleRow } from './primitives';
 import { infoTip } from './infoTip';
 import type { ViewContext } from '../views/view';
 
@@ -24,9 +24,9 @@ export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
       label, hint, on: s.checkInQuestions[key],
       onChange: (on) => set({ checkInQuestions: { ...s.checkInQuestions, [key]: on } }),
     });
-  const row = (label: string, control: HTMLElement): HTMLElement =>
+  const row = (label: string, control: HTMLElement, info?: string): HTMLElement =>
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
-      h('span', { class: 'hint' }, label), control);
+      h('span', { class: 'hint' }, label, info ? infoTip(info, { label: `About ${label}` }) : null), control);
 
   return h('div', { class: 'stack', style: { gap: '12px', marginTop: '12px' } },
     row('Practice focus', segmented({
@@ -37,9 +37,7 @@ export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
       ],
       value: s.practiceFocus,
       onChange: (practiceFocus) => set({ practiceFocus }),
-    })),
-    h('div', { class: 'hint', style: { fontSize: '11px', lineHeight: '1.5', marginTop: '-4px' } },
-      'Auto turns it on while you have active targets: Mental and Review then lead with “did I do what I planned?”, '
+    }), 'Auto turns it on while you have active targets: Mental and Review then lead with “did I do what I planned?”, '
       + 'and win/loss becomes the small print.'),
     // Training session mode (issue #342): the switch itself lives in the
     // sidebar / Matches header; only its opt-in auto-reset is a setting.
@@ -75,11 +73,11 @@ export function coachingSettingsEditor(ctx: ViewContext): HTMLElement {
           onChange: (v) => set({ breakMinutes: Number(v) }),
         }))
       : null,
-    h('div', { class: 'field-label', style: { marginTop: '4px' } }, 'Extra check-in questions'),
-    question('sleep', 'Sleep', 'Poor / OK / Good — compared against how you played on Mental.'),
-    question('energy', 'Energy', 'Foggy / OK / Sharp.'),
-    question('ate', 'Ate properly', 'Yes / No.'),
-    h('div', { class: 'hint', style: { fontSize: '11px', lineHeight: '1.5' } },
-      'Optional, and only ever compared with your own performance on Mental — they never change the Readiness score.'),
+    fieldLabel('Extra check-in questions',
+      'Optional, and only ever compared with your own performance on Mental — they never change the Readiness score.',
+      { style: { marginTop: '4px', marginBottom: '0' } }),
+    question('sleep', 'Sleep', 'Poor / OK / Good'),
+    question('energy', 'Energy', 'Foggy / OK / Sharp'),
+    question('ate', 'Ate properly', 'Yes / No'),
   );
 }

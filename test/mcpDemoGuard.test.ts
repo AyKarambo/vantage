@@ -39,6 +39,7 @@ function provider(demo: boolean): { p: DataProvider; mutations: string[] } {
     getCoaching: () => DEFAULT_COACHING,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    listRankAdjustments: () => [],
     placementRuns: () => [],
     getCheckIns: () => [],
     getRanks: () => [],

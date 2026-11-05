@@ -12,7 +12,7 @@ import { h } from '../../dom';
 import { CATEGORICAL, PALETTE } from '../../theme';
 import { pointsToRank } from '../../../../src/core/rank/scalar';
 import { shortRankLabelOf } from '../../../../src/core/rankDisplay';
-import type { RankSeriesPoint } from '../../../../src/shared/contract';
+import type { RankAdjustmentMark, RankSeriesPoint } from '../../../../src/shared/contract';
 import { svgEl, svgRoot, svgText } from '../svg';
 import { tooltipLayer } from '../tooltip';
 import { emptyChart } from './shared';
@@ -23,6 +23,11 @@ export interface RankSeries {
   /** What the legend and tooltip call this track, e.g. "Karambo · Dmg". */
   label: string;
   points: RankSeriesPoint[];
+  /**
+   * Rank adjustments on this track (cheater compensation…) — drawn as small
+   * diamonds on the line, never as match points (#341).
+   */
+  marks?: RankAdjustmentMark[];
 }
 
 const mmdd = (ts: number): string => {
@@ -43,6 +48,19 @@ function divisionTicks(lo: number, hi: number, maxTicks = 5): number[] {
   return ticks.length ? ticks : [lo];
 }
 
+/** The line's plotted value at `ts` — linear between the bracketing points, flat beyond either end. */
+function lineValueAt(points: RankSeriesPoint[], ts: number): number {
+  if (ts <= points[0].timestamp) return points[0].points;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    if (ts <= b.timestamp) {
+      const span = b.timestamp - a.timestamp;
+      return span > 0 ? a.points + ((ts - a.timestamp) / span) * (b.points - a.points) : b.points;
+    }
+  }
+  return points[points.length - 1].points;
+}
+
 /** Rank trend over time, one line per (account, role) series. */
 export function rankChart(series: RankSeries[]): HTMLElement {
   const wrap = h('div', { class: 'chart-wrap' });
@@ -58,7 +76,10 @@ export function rankChart(series: RankSeries[]): HTMLElement {
 
   const allPoints = withPoints.flatMap((series) => series.points);
   const minTs = Math.min(...allPoints.map((p) => p.timestamp));
-  const maxTs = Math.max(...allPoints.map((p) => p.timestamp));
+  // Adjustment markers widen the time domain so one landing after the last
+  // match is still on the chart.
+  const markTs = withPoints.flatMap((series) => (series.marks ?? []).map((m) => m.at));
+  const maxTs = Math.max(...allPoints.map((p) => p.timestamp), ...markTs);
   const tsSpan = Math.max(1, maxTs - minTs);
   const minPts = Math.min(...allPoints.map((p) => p.points));
   const maxPts = Math.max(...allPoints.map((p) => p.points));
@@ -95,6 +116,22 @@ export function rankChart(series: RankSeries[]): HTMLElement {
       hit.style.cursor = 'pointer';
       const label = `${mmdd(p.timestamp)} · ${series.label} · ${shortRankLabelOf(p.tier, p.division)}${p.estimated ? ' · est.' : ''}`;
       tips.attach(hit, label);
+      s.appendChild(hit);
+    }
+
+    // Adjustment markers: a hollow diamond where the line stands at that
+    // instant (the rank AFTER the refund shows on the next match point).
+    for (const m of series.marks ?? []) {
+      const cx = xAt(m.at), cy = yAt(lineValueAt(series.points, m.at));
+      const r = 4.5;
+      s.appendChild(svgEl('path', {
+        class: 'rank-adj-mark',
+        d: `M${cx} ${cy - r}L${cx + r} ${cy}L${cx} ${cy + r}L${cx - r} ${cy}Z`,
+        fill: 'var(--card)', stroke: color, 'stroke-width': 1.5,
+      }));
+      const hit = svgEl('circle', { cx, cy, r: 10, fill: 'transparent', tabindex: 0 });
+      const what = m.reason === 'cheater-compensation' ? 'cheater compensation' : 'rank adjustment';
+      tips.attach(hit, `${mmdd(m.at)} · ${series.label} · ${what} ${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%`);
       s.appendChild(hit);
     }
   });

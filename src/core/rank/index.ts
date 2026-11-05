@@ -12,3 +12,9 @@ export { enteringRanks, enteringRankAt } from './entering';
 export type { EnteringRank, EnteringRankNote, EnteringRanksOptions } from './entering';
 export { rankSeries } from './series';
 export type { RankSeriesPoint } from './series';
+export type { RankAdjustment, RankAdjustmentReason, RankAdjustmentStep } from './types';
+export { applyAdjustment } from './engine';
+export {
+  attachAdjustments, adjustmentSteps, adjustmentMarks, parseRankAdjustment, MAX_ADJUSTMENT_PCT,
+} from './adjustments';
+export type { RankAdjustmentDraft, RankAdjustmentMark } from './adjustments';

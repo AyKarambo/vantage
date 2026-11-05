@@ -19,13 +19,17 @@ import { store } from '../../store';
  * A collapsible help panel documents the file format for adapting other
  * sources.
  */
+/** The last import count/time this card painted — a Settings re-render repaints from it at once instead of collapsing to "Loading…" (#339). */
+let cachedImport: { count: number; lastImportedAt: number | undefined } | null = null;
+
 export function importCard(): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '10px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
   let helpOpen = false;
-  let count = 0;
-  let lastImportedAt: number | undefined;
+  let count = cachedImport?.count ?? 0;
+  let lastImportedAt: number | undefined = cachedImport?.lastImportedAt;
   let exporting = false;
 
+  if (cachedImport) paint();
   void Promise.all([bridge.fileImportedCount(), bridge.lastFileImportAt()]).then(([c, at]) => {
     count = c;
     lastImportedAt = at;
@@ -33,11 +37,8 @@ export function importCard(): HTMLElement {
   });
 
   function paint(message?: string): void {
+    cachedImport = { count, lastImportedAt };
     render(body,
-      h('div', { class: 'hint' },
-        'Export a full local backup, or import matches from a Vantage import file (JSON). Imported matches are ' +
-        'tagged so you can clear and re-import them cleanly, without touching live-tracked, hand-logged, or ' +
-        'Notion-imported games.'),
       h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' } },
         button(exporting ? 'Exporting…' : 'Export backup…', { variant: 'soft', disabled: exporting, onClick: runExport }),
         button('Import from file…', { variant: 'primary', onClick: runImport }),
@@ -136,7 +137,12 @@ export function importCard(): HTMLElement {
     );
   }
 
-  return card({ title: 'Backup & import', sub: 'export a full local backup, or bring match history in from a file' }, body);
+  return card({
+    title: 'Backup & import',
+    info: 'Export a full local backup, or import matches from a Vantage import file (JSON). Imported matches are '
+      + 'tagged so you can clear and re-import them cleanly, without touching live-tracked, hand-logged or '
+      + 'Notion-imported games.',
+  }, body);
 }
 
 /** A one-line summary of an import result for the toast + status line. */

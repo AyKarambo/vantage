@@ -1,5 +1,7 @@
 import type { Role } from '../core/model';
-import { rankKey, type RankAnchor, type RankAnchorMap } from '../core/rank';
+import {
+  attachAdjustments, rankKey, type RankAdjustment, type RankAdjustmentDraft, type RankAnchor, type RankAnchorMap,
+} from '../core/rank';
 import type { JsonDoc, JsonDocs } from './jsonDocs';
 
 /** A stored anchor plus the (account, role) it belongs to. */
@@ -17,10 +19,22 @@ export interface AnchorRecord extends RankAnchor {
 export class RankAnchorStore {
   private readonly doc: JsonDoc;
   private state: Record<string, AnchorRecord>;
+  /**
+   * Rank adjustments (cheater compensation, manual corrections) — kept beside
+   * the anchors in their own `rankAdjustments.json`, a plain array. Separate
+   * from the anchor records so re-anchoring a track never touches them: the
+   * engine simply ignores the ones at/before the new anchor (see
+   * {@link ../core/rank attachAdjustments}).
+   */
+  private readonly adjDoc: JsonDoc;
+  private adjustments: RankAdjustment[];
+  private seq = 0;
 
   constructor(docs: JsonDocs) {
     this.doc = docs('rankAnchors.json');
+    this.adjDoc = docs('rankAdjustments.json');
     this.state = this.load();
+    this.adjustments = this.loadAdjustments();
   }
 
   /** Every stored anchor. */
@@ -39,7 +53,43 @@ export class RankAnchorStore {
     for (const a of Object.values(this.state)) {
       out[rankKey(a.account, a.role)] = { tier: a.tier, division: a.division, progressPct: a.progressPct, setAt: a.setAt };
     }
-    return out;
+    // Each anchor carries the adjustments after it, so every forward replay
+    // (live rank, Matches "Rank at start", match detail, chart) honours them.
+    return attachAdjustments(out, this.adjustments);
+  }
+
+  /** Every stored rank adjustment, newest first. */
+  listAdjustments(): RankAdjustment[] {
+    return [...this.adjustments].sort((a, b) => b.at - a.at);
+  }
+
+  /** Store a new adjustment (the id is assigned here) and return it. */
+  addAdjustment(draft: RankAdjustmentDraft): RankAdjustment {
+    const record: RankAdjustment = { id: `adj-${Date.now().toString(36)}-${(this.seq++).toString(36)}`, ...draft };
+    this.adjustments.push(record);
+    this.saveAdjustments();
+    return record;
+  }
+
+  /**
+   * Put a previously removed adjustment back under its own id — the toast's
+   * Undo. A record whose id is already stored is left alone (idempotent, which
+   * a repeated backup import relies on too). Returns whether it was added.
+   */
+  restoreAdjustment(record: RankAdjustment): boolean {
+    if (this.adjustments.some((a) => a.id === record.id)) return false;
+    this.adjustments.push({ ...record });
+    this.saveAdjustments();
+    return true;
+  }
+
+  /** Remove one adjustment by id; returns the removed record, or null when it wasn't there. */
+  removeAdjustment(id: string): RankAdjustment | null {
+    const i = this.adjustments.findIndex((a) => a.id === id);
+    if (i < 0) return null;
+    const [removed] = this.adjustments.splice(i, 1);
+    this.saveAdjustments();
+    return removed;
   }
 
   /** Set (or replace) the anchor for an (account, role). */
@@ -75,6 +125,9 @@ export class RankAnchorStore {
       changed++;
     }
     if (changed) this.save();
+    const before = this.adjustments.length;
+    this.adjustments = this.adjustments.filter((a) => a.account !== account);
+    if (this.adjustments.length !== before) this.saveAdjustments();
     return changed;
   }
 
@@ -90,6 +143,13 @@ export class RankAnchorStore {
       changed++;
     }
     if (changed) this.save();
+    let moved = 0;
+    for (const a of this.adjustments) {
+      if (a.account !== from) continue;
+      a.account = to;
+      moved++;
+    }
+    if (moved) this.saveAdjustments();
     return changed;
   }
 
@@ -101,7 +161,9 @@ export class RankAnchorStore {
    */
   relocate(newDir: string): void {
     this.doc.relocate(newDir);
+    this.adjDoc.relocate(newDir);
     this.state = this.load();
+    this.adjustments = this.loadAdjustments();
   }
 
   private load(): Record<string, AnchorRecord> {
@@ -115,5 +177,22 @@ export class RankAnchorStore {
 
   private save(): void {
     this.doc.write(this.state);
+  }
+
+  private loadAdjustments(): RankAdjustment[] {
+    try {
+      const parsed = this.adjDoc.read();
+      return Array.isArray(parsed)
+        ? parsed.filter((a): a is RankAdjustment =>
+          typeof a === 'object' && a !== null && typeof a.id === 'string' && typeof a.account === 'string'
+          && typeof a.role === 'string' && typeof a.at === 'number' && typeof a.deltaPct === 'number')
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveAdjustments(): void {
+    this.adjDoc.write(this.adjustments);
   }
 }

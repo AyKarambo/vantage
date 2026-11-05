@@ -1,10 +1,11 @@
 import { h } from '../../../dom';
+import { infoTip } from '../../../components/infoTip';
 
-/** A titled sub-group inside the master-data card. */
-export function mdGroup(title: string, hint: string, rows: Node[], addForm: Node): HTMLElement {
+/** A titled sub-group inside the master-data card; `info` is its explanation, behind an ⓘ after the title (#339). */
+export function mdGroup(title: string, info: string, rows: Node[], addForm: Node): HTMLElement {
   return h('div', null,
-    h('div', { style: { fontSize: '13px', fontWeight: '600', marginBottom: '2px' } }, title),
-    h('div', { class: 'hint', style: { marginBottom: '8px' } }, hint),
+    h('div', { style: { fontSize: '13px', fontWeight: '600', marginBottom: '8px' } },
+      title, infoTip(info, { label: `About ${title}` })),
     h('div', { class: 'stack', style: { gap: '6px' } }, ...rows, addForm),
   );
 }

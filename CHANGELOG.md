@@ -26,6 +26,21 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   targets instead of the win–loss. Wins and losses still count for rank, readiness and Trends, Stats
   mode looks exactly as before, and any match or sitting can be re-marked from its ⋯ menu.
 
+- **Cheater compensation.** When Overwatch bans a cheater from one of your matches and gives back the rank
+  you lost, add it in **Settings → Accounts → Manage ranks… → Cheater compensation** (or **Add cheater
+  compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never
+  counts as a game. Recent refunds are listed there so you can remove a typo, and the Trends rank chart marks them.
+
+### Changed
+
+- **Log match works from the keyboard.** `W`/`L`/`D` picks the result and jumps to the map; type a few
+  letters and `Tab` takes the top map and moves on. Role, heroes, flags and grades are one Tab stop each,
+  with the arrow keys inside, and `Enter` in the hero search picks the top hero. A whole match can be
+  logged as `W`, map, `Tab`, `Enter`.
+- **Log match and Edit match no longer close by accident.** Clicking beside the dialog does nothing.
+  ✕, Cancel and `Esc` close it straight away when it's empty, and ask "Discard this match?" once you've
+  entered something.
+
 ### Fixed
 
 - **Match length matches the game's history list.** The duration is the summed round time with each
@@ -36,6 +51,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **A match Vantage joined late is marked.** If the app or the game feed only caught a match after it had
   started, the match page now says its time is short and links straight to **Played time** in **Edit
   match**, so you can type in the time from the scoreboard.
+- **Settings stays put when you change something.** Flipping a toggle or picking an option no longer
+  jumps the page to a different spot, and keyboard focus stays on the control you just used.
+
+### Changed
+
+- **Settings is easier to scan.** The longer explanations moved behind a small ⓘ next to each setting
+  (hover, focus or click it), so each row is just the label, the control and at most one short line.
+  The tooltips themselves are larger and easier to read, and no longer get cut off at the window's edge.
 
 ## 0.42.0 — 27 October 2026
 

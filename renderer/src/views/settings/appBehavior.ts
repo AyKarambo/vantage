@@ -3,6 +3,8 @@ import type { AppInfo, AppUiSettings } from '../../../../src/shared/contract';
 import { bridge } from '../../bridge';
 import { button, card, select, toggleRow } from '../../components/primitives';
 import { toast } from '../../components/toast';
+import { infoTip } from '../../components/infoTip';
+import { captureFocus } from '../../focusMemory';
 import { formatClaudeDesktopMcpConfig } from '../../../../src/core/mcpConfig';
 import { ZOOM_OPTIONS, ZOOM_DEFAULT, syncZoom } from '../../zoom';
 import { store } from '../../store';
@@ -14,6 +16,8 @@ const TAPS_TO_UNLOCK = 5;
 // Module scope so the count survives a Settings re-render (which rebuilds this
 // whole card and would otherwise reset a per-instance counter mid-sequence).
 let unlockTaps = 0;
+/** The last settings + build info this card painted — survives re-renders so the card never collapses back to "Loading…". */
+let cached: { settings: AppUiSettings; info: AppInfo | null } | null = null;
 
 function readUnlocked(): boolean {
   try {
@@ -58,6 +62,14 @@ export function appBehaviorCard(ctx: ViewContext): HTMLElement {
       paint(s);
     });
   };
+  // Repaint from the last read at once (#339): a Settings re-render (any
+  // Coaching toggle refreshes the snapshot) rebuilds this card, and a
+  // "Loading…" stub in its place shrank the page for a tick — enough for the
+  // shell's scroll restore to be clamped, which read as the page jumping.
+  if (cached) {
+    info = cached.info;
+    paint(cached.settings);
+  }
   load();
 
   // demoPreference changes the dashboard payload (badge, targets, KPIs), so it
@@ -106,89 +118,100 @@ function devModeSection(s: AppUiSettings): HTMLElement {
         on: !packaged && s.devMode,
         disabled: packaged,
         onChange: () => apply({ devMode: !s.devMode }),
-        hint: packaged
-          ? 'Unavailable in the installed build — Dev Mode only runs in the unpackaged dev build.'
-          : 'When on, the launcher loads real Overwatch (GEP) data using your dev key. Applies on the next launch.',
+        info: packaged
+          ? 'Dev Mode only runs in the unpackaged dev build, not the installed one.'
+          : 'When on, the launcher loads real Overwatch (GEP) data using your dev key.',
+        hint: packaged ? undefined : 'Applies on the next launch.',
       }),
       // The dev-key field is meaningless in a packaged build; hide it there.
       h('div', { class: packaged ? 'hidden' : '' }, devKeyInput, devKeyHint),
     );
   }
 
+  /**
+   * Each row is **Label** ⓘ · control (#339): the "what does this do / why"
+   * prose sits behind the ⓘ, and the muted line underneath is kept only for a
+   * fact the decision needs — what closing the window does right now, that
+   * demo data has no effect, that the MCP pipe is reachable while it's on.
+   */
   function paint(s: AppUiSettings): void {
     last = s;
+    cached = { settings: s, info };
+    // A toggle here repaints this card in place, which replaces the switch the
+    // player just pressed — put focus back on its replacement.
+    const focus = captureFocus(body);
     render(body,
       toggleRow({
         label: 'Keep Vantage in the tray on close',
         on: s.closeToTray,
         onChange: () => apply({ closeToTray: !s.closeToTray }),
         hint: s.closeToTray
-          ? 'On — closing the window (✕) keeps tracking games in the background.'
-          : 'Off — closing the window (✕) quits Vantage entirely.',
+          ? 'Closing the window (✕) keeps tracking games in the background.'
+          : 'Closing the window (✕) quits Vantage entirely.',
       }),
-      h('div', null,
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-          h('span', { class: 'field-label', style: { margin: '0' } }, 'Text size'),
-          select(
-            ZOOM_OPTIONS.map((o) => ({ value: String(o.value), label: o.label })),
-            String(s.uiZoom ?? ZOOM_DEFAULT),
-            (v) => { syncZoom(Number(v)); apply({ uiZoom: Number(v) }); },
-          ),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+        h('span', { class: 'toggle-row-label' }, 'Text size',
+          infoTip('Zooms the whole app. Also Ctrl+= / Ctrl+- to step, Ctrl+Shift+0 to reset — see the ? cheatsheet.',
+            { label: 'About Text size' })),
+        select(
+          ZOOM_OPTIONS.map((o) => ({ value: String(o.value), label: o.label })),
+          String(s.uiZoom ?? ZOOM_DEFAULT),
+          (v) => { syncZoom(Number(v)); apply({ uiZoom: Number(v) }); },
         ),
-        h('div', { class: 'hint', style: { marginTop: '6px' } },
-          'Zooms the whole app. Also Ctrl+= / Ctrl+- to step, Ctrl+Shift+0 to reset — see the ? cheatsheet.'),
       ),
       toggleRow({
         label: 'Run at login',
         on: s.runAtLogin,
         onChange: () => apply({ runAtLogin: !s.runAtLogin }),
-        hint: 'Starts hidden in the tray so it never steals focus from a game.',
+        info: 'Starts hidden in the tray so it never steals focus from a game.',
       }),
       toggleRow({
         label: 'Demo data',
         on: s.demoPreference === 'on',
         onChange: () => apply({ demoPreference: s.demoPreference === 'on' ? 'off' : 'on' }),
-        hint: ctx.data.hasRealHistory
-          ? 'You have tracked games, so this has no visible effect — real data always wins. It applies again only if your history is empty.'
-          : 'Preload a realistic sample season to explore the app. Turn it off to start from a clean slate.',
+        info: 'Preloads a realistic sample season to explore the app. Real data always wins: once you have tracked '
+          + 'games this has no visible effect, and applies again only if your history is empty.',
+        hint: ctx.data.hasRealHistory ? 'No visible effect — you have tracked games.' : undefined,
       }),
       toggleRow({
         label: 'GEP alerts',
         on: s.gepNotifications,
         onChange: () => apply({ gepNotifications: !s.gepNotifications }),
-        hint: 'Notify me when Overwatch game events go down (an Overwolf outage) and when they recover. The in-app banner shows either way.',
+        info: 'Notifies you when Overwatch game events go down (an Overwolf outage) and when they recover. '
+          + 'The in-app banner shows either way.',
       }),
       toggleRow({
         label: 'Live kill feed',
         on: s.liveKillFeed,
         onChange: () => apply({ liveKillFeed: !s.liveKillFeed }),
-        hint: 'Show the kill feed on the Live screen. Turning it off leaves the live scoreboard, the per-team '
-          + 'kills, damage and healing, and the players-you’ve-met section exactly as they are — and stops the '
-          + 'feed being sent to the window at all, rather than just hiding it.',
+        info: 'Shows the kill feed on the Live screen. Off stops the feed being sent to the window at all; the '
+          + 'scoreboard, per-team totals and players-you’ve-met section stay as they are.',
       }),
       toggleRow({
         label: 'Open Live on match start',
         on: s.autoSwitchToLive,
         onChange: () => apply({ autoSwitchToLive: !s.autoSwitchToLive }),
-        hint: 'Switches to the Live screen when a match starts. Never pulls Vantage in front of your game.',
+        info: 'Switches to the Live screen when a match starts. Never pulls Vantage in front of your game.',
       }),
       toggleRow({
         label: 'Open Review on match end',
         on: s.autoSwitchToReview,
         onChange: () => apply({ autoSwitchToReview: !s.autoSwitchToReview }),
-        hint: 'Opens that game’s Review page when the match ends — or Needs result, if no result came through. Never pulls Vantage in front of your game.',
+        info: 'Opens that game’s Review page when the match ends — or Needs result, if no result came through. '
+          + 'Never pulls Vantage in front of your game.',
       }),
       h('div', null,
         toggleRow({
           label: 'MCP endpoint',
           on: s.mcpEnabled,
           onChange: () => apply({ mcpEnabled: !s.mcpEnabled }),
-          // Say plainly what turning this on exposes. It is off by default
-          // because the pipe is reachable by any program running as this user,
-          // and someone enabling it deserves to know that before they do.
-          hint: s.mcpEnabled
-            ? 'On — an AI coach connected to Vantage can read your match history and record matches, reviews and targets. Any program running as you can reach it while it is on. Turn it off when you are not using it.'
-            : 'Off. Lets an AI assistant (Claude Desktop or Claude Code) read your stats and log matches for you, over a local-only connection. Nothing is sent anywhere by Vantage itself. Takes effect immediately.',
+          info: 'Lets an AI assistant (Claude Desktop or Claude Code) read your stats and log matches, reviews and '
+            + 'targets for you, over a local-only connection. Nothing is sent anywhere by Vantage itself. Takes '
+            + 'effect immediately.',
+          // Say plainly what having this on exposes — the pipe is reachable by
+          // any program running as this user — as the one inline line, since
+          // it's the fact that should decide whether to leave it on.
+          hint: s.mcpEnabled ? 'Any program running as you can reach it while on — turn it off when unused.' : undefined,
         }),
         // W4 — turning the toggle on used to leave you to find the absolute
         // bridge path by hand from the README; the main process already
@@ -198,6 +221,7 @@ function devModeSection(s: AppUiSettings): HTMLElement {
       ),
       devModeSection(s),
     );
+    focus.restore();
   }
 
   const cardEl = card({ title: 'App behavior' }, body);

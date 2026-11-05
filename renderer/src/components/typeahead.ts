@@ -1,7 +1,8 @@
 /**
  * A dependency-free typeahead: a text input with a filtered suggestion list.
  * Free text is always allowed — suggestions assist input, they never gate it.
- * Keyboard: ↑/↓ move, Enter/Tab picks, Escape closes the list (not the modal).
+ * Keyboard: ↑/↓ move, Enter picks, Tab picks and moves to the next field,
+ * Escape closes the list (not the modal).
  */
 import { h, render } from '../dom';
 
@@ -126,7 +127,9 @@ export function typeahead(opts: TypeaheadOpts): HTMLElement {
       selected = (selected + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
       paint();
     } else if ((e.key === 'Enter' || e.key === 'Tab') && selected >= 0) {
-      e.preventDefault();
+      // Tab picks AND moves on (#340 — "type three letters, Tab" is the whole
+      // map entry); Enter picks and stays.
+      if (e.key === 'Enter') e.preventDefault();
       e.stopPropagation(); // picking must not reach a surrounding Enter-to-save handler
       pick(items[selected]);
     } else if (e.key === 'Escape') {

@@ -2,7 +2,8 @@
  * The small-coloured-label family — pills, badges, and chips used to tag
  * results, data provenance, and toggleable filters throughout the UI.
  */
-import { h, type Child } from '../../dom';
+import { h, type Child, type Props } from '../../dom';
+import { infoTip } from '../infoTip';
 import type { Result } from '../../../../src/shared/contract';
 
 /** Visual tone for {@link pill}; drives the `is-*` colour class. */
@@ -34,4 +35,15 @@ export function badge(
 /** Toggleable filter tag; `on` reflects the current selection state. */
 export function chip(label: string, on: boolean, onClick?: () => void): HTMLElement {
   return h('button', { class: `chip${on ? ' is-on' : ''}`, on: onClick ? { click: onClick } : undefined }, label);
+}
+
+/**
+ * The small uppercase label above a control (`.field-label`), with an optional
+ * ⓘ carrying the background prose (#339): the Settings pattern is
+ * **Label** ⓘ · control, with at most one short muted line under it.
+ */
+export function fieldLabel(text: string, info?: string, opts: { style?: Props['style'] } = {}): HTMLElement {
+  return h('div', { class: 'field-label', style: opts.style },
+    text,
+    info ? infoTip(info, { label: `About ${text}` }) : null);
 }

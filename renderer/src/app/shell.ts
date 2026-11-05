@@ -7,6 +7,7 @@
 import { h, render } from '../dom';
 import type { AppState, ViewId, ViewParams } from '../store';
 import { sameParams } from '../backStack';
+import { captureFocus } from '../focusMemory';
 import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role, SessionTraining } from '../../../src/shared/contract';
 import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
@@ -35,6 +36,7 @@ import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
 import { maybeOfferPlacements } from './placementOffer';
+import { openRankAdjustment } from './rankAdjustment';
 import { roleStatus } from '../roleStatus';
 import { sidebarChip } from '../sidebarChip';
 import {
@@ -656,6 +658,9 @@ export class App {
     // refresh is seamless. Real navigation keeps both the animation and the
     // per-route scroll memory.
     const priorScroll = this.contentHost.scrollTop;
+    // Same idea for keyboard focus (#339): flipping a Settings toggle refreshes
+    // the snapshot and rebuilds the view, which used to drop focus to <body>.
+    const focus = navigated ? null : captureFocus(this.contentHost);
     render(this.contentHost, VIEWS[state.view](this.context()));
     this.lastRendered = key;
     if (navigated) {
@@ -664,6 +669,7 @@ export class App {
       const view = this.contentHost.firstElementChild as HTMLElement | null;
       if (view) view.style.animation = 'none';
       this.contentHost.scrollTop = priorScroll;
+      focus?.restore();
     }
   }
 
@@ -1301,6 +1307,17 @@ A game counts as hit when every target you worked on in it was a Hit. Execution:
           }))),
           actions: [
             { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
+            {
+              label: 'Add cheater compensation…',
+              hint: 'rank refund after a ban',
+              run: () => {
+                const f = store.get().filters;
+                openRankAdjustment({
+                  ...(f.account !== 'all' ? { account: f.account } : {}),
+                  ...(f.role !== 'all' ? { role: f.role as Role } : {}),
+                });
+              },
+            },
             // Stats ↔ Training (issue #342): the palette names the mode it switches TO.
             ctx.data.sessionMode.mode === 'training'
               ? { label: 'Session mode: Stats', hint: 'Matches leads with win/loss again', run: () => setSessionMode(ctx, 'stats') }
