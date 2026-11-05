@@ -298,7 +298,8 @@ account's per-role lines beneath it.
 - **Trends** — **rank over time**, above everything else: one line per tracked (account, role)
   you have a rank anchor for, plotted by real date so a stretch with no known rank (an open
   placement run, a pre-reset match) shows as a real gap rather than a guessed interpolation; a
-  hollow point marks a reconstructed (rather than recorded or replayed) rank. Then winrate over
+  hollow point marks a reconstructed (rather than recorded or replayed) rank, and a small diamond
+  marks a cheater-compensation refund. Then winrate over
   time — a **momentum strip** states the trailing window vs. the one before it in numbers
   (winrate · games each side, signed point change), and the bold line is a real calendar-true,
   game-weighted rolling average (not just the last 7 *points* averaged unweighted — a schedule
@@ -624,8 +625,10 @@ click one and it scrolls to and flashes that card, and About/FAQ's own links lan
 there too) above an
 **accounts manager** (a tidy list of every account seen in your match history — name, game
 count and a compact per-role rank summary per row, with create/edit/delete; everything
-role-specific — the **Set rank…** anchor and the placement-run controls — lives behind each
-row's **Manage ranks…** button; the active account filter **auto-switches** when GEP reports a
+role-specific — the **Set rank…** anchor, the placement-run controls and **Cheater compensation**
+(enter the rank % Overwatch refunds after banning a cheater from one of your matches; it moves
+that role's rank like a match ±% would but never counts as a game — also in the command palette
+as **Add cheater compensation…**) — lives behind each row's **Manage ranks…** button; the active account filter **auto-switches** when GEP reports a
 different logged-in account), a **Master data**
 editor (see below), and a **Coaching** card whose six editors — Quick Log (how many most-played
 heroes the log-match hero picker suggests, folded in as the first row), break reminder, readiness

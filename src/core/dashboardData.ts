@@ -30,7 +30,9 @@ import {
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
-import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap } from './rank';
+import {
+  adjustmentMarks, currentRank, rankKey, rankSeries, rankToPoints, type RankAdjustment, type RankAnchorMap,
+} from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role, Result } from './model';
@@ -54,6 +56,8 @@ export interface ManualData {
   grading?: GradingSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
   rankAnchors?: RankAnchorMap;
+  /** Rank adjustments (cheater compensation…), only for the rank chart's markers — never counted as matches. */
+  rankAdjustments?: RankAdjustment[];
   /**
    * Tracked placement runs. Open ones make their counted matches contribute no
    * ladder movement (Overwatch shows no ±% during placements), and every run —
@@ -134,6 +138,15 @@ export function computeDashboard(
   // points are narrowed to the active range, via the same filtered-games id
   // set every other "in range" read uses.
   const rankTrend = rankTrendOf(all, games, manual?.rankAnchors, suppressed, resetBoundaries(placementRuns));
+  // Adjustment markers for the same tracks, from the first plotted point on —
+  // drawn as markers on the chart, never as match points.
+  const rankAdjustmentMarks: DashboardData['rankAdjustmentMarks'] = {};
+  for (const [key, series] of Object.entries(rankTrend)) {
+    const role = ROLES.find((r) => key.endsWith(`::${r}`));
+    if (!role || !series.length) continue;
+    const marks = adjustmentMarks(manual?.rankAdjustments ?? [], key.slice(0, key.length - role.length - 2), role, series[0].timestamp);
+    if (marks.length) rankAdjustmentMarks[key] = marks;
+  }
   const placements = placementRuns.map((run) => {
     const { counted, target, latestPrediction, countedMatchIds } = runProgress(all, run);
     return {
@@ -266,6 +279,7 @@ export function computeDashboard(
     accountRoleRanks,
     accountActivity: accountLastPlayedAt(all),
     rankTrend,
+    rankAdjustmentMarks,
     placements,
     session: currentSession(sessionGames, now, sessionSettings.gapMinutes),
     // Every past sitting (S4), same account scope + gap as `session` above, capped like every other list.

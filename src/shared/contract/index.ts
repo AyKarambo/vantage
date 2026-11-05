@@ -80,8 +80,10 @@ export type {
 // Accounts + rank
 export type {
   AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary,
-  RankEntryPreviewInput, RankEntryPreview,
+  RankEntryPreviewInput, RankEntryPreview, RankAdjustmentInput, RankAdjustmentResult,
 } from './accounts';
+export type { RankAdjustment, RankAdjustmentReason } from '../../core/rank/types';
+export type { RankAdjustmentMark } from '../../core/rank/adjustments';
 export type { AccountKind } from '../../core/accountsManage';
 
 // Placement runs
