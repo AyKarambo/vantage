@@ -44,6 +44,14 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 - **A match Vantage joined late is marked.** If the app or the game feed only caught a match after it had
   started, the match page now says its time is short and links straight to **Played time** in **Edit
   match**, so you can type in the time from the scoreboard.
+- **Settings stays put when you change something.** Flipping a toggle or picking an option no longer
+  jumps the page to a different spot, and keyboard focus stays on the control you just used.
+
+### Changed
+
+- **Settings is easier to scan.** The longer explanations moved behind a small ⓘ next to each setting
+  (hover, focus or click it), so each row is just the label, the control and at most one short line.
+  The tooltips themselves are larger and easier to read, and no longer get cut off at the window's edge.
 
 ## 0.42.0 — 27 October 2026
 

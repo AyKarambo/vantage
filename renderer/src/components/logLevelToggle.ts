@@ -7,6 +7,7 @@ import { h, render } from '../dom';
 import type { LogLevel } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
 import { toggleSwitch } from './primitives';
+import { captureFocus } from '../focusMemory';
 
 export function logLevelToggle(): HTMLElement {
   const host = h('span', {
@@ -19,6 +20,8 @@ export function logLevelToggle(): HTMLElement {
     // K3: a fixed "Debug detail" label beside a real switch — this was the
     // one boolean in the app with no on/off cue at all beyond a colour tint,
     // not even the inconsistent label-text suffix every other chip had.
+    // The repaint replaces the switch just pressed — keep focus on it (#339).
+    const focus = captureFocus(host);
     render(host,
       h('span', { class: 'toggle-inline-label' }, 'Debug detail'),
       toggleSwitch({
@@ -30,6 +33,7 @@ export function logLevelToggle(): HTMLElement {
         },
       }),
     );
+    focus.restore();
   }
   return host;
 }

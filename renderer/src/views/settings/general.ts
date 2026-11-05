@@ -1,5 +1,5 @@
 import { h } from '../../dom';
-import { card, segmented } from '../../components/primitives';
+import { card, fieldLabel, segmented } from '../../components/primitives';
 import { inlineLink } from '../../components/inlineLink';
 import { breakReminderEditor } from '../../components/breakReminderEditor';
 import { readinessSettingsEditor } from '../../components/readinessSettingsEditor';
@@ -26,21 +26,20 @@ function section<T extends HTMLElement>(el: T, key: string): T {
 }
 
 /**
- * One labelled block inside the Coaching card (W1): a heading and a one-line
- * hint naming what the control actually affects — the five editors used to
- * just stack with nothing saying which was which — plus a "See it on X →"
- * jump so the player can go look at the thing they just tuned. `jump` is
- * omitted for Quick Log, which affects a modal (Log Match), not a screen
- * `ctx.navigate` can land on.
+ * One labelled block inside the Coaching card (W1): a heading whose ⓘ names
+ * what the control actually affects (#339 — it used to be an always-visible
+ * hint line under every heading) — the five editors used to just stack with
+ * nothing saying which was which — plus a "See it on X →" jump so the player
+ * can go look at the thing they just tuned. `jump` is omitted for Quick Log,
+ * which affects a modal (Log Match), not a screen `ctx.navigate` can land on.
  */
 function coachingBlock(
   ctx: ViewContext,
-  opts: { title: string; hint: string; jump?: { label: string; view: ViewId } },
+  opts: { title: string; info: string; jump?: { label: string; view: ViewId } },
   control: HTMLElement,
 ): HTMLElement {
   return h('div', { class: 'coaching-block' },
-    h('div', { class: 'field-label' }, opts.title),
-    h('div', { class: 'hint', style: { marginBottom: '8px' } }, opts.hint),
+    fieldLabel(opts.title, opts.info),
     control,
     opts.jump
       ? h('div', { style: { marginTop: '6px' } },
@@ -68,7 +67,7 @@ function quickLogBlock(ctx: ViewContext): HTMLElement {
     input.value = String(n);
     prefs.set('suggestedHeroCount', n);
   });
-  const el = coachingBlock(ctx, { title: 'Quick Log', hint: 'How many of your most-played heroes the Log Match card suggests before you have to search.' },
+  const el = coachingBlock(ctx, { title: 'Quick Log', info: 'How many of your most-played heroes the Log Match card suggests before you have to search.' },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
       h('span', { class: 'field-label', style: { margin: '0' } }, 'Suggested heroes shown'),
       input,
@@ -82,36 +81,39 @@ export function generalTab(ctx: ViewContext): HTMLElement {
   return h('div', { class: 'stack', style: { gap: '18px' } },
     section(accountsCard(ctx), 'accounts'),
     h('div', { class: 'grid-2' },
-      section(card({ title: 'Coaching', sub: 'nudges and thresholds used across the app' },
+      section(card({
+        title: 'Coaching',
+        info: 'Nudges and thresholds used across the app. Each block links to the screen it changes.',
+      },
         quickLogBlock(ctx),
         coachingBlock(ctx, {
           title: 'Practice focus',
-          hint: 'Lead Mental and Review with your targets, the optional check-in questions, and how breaks are read.',
+          info: 'Lead Mental and Review with your targets, the optional check-in questions, and how breaks are read.',
           jump: { label: 'See it on Mental →', view: 'mental' },
         }, coachingSettingsEditor(ctx)),
         coachingBlock(ctx, {
           title: 'Break reminder',
-          hint: 'A tray nudge after N losses in a row, so a tilt spiral does not run unnoticed.',
+          info: 'A tray nudge after N losses in a row, so a tilt spiral does not run unnoticed.',
           jump: { label: 'See it on Mental →', view: 'mental' },
         }, breakReminderEditor(ctx)),
         coachingBlock(ctx, {
           title: 'Readiness coach',
-          hint: 'The pre-session readiness verdict, and its optional launch-time nudge.',
+          info: 'The pre-session readiness verdict, and its optional launch-time nudge.',
           jump: { label: 'See it on Readiness →', view: 'readiness' },
         }, readinessSettingsEditor(ctx)),
         coachingBlock(ctx, {
           title: 'Target rotation',
-          hint: 'How long an active target can be your focus before it is flagged stale.',
+          info: 'How long an active target can be your focus before it is flagged stale.',
           jump: { label: 'See it on Targets →', view: 'targets' },
         }, stalenessEditor(ctx)),
         coachingBlock(ctx, {
           title: 'Current session',
-          hint: 'The gap between games that starts a new sitting, everywhere the app groups by one.',
+          info: 'The gap between games that starts a new sitting, everywhere the app groups by one.',
           jump: { label: 'See it on Matches →', view: 'matches' },
         }, sessionSettingsEditor(ctx)),
         coachingBlock(ctx, {
           title: 'Grading margin',
-          hint: 'How close a measured target can miss its threshold and still grade Partial.',
+          info: 'How close a measured target can miss its threshold and still grade Partial.',
           jump: { label: 'See it on Review →', view: 'review' },
         }, gradingSettingsEditor(ctx)),
       ), 'coaching'),
@@ -120,7 +122,9 @@ export function generalTab(ctx: ViewContext): HTMLElement {
     h('div', { class: 'grid-2' },
       section(card({ title: 'Appearance' },
         h('div', { style: { marginTop: '4px' } },
-          h('div', { class: 'field-label' }, 'Winrate colours'),
+          fieldLabel('Winrate colours',
+            'Colours the win / loss / draw stats across every chart and screen. '
+            + 'Colorblind uses a blue–orange palette instead of teal–rose.'),
           segmented<WinrateScheme>({
             options: [...WINRATE_SCHEME_OPTIONS],
             value: getWinrateScheme(),
@@ -129,19 +133,15 @@ export function generalTab(ctx: ViewContext): HTMLElement {
               store.rerender();
             },
           }),
-          h('div', { class: 'hint', style: { marginTop: '8px' } },
-            'Colours the win / loss / draw stats across every chart and screen. ' +
-            'Colorblind uses a blue–orange palette instead of teal–rose.'),
         ),
         h('div', { style: { marginTop: '14px' } },
-          h('div', { class: 'field-label' }, 'Density'),
+          fieldLabel('Density',
+            'Compact tightens row and card padding across tables and lists, for more on screen at once.'),
           segmented<Density>({
             options: [...DENSITY_OPTIONS],
             value: getDensity(),
             onChange: (density) => setDensity(density),
           }),
-          h('div', { class: 'hint', style: { marginTop: '8px' } },
-            'Compact tightens row and card padding across tables and lists, for more on screen at once.'),
         ),
       ), 'appearance'),
       section(diagnosticsCard(), 'diagnostics'),
