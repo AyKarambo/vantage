@@ -134,6 +134,8 @@ export interface MatchRow {
    * (falling back to the preceding check-in's "today's focus").
    */
   suggestedFocus?: string[];
+  /** The carried-over choice was a deliberate "Nothing specific" — the chooser pre-selects that chip. */
+  suggestedNothing?: boolean;
   /**
    * Review inbox rows only (issue #321): automatic break detection read the
    * gap before this game as a break — the seed for the "Took a break before
