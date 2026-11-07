@@ -26,7 +26,7 @@ import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type Readines
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import {
-  autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
+  autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselectorDetailed, practiceFocusOn,
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
   DEFAULT_SESSION_MODE, effectiveSessionMode, sessionTraining, type SessionMode, type SessionModeState, type SessionTraining,
 } from './practice';
@@ -776,9 +776,10 @@ function practiceOf(
   const now: GameRecord = {
     matchId: '__next__', timestamp: Date.now(), account: '', role: 'damage', map: '', result: 'Draw', gameType: 'Competitive', heroes: [],
   };
-  const nextFocus = selectable.size
-    ? focusPreselection([...src.games, now], now, coaching.focusStickiness, src.checkIns, selectable)
-    : [];
+  const next = selectable.size
+    ? focusPreselectorDetailed([...src.games, now], coaching.focusStickiness, src.checkIns, selectable)(now)
+    : { ids: [], nothing: false };
+  const nextFocus = next.ids;
   return {
     on: practiceFocusOn(coaching, targets, sessionMode),
     execution,
@@ -790,6 +791,7 @@ function practiceOf(
     ...(recap ? { recap } : {}),
     byTarget: executionByTarget(rangeGames, selfIds),
     nextFocus,
+    ...(next.nothing ? { nextNothing: true } : {}),
   };
 }
 
@@ -807,7 +809,7 @@ function inboxRows(
   coaching: CoachingSettings,
   checkIns: NonNullable<ManualData['checkIns']>,
   practiceOn: boolean,
-): Array<{ g: GameRecord; extra: Pick<MatchRow, 'suggestedFocus' | 'autoBreak'> }> {
+): Array<{ g: GameRecord; extra: Pick<MatchRow, 'suggestedFocus' | 'suggestedNothing' | 'autoBreak'> }> {
   // Stats mode reads neither — keep every row exactly as before (and skip the work).
   if (!practiceOn) return rows.map((g) => ({ g, extra: {} }));
   const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
@@ -816,12 +818,19 @@ function inboxRows(
   // Scopes let a role/hero-scoped target keep its pick across games it was out of scope for.
   const scopes = new Map(targets.filter((t) => selectable.has(t.id)).map((t) => [t.id, t] as const));
   const preselect = selectable.size
-    ? focusPreselector(all, coaching.focusStickiness, checkIns, selectable, undefined, scopes)
+    ? focusPreselectorDetailed(all, coaching.focusStickiness, checkIns, selectable, undefined, scopes)
     : null;
   return rows.map((g) => {
-    const suggested = preselect ? preselect(g) : [];
+    const suggested = preselect ? preselect(g) : { ids: [], nothing: false };
     const autoBreak = autoBreakBefore(g, prevOf.get(g.matchId) ?? null, coaching);
-    return { g, extra: { ...(suggested.length ? { suggestedFocus: suggested } : {}), ...(autoBreak ? { autoBreak } : {}) } };
+    return {
+      g,
+      extra: {
+        ...(suggested.ids.length ? { suggestedFocus: suggested.ids } : {}),
+        ...(suggested.nothing ? { suggestedNothing: true } : {}),
+        ...(autoBreak ? { autoBreak } : {}),
+      },
+    };
   });
 }
 

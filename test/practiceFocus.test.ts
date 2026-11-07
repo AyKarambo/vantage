@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  autoBreakBefore, breakBefore, focusGamesSince, focusOf, focusPreselection, gameContexts, practiceFocusOn, sittingsOf,
+  autoBreakBefore, breakBefore, focusGamesSince, focusOf, focusPreselection, focusPreselectorDetailed, gameContexts, practiceFocusOn, sittingsOf,
 } from '../src/core/practice';
 import { DEFAULT_COACHING, type CoachingSettings } from '../src/core/coachingSettings';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../src/core/targets/notionBookkeeping';
@@ -93,6 +93,21 @@ describe('focusPreselection', () => {
     old.review!.at = T0 + 999 * MIN; // graded last, although played first
     const g = game(900);
     expect(focusPreselection([old, newer, g], g, 'sticky', [], selectable)).toEqual(['a']);
+  });
+
+  it('a deliberate "Nothing specific" carries over as `nothing`, beating the check-in; no choice at all does not', () => {
+    const none = game(0, { focusTargetIds: [] });
+    const later = game(600);
+    const checkIns: SessionCheckIn[] = [{ at: T0 - 5 * MIN, focusTargetIds: ['a'] } as SessionCheckIn];
+    const sticky = focusPreselectorDetailed([none, later], 'sticky', checkIns, selectable)(later);
+    expect(sticky).toEqual({ ids: [], nothing: true });
+    expect(focusPreselectorDetailed([none, later], 'game', [], selectable)(later).nothing).toBe(false);
+    // a no-read review (no choice) is not "nothing"
+    const noRead = game(0, { grades: {} });
+    expect(focusPreselectorDetailed([noRead, later], 'sticky', [], selectable)(later).nothing).toBe(false);
+    // a choice whose targets are gone is empty but not "nothing"
+    const gone = game(0, { focusTargetIds: ['zzz'] });
+    expect(focusPreselectorDetailed([gone, later], 'sticky', [], selectable)(later)).toEqual({ ids: [], nothing: false });
   });
 
   it('a hero-scoped pick survives a game it was out of scope for', () => {

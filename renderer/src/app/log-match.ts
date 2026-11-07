@@ -670,17 +670,22 @@ function buildForm(
   let chooser: FocusChooser | null = null;
   let targetRows: Array<{ el: HTMLElement; set: (g: TargetGrade) => void }> = [];
   let initialFocus = carry?.focusTargetIds ?? ctx.data.practice.nextFocus;
+  let initialNothing = carry?.focusTargetIds ? carry.focusTargetIds.length === 0 : !!ctx.data.practice.nextNothing;
   const targetsHost = h('div', { class: 'stack', style: { gap: '10px' } });
   const paintTargets = (): void => {
     const shown = activeTargets.filter(inScope);
     // A target that left the scope takes its grade with it.
     for (const id of Object.keys(grades)) if (!shown.some((t) => t.id === id)) delete grades[id];
-    if (chooser) initialFocus = chooser.focusIds() ?? initialFocus;
+    if (chooser) {
+      const current = chooser.focusIds();
+      if (current) { initialFocus = current; initialNothing = current.length === 0; }
+    }
     const selfTargets = shown.filter((t) => t.mode !== 'measured');
     chooser = practice && selfTargets.length
       ? focusTargetChooser({
           targets: selfTargets,
           initial: initialFocus,
+          initialNothing,
           grades,
           stickiness: ctx.data.coachingSettings.focusStickiness,
           onStickiness: (focusStickiness) => {

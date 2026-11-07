@@ -413,4 +413,6 @@ export interface PracticeSummary {
   byTarget: Record<string, ExecutionTally>;
   /** What Log Match pre-selects for a game logged right now (stickiness + check-in, like an inbox row's `suggestedFocus`). */
   nextFocus: string[];
+  /** The carried-over choice for that game was "Nothing specific". */
+  nextNothing?: boolean;
 }
