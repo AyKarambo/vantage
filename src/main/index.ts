@@ -38,6 +38,7 @@ import { safeReadiness } from '../core/readiness';
 import { parseProTier, resumeActivation } from '../core/entitlement';
 import { createEntitlementService } from './entitlement/service';
 import { noneSource } from './entitlement/source';
+import { developerSource, hasDeveloperKey } from './entitlement/developerKey';
 import { currentSession } from '../core/analytics';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -421,9 +422,11 @@ function main(): void {
   // Unpackaged dev runs get the developer tier override (Settings › Developer);
   // OW_PRO_SIMULATE picks the tier it starts on. It sits on top of the real
   // cache and never writes it, so turning it off restores the real state.
+  // A valid `<userData>/developer.key` grants permanent Pro in any build,
+  // checked offline against a hash (no dev UI, no network).
   const devTools = !app.isPackaged;
   const entitlement = createEntitlementService({
-    source: noneSource,
+    source: hasDeveloperKey(app.getPath('userData')) ? developerSource : noneSource,
     doc: jsonFiles(app.getPath('userData'))('entitlement.json'),
     devOverrides: devTools,
     initialOverride: devTools ? parseProTier(process.env.OW_PRO_SIMULATE) : undefined,

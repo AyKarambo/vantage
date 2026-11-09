@@ -1050,6 +1050,14 @@ sensor; `OW_PRO_SIMULATE=free|trial|pro|lapsed` starts a dev run on a Vantage Pr
 preview` takes `?pro=` the same way). Dev builds and the preview also show **Settings › Developer**,
 where the tier can be switched live; the release build (`npm run release`) compiles that card out.
 
+**Developer key (any build, release included):** a `developer.key` file in the app's userData folder
+(`%APPDATA%ow.vantage` on Windows) whose SHA-256 matches `DEVELOPER_KEY_SHA256` in
+`src/main/entitlement/developerKey.ts` grants permanent Pro, checked offline at startup — no dev
+UI, no network. Settings › Vantage Pro then reads "Activated by developer key". Only the hash is in
+git; keep the key itself in a password manager and copy the file to each machine (restart Vantage
+after adding it). To rotate: generate a new random key, write it to `developer.key`, and replace the
+hash. Deleting the file drops back to the normal entitlement (which then reads as *lapsed*).
+
 ## Importing match history
 
 Bring an existing tracker's matches into Vantage without giving up your own tool. A companion

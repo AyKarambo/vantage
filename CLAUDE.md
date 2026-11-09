@@ -64,6 +64,9 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
   pace; `1` replays the simulated match at real speed so the measured played-time path runs),
   `OW_PRO_SIMULATE=free|trial|pro|lapsed` (the Vantage Pro tier a dev run starts on; ignored in
   packaged builds — the browser preview takes `?pro=` the same way).
+- **Developer key:** `<userData>/developer.key` matching the SHA-256 in
+  `src/main/entitlement/developerKey.ts` grants permanent Pro in **any** build (release too), offline,
+  with no UI. Only the hash is committed; the key never enters git (guardrail 2).
 - **Settings › Developer** (dev builds + preview only): switch the Pro tier live (Real/Free/Trial/Pro/
   Lapsed). Gated by the `__DEV_TOOLS__` compile flag — `npm run release` builds the renderer with
   `--release`, which compiles it to `false` and drops the card; main also refuses the override when

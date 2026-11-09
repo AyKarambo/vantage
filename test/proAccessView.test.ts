@@ -50,6 +50,7 @@ describe('renderer Pro access', () => {
   it('purchases are unavailable until a real source exists', () => {
     expect(purchaseAvailable(free)).toBe(false);
     expect(purchaseAvailable(pro)).toBe(true);
+    expect(purchaseAvailable({ ...pro, source: 'developer' })).toBe(false);
   });
 
   it('labels the tier with days left', () => {
