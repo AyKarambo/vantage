@@ -59,7 +59,6 @@ function keepStoredTargetLayer(provider: DataProvider, input: ReviewInput): Revi
 }
 
 function withoutTargetLayer<T extends ManualMatchInput | MatchEditInput>(input: T): T {
-  const { grades: _g, ...rest } = input as T & { focusTargetIds?: unknown };
-  delete (rest as { focusTargetIds?: unknown }).focusTargetIds;
+  const { grades: _g, focusTargetIds: _f, ...rest } = input as T & { focusTargetIds?: unknown };
   return rest as T;
 }

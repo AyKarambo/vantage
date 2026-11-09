@@ -9,6 +9,17 @@ import { PlacementStore } from '../src/store/placements';
 import { CheckInStore } from '../src/store/checkIns';
 import { FriendStore } from '../src/store/friends';
 import { MasterDataStore } from '../src/store/masterData';
+import type { EntitlementRecord } from '../src/core/entitlement';
+import type { EntitlementSource } from '../src/main/entitlement/source';
+
+/** An entitlement source that always reports `record`, stamped as checked just now. */
+export function fixedSource(record: EntitlementRecord): EntitlementSource {
+  return {
+    kind: 'simulated',
+    check: async () => ({ ...record, lastCheckedAt: Date.now() }),
+    action: async () => ({ ok: true }),
+  };
+}
 
 /** A storage location that keeps every document in memory (copied in and out, like a file would). */
 export function memoryDocs(): JsonDocs {

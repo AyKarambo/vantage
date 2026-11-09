@@ -25,16 +25,3 @@ export const noneSource: EntitlementSource = {
   check: async () => ({ plan: 'none' }),
   action: async () => ({ ok: false, reason: 'unavailable' }),
 };
-
-/**
- * Dev only (`OW_PRO_SIMULATE`): always reports the given record, stamped as
- * checked just now (a long-running simulated Pro never drifts into the grace
- * end); actions succeed without doing anything.
- */
-export function simulatedSource(record: EntitlementRecord): EntitlementSource {
-  return {
-    kind: 'simulated',
-    check: async () => ({ ...record, lastCheckedAt: Date.now() }),
-    action: async () => ({ ok: true }),
-  };
-}

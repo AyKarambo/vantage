@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  NO_ENTITLEMENT, PRO_GRACE_MS, TRIAL_MS, nextRecord, nextTierChange, parseProSimulation, proAccess, resolveTier,
-  resumeActivation,
+  NO_ENTITLEMENT, PRO_GRACE_MS, TRIAL_MS, nextRecord, nextTierChange, parseProTier, proAccess, resolveTier,
+  resumeActivation, simulatedRecord,
 } from '../src/core/entitlement';
 
 const DAY = 86_400_000;
@@ -63,18 +63,17 @@ describe('proAccess', () => {
   });
 });
 
-describe('parseProSimulation', () => {
-  it('maps each simulated tier to a record that resolves to it', () => {
+describe('simulatedRecord / parseProTier', () => {
+  it('maps each tier name to a record that resolves to it', () => {
     for (const tier of ['free', 'trial', 'pro', 'lapsed'] as const) {
-      const rec = parseProSimulation({ OW_PRO_SIMULATE: tier }, NOW);
-      expect(rec).toBeDefined();
-      expect(resolveTier(rec, NOW).tier).toBe(tier);
+      expect(parseProTier(` ${tier.toUpperCase()} `)).toBe(tier);
+      expect(resolveTier(simulatedRecord(tier, NOW), NOW).tier).toBe(tier);
     }
   });
 
-  it('ignores unset or unknown values', () => {
-    expect(parseProSimulation({}, NOW)).toBeUndefined();
-    expect(parseProSimulation({ OW_PRO_SIMULATE: 'gold' }, NOW)).toBeUndefined();
+  it('ignores unset or unknown tier names', () => {
+    expect(parseProTier(undefined)).toBeUndefined();
+    expect(parseProTier('gold')).toBeUndefined();
   });
 });
 
