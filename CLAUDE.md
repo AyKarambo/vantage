@@ -79,6 +79,23 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
 - Views **compose** `components/`; don't hand-roll markup. Charts stay dependency-free SVG.
 - Keep the IPC contract typed end-to-end; don't smuggle `any` across the boundary.
 
+## Code Philosophy — simple, readable, senior-level
+Write the code a senior engineer would be happy to review: the smallest change that solves the
+problem, understandable at a glance.
+- **Smallest diff.** Touch only what the task needs; every changed line traces back to the request.
+  Mention unrelated problems instead of fixing them. Clean up only what your own change orphaned.
+- **Reuse before writing.** Look for an existing helper/component (`h()`, `components/`, `core/`)
+  first. Prefer plain functions and data over classes, factories or config objects.
+- **Abstract on the third use, not the first.** Three similar lines beat a premature abstraction.
+  No options, parameters or layers "for later"; no defensive code for cases that can't happen.
+- **Patterns earn their place.** Use a pattern (discriminated union, pure reducer, small
+  composable function, typed lookup table instead of an `if` chain…) when it makes the code
+  shorter or removes a bug class — never to look sophisticated. Prefer making invalid states
+  unrepresentable via types over runtime checks.
+- **Readable over clever.** Clear names, early returns, small single-purpose functions, comments
+  only for the *why*. Test: could a newcomer follow this in a minute?
+- **Check before finishing:** "Would a senior engineer call this overcomplicated?" If yes, cut it.
+
 ## Guardrails (never violate)
 1. **Account safety — GEP only.** Live match data comes solely from Overwolf's Game Events
    Provider. Never read game memory, inject, or expose hidden info. This is the product's
