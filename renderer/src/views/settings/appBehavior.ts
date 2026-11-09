@@ -9,52 +9,16 @@ import { formatClaudeDesktopMcpConfig } from '../../../../src/core/mcpConfig';
 import { ZOOM_OPTIONS, ZOOM_DEFAULT, syncZoom } from '../../zoom';
 import { store } from '../../store';
 import type { ViewContext } from '../view';
+import { developerSection } from './developer';
 
-/** localStorage flag: once the Dev Mode easter egg is unlocked, it stays unlocked. */
-const DEV_UNLOCK_KEY = 'vantage.devUnlocked';
-const TAPS_TO_UNLOCK = 5;
-// Module scope so the count survives a Settings re-render (which rebuilds this
-// whole card and would otherwise reset a per-instance counter mid-sequence).
-let unlockTaps = 0;
 /** The last settings + build info this card painted — survives re-renders so the card never collapses back to "Loading…". */
 let cached: { settings: AppUiSettings; info: AppInfo | null } | null = null;
 
-function readUnlocked(): boolean {
-  try {
-    return localStorage.getItem(DEV_UNLOCK_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** Close-to-tray + run-at-login + demo data — plus a hidden Dev Mode section. */
+/** Close-to-tray + run-at-login + demo data — plus, in dev builds only, the Developer section. */
 export function appBehaviorCard(ctx: ViewContext): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '10px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
   // AppInfo is a build-constant (packaged / devMode); fetched alongside settings.
   let info: AppInfo | null = null;
-  let last: AppUiSettings | null = null;
-  // Dev Mode is a hidden feature: revealed only once the easter egg is unlocked,
-  // or when the app is already running in Dev Mode (so it can be turned off).
-  let unlocked = readUnlocked();
-
-  // The dev-key input is created ONCE so a repaint (from an unrelated toggle)
-  // re-inserts the same node, preserving its value. It saves on `change`
-  // (blur/Enter) — never through the paint cycle — so typing is never cut off.
-  const devKeyInput = h('input', {
-    class: 'vt-input',
-    type: 'password',
-    placeholder: 'Paste your Overwolf dev key',
-  }) as HTMLInputElement;
-  const devKeyHint = h('div', { class: 'hint', style: { marginTop: '6px' } },
-    'Stored at ~/.ow-cli/dev-key (never in the app or git). Restart Vantage to apply.');
-  devKeyInput.addEventListener('change', () => {
-    void bridge.setDevKey(devKeyInput.value).then((r) => {
-      devKeyInput.value = '';
-      devKeyHint.textContent = r.hasKey
-        ? 'Dev key saved at ~/.ow-cli/dev-key. Restart Vantage to apply.'
-        : 'Dev key cleared. Restart Vantage to apply.';
-    });
-  });
 
   const load = (): void => {
     void Promise.all([bridge.getAppSettings(), bridge.getAppInfo()]).then(([s, i]) => {
@@ -103,39 +67,13 @@ function mcpBridgeBlock(bridgePath: string): HTMLElement {
   );
 }
 
-function devModeSection(s: AppUiSettings): HTMLElement {
-    const packaged = info?.packaged ?? false;
-    // Reveal on any attempt this run, not just a confirmed one — a *failed*
-    // dev-mode auth (the exact case this section's toggle is most useful for)
-    // must not stay hidden behind the easter egg.
-    const show = unlocked || (info?.devModeAttempted ?? false);
-    return h('div', { class: show ? 'stack' : 'hidden', style: { gap: '10px', marginTop: '4px' } },
-      h('div', { style: { fontSize: '11.5px', fontWeight: '600', color: 'var(--text-1)' } }, 'Dev Mode'),
-      // Packaged builds can never run Dev Mode → show it disabled (K3, still
-      // announced as a real switch), not a fake "on" (AC5: never a silent no-op).
-      toggleRow({
-        label: packaged ? 'Dev Mode (unavailable)' : 'Dev Mode',
-        on: !packaged && s.devMode,
-        disabled: packaged,
-        onChange: () => apply({ devMode: !s.devMode }),
-        info: packaged
-          ? 'Dev Mode only runs in the unpackaged dev build, not the installed one.'
-          : 'When on, the launcher loads real Overwatch (GEP) data using your dev key.',
-        hint: packaged ? undefined : 'Applies on the next launch.',
-      }),
-      // The dev-key field is meaningless in a packaged build; hide it there.
-      h('div', { class: packaged ? 'hidden' : '' }, devKeyInput, devKeyHint),
-    );
-  }
-
-  /**
+/**
    * Each row is **Label** ⓘ · control (#339): the "what does this do / why"
    * prose sits behind the ⓘ, and the muted line underneath is kept only for a
    * fact the decision needs — what closing the window does right now, that
    * demo data has no effect, that the MCP pipe is reachable while it's on.
    */
   function paint(s: AppUiSettings): void {
-    last = s;
     cached = { settings: s, info };
     // A toggle here repaints this card in place, which replaces the switch the
     // player just pressed — put focus back on its replacement.
@@ -219,31 +157,11 @@ function devModeSection(s: AppUiSettings): HTMLElement {
         // Claude Desktop config block instead of making anyone type it.
         s.mcpEnabled && info?.mcpBridgePath ? mcpBridgeBlock(info.mcpBridgePath) : null,
       ),
-      devModeSection(s),
+      // Dev builds only: the release bundle compiles this branch (and developer.ts) out.
+      __DEV_TOOLS__ ? developerSection(ctx, s, apply) : null,
     );
     focus.restore();
   }
 
-  const cardEl = card({ title: 'App behavior' }, body);
-  // Easter egg: clicking the card header TAPS_TO_UNLOCK times reveals Dev Mode.
-  // The whole header is the hit target (not just the title text) so it's easy to
-  // find, and `unlockTaps` lives at module scope so a Settings re-render — which
-  // rebuilds this card — doesn't reset progress mid-sequence. Not advertised.
-  const head = cardEl.querySelector('.card-head') as HTMLElement | null;
-  if (head) {
-    head.addEventListener('click', () => {
-      if (unlocked) return;
-      unlockTaps += 1;
-      if (unlockTaps < TAPS_TO_UNLOCK) return;
-      unlocked = true;
-      unlockTaps = 0;
-      try {
-        localStorage.setItem(DEV_UNLOCK_KEY, '1');
-      } catch {
-        /* storage unavailable — session-only unlock still works */
-      }
-      if (last) paint(last);
-    });
-  }
-  return cardEl;
+  return card({ title: 'App behavior' }, body);
 }

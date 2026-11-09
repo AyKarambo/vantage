@@ -67,8 +67,8 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
 - **Developer key:** `<userData>/developer.key` matching the SHA-256 in
   `src/main/entitlement/developerKey.ts` grants permanent Pro in **any** build (release too), offline,
   with no UI. Only the hash is committed; the key never enters git (guardrail 2).
-- **Settings › Developer** (dev builds + preview only): switch the Pro tier live (Real/Free/Trial/Pro/
-  Lapsed). Gated by the `__DEV_TOOLS__` compile flag — `npm run release` builds the renderer with
+- **Settings › App behavior › Developer** (dev builds + preview only): Dev Mode, the Overwolf dev key, and
+  the live Pro tier switch (Real/Free/Trial/Pro/Lapsed). Gated by the `__DEV_TOOLS__` compile flag — `npm run release` builds the renderer with
   `--release`, which compiles it to `false` and drops the card; main also refuses the override when
   packaged. Put any future dev-only UI behind the same flag (`renderer/src/buildFlags.d.ts`).
 

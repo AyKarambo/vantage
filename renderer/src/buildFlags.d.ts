@@ -4,6 +4,6 @@
  *
  * `__DEV_TOOLS__` is `false` only in the release bundle (`npm run release` →
  * `build-renderer.mjs --release`). Code behind `if (__DEV_TOOLS__)` is then dead
- * and esbuild drops it from the bundle — Settings › Developer never ships.
+ * and esbuild drops it from the bundle — the Developer section in App behavior never ships.
  */
 declare const __DEV_TOOLS__: boolean;
