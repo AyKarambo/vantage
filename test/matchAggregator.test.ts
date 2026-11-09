@@ -828,3 +828,48 @@ describe('MatchAggregator.clearPartyCount (review fix)', () => {
     expect(rec?.groupSize).toBeUndefined();
   });
 });
+
+describe('MatchAggregator — tracked-but-unevaluated GEP signals (gepExtras)', () => {
+  it('stores game_mode, objective_kills, respawns, revives, game_exit and the GEP version', () => {
+    let clock = 1_000_000;
+    const agg = new MatchAggregator(() => (clock += 1_000));
+    agg.handle(info('gep_internal', 'version_info', '317.3.1'));
+    agg.handle(event('match_start'));
+    agg.handle(info('game_info', 'game_mode', '258'));
+    agg.handle(info('kill', 'objective_kills', '2'));
+    agg.handle(event('respawn', null));
+    agg.handle(event('respawn', null));
+    agg.handle(event('revive', null));
+    agg.handle(event('game_exit', ''));
+    agg.handle(info('match_info', 'match_outcome', 'victory'));
+    const rec = agg.handle(event('match_end', null));
+    expect(rec?.gepExtras).toMatchObject({ gameMode: '258', objectiveKills: 2, gepVersion: '317.3.1' });
+    expect(rec?.gepExtras?.respawns).toHaveLength(2);
+    expect(rec?.gepExtras?.revives).toHaveLength(1);
+    expect(rec?.gepExtras?.gameExitAt).toBeTypeOf('number');
+    expect(matchToGame(rec!, {})!.gepExtras).toEqual(rec!.gepExtras);
+  });
+
+  it('leaves gepExtras absent when none arrived, and does not leak into the next match', () => {
+    const agg = new MatchAggregator(() => 1_000_000);
+    agg.handle(event('match_start'));
+    agg.handle(event('respawn', null));
+    agg.handle(info('match_info', 'match_outcome', 'defeat'));
+    agg.handle(event('match_end', null));
+    agg.handle(event('match_start'));
+    agg.handle(info('match_info', 'match_outcome', 'victory'));
+    const second = agg.handle(event('match_end', null));
+    expect(second?.gepExtras).toBeUndefined();
+  });
+
+  it('does not disturb map or outcome handling', () => {
+    const agg = new MatchAggregator(() => 1_000_000);
+    agg.handle(event('match_start'));
+    agg.handle(event('revive', null));
+    agg.handle(info('match_info', 'map', '4704'));
+    agg.handle(info('match_info', 'match_outcome', 'victory'));
+    const rec = agg.handle(event('match_end', null));
+    expect(rec?.mapName).toBe('Redwood Dam');
+    expect(rec?.outcome).toBe('victory');
+  });
+});

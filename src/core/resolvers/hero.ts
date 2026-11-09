@@ -53,11 +53,23 @@ export function resolveHeroName(value: string | undefined | null): string | unde
 /**
  * GEP hero id -> canonical name, for heroes the feed reports with a numeric
  * `hero_id` but `hero_name: "UNKNOWN"` because Overwolf hasn't shipped the name
- * yet (seen in live captures on release week). Only ids observed in real captures
- * belong here — an id is never guessed. Names resolve through
+ * yet (seen in live captures on release week). Ids come from live captures or
+ * Overwolf's published `hero_id` table — an id is never guessed. Names resolve through
  * {@link resolveHeroName}, so each must exist in the hero list.
  */
 export const HERO_ID_TO_NAME: Readonly<Record<string, string>> = {
+  // Heroes released since late 2025, per Overwolf's documented `hero_id` table
+  // (supported-games/overwatch, checked 2026-11-09) — the window in which GEP has
+  // lagged on `hero_name`. Older heroes always arrive named.
+  '1138': 'Vendetta',
+  '1220': 'Domina',
+  '1234': 'Sierra',
+  '1240': 'Emre',
+  '1245': 'Anran',
+  '1251': 'Mizuki',
+  '1302': 'Jetpack Cat',
+  '1324': 'Shion',
+  '1346': 'D.Mon',
   '1392': 'Doctrine',
 };
 

@@ -46,6 +46,7 @@ export function matchToGame(
     ...(record.playedMinutes != null ? { playedMinutes: record.playedMinutes } : {}),
     ...(record.rounds?.length ? { rounds: record.rounds } : {}),
     ...(record.joinedLate ? { joinedLate: true } : {}),
+    ...(record.gepExtras ? { gepExtras: record.gepExtras } : {}),
     heroes: record.heroes,
     perHero,
     finalScore: record.finalScore,

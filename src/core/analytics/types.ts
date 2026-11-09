@@ -4,7 +4,7 @@
  * insights are built from. Pure and I/O-free so it is fully unit-testable and
  * reusable in the renderer.
  */
-import type { Result, Role, HeroStat, RosterPlayer, RoundSpan, MatchParty } from '../model';
+import type { Result, Role, HeroStat, RosterPlayer, RoundSpan, MatchParty, GepExtras } from '../model';
 // From `rank/types` rather than the `rank` barrel: that module imports only
 // `../model`, so this stays a leaf type import with no cycle back through the
 // rank engine (which itself reads `GameRecord` from here).
@@ -151,6 +151,8 @@ export interface GameRecord {
    * and played time are short until {@link playedMinutesOverride} fixes them.
    */
   joinedLate?: boolean;
+  /** GEP signals recorded for later (game mode, respawns, game exit …) — stored, not evaluated. See `GepExtras`. */
+  gepExtras?: GepExtras;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   heroes: string[];

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveMapId, MAP_ID_TO_NAME } from '../src/core/resolvers/mapId';
-import { MAP_MODES } from '../src/core/maps';
+import { MAP_MODES, isStadiumOnlyMap } from '../src/core/maps';
 
 describe('resolveMapId', () => {
   it('resolves the documented map id 1207 to Nepal (string or number)', () => {
@@ -43,9 +43,23 @@ describe('resolveMapId', () => {
     expect(resolveMapId('')).toBeUndefined();
   });
 
-  it('every table name is a canonical map known to MAP_MODES (spelling guard)', () => {
+  // Named in Overwolf's table, game mode not yet verified — see mapId.ts.
+  const UNCLASSIFIED = new Set(['Thames District', 'Powder Keg Mine', 'Serenza']);
+
+  it('every table name is a canonical map known to MAP_MODES, a Stadium map, or a listed unclassified one (spelling guard)', () => {
     for (const name of Object.values(MAP_ID_TO_NAME)) {
-      expect(MAP_MODES[name], `"${name}" not a canonical MAP_MODES key`).toBeDefined();
+      const known = MAP_MODES[name] !== undefined || isStadiumOnlyMap(name) || UNCLASSIFIED.has(name);
+      expect(known, `"${name}" not a canonical map`).toBe(true);
     }
+  });
+
+  it('resolves the newer ids: Redwood Dam, re-issued ids, sub-areas and Stadium maps', () => {
+    expect(resolveMapId('4704')).toBe('Redwood Dam');
+    expect(resolveMapId('4784')).toBe('Esperança');
+    expect(resolveMapId('4949')).toBe('Samoa');
+    expect(resolveMapId('5195')).toBe('Lijiang Tower'); // Night Market sub-area
+    expect(resolveMapId('4981')).toBe('Wuxing University');
+    expect(isStadiumOnlyMap(resolveMapId('4698')!)).toBe(true);
+    expect(isStadiumOnlyMap(resolveMapId('4778')!)).toBe(true);
   });
 });

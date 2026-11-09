@@ -58,6 +58,11 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   match**, so you can type in the time from the scoreboard.
 - **Settings stays put when you change something.** Flipping a toggle or picking an option no longer
   jumps the page to a different spot, and keyboard focus stays on the control you just used.
+- **More maps and the newest heroes are recognised.** Redwood Dam, the Stadium maps and the maps the game
+  now reports under new ids show up by name instead of as a number, and the newest heroes (Vendetta, Sierra,
+  Shion, D.Mon and others) are named even when the game feed hasn't caught up yet. Vantage also quietly
+  keeps a few extra signals from the feed (game mode, respawns, game exit) for future stats — nothing in
+  the app uses them yet.
 
 ### Changed
 
