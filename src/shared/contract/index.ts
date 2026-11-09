@@ -18,6 +18,7 @@ export type {
   TrendGroup, Momentum, ScoreSplit,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
+export type { ProAccess, ProTier, EntitlementSourceKind } from '../../core/entitlement';
 export type { Progression } from '../../core/progression';
 export type { TargetSummary, TargetMode, OrderedAttempt } from '../../core/targets';
 export type { TargetLearningCurve, LearningCurvePoint, LearningPhase } from '../../core/targets';
@@ -105,6 +106,7 @@ export type { DevModeAuthOutcome, DevModeAuthStatusPayload } from './devModeAuth
 
 // App-behavior settings + metadata (Settings screen)
 export type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
+export type { ProAction, ProActionResult, DevToolsState } from './pro';
 
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';

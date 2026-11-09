@@ -1,3 +1,4 @@
+import { FULL_PRO_ACCESS } from '../src/core/entitlement';
 import { describe, it, expect } from 'vitest';
 import { createDispatcher, McpOpError } from '../src/main/mcp/dispatch';
 import { DESTRUCTIVE_OPS, ADDITIVE_WRITE_OPS, READ_OPS, type McpOp } from '../src/shared/mcp/ops';
@@ -48,6 +49,7 @@ function setup() {
     manualTargets: () => targets,
     demoContext: () => ({ active: false, preference: 'off', hasRealHistory: true }),
     isSample: () => false,
+    proAccess: () => FULL_PRO_ACCESS,
     historyRevision: () => 'rev-1',
     effectiveMasterData: () => DEFAULT_MASTER_DATA,
     getBreakReminder: () => DEFAULT_BREAK_REMINDER,

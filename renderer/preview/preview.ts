@@ -37,6 +37,9 @@ import { PlacementStore } from '../../src/store/placements';
 import { CheckInStore } from '../../src/store/checkIns';
 import { FriendStore } from '../../src/store/friends';
 import { MasterDataStore } from '../../src/store/masterData';
+import { parseProTier } from '../../src/core/entitlement';
+import { createEntitlementService } from '../../src/main/entitlement/service';
+import { noneSource } from '../../src/main/entitlement/source';
 import { App } from '../src/app/shell';
 import { must } from '../src/dom';
 import { localDocs } from './localDocs';
@@ -92,6 +95,18 @@ const saveConfig = (): void => configDoc.write(config);
 // prompt (unset) and the honest empty states (off) without Electron.
 const demoParam = params.get('demo');
 if (demoParam === 'on' || demoParam === 'off' || demoParam === 'unset') config.ui.demoPreference = demoParam as DemoPreference;
+
+// ?pro=free|trial|pro|lapsed previews the Vantage Pro tiers (#337) through the
+// same developer override OW_PRO_SIMULATE seeds in the app, and Settings ›
+// Developer switches it live. Absent = Pro, so every screen works as before;
+// "Real" there falls back to the release default (no purchase source → free).
+const entitlement = createEntitlementService({
+  source: noneSource,
+  doc: { read: () => undefined, write: () => {} },
+  devOverrides: true,
+  initialOverride: parseProTier(params.get('pro')) ?? 'pro',
+  onChange: () => dataChanged.emit(),
+});
 
 const appUiSettings = (): AppUiSettings => ({ ...config.ui, runAtLogin: config.runAtLogin });
 
@@ -287,6 +302,8 @@ const pipeline = createMatchPipeline({
 
 const provider = createDataProvider({
   history,
+  entitlement,
+  devTools: true,
   manual: new ManualStore(docs),
   rankAnchors: new RankAnchorStore(docs),
   placements: new PlacementStore(docs),

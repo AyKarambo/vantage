@@ -26,7 +26,7 @@ export function setSessionMode(ctx: ViewContext, mode: SessionMode): void {
 
 /** Whether Training can be switched on right now (needs an active self-rated target). */
 export function trainingAvailable(ctx: ViewContext): boolean {
-  return canTrain(ctx.data.targets);
+  return ctx.data.pro.full && canTrain(ctx.data.targets);
 }
 
 /**
@@ -34,7 +34,9 @@ export function trainingAvailable(ctx: ViewContext): boolean {
  * not already on), it offers "Pick a target →" instead of a Training option
  * that would have nothing to grade.
  */
-export function sessionModeToggle(ctx: ViewContext, opts: { compact?: boolean } = {}): HTMLElement {
+export function sessionModeToggle(ctx: ViewContext, opts: { compact?: boolean } = {}): HTMLElement | null {
+  // Training is Vantage Pro (#337): no switch, and no teaser into the locked Targets screen.
+  if (!ctx.data.pro.full) return null;
   const mode = ctx.data.sessionMode.mode;
   const pickTarget = inlineLink('Pick a target →', {
     title: 'Training drills an active self-rated target — pick or create one on Targets',

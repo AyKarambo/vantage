@@ -41,6 +41,8 @@ import type { LogEntry, LogLevel, LogExportResult, RendererErrorInput } from './
 import type { GepStatusPayload } from './gepStatus';
 import type { DevModeAuthStatusPayload } from './devModeAuth';
 import type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
+import type { ProAction, ProActionResult, DevToolsState } from './pro';
+import type { ProAccess, ProTier } from '../../core/entitlement';
 import type { MasterData, HeroEntry, MapEntry, SeasonEntry, UpdatePreview, AcceptedUpdate, MasterDataCheckInfo } from './masterData';
 
 /** The API surface exposed on `window.owstats` by the preload bridge. */
@@ -316,6 +318,20 @@ export interface OwStatsApi {
   /** Restart the app to apply a staged GEP package fix. The renderer only calls
    *  this from the explicit "restart to apply" banner action. */
   applyGepUpdate(): Promise<void>;
+  /** Re-check the Vantage Pro entitlement now (Settings → Vantage Pro "Re-check"); resolves with the access the next payload will carry. */
+  refreshEntitlement(): Promise<ProAccess>;
+  /** Start a trial, open the checkout, or open subscription management (#337). */
+  proAction(kind: ProAction): Promise<ProActionResult>;
+  /**
+   * A full dashboard over the demo dataset, for a Pro lock page's "View with
+   * demo data" — works even with real history, where the global demo toggle
+   * can't apply. Its `pro` is full but targets read-only: a preview, not a workspace.
+   */
+  getProPreview(filters: DashboardFilters): Promise<DashboardData>;
+  /** Settings › Developer: whether dev tools are live, and the pinned Pro tier. `available` is false in a packaged build. */
+  getDevTools(): Promise<DevToolsState>;
+  /** Pin the Vantage Pro tier for testing (null = the real one). Refused (no-op) in a packaged build. */
+  setDevProOverride(tier: ProTier | null): Promise<DevToolsState>;
   /** Where Vantage's data folder currently lives (Settings screen + first run). */
   getDataLocation(): Promise<DataLocation>;
   /** Open a folder picker (Settings "Change…") and, if chosen, migrate/adopt the data folder. */
@@ -513,6 +529,11 @@ export const IPC_CHANNELS = {
   getAppInfo: 'app:info',
   openExternal: 'app:open-external',
   applyGepUpdate: 'app:apply-gep-update',
+  refreshEntitlement: 'pro:refresh',
+  proAction: 'pro:action',
+  getProPreview: 'pro:preview',
+  getDevTools: 'dev:get',
+  setDevProOverride: 'dev:set-pro-override',
   getDataLocation: 'settings:get-data-location',
   chooseDataFolder: 'settings:choose-data-folder',
   setDataFolder: 'settings:set-data-folder',

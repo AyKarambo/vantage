@@ -69,7 +69,7 @@ against the unsigned local build. It still needs the Console-side app registrati
 | 1. App ideation | Public app + at least one desktop window | ✅ Public; frameless 1300×840 dashboard | src/main/dashboard.ts |
 | 2. Choose a framework | Native or Electron | ✅ **ow-electron** | package.json |
 | 3. Game compliance | No unfair advantage / ToS-safe | ✅ GEP-only, ban-safe (see §7) | src/main/gep.ts |
-| 4. Monetization | Ads or subscription | ⚠ **Ad-free by choice** — confirm with DevRel (§3) | — |
+| 4. Monetization | Ads or subscription | ⏳ **Overwolf Subscriptions (Tebex), no ads** — gating built (#337); purchase source waits on the OIDC client registration from DevRel | src/main/entitlement/ |
 | 5. Submit app idea | Proposal form | ⏳ Copy ready in §3 — you submit |
 
 ---
@@ -92,10 +92,10 @@ Use these when filling the "Submit your app idea" form.
   reads sanctioned events (your own account, map, role, match outcome, your own
   scoreboard). It never reads game memory, never injects, and exposes nothing the
   player can't already see — so there is no competitive advantage from using it.
-- **Monetization:** **None — the app is free and ad-free by choice.** There is no ad
-  container in the UI. Overwolf usually expects ads or a subscription, so flag this in
-  the proposal and confirm an ad-free app is acceptable for this scope; a subscription
-  tier could be added later if required. *(Do not claim ads — the ad slot was removed.)*
+- **Monetization:** **Overwolf Subscriptions (Tebex), no ads.** Tracking, stats and
+  matches are free; Readiness, Targets, Mental analytics and the MCP server are Vantage
+  Pro (€1.49/month or €9.99/year, 14-day trial). Required since 2026-11-01. *(Do not claim
+  ads — there is no ad container.)*
 - **Why it's a good fit:** Fills the "what should I actually practice?" gap that raw
   trackers miss — it ranks maps by *net losses × volume*, tracks per-hero efficiency,
   and correlates a mental/tilt log with winrate.
@@ -138,7 +138,8 @@ Vantage turns your Overwatch match history into a coaching dashboard that tells 
 ### Account-safe by design
 Vantage uses Overwolf's official Game Events Provider — the same sanctioned feed other
 Overwatch apps use. It never reads game memory or injects anything, and only ever shows
-information you can already see in your own game. **Free to use.**
+information you can already see in your own game. **Free to use** — an optional Vantage Pro
+subscription adds Readiness, Targets and Mental analytics.
 
 ### Bonus
 One-click export of your tracked games to a Notion database.
@@ -298,10 +299,12 @@ the built-in CMP + Terms-of-Use acceptance flow and is the only way to use the D
   `renderer/index.html` (`default-src 'none'`; `script-src 'self'`). The CSP warning
   seen while capturing screenshots is from the **dev-only preview harness**, which is
   excluded from the packaged app.
-- ⚠ **Monetization** — the app is **ad-free by choice** (no ad container). Overwolf's
-  [monetization docs](https://dev.overwolf.com/ow-electron/monetization/overview/) confirm ad-free
-  is allowed — Overwolf only forbids **third-party** monetization. Still flag it with DevRel; a
-  subscription tier can be added later. (Notion export is the user's own integration, not monetization.)
+- ⏳ **Monetization** — since 2026-11-01 Overwolf only approves apps with Overwolf ads and/or
+  Overwolf Subscriptions ([monetization docs](https://dev.overwolf.com/ow-electron/monetization/overview/)).
+  Vantage uses **Subscriptions only, no ads** (#337). The free/Pro gating is built; the purchase
+  source needs DevRel's OIDC registration token plus answers on the `client_secret`/PKCE question,
+  the `subscriptions` claim shape and the checkout URL. (Notion export is the user's own
+  integration, not monetization.)
 - ✅ **Legal** — Privacy Policy + Terms of Use authored at `docs/legal/{privacy,terms}.html`,
   accurate to real data flows (local storage, GEP scope, optional Notion, default Overwolf
   analytics). **Publish on GitHub Pages and paste the public URLs into the console + installer.**

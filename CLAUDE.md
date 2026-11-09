@@ -61,7 +61,13 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
 - `npm run release` — ow-electron-builder → `release/Vantage-Setup-<ver>.exe`.
 - Dev-only env flags: `OW_SYNC_SIMULATE=1`, `OW_SYNC_SENSOR=gep|counterwatch`,
   `OW_SYNC_RECORD=1`, `OW_SYNC_REPLAY=<file>`, `OW_SYNC_SIM_SPEED=<multiplier>` (simulation
-  pace; `1` replays the simulated match at real speed so the measured played-time path runs).
+  pace; `1` replays the simulated match at real speed so the measured played-time path runs),
+  `OW_PRO_SIMULATE=free|trial|pro|lapsed` (the Vantage Pro tier a dev run starts on; ignored in
+  packaged builds — the browser preview takes `?pro=` the same way).
+- **Settings › Developer** (dev builds + preview only): switch the Pro tier live (Real/Free/Trial/Pro/
+  Lapsed). Gated by the `__DEV_TOOLS__` compile flag — `npm run release` builds the renderer with
+  `--release`, which compiles it to `false` and drops the card; main also refuses the override when
+  packaged. Put any future dev-only UI behind the same flag (`renderer/src/buildFlags.d.ts`).
 
 ## Conventions
 - **Formatting:** 2-space indent, single quotes, semicolons. Match surrounding files.
@@ -110,8 +116,12 @@ problem, understandable at a glance.
 4. **Renderer stays CSP-friendly.** No inline scripts, no `eval`, no CDN / runtime-fetched
    remote code. The renderer ships as one esbuild bundle — required for Overwolf store review.
 5. **Local-first, opt-in export.** All match history and manual data stays on-device by
-   default. The only outbound path is Notion export, which requires the user's own token
-   and an explicit action.
+   default. The only outbound path for that data is Notion export, which requires the user's own
+   token and an explicit action. *Amendment (#337, Vantage Pro):* the subscription check is a
+   second outbound path, and it carries **only** the user's Overwolf account token / identity —
+   never match, hero, rank, mental or any other manual data. It lives behind
+   `EntitlementSource` (`src/main/entitlement/`); the free tier works fully offline and
+   without an Overwolf login.
 
 ## Definition of Done
 A change is done only when:

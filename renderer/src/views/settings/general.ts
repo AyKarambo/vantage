@@ -13,6 +13,8 @@ import { getDensity, setDensity, DENSITY_OPTIONS, type Density } from '../../den
 import { prefs, DEFAULT_SUGGESTED_HEROES, clampSuggestedHeroCount } from '../../prefs';
 import { store, type ViewId } from '../../store';
 import type { ViewContext } from '../view';
+import { proCard } from './pro';
+import { developerCard } from './developer';
 import { accountsCard } from './accounts';
 import { appBehaviorCard } from './appBehavior';
 import { diagnosticsCard } from './diagnostics';
@@ -78,7 +80,11 @@ function quickLogBlock(ctx: ViewContext): HTMLElement {
 
 /** Accounts, Coaching (incl. Quick Log), App Behavior, Appearance, Diagnostics, Data Storage, Import. */
 export function generalTab(ctx: ViewContext): HTMLElement {
+  const full = ctx.data.pro.full;
   return h('div', { class: 'stack', style: { gap: '18px' } },
+    // Dev builds only: the release bundle compiles this branch (and developer.ts) out.
+    __DEV_TOOLS__ ? section(developerCard(ctx), 'developer') : null,
+    section(proCard(ctx), 'pro'),
     section(accountsCard(ctx), 'accounts'),
     h('div', { class: 'grid-2' },
       section(card({
@@ -87,35 +93,39 @@ export function generalTab(ctx: ViewContext): HTMLElement {
       },
         quickLogBlock(ctx),
         coachingBlock(ctx, {
-          title: 'Practice focus',
-          info: 'Lead Mental and Review with your targets, the optional check-in questions, and how breaks are read.',
-          jump: { label: 'See it on Mental →', view: 'mental' },
-        }, coachingSettingsEditor(ctx)),
+          title: full ? 'Practice focus' : 'Check-ins and breaks',
+          info: full
+            ? 'Lead Mental and Review with your targets, the optional check-in questions, and how breaks are read.'
+            : 'The optional check-in questions, and how breaks are read.',
+          // Mental is Pro (#337): no jump into a lock page from a free setting.
+          ...(full ? { jump: { label: 'See it on Mental →', view: 'mental' as const } } : {}),
+        }, coachingSettingsEditor(ctx, { proFocus: full })),
         coachingBlock(ctx, {
           title: 'Break reminder',
           info: 'A tray nudge after N losses in a row, so a tilt spiral does not run unnoticed.',
-          jump: { label: 'See it on Mental →', view: 'mental' },
+          // Mental is Pro (#337): no jump into a lock page from a free setting.
+          ...(full ? { jump: { label: 'See it on Mental →', view: 'mental' as const } } : {}),
         }, breakReminderEditor(ctx)),
-        coachingBlock(ctx, {
+        full ? coachingBlock(ctx, {
           title: 'Readiness coach',
           info: 'The pre-session readiness verdict, and its optional launch-time nudge.',
           jump: { label: 'See it on Readiness →', view: 'readiness' },
-        }, readinessSettingsEditor(ctx)),
-        coachingBlock(ctx, {
+        }, readinessSettingsEditor(ctx)) : null,
+        full ? coachingBlock(ctx, {
           title: 'Target rotation',
           info: 'How long an active target can be your focus before it is flagged stale.',
           jump: { label: 'See it on Targets →', view: 'targets' },
-        }, stalenessEditor(ctx)),
+        }, stalenessEditor(ctx)) : null,
         coachingBlock(ctx, {
           title: 'Current session',
           info: 'The gap between games that starts a new sitting, everywhere the app groups by one.',
           jump: { label: 'See it on Matches →', view: 'matches' },
         }, sessionSettingsEditor(ctx)),
-        coachingBlock(ctx, {
+        full ? coachingBlock(ctx, {
           title: 'Grading margin',
           info: 'How close a measured target can miss its threshold and still grade Partial.',
           jump: { label: 'See it on Review →', view: 'review' },
-        }, gradingSettingsEditor(ctx)),
+        }, gradingSettingsEditor(ctx)) : null,
       ), 'coaching'),
       section(appBehaviorCard(ctx), 'appBehavior'),
     ),

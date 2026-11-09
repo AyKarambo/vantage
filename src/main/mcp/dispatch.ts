@@ -222,6 +222,14 @@ export function createDispatcher(provider: DataProvider): Dispatcher {
   };
 
   return (op, args) => {
+    // The MCP server is Vantage Pro (#337) — every op, read or write. Checked
+    // first so a free user gets the one honest reason, not a demo/confirm one.
+    if (!provider.proAccess().full) {
+      throw new McpOpError(
+        'pro-required',
+        'The Vantage MCP server is part of Vantage Pro. Start a trial or subscribe in Vantage → Settings → Vantage Pro.',
+      );
+    }
     // Demo mode serves GENERATED sample matches. Reads are allowed (they carry
     // `demo: true` so the caller knows what it's looking at), but a write would
     // mix real authored data into a fabricated season — or, worse, retire the

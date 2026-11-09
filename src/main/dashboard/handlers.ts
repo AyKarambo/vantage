@@ -1,7 +1,7 @@
 import { EVENT_CHANNELS, IPC_CHANNELS, type OwStatsApi } from '../../shared/contract';
 import type { DataProvider } from './provider';
 import {
-  dashboardRead, heroDetailRead, matchDetailRead, matchesPageRead, searchMatchesRead, playerHistoryRead,
+  dashboardRead, proPreviewRead, heroDetailRead, matchDetailRead, matchesPageRead, searchMatchesRead, playerHistoryRead,
   playerListRead, playerRecordsRead, filteredCompetitiveGames, competitiveOnly,
 } from './reads';
 
@@ -18,7 +18,7 @@ export type DashboardHandlers = { [K in keyof DashboardInvokers]: Answer<Dashboa
 export type ComposedMethod =
   | 'getDashboard' | 'heroDetail' | 'matchDetail' | 'matchesPage' | 'searchMatches'
   | 'playerHistory' | 'playerRecords' | 'playerList'
-  | 'exportNotion' | 'exportNotionMatches' | 'masterDataGet' | 'getMasterDataCheck';
+  | 'exportNotion' | 'exportNotionMatches' | 'masterDataGet' | 'getMasterDataCheck' | 'getProPreview';
 
 /** Contract methods the provider answers itself, under the contract's own name. */
 export type ProviderMethod = Exclude<keyof DashboardInvokers, ComposedMethod>;
@@ -28,7 +28,8 @@ export type AsyncProviderMethod =
   | 'importNotion' | 'importFromFile' | 'exportBackup' | 'cleanupNotionDuplicates'
   | 'listNotionDatabases' | 'listNotionPages' | 'selectNotionDatabase' | 'createNotionDatabase'
   | 'exportLogBundle' | 'openExternal' | 'masterDataFetchUpdate'
-  | 'chooseDataFolder' | 'setDataFolder' | 'chooseFirstRunDataFolder';
+  | 'chooseDataFolder' | 'setDataFolder' | 'chooseFirstRunDataFolder'
+  | 'refreshEntitlement' | 'proAction';
 
 type Sync<F> = F extends (...args: infer A) => Promise<infer R> ? (...args: A) => R : never;
 
@@ -63,6 +64,7 @@ function composed(provider: DataProvider): Pick<DashboardHandlers, ComposedMetho
     },
     masterDataGet: () => provider.effectiveMasterData(),
     getMasterDataCheck: () => ({ lastCheckedAt: provider.getMasterDataConfig().lastCheckedAt }),
+    getProPreview: (filters) => proPreviewRead(provider, filters),
   };
 }
 

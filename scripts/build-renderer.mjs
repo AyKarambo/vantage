@@ -16,6 +16,10 @@ import { generateChangelogModule } from './build-changelog.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const watch = process.argv.includes('--watch');
+// `--release` (npm run release) compiles the developer tools OUT: `__DEV_TOOLS__`
+// becomes the literal `false`, and minifySyntax lets esbuild drop the dead
+// branches and the modules only they import (renderer/src/buildFlags.d.ts).
+const release = process.argv.includes('--release');
 
 // Compile CHANGELOG.md into the module graph before bundling: the renderer's CSP
 // (`default-src 'none'`, no `connect-src`) forbids fetching anything at runtime, so
@@ -34,6 +38,8 @@ const rendererOptions = {
   sourcemap: true,
   logLevel: 'info',
   legalComments: 'none',
+  define: { __DEV_TOOLS__: JSON.stringify(!release) },
+  minifySyntax: release,
 };
 
 /** @type {import('esbuild').BuildOptions} */
@@ -59,5 +65,5 @@ if (watch) {
 } else {
   await build(rendererOptions);
   await build(preloadOptions);
-  console.log('[build-renderer] done → renderer/dist/dashboard.js + dist/main/preload.js');
+  console.log(`[build-renderer] done → renderer/dist/dashboard.js + dist/main/preload.js${release ? ' (release: developer tools compiled out)' : ''}`);
 }

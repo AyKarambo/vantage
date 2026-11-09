@@ -11,6 +11,7 @@ import { targetStatusSentence } from '../../../../src/core/targets';
 import { pct, signed } from '../../format';
 import { badge, button, card, chip, pill, type PillState } from '../../components/primitives';
 import { bridge } from '../../bridge';
+import { targetsReadOnly } from '../../proAccess';
 import type { ViewContext } from '../view';
 import { confirmDelete, scopeBadge } from './shared';
 
@@ -19,7 +20,8 @@ export function libraryCard(ctx: ViewContext): HTMLElement {
   const archived = ctx.data.targets.filter((t) => t.archivedAt);
   return card({ variant: 'raised', title: 'Your targets', sub: 'does it move your winrate?' },
     ...live.map((t) => targetRow(t, ctx)),
-    archived.length ? archivedSection(archived, ctx) : null,
+    // Read-only (lapsed / demo): no Restore/Delete, so the archive stays hidden.
+    archived.length && !targetsReadOnly(ctx.data.pro) ? archivedSection(archived, ctx) : null,
   );
 }
 
@@ -49,7 +51,7 @@ function targetRow(t: TargetSummary, ctx: ViewContext): HTMLElement {
         ),
         h('div', { class: 'hint', style: { fontSize: '11.5px', marginTop: '3px', lineHeight: '1.45' } }, targetStatusSentence(t)),
       ),
-      activeToggle(t, ctx),
+      targetsReadOnly(ctx.data.pro) ? null : activeToggle(t, ctx),
       liftChip(t),
       h('div', { style: { textAlign: 'right', width: '56px', flex: '0 0 auto' } },
         h('div', { class: 'mono', style: { fontSize: '16px', fontWeight: '600' } }, t.attempts ? pct(t.hitRate) : 'New'),

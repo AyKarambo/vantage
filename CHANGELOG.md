@@ -19,6 +19,13 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
 
 ### Added
 
+- **Vantage Pro.** Tracking, stats and matches stay free. Readiness, Targets, the Mental analytics and
+  the MCP server are now **Vantage Pro** (€1.49/month or €9.99/year, 14-day trial). Free users see these
+  screens with a **PRO** label and can look at them with demo data first. Your check-ins and "How it
+  felt" keep being recorded on the free tier, so Pro starts with your full history. If Pro ends, nothing
+  is deleted: your targets stay visible read-only and come back when you renew.
+- **Settings → Vantage Pro** shows your plan, the trial or renewal date, and a **Re-check** button.
+
 - **Training mode.** For sittings about drilling a target rather than winning, switch the session from
   **Stats** to **Training** (sidebar, Matches header or Ctrl K). Matches you play while it's on show how well
   you hit your targets — Hit / Partial / Missed per target, an execution score and a "Grade targets" shortcut —

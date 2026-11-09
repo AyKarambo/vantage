@@ -13,6 +13,7 @@
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && npm run build:renderer && npm run build:mcp",
     "build:renderer": "node scripts/build-renderer.mjs",
+    "build:release": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/build-renderer.mjs --release && npm run build:mcp",
     "build:mcp": "node scripts/build-mcp.mjs",
     "watch:renderer": "node scripts/build-renderer.mjs --watch",
     "mcp": "node dist/mcp/stdio.js",
@@ -29,7 +30,7 @@
     "dev:check": "node scripts/ow-dev.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "release": "npm run make-icon && npm run build && ow-electron-builder --win --x64 --publish=never",
+    "release": "npm run make-icon && npm run build:release && ow-electron-builder --win --x64 --publish=never",
     "publish:release": "powershell -ExecutionPolicy Bypass -File scripts/publish-release.ps1",
     "release:check": "node scripts/next-version.mjs --check",
     "import:obsidian": "powershell -ExecutionPolicy Bypass -File scripts/import-obsidian.ps1",

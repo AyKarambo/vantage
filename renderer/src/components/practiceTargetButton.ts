@@ -14,7 +14,9 @@ import type { ViewContext } from '../views/view';
 
 export type PracticeTargetDimension = 'role' | 'hero' | 'map';
 
-export function practiceTargetButton(ctx: ViewContext, dimension: PracticeTargetDimension, key: string): HTMLElement {
+export function practiceTargetButton(ctx: ViewContext, dimension: PracticeTargetDimension, key: string): HTMLElement | null {
+  // Targets are Vantage Pro (#337) — no quick-create without access.
+  if (!ctx.data.pro.full) return null;
   const label = dimension === 'role' ? roleLabel(key as Role) : key;
   const name = `Practice ${label}: warm up unranked + review one replay`;
   const params = {

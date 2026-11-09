@@ -26,6 +26,8 @@ import {
 
 /** Everything the pipeline needs, as narrow structural slices so tests can inject plain objects. */
 export interface MatchPipelineDeps {
+  /** Whether Training mode may stamp new matches — it's Vantage Pro (#337). Absent = allowed. */
+  trainingAllowed?(): boolean;
   /** Durable game history: dedupe-add, full read for streak evaluation, plus the
    *  "needs review" holding store (hold on uncertainty / take on resolve / remove on dismiss). */
   history: Pick<HistoryStore, 'add' | 'all' | 'addPending' | 'takePending' | 'removePending'>;
@@ -121,7 +123,7 @@ export function createMatchPipeline(deps: MatchPipelineDeps): {
   /** The Stats / Training mode in effect right now, honoring the opt-in auto-reset. */
   function modeNow(): SessionMode {
     const config = deps.getConfig();
-    if (config.sessionMode?.mode !== 'training') return 'stats';
+    if (config.sessionMode?.mode !== 'training' || deps.trainingAllowed?.() === false) return 'stats';
     return effectiveSessionMode(config.sessionMode, {
       autoReset: config.coaching?.trainingAutoReset === true,
       gapMinutes: config.sessionSettings?.gapMinutes ?? DEFAULT_SESSION_SETTINGS.gapMinutes,

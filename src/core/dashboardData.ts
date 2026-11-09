@@ -38,6 +38,7 @@ import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMat
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role, Result } from './model';
 import type { DemoContext } from './demoPreference';
+import { FULL_PRO_ACCESS } from './entitlement';
 import type { DashboardData, DashboardFilters, MatchRow, MasterData, PendingMatch } from '../shared/contract';
 
 /** Manual (◎) data the player authored, threaded in from the main-process store. */
@@ -266,6 +267,8 @@ export function computeDashboard(
 
   return {
     isSample: demo.active,
+    // Ungated by default; the main-process edge narrows it via gateDashboard (#337).
+    pro: FULL_PRO_ACCESS,
     demoPreference: demo.preference,
     hasRealHistory: demo.hasRealHistory,
     generatedAt: now,

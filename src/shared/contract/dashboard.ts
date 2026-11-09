@@ -22,6 +22,7 @@ import type { CoachingSettings } from '../../core/coachingSettings';
 import type { SessionModeState, SessionTraining } from '../../core/practice/sessionMode';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
+import type { ProAccess } from '../../core/entitlement';
 import type { MasterData } from './masterData';
 import type { PlacementRunSummary } from './placements';
 import type { PlayerListRow } from './players';
@@ -211,6 +212,11 @@ export interface SeasonBreakdown {
 export interface DashboardData {
   /** Effective demo display: the sample season is shown (demo opted-in AND no real history). */
   isSample: boolean;
+  /**
+   * Vantage Pro access (spec #337) — what this snapshot was gated for. Pro-only
+   * fields carry neutral (empty-history) values when `full` is false.
+   */
+  pro: ProAccess;
   /** The user's first-run demo choice; 'unset' drives the first-run prompt. */
   demoPreference: DemoPreference;
   /** Whether the user has any real tracked matches (independent of the demo season). */

@@ -3,6 +3,7 @@ import type { AuthoredTarget } from '../../core/targets';
 import type { SessionCheckIn } from '../../core/checkIn';
 import type { SessionModeState } from '../../core/practice/sessionMode';
 import type { DemoContext } from '../../core/demoPreference';
+import type { ProAccess } from '../../core/entitlement';
 import type { RankAnchorMap } from '../../core/rank';
 import type { PlacementRun } from '../../core/placements';
 import type { MasterDataConfig } from '../config';
@@ -27,6 +28,10 @@ export interface DataProvider extends ProviderContract {
   isSample(): boolean;
   /** Demo facts (effective display, raw choice, real-history presence) for the dashboard payload. */
   demoContext(): DemoContext;
+  /** The demo dataset, regardless of real history — the Pro lock page's preview reads it (#337). */
+  sampleGames(): GameRecord[];
+  /** What the viewer's Vantage Pro entitlement allows right now (#337). Main-internal; the payload carries it. */
+  proAccess(): ProAccess;
   exportToNotion?(games: GameRecord[]): Promise<ExportResult>;
   /** The player's authored improvement targets (◎ manual). */
   manualTargets(): AuthoredTarget[];

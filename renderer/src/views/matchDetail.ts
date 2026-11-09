@@ -44,6 +44,7 @@ import { groupByDay, UNKNOWN_MAP } from '../../../src/core/analytics';
 import { PALETTE, wrHsl } from '../theme';
 import { openHeroDrawer } from './heroes';
 import { backControl, type ViewContext } from './view';
+import { gradableTargets } from '../proData';
 
 const ROLE_OPTS: Array<{ value: Role; label: string }> = [
   { value: 'tank', label: 'Tank' }, { value: 'damage', label: 'Damage' },
@@ -555,8 +556,7 @@ function competitiveSection(
 function gradesSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
   const selfGrades = d.review?.grades ?? {};
   const measured = d.measuredGrades ?? {};
-  const rows = ctx.data.targets
-    .filter((t) => t.isActive && !t.archivedAt)
+  const rows = gradableTargets(ctx.data)
     .flatMap((t) => {
       // Mode-aware: measured (⚡) targets show their auto-calculated grade (skipped
       // when the match can't measure them), self (◎) targets your stored grade.
@@ -689,8 +689,7 @@ function buildMatchEditor(
   // Self-rated targets scoped away from this match's hero/role aren't offered
   // here either — mirrors the Review screen; measured targets are unaffected
   // (their own read-only grade already skips out-of-scope matches).
-  const active = ctx.data.targets.filter((t) =>
-    t.isActive && !t.archivedAt && (t.mode === 'measured' || matchInTargetScope(d, t)));
+  const active = gradableTargets(ctx.data).filter((t) => t.mode === 'measured' || matchInTargetScope(d, t));
   const grades: Record<string, TargetGrade> = { ...(d.review?.grades ?? {}) };
   const flags: MatchMental = normalizeFlags({ ...(d.mental ?? {}), ...(d.review?.flags ?? {}) });
   const isComp = classifyGameType(d.gameType) === 'competitive';
@@ -1128,7 +1127,7 @@ function buildMatchEditor(
             field(optionalLabel('Comms', '— how team comms felt'), commsToneSwitch(flags)),
             field(optionalLabel('Flags', "— manual, the game doesn't report these"), mentalFlagChips(flags)),
             field(optionalLabel('Queued with', '— who was in your group?'), party.el),
-            field(optionalLabel('Targets', '— grade now or later on Review'),
+            !ctx.data.pro.full ? null : field(optionalLabel('Targets', '— grade now or later on Review'),
               h('div', { class: 'stack', style: { gap: '11px' } },
                 ...(rows.length
                   ? rows.map((r) => r.el)

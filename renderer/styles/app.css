@@ -355,6 +355,14 @@
   background: var(--surface-3);
   color: var(--text-2);
 }
+/* Vantage Pro (#337): marks the Pro screens while the user has no access —
+   a quiet label, not a count, so it never reads as something to clear. */
+.nav-badge--pro {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
 /* Live-match indicator on the Live nav item — present only while a match is
    actually in progress, so it never becomes decoration you stop reading. */
 .nav-live-indicator {

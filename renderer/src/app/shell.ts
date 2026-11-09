@@ -8,7 +8,7 @@ import { h, render } from '../dom';
 import type { AppState, ViewId, ViewParams } from '../store';
 import { sameParams } from '../backStack';
 import { captureFocus } from '../focusMemory';
-import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, Role, SessionTraining } from '../../../src/shared/contract';
+import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, ProAccess, Role, SessionTraining } from '../../../src/shared/contract';
 import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { demoTransition } from '../../../src/core/demoPreference';
@@ -65,6 +65,8 @@ import { about } from '../views/about';
 import { faq } from '../views/faq';
 import { filterBar, filterBarReason, type ViewContext, type ViewRender } from '../views/view';
 import { gradedThisSession, migrateLegacyReviews } from '../reviews';
+import { isLockedView, proViewOf, showsProBadge, type ProView } from '../proAccess';
+import { proLockView, proPreviewBanner } from '../components/proLock';
 import { prefs } from '../prefs';
 import { openLogMatch } from './log-match';
 import { openPalette } from './palette';
@@ -489,6 +491,54 @@ export class App {
     };
   }
 
+  /**
+   * A Pro screen shown over the demo dataset from its lock page (#337) — the
+   * one way a user with real history can see what Pro does. Held here, not in
+   * the store: it's a transient view mode, dropped on leaving the screen.
+   */
+  private proPreview: { view: ProView; data: DashboardData } | null = null;
+
+  /** The routed view, or — for a Pro screen without access — its lock page / demo preview. */
+  private renderView(state: AppState): HTMLElement {
+    const ctx = this.context();
+    const pro = proViewOf(state.view);
+    const locked = isLockedView(state.view, ctx.data.pro);
+    // Leaving the previewed screen (or gaining access) ends the preview.
+    if (this.proPreview && (this.proPreview.view !== pro || !locked)) this.proPreview = null;
+    if (pro && this.proPreview) {
+      const el = VIEWS[state.view]({ ...ctx, data: this.proPreview.data });
+      el.prepend(proPreviewBanner(() => this.endProPreview()));
+      return el;
+    }
+    if (pro && locked) return proLockView(ctx, pro, { onPreview: () => void this.startProPreview(pro) });
+    return VIEWS[state.view](ctx);
+  }
+
+  private async startProPreview(view: ProView): Promise<void> {
+    try {
+      const data = await bridge.getProPreview(store.get().filters);
+      this.proPreview = { view, data };
+      store.rerender();
+    } catch {
+      toast('The demo preview couldn’t load — try again in a moment.');
+    }
+  }
+
+  private endProPreview(): void {
+    this.proPreview = null;
+    store.rerender();
+  }
+
+  /** The "PRO" badge on the Pro screens' nav items, mutated in place like the Review badge. */
+  private updateProBadges(access: ProAccess | undefined): void {
+    for (const [id, btn] of this.navButtons) {
+      const show = !!access && showsProBadge(id, access);
+      const existing = btn.querySelector<HTMLElement>('.nav-badge--pro');
+      if (show && !existing) btn.append(h('span', { class: 'nav-badge nav-badge--pro', title: 'Part of Vantage Pro' }, 'PRO'));
+      else if (!show) existing?.remove();
+    }
+  }
+
   private migrated = false;
   private firstRunHandled = false;
   /** The `isSample` this shell last observed — `undefined` until the first snapshot, so that one never itself reads as a transition (F2). */
@@ -661,7 +711,7 @@ export class App {
     // Same idea for keyboard focus (#339): flipping a Settings toggle refreshes
     // the snapshot and rebuilds the view, which used to drop focus to <body>.
     const focus = navigated ? null : captureFocus(this.contentHost);
-    render(this.contentHost, VIEWS[state.view](this.context()));
+    render(this.contentHost, this.renderView(state));
     this.lastRendered = key;
     if (navigated) {
       this.contentHost.scrollTop = this.scrollMemory.get(routeKey(key.view, key.params)) ?? 0;
@@ -730,6 +780,7 @@ export class App {
     const activeNav: ViewId = DETAIL_PARENT[state.view as keyof typeof DETAIL_PARENT] ?? state.view;
     for (const [id, btn] of this.navButtons) btn.classList.toggle('is-active', id === activeNav);
     this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0, d?.isSample ?? false);
+    this.updateProBadges(d?.pro);
 
     render(this.sessionBody,
       this.sessionSummary(state),
@@ -1319,11 +1370,12 @@ A game counts as hit when every target you worked on in it was a Hit. Execution:
               },
             },
             // Stats ↔ Training (issue #342): the palette names the mode it switches TO.
-            ctx.data.sessionMode.mode === 'training'
+            // Training is Vantage Pro (#337).
+            ...(!ctx.data.pro.full ? [] : [ctx.data.sessionMode.mode === 'training'
               ? { label: 'Session mode: Stats', hint: 'Matches leads with win/loss again', run: () => setSessionMode(ctx, 'stats') }
               : trainingAvailable(ctx)
                 ? { label: 'Session mode: Training', hint: 'judge this sitting by your targets, not the result', run: () => setSessionMode(ctx, 'training') }
-                : { label: 'Session mode: Training — pick a target first', hint: 'opens Targets', run: () => ctx.navigate('targets') },
+                : { label: 'Session mode: Training — pick a target first', hint: 'opens Targets', run: () => ctx.navigate('targets') }]),
             { label: 'Keyboard shortcuts', kbd: '?', run: () => this.openCheatsheet() },
             { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding() },
             { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },
