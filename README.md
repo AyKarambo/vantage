@@ -282,6 +282,24 @@ account's per-role lines beneath it.
   popover explaining what it creates before pre-filling the builder's hero/role/map scope, not
   just the name — and links back to a target scoped that way directly, not just by matching
   its name.
+- **Training mode** — a sitting about drilling a target rather than winning can be switched to
+  **Training** (Stats ↔ Training in the sidebar's Current session card, the Matches header, or the
+  palette; it needs an active self-rated target). Matches recorded while it is on are marked as
+  training. The switch is a **view switch** on Matches: in **Training** it lists only training games,
+  by **target execution** — a Hit / Partial / Missed pill per focus target and, in place of the W/L
+  badge, a ✓ ◐ ✕ symbol in the win / draw / loss colours (one per target, dots from four), a **Grade
+  targets** shortcut while ungraded, and a sitting header reading "Training · targets · 3 hit ·
+  1 partial · 2 miss" with a Hit / Partial / Miss split bar — while the result and ±% stay hidden
+  until you click "result hidden" (or turn on **Show results in training sittings** in Customize
+  view), and the result filter is gone. Switch to **Stats** and every game is back with its
+  win/loss (training ones keep a "Training" tag). The optional **Performance** field (Customize
+  view) is a Loss → Draw → Win meter, the 0–100 in its tooltip. A row's or
+  a whole sitting's ⋯ menu re-marks it as training or stats. Win/loss is still tracked: rank,
+  readiness and Trends are unchanged. The sidebar's Current session card follows suit in a training sitting, showing how many games hit your
+  targets ("2/4 targets hit"), the execution % and what's left to grade instead of the W–L.
+  Training also turns practice focus on for Mental and Review.
+  Stats mode (the default) looks exactly as before; an opt-in Coaching setting switches back to
+  Stats when a new sitting starts.
 - **Mental** — in **practice focus** (Settings › Coaching: Auto, Always on or Off), it leads with
   **target execution** and a **"What shapes your performance"** table (sleep, energy, mood and food from
   your check-ins, breaks and game number in a sitting); with it off, the stats view leads with calm/tilt state and a **"What it costs you"** card (the tilt tax generalized:
@@ -298,7 +316,8 @@ account's per-role lines beneath it.
 - **Trends** — **rank over time**, above everything else: one line per tracked (account, role)
   you have a rank anchor for, plotted by real date so a stretch with no known rank (an open
   placement run, a pre-reset match) shows as a real gap rather than a guessed interpolation; a
-  hollow point marks a reconstructed (rather than recorded or replayed) rank. Then winrate over
+  hollow point marks a reconstructed (rather than recorded or replayed) rank, and a small diamond
+  marks a cheater-compensation refund. Then winrate over
   time — a **momentum strip** states the trailing window vs. the one before it in numbers
   (winrate · games each side, signed point change), and the bold line is a real calendar-true,
   game-weighted rolling average (not just the last 7 *points* averaged unweighted — a schedule
@@ -478,7 +497,11 @@ account's per-role lines beneath it.
   already selected, not just a prefilled name, and Focus links its progress display back to that
   target by scope, not by guessing from its name.
 - **Log match** — the quick-capture card that opens after a game, built to be **keyboard-fast**:
-  `W`/`L`/`D` picks the result, the **map is a locked combobox** — type to search (recent picks
+  `W`/`L`/`D` picks the result and jumps straight to the map; type a few letters and `Tab` takes
+  the top match and moves on. Each button group (role, heroes, flags, grades…) is a single Tab
+  stop with `←`/`→` inside it, and `Enter` in the hero search picks the top hero. The card only
+  closes on purpose (#340): a click beside it does nothing, and ✕ / Cancel / `Esc` ask
+  "Discard this match?" once you've entered anything. The **map is a locked combobox** — type to search (recent picks
   listed first), but the field can only ever hold a real map name; a rotated-out map is still
   reachable by typing its name (shown muted, deprioritized), just not offered by default. The
   search is **fuzzy, not prefix-only** (L4) — a typo, a missing apostrophe or a missing accent
@@ -620,13 +643,15 @@ click one and it scrolls to and flashes that card, and About/FAQ's own links lan
 there too) above an
 **accounts manager** (a tidy list of every account seen in your match history — name, game
 count and a compact per-role rank summary per row, with create/edit/delete; everything
-role-specific — the **Set rank…** anchor and the placement-run controls — lives behind each
-row's **Manage ranks…** button; the active account filter **auto-switches** when GEP reports a
+role-specific — the **Set rank…** anchor, the placement-run controls and **Cheater compensation**
+(enter the rank % Overwatch refunds after banning a cheater from one of your matches; it moves
+that role's rank like a match ±% would but never counts as a game — also in the command palette
+as **Add cheater compensation…**) — lives behind each row's **Manage ranks…** button; the active account filter **auto-switches** when GEP reports a
 different logged-in account), a **Master data**
 editor (see below), and a **Coaching** card whose six editors — Quick Log (how many most-played
 heroes the log-match hero picker suggests, folded in as the first row), break reminder, readiness
 coach, target rotation, current session, and grading margin — plus practice focus (Auto / Always on /
-Off), break detection and the optional check-in questions — each get their own heading, a
+Off), the Training-mode auto-reset, break detection and the optional check-in questions — each get their own heading, a
 one-line hint naming what they actually affect, and a "See it on X →" link to the screen they
 govern, plus close-to-tray, run-at-login, diagnostics, and a **Data storage** card that relocates
 *all* your data — match history, targets, outbox, and rank anchors — to any folder,
@@ -669,7 +694,8 @@ what the game's own career profile shows. So:
 - **Measured** — matches captured with the game feed's round events carry their played time
   exactly: each round counts from the moment its doors open (when the opponents' heroes first
   show up in the feed), or from its mode's typical setup lock when that moment wasn't seen. The
-  match's **Duration** is the same round time, shown as `mm:ss`.
+  match's **Duration** is the summed round time *including* each round's setup — the number the
+  game's own History/Replays list shows, without hero select and the end scoreboard — as `mm:ss`.
 - **Joined late** — if Vantage (or the game feed) only caught a match after it had started, the
   match page says so and asks for the time from the in-game scoreboard; enter it as **Played
   time** in **Edit match**.

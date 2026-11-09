@@ -4,6 +4,7 @@
  * transient UI state (e.g. the active segment) so callers don't re-render.
  */
 import { h, type Child } from '../../dom';
+import { infoTip } from '../infoTip';
 
 /**
  * Options for {@link button}; `variant` picks the visual weight, `default` is
@@ -44,8 +45,10 @@ export interface ToggleRowOpts {
   /** Never changes with the state — the switch track alone shows on/off. */
   label: string;
   on: boolean;
-  /** Explanatory line under the row, same placement every caller already used with `chip`. */
+  /** One short muted line under the row: a fact or current value the decision needs, never a paragraph (#339). */
   hint?: string | Node;
+  /** Background "what does this do / why" prose, behind an ⓘ right after the label (#339). */
+  info?: string;
   disabled?: boolean;
   onChange: (next: boolean) => void;
 }
@@ -87,14 +90,15 @@ export function toggleSwitch(o: ToggleSwitchOpts): HTMLButtonElement {
 export function toggleRow(o: ToggleRowOpts): HTMLElement {
   return h('div', { class: 'toggle-row' },
     h('div', { class: 'toggle-row-main' },
-      h('span', { class: 'toggle-row-label' }, o.label),
+      h('span', { class: 'toggle-row-label' }, o.label,
+        o.info ? infoTip(o.info, { label: `About ${o.label}` }) : null),
       // The label is a sibling, not inside the switch <button> itself, so the
       // button has no text content of its own to derive an accessible name
       // from — pass the same label through explicitly rather than leaving a
       // screen reader with a bare "switch, off/on".
       toggleSwitch({ on: o.on, disabled: o.disabled, ariaLabel: o.label, onChange: o.onChange }),
     ),
-    o.hint ? h('div', { class: 'hint', style: { marginTop: '6px' } }, o.hint) : null,
+    o.hint ? h('div', { class: 'hint', style: { marginTop: '4px' } }, o.hint) : null,
   );
 }
 

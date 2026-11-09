@@ -7,8 +7,8 @@ import { matchInTargetScope } from '../../../src/core/targets';
 import { formatPlayedTime, pct, prettyDay, rankLabel, relTime, roleLabel, signed, time } from '../format';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleIcon } from '../components/roleIcon';
-import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, type PillState } from '../components/primitives';
-import { wrHsl } from '../theme';
+import { button, card, chip, confirmButton, emptyState, pill, RESULT_LETTER, RESULT_STATE, segmented, toggleRow, type PillState } from '../components/primitives';
+import { gradeLeadCell, gradeSplitBar, performanceMeter } from '../components/gradeGlyphs';
 import { openPopover } from '../components/popover';
 import { clickableRow } from '../components/clickableRow';
 import { inlineLink } from '../components/inlineLink';
@@ -19,6 +19,9 @@ import { store } from '../store';
 import { deleteMatch } from '../matchActions';
 import { openMatchEditorById } from './matchDetail';
 import { MATCHES_PAGE_SIZE } from '../../../src/core/dashboardData';
+import { isTrainingMatch, splitByMode, trainingSummary } from '../../../src/core/practice/sessionMode';
+import { sessionModeToggle, setSessionMode } from '../components/sessionModeToggle';
+import { toast } from '../components/toast';
 
 /** Human labels for the drill-down chip, matching Mental's "Flags this range" card. */
 const FLAG_LABELS: Record<MatchFlagKey, string> = {
@@ -72,12 +75,21 @@ let matchResultFilter = new Set<Result>();
 let matchTypeFilter = new Set<string>();
 let matchSearch = '';
 let onMatches = false;
+/**
+ * Training rows / group headers (issue #342) whose hidden result the player
+ * revealed with a click — per visit, like the in-list filter: leaving Matches
+ * hides them again, so the next look at a training sitting starts on execution.
+ */
+let revealedRows = new Set<string>();
+let revealedGroups = new Set<string>();
 store.subscribe((state) => {
   if (state.view !== 'matches' && onMatches) {
     onMatches = false;
     matchResultFilter = new Set();
     matchTypeFilter = new Set();
     matchSearch = '';
+    revealedRows = new Set();
+    revealedGroups = new Set();
   } else if (state.view === 'matches') {
     onMatches = true;
   }
@@ -127,6 +139,11 @@ export function matches(ctx: ViewContext): HTMLElement {
   const hadFocus = outgoing instanceof HTMLInputElement && outgoing.classList.contains('matches-search-input');
   const caret = hadFocus ? outgoing.selectionStart : null;
 
+  // The Stats ↔ Training switch is a view switch: Training shows only training
+  // matches, by target execution, with no result filter to peek past it; Stats
+  // shows everything with win/loss.
+  const trainingView = ctx.data.sessionMode.mode === 'training';
+
   const host = h('div', { class: 'view view--wide' });
   const headHost = h('div');
   const scopeHost = h('div');
@@ -152,6 +169,7 @@ export function matches(ctx: ViewContext): HTMLElement {
   const resultChipsHost = h('div', { style: { display: 'flex', gap: '6px' } });
   const typeChipsHost = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } });
   const paintResultChips = (): void => {
+    if (trainingView) { render(resultChipsHost); return; }
     render(resultChipsHost, ...(['Win', 'Loss', 'Draw'] as Result[]).map((r) =>
       chip(RESULT_LETTER[r], matchResultFilter.has(r), () => {
         if (matchResultFilter.has(r)) matchResultFilter.delete(r); else matchResultFilter.add(r);
@@ -170,7 +188,7 @@ export function matches(ctx: ViewContext): HTMLElement {
       })));
   };
   const hasTextFilter = (): boolean =>
-    matchResultFilter.size > 0 || matchTypeFilter.size > 0 || matchSearch.trim() !== '';
+    (!trainingView && matchResultFilter.size > 0) || matchTypeFilter.size > 0 || matchSearch.trim() !== '';
   const clearLink = (): HTMLElement | null =>
     hasTextFilter()
       ? inlineLink('Clear filter', {
@@ -203,9 +221,12 @@ export function matches(ctx: ViewContext): HTMLElement {
           ? allMatches.filter((m) => m.map === map)
           : allMatches;
     const textActive = hasTextFilter();
-    const rows = textActive
-      ? textFilterRows(scoped, { results: matchResultFilter, mapTypes: matchTypeFilter, search: matchSearch })
+    const textRows = textActive
+      ? textFilterRows(scoped, { results: trainingView ? new Set<Result>() : matchResultFilter, mapTypes: matchTypeFilter, search: matchSearch })
       : scoped;
+    // Training view: only the matches played as training; the rest wait in Stats.
+    const rows = trainingView ? textRows.filter(isTrainingMatch) : textRows;
+    const statsHidden = textRows.length - rows.length;
 
     // By day / by sitting (S4) — a single-day drill-down (from the heatmap)
     // keeps calendar grouping; grouping any further by sitting inside one
@@ -252,12 +273,35 @@ export function matches(ctx: ViewContext): HTMLElement {
           : `${rows.length} games in range · newest first · click a match for details`;
     }
 
-    const headActions: Node[] = [];
+    if (trainingView) {
+      // No W–L tally in the headline here: the training view leads with execution.
+      const where = day ? `on ${prettyDay(day)}` : flag || map ? 'in this scope' : 'in range';
+      headline = `${rows.length} training game${rows.length === 1 ? '' : 's'} ${where} · judged by target execution · click a match for details`
+        + (statsHidden ? ` · ${statsHidden} stats game${statsHidden === 1 ? '' : 's'} hidden — switch to Stats to see them` : '');
+    }
+
+    const toggle = sessionModeToggle(ctx);
+    const headActions: Node[] = toggle ? [toggle] : [];
     if (!day) headActions.push(groupingToggle(grouping));
     headActions.push(customizeViewButton(ctx.data.pro.full));
     render(headHost, viewHead('Matches', headline, headActions));
 
     render(scopeHost, day || flag || map ? drillDownChip(ctx, day, flag, map, allMatches) : null);
+
+    // Training (issue #342): each row's sitting (for "Mark sitting as …"),
+    // over the loaded rows by the same gap the By-sitting grouping uses, and
+    // what the training rows / headers need to grade and hide results.
+    const sittingIds = new Map<string, string[]>();
+    for (const s of groupBySitting(rows, ctx.data.sessionSettings.gapMinutes)) {
+      const ids = s.items.map((m) => m.matchId);
+      for (const id of ids) sittingIds.set(id, ids);
+    }
+    const training: TrainingView = {
+      selfIds: new Set(ctx.data.targets.filter((t) => t.mode !== 'measured').map((t) => t.id)),
+      showResults: prefs.get('trainingShowResults') === true,
+      statsView: !trainingView,
+      repaint,
+    };
 
     render(listHost,
       rows.length
@@ -266,8 +310,10 @@ export function matches(ctx: ViewContext): HTMLElement {
             // date directly under it (M3) — the header stays for every other
             // grouping (all days, and every sitting).
             ...groups.flatMap((g) => [
-              day ? null : dayHeader(g.label, g),
-              ...g.items.map((m) => matchRow(m, ctx, columns)),
+              day ? null : groupHeader(g, ctx, training, bySitting),
+              ...g.items.map((m) => (isTrainingMatch(m) && trainingView
+                ? trainingRow(m, ctx, columns, training, sittingIds.get(m.matchId) ?? [m.matchId])
+                : matchRow(m, ctx, columns, sittingIds.get(m.matchId) ?? [m.matchId]))),
             ]),
             moreToLoad ? showOlderRow(ctx, repaint) : null,
           )
@@ -284,7 +330,9 @@ export function matches(ctx: ViewContext): HTMLElement {
                 // makes the advice actionable.
                 moreToLoad ? showOlderRow(ctx, repaint) : null,
               )
-            : emptyActions(ctx),
+            : trainingView
+              ? trainingEmpty(ctx, statsHidden)
+              : emptyActions(ctx),
     );
   };
   repaint();
@@ -369,6 +417,15 @@ function openCustomizeViewPopover(anchor: HTMLElement, pro: boolean): void {
     return h('div', { class: 'stack', style: { gap: '10px', minWidth: '260px' } },
       h('div', { class: 'gep-popover-title' }, 'Customize view'),
       ...FIELD_ORDER.filter((key) => pro || key !== 'measuredGrades').map((key) => customizeViewRow(key, current)),
+      // Training sittings (issue #342) hide win/loss by default; this shows it
+      // muted, in a secondary position, for every training row and header.
+      // Training mode rides on targets (Vantage Pro, #337).
+      pro && toggleRow({
+        label: 'Show results in training sittings',
+        hint: 'Muted, beside the target execution. Off: reveal one row or sitting at a time.',
+        on: prefs.get('trainingShowResults') === true,
+        onChange: (on) => { prefs.set('trainingShowResults', on); store.rerender(); },
+      }),
     );
   });
 }
@@ -430,6 +487,16 @@ function dayStepButton(label: string, target: string | null, ctx: ViewContext, h
     title: target ? hint : undefined,
     onClick: () => { if (target) ctx.navigate('matches', { day: target }); },
   });
+}
+
+/** Training view with nothing to show: say why, and offer the way back to everything. */
+function trainingEmpty(ctx: ViewContext, statsHidden: number): HTMLElement {
+  return h('div', { style: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-start' } },
+    emptyState('No training games in this range yet — matches you play in Training mode show up here.'),
+    statsHidden || ctx.data.matchesTotal
+      ? button('Switch to Stats', { variant: 'soft', onClick: () => setSessionMode(ctx, 'stats') })
+      : null,
+  );
 }
 
 /** Empty in range — offer the next step instead of a dead end. */
@@ -513,11 +580,9 @@ function fieldNode(key: MatchColumnKey, m: MatchRow, ctx: ViewContext, mode: Mat
     case 'finalScore':
       return m.finalScore ? document.createTextNode(m.finalScore) : null;
     case 'performance':
-      // The 0-100 self-rating as a small stat, tinted with the same continuous
-      // ramp the performance slider uses, so the colour language matches.
-      return m.performance != null
-        ? h('span', { class: 'mono', title: 'Self-rated performance', style: { color: wrHsl(m.performance / 100) } }, String(m.performance))
-        : null;
+      // The 0-100 self-rating as a Loss → Draw → Win meter (win colour = 100,
+      // draw = 50, loss = 0); the number lives in its tooltip.
+      return m.performance != null ? performanceMeter(m.performance) : null;
     case 'measuredGrades':
       return gradePills(m, ctx);
     case 'flags':
@@ -641,7 +706,7 @@ function withProColumns(columns: MatchColumnsPref, pro: boolean): MatchColumnsPr
   return pro ? columns : { ...columns, measuredGrades: 'hidden' };
 }
 
-function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTMLElement {
+function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref, sittingIds: string[] = [m.matchId]): HTMLElement {
   const open = (): void => ctx.navigate('matchDetail', { matchId: m.matchId });
   const state = RESULT_STATE[m.result];
 
@@ -672,7 +737,7 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
   },
     h('div', { class: `match-result is-${state}` }, RESULT_LETTER[m.result]),
     h('div', { class: 'row-main' },
-      h('div', { class: 'row-name' },
+      h('div', { class: 'row-name', ...(isTrainingMatch(m) ? { style: { display: 'flex', alignItems: 'center', gap: '8px' } } : {}) },
         // The Maps screen doesn't list the 'Unknown' placeholder, so there is nothing to find there.
         m.map === UNKNOWN_MAP
           ? m.map
@@ -681,6 +746,8 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
               title: `Find ${m.map} on the Maps screen`,
               onClick: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); },
             }),
+        // Stats view: a training match keeps its result, plus the quiet tag.
+        isTrainingMatch(m) ? trainingBadge() : null,
       ),
       metaLine,
     ),
@@ -700,7 +767,7 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
       class: 'mono u-muted', style: { fontSize: '11px', width: '64px', textAlign: 'right' },
       title: relTime(m.timestamp),
     }, time(m.timestamp)),
-    rowMenuButton(m, ctx),
+    rowMenuButton(m, ctx, sittingIds),
   );
 }
 
@@ -714,7 +781,7 @@ function matchRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref): HTM
  * delete one stray gesture away. Going through the popover means nothing
  * destructive is reachable without a deliberate, aimed click.
  */
-function rowMenuButton(m: MatchRow, ctx: ViewContext): HTMLElement {
+function rowMenuButton(m: MatchRow, ctx: ViewContext, sittingIds: string[] = [m.matchId]): HTMLElement {
   const btn = h('button', {
     class: 'match-row-menu',
     title: 'More actions',
@@ -723,12 +790,13 @@ function rowMenuButton(m: MatchRow, ctx: ViewContext): HTMLElement {
   btn.addEventListener('click', (e) => {
     // Never let opening the menu also navigate into the match.
     e.stopPropagation();
-    openRowMenu(btn, m, ctx);
+    openRowMenu(btn, m, ctx, sittingIds);
   });
   return btn;
 }
 
-function openRowMenu(anchor: HTMLElement, m: MatchRow, ctx: ViewContext): void {
+function openRowMenu(anchor: HTMLElement, m: MatchRow, ctx: ViewContext, sittingIds: string[]): void {
+  const training = isTrainingMatch(m);
   openPopover(anchor, (close) =>
     h('div', { class: 'stack', style: { gap: '10px', minWidth: '250px' } },
       // Name the match being acted on. A bare "Delete?" on a dense list tells
@@ -757,6 +825,20 @@ function openRowMenu(anchor: HTMLElement, m: MatchRow, ctx: ViewContext): void {
         class: 'btn--block',
         onClick: () => { close(); openMatchEditorById(ctx, m.matchId); },
       }),
+      // Reclassify (issue #342): this match, or every match of its sitting.
+      button(training ? 'Mark as stats' : 'Mark as training', {
+        variant: 'ghost',
+        class: 'btn--block',
+        title: training ? 'Show this match with its result again' : 'Show this match by target execution, result hidden',
+        onClick: () => { close(); reclassify([m.matchId], training ? 'stats' : 'training'); },
+      }),
+      sittingIds.length > 1
+        ? button(training ? `Mark sitting as stats (${sittingIds.length})` : `Mark sitting as training (${sittingIds.length})`, {
+            variant: 'ghost',
+            class: 'btn--block',
+            onClick: () => { close(); reclassify(sittingIds, training ? 'stats' : 'training'); },
+          })
+        : null,
       confirmButton({
         label: 'Delete match',
         confirmLabel: "Delete permanently — can't be undone",
@@ -787,4 +869,274 @@ function matchRowGridTemplate(columnCount: number): string {
 /** Interleave ` · ` only between present segments — never leading/trailing/doubled. */
 function joinWithDot(nodes: Node[]): Node[] {
   return nodes.flatMap((node, i) => (i ? [document.createTextNode(' · '), node] : [node]));
+}
+
+// --- Training sittings (issue #342) -------------------------------------------
+
+/** What the training rows and headers of one render share. */
+interface TrainingView {
+  /** Self-rated target ids — only those grades count toward execution. */
+  selfIds: ReadonlySet<string>;
+  /** The "Show results in training sittings" view option. */
+  showResults: boolean;
+  /** Stats view (the session-mode switch): every match shows its result, training ones included. */
+  statsView: boolean;
+  repaint: () => void;
+}
+
+/** Write a Training / Stats stamp to `ids`; the main process pushes the refetch. */
+function reclassify(ids: string[], mode: 'training' | 'stats'): void {
+  void bridge.setMatchSessionMode({ matchIds: ids, mode }).then(({ updated }) => {
+    if (!updated) {
+      toast('Sample matches can’t be reclassified — this works once real matches are tracked or logged.');
+      return;
+    }
+    toast(`${updated} match${updated === 1 ? '' : 'es'} marked as ${mode}`, { ttl: 3000 });
+  });
+}
+
+/**
+ * The self-rated grades of a training row that count: in scope for the
+ * target (mirrors {@link gradePills} and the Review screen).
+ */
+function selfGradeEntries(m: MatchRow, ctx: ViewContext, selfIds: ReadonlySet<string>): Array<[string, TargetGrade]> {
+  const targetsById = new Map(ctx.data.targets.map((t) => [t.id, t]));
+  return Object.entries(m.targetGrades ?? {}).filter(([id]) => {
+    if (!selfIds.has(id)) return false;
+    const t = targetsById.get(id);
+    return !t || matchInTargetScope(m, t);
+  });
+}
+
+/** Short target name for a pill / header — the full name stays in the title. */
+function shortName(name: string, max = 16): string {
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name;
+}
+
+/** The subtle "Training" tag on a row / header. */
+function trainingBadge(): HTMLElement {
+  const p = pill('Training', undefined, { title: 'Played in a Training session — judged by target execution, not the result' });
+  p.classList.add('pill--training');
+  return p;
+}
+
+/**
+ * The hidden-result affordance: a muted "result hidden" that shows the result
+ * on hover (its title) and reveals it in place on click; once revealed (or
+ * with the view option on) the result sits muted in a secondary position, and
+ * a click hides it again (unless the view option keeps it shown).
+ */
+function resultReveal(o: { revealed: boolean; forced: boolean; text: string; toggle: () => void }): HTMLElement {
+  const el = o.revealed
+    ? h('button', {
+        class: 'training-result is-revealed mono',
+        title: o.forced ? 'Shown by the “Show results in training sittings” view option' : 'Hide the result again',
+      }, o.text)
+    : h('button', { class: 'training-result', title: o.text }, 'result hidden');
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!o.forced) o.toggle();
+  });
+  return el;
+}
+
+/** "L · −20%" — a row's result and ±%, for the reveal. */
+function rowResultText(m: MatchRow): string {
+  return m.srDelta != null ? `${RESULT_LETTER[m.result]} · ${signed(m.srDelta)}%` : RESULT_LETTER[m.result];
+}
+
+/** The accent "Grade targets" pill on an ungraded training row — opens its review. */
+function gradeTargetsPill(m: MatchRow, ctx: ViewContext): HTMLElement {
+  const p = h('button', { class: 'pill is-accent pill--action', title: 'Grade this match’s focus targets on Review' }, 'Grade targets');
+  p.addEventListener('click', (e) => { e.stopPropagation(); ctx.navigate('review', { matchId: m.matchId }); });
+  return p;
+}
+
+/**
+ * A training match row (issue #342). Same grid as {@link matchRow}, but the
+ * result badge becomes the execution score, the meta line leads with a
+ * Hit / Partial / Miss pill per focus target (or a "Grade targets" pill while
+ * ungraded), and the result + ±% (and rank at start) stay hidden until
+ * revealed. Measured grades are left out — they aren't what was drilled.
+ */
+function trainingRow(m: MatchRow, ctx: ViewContext, columns: MatchColumnsPref, t: TrainingView, sittingIds: string[]): HTMLElement {
+  const open = (): void => ctx.navigate('matchDetail', { matchId: m.matchId });
+  const targetsById = new Map(ctx.data.targets.map((x) => [x.id, x]));
+  const grades = selfGradeEntries(m, ctx, t.selfIds);
+  const revealed = t.showResults || revealedRows.has(m.matchId);
+  // The ±% only ever shows muted, inside the reveal (never in its tinted
+  // field); the rank at start follows the reveal.
+  const hiddenKeys = new Set<MatchColumnKey>(revealed ? ['measuredGrades', 'srDelta'] : ['measuredGrades', 'srDelta', 'rankAtStart']);
+
+  const execution: Node = grades.length
+    ? pillRow(grades.map(([id, grade]) => {
+        const name = targetsById.get(id)?.name ?? 'target';
+        const label = grades.length > 1 ? `${shortName(name, 12)} · ${GRADE_PILLS[grade].label}` : GRADE_PILLS[grade].label;
+        return pill(label, GRADE_PILLS[grade].state, { title: `${name}: ${GRADE_PILLS[grade].label}` });
+      }))
+    : !m.reviewed
+      ? gradeTargetsPill(m, ctx)
+      : h('span', { class: 'u-dim', title: 'Reviewed without a target grade' }, 'no grades');
+
+  const inlineSegments: Node[] = [
+    execution,
+    ...FIELD_ORDER
+      .filter((key) => columns[key] === 'inline' && !hiddenKeys.has(key))
+      .map((key) => fieldNode(key, m, ctx, 'inline'))
+      .filter((node): node is Node => node != null),
+    resultReveal({
+      revealed,
+      forced: t.showResults,
+      text: rowResultText(m),
+      toggle: () => {
+        if (revealedRows.has(m.matchId)) revealedRows.delete(m.matchId); else revealedRows.add(m.matchId);
+        t.repaint();
+      },
+    }),
+  ];
+  const columnKeys = FIELD_ORDER.filter((key) => columns[key] === 'column');
+  const columnCells = columnKeys.map((key) => h('div', { class: `match-col match-col--${key}` },
+    hiddenKeys.has(key) ? '' : fieldNode(key, m, ctx, 'column') ?? ''));
+
+  return h('div', {
+    class: 'match-row is-clickable is-training',
+    style: { gridTemplateColumns: matchRowGridTemplate(columnKeys.length) },
+    ...clickableRow(open),
+  },
+    gradeLeadCell(
+      grades.map(([id, grade]) => ({ name: targetsById.get(id)?.name ?? 'target', grade })),
+      'Not graded yet — grade your targets to see how well you executed them',
+    ),
+    h('div', { class: 'row-main' },
+      h('div', { class: 'row-name', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+        m.map === UNKNOWN_MAP
+          ? m.map
+          : inlineLink(m.map, {
+              strong: true,
+              title: `Find ${m.map} on the Maps screen`,
+              onClick: (e) => { e.stopPropagation(); ctx.navigate('maps', { highlight: m.map }); },
+            }),
+        trainingBadge(),
+      ),
+      h('div', { class: 'row-meta' }, ...joinWithDot(inlineSegments)),
+    ),
+    ...columnCells,
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '84px' } },
+      pill(m.mapType, 'accent'),
+    ),
+    h('div', {
+      class: 'mono u-muted', style: { fontSize: '11px', width: '64px', textAlign: 'right' },
+      title: relTime(m.timestamp),
+    }, time(m.timestamp)),
+    rowMenuButton(m, ctx, sittingIds),
+  );
+}
+
+/** W/L/D + SR tally over `rows` — a mixed group's stats half and a training group's hidden one. */
+function tallyOf(rows: MatchRow[]): { wins: number; losses: number; draws: number; srNet?: number } {
+  const deltas = rows.map((r) => r.srDelta).filter((v): v is number => v != null);
+  return {
+    wins: rows.filter((r) => r.result === 'Win').length,
+    losses: rows.filter((r) => r.result === 'Loss').length,
+    draws: rows.filter((r) => r.result === 'Draw').length,
+    ...(deltas.length ? { srNet: deltas.reduce((a, b) => a + b, 0) } : {}),
+  };
+}
+
+/** The stats half of a mixed day's header: its stats matches' W–L and ±%. */
+function statsTallyPart(stats: MatchRow[]): HTMLElement {
+  const st = tallyOf(stats);
+  return h('span', { class: 'day-header-part', title: 'Stats matches in this group' },
+    h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, winLossText(st)),
+    st.srNet !== undefined
+      ? h('span', { class: 'mono', style: { fontSize: '11px', color: st.srNet >= 0 ? 'var(--win-text)' : 'var(--loss-text)' } }, `${signed(Math.round(st.srNet))}%`)
+      : null,
+    h('span', { class: 'u-dim', style: { fontSize: '11px' } }, '|'));
+}
+
+/**
+ * A day / sitting header. With no training match in the group it is exactly
+ * {@link dayHeader} (Stats looks as before; a sitting header only gains a ⋯
+ * that shows on hover). A training group reads "Training · <targets> · 4 hit
+ * · 1 partial · 1 miss" with an execution bar and its W–L hidden behind the
+ * same reveal rule as rows; a mixed day shows the stats tally of its stats
+ * matches and the training summary of its training matches side by side.
+ */
+function groupHeader(
+  g: { key: string; label: string; wins: number; losses: number; draws: number; srNet?: number; items: MatchRow[] },
+  ctx: ViewContext,
+  t: TrainingView,
+  bySitting: boolean,
+): HTMLElement {
+  const { training, stats } = splitByMode(g.items);
+  const ids = g.items.map((m) => m.matchId);
+  if (!training.length) {
+    const header = dayHeader(g.label, g);
+    if (bySitting) header.append(sittingMenuButton(ids, false));
+    return header;
+  }
+  const s = trainingSummary(training, t.selfIds);
+  const names = s.targetIds.map((id) => ctx.data.targets.find((x) => x.id === id)?.name ?? 'target');
+  const shownNames = names.length > 2
+    ? `${names.slice(0, 2).map((n) => shortName(n)).join(', ')} +${names.length - 2}`
+    : names.map((n) => shortName(n, 24)).join(', ');
+  const ungraded = s.games - s.graded;
+  const revealed = t.showResults || revealedGroups.has(g.key);
+  if (t.statsView) {
+    // Stats view: the normal W–L · ±% header for the whole group, then the
+    // training half (targets, Hit / Partial / Miss, split bar) beside it.
+    const header = dayHeader(g.label, g);
+    header.classList.add('day-header--training');
+    const extras: Array<Node | null> = [
+      trainingBadge(),
+      names.length ? h('span', { class: 'u-muted', style: { fontSize: '11px' }, title: names.join(', ') }, shownNames) : null,
+      s.attempts
+        ? h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${s.hits} hit · ${s.partials} partial · ${s.misses} miss`)
+        : null,
+      gradeSplitBar(s),
+      ungraded ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${ungraded} to grade`) : null,
+    ];
+    header.append(...extras.filter((n): n is Node => n != null));
+    if (bySitting) header.append(sittingMenuButton(ids, stats.length === 0));
+    return header;
+  }
+  return h('div', { class: 'day-header day-header--training' },
+    h('span', { class: 'day-header-label' }, prettyDay(g.label)),
+    stats.length ? statsTallyPart(stats) : null,
+    trainingBadge(),
+    names.length ? h('span', { class: 'u-muted', style: { fontSize: '11px' }, title: names.join(', ') }, shownNames) : null,
+    s.attempts
+      ? h('span', { class: 'mono u-muted', style: { fontSize: '11px' } }, `${s.hits} hit · ${s.partials} partial · ${s.misses} miss`)
+      : null,
+    gradeSplitBar(s),
+    ungraded ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${ungraded} to grade`) : null,
+    resultReveal({
+      revealed,
+      forced: t.showResults,
+      text: tallyText(tallyOf(training)),
+      toggle: () => {
+        if (revealedGroups.has(g.key)) revealedGroups.delete(g.key); else revealedGroups.add(g.key);
+        t.repaint();
+      },
+    }),
+    bySitting ? sittingMenuButton(ids, stats.length === 0) : null,
+  );
+}
+
+/** The sitting header's ⋯ — "Mark sitting as training / stats" over every match in it. */
+function sittingMenuButton(ids: string[], isTraining: boolean): HTMLElement {
+  const btn = h('button', { class: 'match-row-menu day-header-menu', title: 'Sitting actions', 'aria-label': 'Sitting actions' }, '⋯');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPopover(btn, (close) => h('div', { class: 'stack', style: { gap: '10px', minWidth: '240px' } },
+      h('div', { class: 'gep-popover-title' }, `This sitting · ${ids.length} match${ids.length === 1 ? '' : 'es'}`),
+      button(isTraining ? 'Mark sitting as stats' : 'Mark sitting as training', {
+        variant: 'ghost',
+        class: 'btn--block',
+        title: isTraining ? 'Show every match of this sitting with its result again' : 'Judge every match of this sitting by target execution',
+        onClick: () => { close(); reclassify(ids, isTraining ? 'stats' : 'training'); },
+      }),
+    ));
+  });
+  return btn;
 }

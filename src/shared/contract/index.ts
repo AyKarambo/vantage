@@ -45,6 +45,7 @@ export type { GradingSettings } from '../../core/gradingSettings';
 // Practice layer (issue #321)
 export type {
   PracticeSummary, ExecutionTally, SittingExecution, FactorKey, FactorRow, FactorEntry, FactorHeadline, WeakDay, SittingRecap,
+  SessionMode, SessionModeState, TrainingSummary, SessionTraining,
 } from '../../core/practice';
 export { FACTOR_LEVELS, FACTOR_LABELS } from '../../core/practice';
 
@@ -81,8 +82,10 @@ export type {
 // Accounts + rank
 export type {
   AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary,
-  RankEntryPreviewInput, RankEntryPreview,
+  RankEntryPreviewInput, RankEntryPreview, RankAdjustmentInput, RankAdjustmentResult,
 } from './accounts';
+export type { RankAdjustment, RankAdjustmentReason } from '../../core/rank/types';
+export type { RankAdjustmentMark } from '../../core/rank/adjustments';
 export type { AccountKind } from '../../core/accountsManage';
 
 // Placement runs

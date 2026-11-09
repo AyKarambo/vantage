@@ -1,6 +1,7 @@
 import type { GameRecord } from '../../core/analytics';
 import type { AuthoredTarget } from '../../core/targets';
 import type { SessionCheckIn } from '../../core/checkIn';
+import type { SessionModeState } from '../../core/practice/sessionMode';
 import type { DemoContext } from '../../core/demoPreference';
 import type { ProAccess } from '../../core/entitlement';
 import type { RankAnchorMap } from '../../core/rank';
@@ -48,6 +49,8 @@ export interface DataProvider extends ProviderContract {
   pendingMatches(): PendingMatch[];
   /** The effective master data (defaults ⊕ overrides) — feeds the dashboard read + the editor. */
   effectiveMasterData(): MasterData;
+  /** The persisted Stats / Training switch (issue #342) — main-internal; the dashboard read derives the effective mode. Absent → Stats. */
+  getSessionMode?(): SessionModeState;
   /** The Master Data source's own settings — when it was last successfully checked (W1). */
   getMasterDataConfig(): MasterDataConfig;
 }

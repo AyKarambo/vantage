@@ -36,6 +36,8 @@ export function focusTargetChooser(o: {
   targets: TargetSummary[];
   /** Pre-selected target ids (stickiness / check-in), already narrowed to `targets`. */
   initial: string[];
+  /** Start with "Nothing specific" on (a carried-over deliberate choice); ignored when `initial` has targets. */
+  initialNothing?: boolean;
   grades: Record<string, TargetGrade>;
   stickiness: FocusStickiness;
   onStickiness: (s: FocusStickiness) => void;
@@ -47,8 +49,10 @@ export function focusTargetChooser(o: {
   const selected = new Set(o.initial.filter((id) => ids.has(id)));
   // A lone active target is the obvious choice — pre-pick it rather than
   // making the player confirm the only option there is.
-  if (!selected.size && o.targets.length === 1) selected.add(o.targets[0].id);
-  let nothing = false;
+  // — unless the player deliberately chose "Nothing specific" and keeps it.
+  const startNothing = !selected.size && !!o.initialNothing;
+  if (!selected.size && !startNothing && o.targets.length === 1) selected.add(o.targets[0].id);
+  let nothing = startNothing;
   let multi = selected.size > 1;
   let rowList: Array<{ el: HTMLElement; set: (g: TargetGrade) => void }> = [];
 

@@ -4,7 +4,7 @@
  * insights are built from. Pure and I/O-free so it is fully unit-testable and
  * reusable in the renderer.
  */
-import type { Result, Role, HeroStat, RosterPlayer, RoundSpan, MatchParty } from '../model';
+import type { Result, Role, HeroStat, RosterPlayer, RoundSpan, MatchParty, GepExtras } from '../model';
 // From `rank/types` rather than the `rank` barrel: that module imports only
 // `../model`, so this stays a leaf type import with no cycle back through the
 // rank engine (which itself reads `GameRecord` from here).
@@ -151,6 +151,8 @@ export interface GameRecord {
    * and played time are short until {@link playedMinutesOverride} fixes them.
    */
   joinedLate?: boolean;
+  /** GEP signals recorded for later (game mode, respawns, game exit …) — stored, not evaluated. See `GepExtras`. */
+  gepExtras?: GepExtras;
   /** Self-rated performance for this match, 0-100, if the player rated it. */
   performance?: number;
   heroes: string[];
@@ -173,6 +175,14 @@ export interface GameRecord {
   mental?: MatchMental;
   /** The saved Review-screen read (target grades + feel flags), if graded. */
   review?: MatchReview;
+  /**
+   * Played as a Training match (issue #342): stamped when the game is
+   * persisted while the player's session mode is Training, or set later by
+   * reclassifying the row / sitting. Absent = a Stats match (every game
+   * recorded before the mode existed). Display-only — rank, readiness and
+   * Trends never read it.
+   */
+  sessionMode?: 'training';
   /**
    * Epoch ms of the import that brought this record into local history — set
    * only on imported games (never on live-tracked or hand-logged ones). Flags

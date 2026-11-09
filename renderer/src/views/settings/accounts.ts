@@ -4,7 +4,9 @@ import { bridge } from '../../bridge';
 import { button, card, confirmButton, pill, select } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
 import { openPlacementComplete, maybeConfirmPlacementRank } from '../../app/placementComplete';
+import { openRankAdjustment } from '../../app/rankAdjustment';
 import { inlineLink } from '../../components/inlineLink';
+import { infoTip } from '../../components/infoTip';
 import { roleLabel } from '../../format';
 import { TIERS } from '../../../../src/core/rank';
 import { ROLE_ORDER, accountRoleSummary, roleStatus } from '../../roleStatus';
@@ -15,6 +17,14 @@ import type { ViewContext } from '../view';
 const ROLE_NAME: Readonly<Record<Role, string>> = { tank: 'Tank', damage: 'Damage', support: 'Support', openQ: 'Open Queue' };
 const ROLE_OPTIONS: Array<{ value: Role; label: string }> = ROLE_ORDER.map((role) => ({ value: role, label: ROLE_NAME[role] }));
 const DIVISIONS = [5, 4, 3, 2, 1];
+
+/**
+ * The last accounts/ranks/placements read the card painted. A Settings
+ * re-render (any Coaching toggle refreshes the snapshot) rebuilds this card;
+ * repainting from this at once — instead of a one-line "Loading…" stub — keeps
+ * the card's height, so the content below it doesn't jump (#339).
+ */
+let cachedAccounts: { accounts: AccountSummary[]; ranks: RankSummary[]; placements: PlacementRunSummary[] } | null = null;
 
 /**
  * How a dialog opened FROM the manage-ranks modal hands control back. The modal
@@ -64,6 +74,7 @@ export function accountsCard(ctx: ViewContext): HTMLElement {
   }
 
   function paint(accounts: AccountSummary[], ranks: RankSummary[], placements: PlacementRunSummary[]): void {
+    cachedAccounts = { accounts, ranks, placements };
     render(body,
       accounts.length
         ? h('div', { class: 'acct-grid' },
@@ -239,12 +250,14 @@ export function accountsCard(ctx: ViewContext): HTMLElement {
     );
   }
 
+  if (cachedAccounts) paint(cachedAccounts.accounts, cachedAccounts.ranks, cachedAccounts.placements);
   reload();
   return card({
     title: 'Accounts',
-    sub: mainAccount
-      ? `used when logging a match; readiness weighs games on your other accounts by how close their rank is to ${mainAccount}'s`
-      : 'used when logging a match; rank is tracked per role, per account',
+    info: mainAccount
+      ? `The accounts you pick from when logging a match. Rank is tracked per role, per account; readiness weighs `
+        + `games on your other accounts by how close their rank is to ${mainAccount}'s.`
+      : 'The accounts you pick from when logging a match. Rank is tracked per role, per account.',
   }, body);
 }
 
@@ -344,7 +357,7 @@ export function openManageRanks(account: string, onChange: () => void): void {
       const status = roleStatus(rank, openRun, run?.completed === true);
       const statusEl = h('div', { class: 'rank-modal-status' },
         status.tone === 'empty' ? h('span', { class: 'u-dim' }, status.text) : pill(status.text, 'accent'),
-        status.tone === 'placed' ? h('span', { class: 'rank-modal-placed u-dim' }, 'placed') : null,
+        status.tone === 'placed' ? h('span', { class: 'rank-modal-placed u-dim' }, 'from placements') : null,
       );
 
       const actions: Node[] = [];
@@ -434,7 +447,7 @@ export function openManageRanks(account: string, onChange: () => void): void {
             onConfirm: (reset) => void bridge.resetPlacementRun({ account, role }).then(afterWrite).catch(() => reset()),
           }),
           confirmButton({
-            label: 'Remove placement record',
+            label: 'Remove record',
             confirmLabel: 'Remove — undo the confirmed rank?',
             variant: 'ghost',
             title: 'Undoes the confirmed rank and un-marks these matches as placements — for when this shouldn’t have been tracked as a run at all.',
@@ -448,6 +461,16 @@ export function openManageRanks(account: string, onChange: () => void): void {
             button('Recount', { variant: 'ghost', onClick: () => void bridge.recountPlacementRun({ account, role }).then(afterWrite) }),
           );
         }
+      }
+
+      // Cheater compensation (#341) — a refund only moves a rank that exists,
+      // so it is offered on every row that has one (an open run has none yet).
+      if (rank && !openRun) {
+        actions.push(button('Cheater refund', {
+          variant: 'ghost',
+          title: 'Cheater compensation: Overwatch refunded rank after banning a cheater from one of your matches — add that % here.',
+          onClick: () => leaveFor(() => openRankAdjustment({ account, lockAccount: true, role, onChange, onReturn: reopen })),
+        }));
       }
 
       return h('div', { class: 'rank-modal-row' },
@@ -473,12 +496,12 @@ export function openManageRanks(account: string, onChange: () => void): void {
 
     return h('div', { class: 'stack rank-modal' },
       h('div', { class: 'rank-modal-head' },
-        h('div', { class: 'rank-modal-title' }, `Ranks & placements — ${account}`),
+        h('div', { class: 'rank-modal-title' }, `Ranks & placements — ${account}`,
+          infoTip('Set a rank once per role; logged competitive matches move it from there. A placement run counts '
+            + 'the next ten matches on a role instead and takes the rank the game reveals at the end.',
+          { label: 'How ranks and placements work' })),
         setRankBtn,
       ),
-      h('div', { class: 'hint' },
-        'Set a rank once per role; logged competitive matches move it from there. A placement run counts the next '
-        + 'ten matches on a role instead and takes the rank the game reveals at the end.'),
       host,
       h('div', { class: 'rank-modal-foot' }, button('Close', { variant: 'ghost', onClick: close })),
     );
@@ -516,8 +539,10 @@ function openSetRank(account: string, ranks: RankSummary[], flow: RanksFlow): vo
     paint();
 
     return h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '440px', maxWidth: '92vw' } },
-      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Set rank — ${account}`),
-      h('div', { class: 'hint' }, 'Set your current rank once; logged competitive matches move it from here. Editing re-anchors from the value you enter. A negative % means you’re in rank protection.'),
+      h('div', { style: { fontSize: '15px', fontWeight: '600' } }, `Set rank — ${account}`,
+        infoTip('Set your current rank once; logged competitive matches move it from here. Editing re-anchors from '
+          + 'the value you enter.', { label: 'How the rank anchor works' })),
+      h('div', { class: 'hint' }, 'A negative % means you’re in rank protection.'),
       host,
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '4px' } },
         button('Save', { variant: 'primary', onClick: () => {
@@ -556,9 +581,9 @@ function openBackdateStart(account: string, role: Role, flow: RanksFlow, replace
   openModal((close) => h('div', { class: 'stack', style: { gap: '14px', padding: '18px', width: '460px', maxWidth: '92vw' } },
     h('div', { style: { fontSize: '15px', fontWeight: '600' } },
       `${replacesRun ? 'Move placements to start from' : 'Start placements from'} — ${roleLabel(role)} on ${account}`),
-    h('div', { class: 'hint' },
-      'Pick the match that was your first placement. It and every later competitive match on this track count '
-      + 'toward the run; their logged ±% stays in your data but is ignored while the run is open.'),
+    h('div', { class: 'hint' }, 'Pick the match that was your first placement.',
+      infoTip('It and every later competitive match on this track count toward the run; their logged ±% stays in '
+        + 'your data but is ignored while the run is open.', { label: 'What backdating does' })),
     ...(replacesRun
       // Only reachable from an ACTIVE run's "Change start match…" — a
       // completed run offers "Redo placements" / "Remove placement record"

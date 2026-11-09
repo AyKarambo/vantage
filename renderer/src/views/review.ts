@@ -709,6 +709,7 @@ function expanded(
     ? focusTargetChooser({
         targets: selfTargets,
         initial: m.suggestedFocus ?? [],
+        initialNothing: m.suggestedNothing,
         grades,
         stickiness: ctx.data.coachingSettings.focusStickiness,
         onStickiness: (focusStickiness) => {

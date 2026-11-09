@@ -6,6 +6,7 @@
 import type { Role, Result, MatchParty } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
+import type { RankAdjustmentMark } from '../../core/rank/adjustments';
 import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
@@ -18,6 +19,7 @@ import type { BreakReminderSettings } from '../../core/breakReminder';
 import type { ReadinessSummary, ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { CoachingSettings } from '../../core/coachingSettings';
+import type { SessionModeState, SessionTraining } from '../../core/practice/sessionMode';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { DemoPreference } from '../../core/demoPreference';
 import type { ProAccess } from '../../core/entitlement';
@@ -43,6 +45,11 @@ export interface Session extends WinLoss {
   date: string;
   streak: Streak;
   topMaps: Group[];
+  /**
+   * Present only for a training sitting (issue #342): the card shows target
+   * execution instead of W–L. Absent = the stats read, exactly as before.
+   */
+  training?: SessionTraining;
 }
 
 /** One cell of the activity heatmap. */
@@ -120,12 +127,16 @@ export interface MatchRow {
    * one — this is what tells the two apart (R4).
    */
   reviewed: boolean;
+  /** Played as a Training match (issue #342) — Matches leads with target execution and hides the result. Absent = Stats. */
+  sessionMode?: 'training';
   /**
    * Review inbox rows only (issue #321): the self-rated targets the focus
    * chooser pre-selects for this game, by the player's stickiness setting
    * (falling back to the preceding check-in's "today's focus").
    */
   suggestedFocus?: string[];
+  /** The carried-over choice was a deliberate "Nothing specific" — the chooser pre-selects that chip. */
+  suggestedNothing?: boolean;
   /**
    * Review inbox rows only (issue #321): automatic break detection read the
    * gap before this game as a break — the seed for the "Took a break before
@@ -279,6 +290,12 @@ export interface DashboardData {
    */
   rankTrend: Record<string, RankSeriesPoint[]>;
   /**
+   * Rank adjustments (cheater compensation, manual corrections) to mark on the
+   * rank chart, keyed like {@link rankTrend} and only for tracks it has — from
+   * that series' first point on. A marker, never a match point.
+   */
+  rankAdjustmentMarks: Record<string, RankAdjustmentMark[]>;
+  /**
    * Open and completed placement runs across every track, so rank surfaces
    * can render `Placements N/10` instead of a rank the player does not have.
    */
@@ -412,6 +429,12 @@ export interface DashboardData {
   sessionSettings: SessionSettings;
   /** Effective coaching settings (practice focus, check-in questions, break detection), so views render synchronously. */
   coachingSettings: CoachingSettings;
+  /**
+   * The Stats / Training session mode in effect now (issue #342) — `mode` is
+   * already the effective one (Training may have lapsed by the opt-in
+   * auto-reset); `since` is when the player last switched it.
+   */
+  sessionMode: SessionModeState;
   /** Effective measured-grade settings (partial-credit margin), so the Settings editor renders synchronously. */
   gradingSettings: GradingSettings;
   /** Unfiltered history size — lets empty states offer "Show all time". */

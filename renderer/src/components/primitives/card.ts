@@ -4,11 +4,14 @@
  * knowing about their content.
  */
 import { h, type Props, type Child } from '../../dom';
+import { infoTip } from '../infoTip';
 
 /** Options for the {@link card} shell; title/actions form an optional header row. */
 export interface CardOpts {
   title?: string | Node;
   sub?: string;
+  /** Background prose about the whole card, behind an ⓘ after the title (#339); `sub` stays for a short fact. */
+  info?: string;
   actions?: Child | Child[];
   variant?: 'plain' | 'raised' | 'glow';
   class?: string;
@@ -22,7 +25,11 @@ export function card(opts: CardOpts, ...children: Array<Child | Child[]>): HTMLE
   if (opts.title != null || opts.actions) {
     el.append(
       h('div', { class: 'card-head' },
-        h('div', { class: 'card-title' }, opts.title ?? '', opts.sub && h('span', { class: 'card-sub' }, opts.sub)),
+        h('div', { class: 'card-title' }, opts.title ?? '',
+          opts.info
+            ? infoTip(opts.info, { label: `About ${typeof opts.title === 'string' ? opts.title : 'this card'}` })
+            : null,
+          opts.sub && h('span', { class: 'card-sub' }, opts.sub)),
         opts.actions ? h('div', { class: 'card-actions' }, ...toArray(opts.actions)) : null,
       ),
     );

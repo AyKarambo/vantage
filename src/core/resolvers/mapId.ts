@@ -50,6 +50,31 @@ export const MAP_ID_TO_NAME: Record<string, string> = {
   // Clash
   '4439': 'Hanaoka',
   '4448': 'Throne of Anubis',
+  // Push (Redwood Dam was missing)
+  '4704': 'Redwood Dam',
+  // Re-issued ids for existing maps (newer client builds report these instead)
+  '4310': 'Antarctic Peninsula',
+  '4784': 'Esperança',
+  '4789': 'Throne of Anubis',
+  '4790': 'Hanaoka',
+  '4791': 'Colosseo',
+  '4949': 'Samoa',
+  // Sub-area ids reported mid-match, folded to their map
+  '4731': 'Ilios', // Ruins
+  '4735': 'Oasis', // Gardens
+  '4849': 'Nepal', // Shrine
+  '5000': 'Busan', // Sanctuary
+  '5195': 'Lijiang Tower', // Night Market
+  // Stadium-only maps (see STADIUM_ONLY_MAPS)
+  '4698': 'Gogadoro',
+  '4702': 'Place Lacroix',
+  '4778': 'Arena Victoriae',
+  '4981': 'Wuxing University', // Water College
+  // Named in Overwolf's table but not yet classified by mode — named so they
+  // stop showing as a bare number; their game mode stays 'Unknown' until verified.
+  '4695': 'Thames District',
+  '4721': 'Powder Keg Mine',
+  '4724': 'Serenza',
 };
 
 /**

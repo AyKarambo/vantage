@@ -5,6 +5,9 @@ import { button, card } from '../../components/primitives';
 import { openModal } from '../../components/overlay';
 import { store } from '../../store';
 
+/** The last location this card painted — a Settings re-render repaints from it at once instead of collapsing to "Loading…" (#339). */
+let cachedLocation: DataLocation | null = null;
+
 /**
  * Data storage — where *all* Vantage data files live (`history.db`,
  * `manual.json`, `outbox.json`, `rankAnchors.json`, plus a legacy
@@ -16,9 +19,11 @@ import { store } from '../../store';
  */
 export function dataLocationCard(): HTMLElement {
   const body = h('div', { class: 'stack', style: { gap: '8px', marginTop: '4px' } }, h('div', { class: 'hint' }, 'Loading…'));
+  if (cachedLocation) paint(cachedLocation);
   void bridge.getDataLocation().then((loc) => paint(loc));
 
   function paint(loc: DataLocation, message?: string): void {
+    cachedLocation = loc;
     render(body,
       h('div', { style: { fontSize: '12px', fontWeight: '600' } }, loc.isDefault ? 'Default location' : 'Custom folder'),
       h('div', { class: 'mono u-dim', style: { fontSize: '11px', wordBreak: 'break-all' } }, loc.folder),
@@ -27,10 +32,10 @@ export function dataLocationCard(): HTMLElement {
         button('Show in Explorer', { variant: 'ghost', onClick: () => void bridge.revealDataFolder() }),
         button('Change…', { variant: 'soft', onClick: choose }),
       ),
-      h('div', { class: 'hint', style: { marginTop: '6px' } },
-        'All match history and targets move together. Point this at a cloud-synced folder ' +
-        '(OneDrive, Dropbox) for off-machine backup — use from one machine only, since editing the synced ' +
-        'files from two machines at once can corrupt them. Notion export stays a separate, portable backup.'),
+      // The one warning that should shape the choice stays inline (#339); the
+      // rest of the explanation lives behind the card's ⓘ.
+      h('div', { class: 'hint', style: { marginTop: '4px' } },
+        'Cloud-synced folder? Use it from one machine only — two at once can corrupt the files.'),
     );
   }
 
@@ -78,7 +83,11 @@ export function dataLocationCard(): HTMLElement {
     ));
   }
 
-  return card({ title: 'Data storage', sub: 'where your match history and targets are stored' }, body);
+  return card({
+    title: 'Data storage',
+    info: 'Where all your match history and targets are stored — they move together. Point this at a cloud-synced '
+      + 'folder (OneDrive, Dropbox) for off-machine backup. Notion export stays a separate, portable backup.',
+  }, body);
 }
 
 /** The migration succeeded but some originals in the old folder couldn't be

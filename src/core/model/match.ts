@@ -68,6 +68,26 @@ export interface RoundSpan {
 }
 
 /**
+ * GEP signals the app records for later but does NOT evaluate yet (GEP 312 era
+ * additions and a few long-documented ones). Stored verbatim so the data exists
+ * when an analysis wants it; nothing in the UI or analytics reads it today.
+ */
+export interface GepExtras {
+  /** `game_info.game_mode` as reported (a numeric id, leading zeros already stripped by GEP). */
+  gameMode?: string;
+  /** `gep_internal.version_info` — the GEP package version that produced this capture. */
+  gepVersion?: string;
+  /** `kill.objective_kills` — the game's own objective-kill counter, last value seen. */
+  objectiveKills?: number;
+  /** ms epoch of each `respawn` event (the local player respawned), in order. */
+  respawns?: number[];
+  /** ms epoch of each `revive` event (the local player was revived), in order. */
+  revives?: number[];
+  /** ms epoch of the `game_exit` event (player quit the game / to desktop) seen during this match. */
+  gameExitAt?: number;
+}
+
+/**
  * One completed match, assembled by {@link MatchAggregator}. Fields are optional
  * because GEP availability varies; the writer only sets Notion properties that
  * are present.
@@ -103,9 +123,10 @@ export interface MatchRecord {
   startedAt?: number;
   endedAt?: number;
   /**
-   * The displayed match length in minutes: the summed GEP round time from each
-   * round's doors, the way the game's own clock counts it (stopped in hero
-   * select, setup and between rounds). Captures without round events fall back
+   * The displayed match length in minutes: the summed GEP round time
+   * (`round_start` → `round_end`, setup lock included), the way the game's own
+   * history list counts it — hero select and the post-match scoreboard are out.
+   * Not the per-10 divisor (see `playedMinutes`). Captures without round events fall back
    * to the wall clock `match_start` → `match_end`. Fractional on newer captures
    * (shown as mm:ss); whole minutes on older ones and hand logs.
    */
@@ -127,6 +148,8 @@ export interface MatchRecord {
    * to correct the time from the scoreboard. See {@link MatchAggregator}.
    */
   joinedLate?: boolean;
+  /** Tracked-but-unevaluated GEP signals (see {@link GepExtras}). Absent when none arrived. */
+  gepExtras?: GepExtras;
   /** Signed competitive SR change for this match (percentage points of a division). */
   srDelta?: number;
 }

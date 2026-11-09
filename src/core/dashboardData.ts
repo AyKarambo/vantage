@@ -26,11 +26,14 @@ import { DEFAULT_READINESS, safeReadiness, type ReadinessSettings, type Readines
 import { DEFAULT_SESSION_SETTINGS, type SessionSettings } from './sessionSettings';
 import { DEFAULT_COACHING, type CoachingSettings } from './coachingSettings';
 import {
-  autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselection, focusPreselector, practiceFocusOn,
+  autoBreakBefore, executionByTarget, executionOf, factorHeadline, factorTable, focusGamesSince, focusPreselectorDetailed, practiceFocusOn,
   sittingExecution, sittingRecap, sittingsOf, tiltByCheckInField, weakestDays, type PracticeSummary,
+  DEFAULT_SESSION_MODE, effectiveSessionMode, sessionTraining, type SessionMode, type SessionModeState, type SessionTraining,
 } from './practice';
 import { samplePracticeLayer } from './sampleData';
-import { currentRank, rankKey, rankSeries, rankToPoints, type RankAnchorMap } from './rank';
+import {
+  adjustmentMarks, currentRank, rankKey, rankSeries, rankToPoints, type RankAdjustment, type RankAnchorMap,
+} from './rank';
 import { hasDrifted, isAwaitingRank, resetBoundaries, runProgress, suppressedMatchIds, type PlacementRun } from './placements';
 import { seasonsForData, seasonWindowById } from './season';
 import type { Role, Result } from './model';
@@ -55,6 +58,8 @@ export interface ManualData {
   grading?: GradingSettings;
   /** Per-(account, role) rank anchors, so the "real" primary rank can be computed. */
   rankAnchors?: RankAnchorMap;
+  /** Rank adjustments (cheater compensation…), only for the rank chart's markers — never counted as matches. */
+  rankAdjustments?: RankAdjustment[];
   /**
    * Tracked placement runs. Open ones make their counted matches contribute no
    * ladder movement (Overwatch shows no ±% during placements), and every run —
@@ -75,6 +80,8 @@ export interface ManualData {
   readinessSummary?: ReadinessSummary;
   /** Pre-session mood check-ins (S10 phase 2); empty when none have been logged. */
   checkIns?: SessionCheckIn[];
+  /** The persisted Stats / Training switch (issue #342); Stats when absent. */
+  sessionMode?: SessionModeState;
 }
 
 export function computeDashboard(
@@ -135,6 +142,15 @@ export function computeDashboard(
   // points are narrowed to the active range, via the same filtered-games id
   // set every other "in range" read uses.
   const rankTrend = rankTrendOf(all, games, manual?.rankAnchors, suppressed, resetBoundaries(placementRuns));
+  // Adjustment markers for the same tracks, from the first plotted point on —
+  // drawn as markers on the chart, never as match points.
+  const rankAdjustmentMarks: DashboardData['rankAdjustmentMarks'] = {};
+  for (const [key, series] of Object.entries(rankTrend)) {
+    const role = ROLES.find((r) => key.endsWith(`::${r}`));
+    if (!role || !series.length) continue;
+    const marks = adjustmentMarks(manual?.rankAdjustments ?? [], key.slice(0, key.length - role.length - 2), role, series[0].timestamp);
+    if (marks.length) rankAdjustmentMarks[key] = marks;
+  }
   const placements = placementRuns.map((run) => {
     const { counted, target, latestPrediction, countedMatchIds } = runProgress(all, run);
     return {
@@ -176,6 +192,14 @@ export function computeDashboard(
   const sessionSettings = manual?.sessionSettings ?? DEFAULT_SESSION_SETTINGS;
   const coaching = manual?.coaching ?? DEFAULT_COACHING;
   const checkIns = manual?.checkIns ?? [];
+  // Stats / Training (issue #342): the mode in effect now — Training may have
+  // lapsed by the opt-in auto-reset. Feeds practice focus and the toggles;
+  // never rank, readiness or Trends.
+  const modeState = manual?.sessionMode ?? DEFAULT_SESSION_MODE;
+  const sessionMode = effectiveSessionMode(modeState, {
+    autoReset: coaching.trainingAutoReset, gapMinutes: sessionSettings.gapMinutes, now,
+    matchTimes: all.map((g) => g.timestamp),
+  });
   const targets = withStaleness(buildTargets(games, demo.active, manual?.targets, margin), authoredTargets, all);
   // The practice reads (issue #321) run over a deterministic sample overlay on
   // demo data — focus choices, grades and extended check-ins the generated
@@ -269,8 +293,14 @@ export function computeDashboard(
     accountRoleRanks,
     accountActivity: accountLastPlayedAt(all),
     rankTrend,
+    rankAdjustmentMarks,
     placements,
-    session: currentSession(sessionGames, now, sessionSettings.gapMinutes),
+    session: withSessionTraining(
+      currentSession(sessionGames, now, sessionSettings.gapMinutes),
+      sessionTraining(sessionGames, new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id)), {
+        now, gapMinutes: sessionSettings.gapMinutes, mode: sessionMode,
+      }),
+    ),
     // Every past sitting (S4), same account scope + gap as `session` above, capped like every other list.
     sessions: sessionHistory(sessionGames, sessionSettings.gapMinutes, suppressed).slice(0, ROW_CAP),
     byRole: byRole(games),
@@ -345,11 +375,11 @@ export function computeDashboard(
     tiltByCheckIn: tiltByCheckIn(all, manual?.checkIns ?? [], { include: inRange }),
     tiltBySleep: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'sleep'),
     tiltByEnergy: tiltByCheckInField(practiceSrc.games, inRange, practiceSrc.checkIns, 'energy'),
-    practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching),
+    practice: practiceOf(practiceSrc, inRange, prevIds, targets, coaching, sessionMode),
     checkIns,
     performance: performanceStats(games),
     targets,
-    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets))
+    reviewInbox: inboxRows(pending.slice(0, ROW_CAP), all, targets, coaching, checkIns, practiceFocusOn(coaching, targets, sessionMode))
       .map(({ g, extra }) => ({ ...toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed), ...extra })),
     pendingReviews: pending.length,
     pendingReviewsRecent: pendingReviewsRecent(pending, now),
@@ -373,6 +403,7 @@ export function computeDashboard(
     readinessSettings: manual?.readiness ?? DEFAULT_READINESS,
     sessionSettings,
     coachingSettings: coaching,
+    sessionMode: { mode: sessionMode, since: modeState.since },
     gradingSettings: grading,
     totalGamesAllTime: all.length,
     masterData,
@@ -648,6 +679,11 @@ function recentMatches(games: GameRecord[], mapModeOf: MapModeResolver, activeMe
     .map((g) => toMatchRow(g, mapModeOf, activeMeasured, margin, suppressed));
 }
 
+/** The Current session card's read, with its training read (issue #342) attached when the sitting is a training one. */
+function withSessionTraining<S extends object>(session: S | null, training: SessionTraining | null): (S & { training?: SessionTraining }) | null {
+  return session && training ? { ...session, training } : session;
+}
+
 export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeasured: AuthoredTarget[] = [], margin?: number, suppressed?: ReadonlySet<string>): MatchRow {
   const flags = rowFlags(g);
   const groupSize = effectiveGroupSize(g);
@@ -686,6 +722,7 @@ export function toMatchRow(g: GameRecord, mapModeOf: MapModeResolver, activeMeas
     ...(flags ? { flags } : {}),
     ...(measuredGrades ? { measuredGrades } : {}),
     ...(targetGrades ? { targetGrades } : {}),
+    ...(g.sessionMode ? { sessionMode: g.sessionMode } : {}),
     reviewed: g.review != null,
   };
 }
@@ -728,6 +765,7 @@ function practiceOf(
   prevIds: ReadonlySet<string> | undefined,
   targets: TargetSummary[],
   coaching: CoachingSettings,
+  sessionMode: SessionMode = 'stats',
 ): PracticeSummary {
   const selfIds = new Set(targets.filter((t) => t.mode !== 'measured').map((t) => t.id));
   const rangeGames = src.games.filter((g) => inRange.has(g.matchId));
@@ -741,11 +779,12 @@ function practiceOf(
   const now: GameRecord = {
     matchId: '__next__', timestamp: Date.now(), account: '', role: 'damage', map: '', result: 'Draw', gameType: 'Competitive', heroes: [],
   };
-  const nextFocus = selectable.size
-    ? focusPreselection([...src.games, now], now, coaching.focusStickiness, src.checkIns, selectable)
-    : [];
+  const next = selectable.size
+    ? focusPreselectorDetailed([...src.games, now], coaching.focusStickiness, src.checkIns, selectable)(now)
+    : { ids: [], nothing: false };
+  const nextFocus = next.ids;
   return {
-    on: practiceFocusOn(coaching, targets),
+    on: practiceFocusOn(coaching, targets, sessionMode),
     execution,
     ...(prevExecution?.attempts ? { prevExecution } : {}),
     sittings: sittingExecution(src.games, inRange, selfIds),
@@ -755,6 +794,7 @@ function practiceOf(
     ...(recap ? { recap } : {}),
     byTarget: executionByTarget(rangeGames, selfIds),
     nextFocus,
+    ...(next.nothing ? { nextNothing: true } : {}),
   };
 }
 
@@ -772,7 +812,7 @@ function inboxRows(
   coaching: CoachingSettings,
   checkIns: NonNullable<ManualData['checkIns']>,
   practiceOn: boolean,
-): Array<{ g: GameRecord; extra: Pick<MatchRow, 'suggestedFocus' | 'autoBreak'> }> {
+): Array<{ g: GameRecord; extra: Pick<MatchRow, 'suggestedFocus' | 'suggestedNothing' | 'autoBreak'> }> {
   // Stats mode reads neither — keep every row exactly as before (and skip the work).
   if (!practiceOn) return rows.map((g) => ({ g, extra: {} }));
   const selectable = new Set(targets.filter((t) => t.mode !== 'measured' && t.isActive && !t.archivedAt).map((t) => t.id));
@@ -781,12 +821,19 @@ function inboxRows(
   // Scopes let a role/hero-scoped target keep its pick across games it was out of scope for.
   const scopes = new Map(targets.filter((t) => selectable.has(t.id)).map((t) => [t.id, t] as const));
   const preselect = selectable.size
-    ? focusPreselector(all, coaching.focusStickiness, checkIns, selectable, undefined, scopes)
+    ? focusPreselectorDetailed(all, coaching.focusStickiness, checkIns, selectable, undefined, scopes)
     : null;
   return rows.map((g) => {
-    const suggested = preselect ? preselect(g) : [];
+    const suggested = preselect ? preselect(g) : { ids: [], nothing: false };
     const autoBreak = autoBreakBefore(g, prevOf.get(g.matchId) ?? null, coaching);
-    return { g, extra: { ...(suggested.length ? { suggestedFocus: suggested } : {}), ...(autoBreak ? { autoBreak } : {}) } };
+    return {
+      g,
+      extra: {
+        ...(suggested.ids.length ? { suggestedFocus: suggested.ids } : {}),
+        ...(suggested.nothing ? { suggestedNothing: true } : {}),
+        ...(autoBreak ? { autoBreak } : {}),
+      },
+    };
   });
 }
 

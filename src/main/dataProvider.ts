@@ -9,6 +9,7 @@ import { normalizeStaleness } from '../core/staleness';
 import { normalizeReadiness } from '../core/readiness';
 import { normalizeSessionSettings } from '../core/sessionSettings';
 import { normalizeCoachingSettings } from '../core/coachingSettings';
+import { DEFAULT_SESSION_MODE, normalizeSessionMode } from '../core/practice/sessionMode';
 import { normalizeGradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
 import { FULL_PRO_ACCESS } from '../core/entitlement';
@@ -18,7 +19,9 @@ import { openIfAllowed } from '../core/externalLink';
 import { LOG_LEVELS, formatLogLine, type LogLevel } from '../core/logging';
 import { redactForExport } from '../core/logRedaction';
 import { formatDiagnostics } from '../core/about';
-import { currentRank, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAnchorMap } from '../core/rank';
+import {
+  currentRank, parseRankAdjustment, rankEnteringMatch, rankKey, srDeltaForSetRank, type RankAdjustment, type RankAnchorMap,
+} from '../core/rank';
 import { classifyGameType } from '../core/matchFilter';
 import { parseVantageImport, buildImportEnvelope, type ImportAccount } from '../core/importEnvelope';
 import { mostPlayedHeroes as rankHeroesByPlays } from '../core/analytics';
@@ -63,7 +66,7 @@ import type { GameRecord } from '../core/analytics';
  */
 
 /** The config sections the Settings screen reads and writes as a whole. */
-type SettingsSection = 'breakReminder' | 'staleness' | 'readiness' | 'sessionSettings' | 'coaching' | 'grading';
+type SettingsSection = 'breakReminder' | 'staleness' | 'readiness' | 'sessionSettings' | 'coaching' | 'grading' | 'sessionMode';
 
 /** Backing services for the dashboard's DataProvider, as narrow structural slices so tests can inject plain objects. */
 export interface DataProviderDeps {
@@ -73,7 +76,11 @@ export interface DataProviderDeps {
   /** Authored-target (◎ manual) persistence. */
   manual: Pick<ManualStore, 'targets' | 'addTarget' | 'updateTarget' | 'setActive' | 'deactivateAll' | 'setArchived' | 'removeTarget'>;
   /** Per-(account, role) rank anchors for the calculated-rank engine. */
-  rankAnchors: Pick<RankAnchorStore, 'all' | 'get' | 'map' | 'set' | 'remove' | 'relabel' | 'removeAccount'>;
+  rankAnchors: Pick<
+    RankAnchorStore,
+    'all' | 'get' | 'map' | 'set' | 'remove' | 'relabel' | 'removeAccount'
+    | 'listAdjustments' | 'addAdjustment' | 'removeAdjustment' | 'restoreAdjustment'
+  >;
   /** Per-(account, role) placement-run tracking and its declined-season bookkeeping. */
   placements: Pick<
     PlacementStore,
@@ -432,6 +439,24 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
       return rankSummaries(deps);
     },
     rankAnchorMap: (): RankAnchorMap => deps.rankAnchors.map(),
+    listRankAdjustments: (): RankAdjustment[] => deps.rankAnchors.listAdjustments(),
+    addRankAdjustment: (input) => {
+      const parsed = parseRankAdjustment({ ...input, at: input.at ?? Date.now() });
+      if (!parsed.ok) throw new Error(parsed.reason);
+      const adjustment = deps.rankAnchors.addAdjustment(parsed.value);
+      return { adjustment, ranks: rankSummaries(deps) };
+    },
+    removeRankAdjustment: (id) => {
+      const adjustment = deps.rankAnchors.removeAdjustment(id);
+      return { adjustment, ranks: rankSummaries(deps) };
+    },
+    restoreRankAdjustment: (record) => {
+      // Re-validate: the record crossed IPC back from the renderer.
+      const parsed = parseRankAdjustment(record);
+      if (!parsed.ok || typeof record.id !== 'string' || !record.id) throw new Error(parsed.ok ? 'Missing id.' : parsed.reason);
+      const adjustment = { id: record.id, ...parsed.value };
+      return { adjustment: deps.rankAnchors.restoreAdjustment(adjustment) ? adjustment : null, ranks: rankSummaries(deps) };
+    },
     rankEntryPreview: (input) => {
       // Read-only by construction: this is the translation from "I ended at this
       // rank" to the ±% the player would otherwise have typed. Without an anchor
@@ -682,7 +707,13 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
           anchorSet = true;
         }
       }
-      return { imported, skipped, invalid, accountsAdded, anchorSet };
+      // v2 backup: put back its rank adjustments. Keyed by id, so importing the
+      // same backup twice (or over a live store that still has them) adds nothing.
+      let adjustmentsRestored = 0;
+      for (const adj of parsed.rankAdjustments ?? []) {
+        if (deps.rankAnchors.restoreAdjustment(adj)) adjustmentsRestored++;
+      }
+      return { imported, skipped, invalid, accountsAdded, anchorSet, ...(adjustmentsRestored ? { adjustmentsRestored } : {}) };
     },
     deleteFileImports: () => {
       const removed = deps.history.removeImported('file');
@@ -698,6 +729,7 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
         games: deps.history.all(),
         accounts,
         rankAnchors: deps.rankAnchors.map(),
+        rankAdjustments: deps.rankAnchors.listAdjustments(),
         targets: deps.manual.targets(),
       });
       const dateStamp = new Date().toISOString().slice(0, 10);
@@ -720,6 +752,23 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     setReadiness: readiness.set,
     getSessionSettings: sessionSettings.get,
     setSessionSettings: sessionSettings.set,
+    getSessionMode: () => deps.getConfig().sessionMode ?? DEFAULT_SESSION_MODE,
+    setSessionMode: (mode) => {
+      // `since` is stamped here, not taken from the renderer, so the opt-in
+      // auto-reset measures from the real switch instant.
+      const value = normalizeSessionMode({ mode, since: Date.now() });
+      deps.getConfig().sessionMode = value;
+      deps.persistConfig({ sessionMode: value });
+      return value;
+    },
+    setMatchSessionMode: (input) => {
+      // Defensive at the edge: untyped IPC input — anything but 'training' reads as Stats.
+      const ids = Array.isArray(input?.matchIds) ? input.matchIds.filter((id): id is string => typeof id === 'string') : [];
+      const sessionMode = input?.mode === 'training' ? 'training' as const : null;
+      let updated = 0;
+      for (const id of new Set(ids)) if (deps.history.editManual(id, { sessionMode })) updated++;
+      return { updated };
+    },
     getCoaching: coaching.get,
     setCoaching: coaching.set,
     getGrading: grading.get,
@@ -888,8 +937,8 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
  */
 export const DASHBOARD_WRITES = [
   'saveReview', 'clearReview', 'importReviews', 'ignorePendingReviews', 'clearReviews',
-  'editMatch', 'deleteMatch', 'undoDeleteMatch',
-  'setRankAnchor',
+  'editMatch', 'deleteMatch', 'undoDeleteMatch', 'setMatchSessionMode',
+  'setRankAnchor', 'addRankAdjustment', 'removeRankAdjustment', 'restoreRankAdjustment',
   'startPlacementRun', 'setPlacementPrediction', 'completePlacementRun',
   'resetPlacementRun', 'cancelPlacementRun', 'recountPlacementRun', 'declinePlacementRun',
   'saveAccount', 'deleteAccount', 'deleteDetectedAccount',

@@ -38,8 +38,17 @@ const SETTINGS_SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> 
 // navigates elsewhere, so re-entering Settings still always starts on General.
 let activeTab: SettingsTab = 'general';
 let onSettings = false;
+// The deep-link section already revealed for THIS visit (#339). `ViewParams.section`
+// survives every same-route re-render — a toggle's `ctx.refresh()`, a winrate-scheme
+// `store.rerender()` — and re-running the reveal on each one is what yanked the
+// page back up to that card after the shell had restored the scroll position.
+// Reset on leaving Settings, so the next arrival with a section reveals again.
+let revealedSection: SettingsSection | null = null;
 store.subscribe((state) => {
-  if (state.view !== 'settings') onSettings = false;
+  if (state.view !== 'settings') {
+    onSettings = false;
+    revealedSection = null;
+  }
 });
 
 /** Scroll a General-tab card into view and flash it (W1) — mirrors Maps' `highlight` idiom, targeted by a stable data attribute instead of text matching. */
@@ -94,8 +103,12 @@ export function settings(ctx: ViewContext): HTMLElement {
 
   // A deep link (About/FAQ's cross-links, or the rail itself after a fresh
   // navigation) — General is already the default tab, so this only needs to
-  // reveal the target card.
-  if (ctx.params.section) revealSection(body, ctx.params.section);
+  // reveal the target card. Only on arrival (or a NEW section), never on a
+  // re-render of the same route.
+  if (ctx.params.section && ctx.params.section !== revealedSection) {
+    revealedSection = ctx.params.section;
+    revealSection(body, ctx.params.section);
+  }
 
   return h('div', { class: 'view' },
     viewHead('Settings', 'Accounts, app behavior, coaching nudges, appearance, diagnostics', tabs),

@@ -8,7 +8,7 @@
  * Pure and Electron-free — the GEP edge in `src/main` owns the I/O and feeds
  * normalized messages in (guardrail #1: GEP is the only live data source).
  */
-import { battleTagName, emptyMatch, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer, type RoundSpan } from '../model';
+import { battleTagName, emptyMatch, type GepExtras, type GepMessage, type HeroStat, type MatchRecord, type Role, type RosterPlayer, type RoundSpan } from '../model';
 import { isPlayedSegment, mergeHeroStats } from '../perHero';
 import { K } from './keys';
 import { asNumber, asString, parseRoster } from './gepValues';
@@ -46,12 +46,16 @@ export class MatchAggregator {
    */
   private partyCount?: number;
 
+  /** GEP package version from `gep_internal.version_info`; outlives the per-match reset like {@link partyCount}. */
+  private gepVersion?: string;
+
   /** A checkpoint from before a restart, waiting for the feed to name its match. */
   private resume?: AggregatorCheckpoint;
 
   reset(): void {
     this.current = newMutable();
     this.partyCount = undefined;
+    this.gepVersion = undefined;
     this.resume = undefined;
   }
 
@@ -176,6 +180,9 @@ export class MatchAggregator {
     const feature = msg.feature?.toLowerCase();
     const key = msg.key?.toLowerCase();
 
+    // Tracked for later, not evaluated: stored verbatim in `rec.gepExtras`.
+    if (this.trackExtras(msg, feature, key)) return;
+
     if (feature === K.gameInfo) {
       switch (key) {
         case K.battleTag:
@@ -231,6 +238,47 @@ export class MatchAggregator {
       else if (key.startsWith(K.roster)) this.applyRoster(key, msg.value);
       return;
     }
+  }
+
+  /**
+   * Record the GEP signals we keep but do not evaluate (see `GepExtras`).
+   * Returns true when the message was one of them (nothing else needs it).
+   * `game_mode` is only recorded here and still falls through to nothing else;
+   * the others have no other consumer in the aggregator either.
+   */
+  private trackExtras(msg: GepMessage, feature: string | undefined, key: string | undefined): boolean {
+    if (!key) return false;
+    const rec = this.current.record;
+    const extras = (): GepExtras => (rec.gepExtras ??= {});
+
+    if (feature === K.gepInternal && key === K.versionInfo) {
+      // Sent once on attach — before match_start wipes `current`, so held on the aggregator.
+      this.gepVersion = versionOf(msg.value) ?? this.gepVersion;
+      return true;
+    }
+    if (feature === K.gameInfo && key === K.gameMode) {
+      const mode = asString(msg.value);
+      if (mode !== undefined) extras().gameMode = mode;
+      return true;
+    }
+    if (feature === K.killFeature && key === K.objectiveKills) {
+      const n = asNumber(msg.value);
+      if (n !== undefined) extras().objectiveKills = n;
+      return true;
+    }
+    if (msg.kind === 'event') {
+      const at = this.now();
+      if (key === K.respawn || key === K.revive) {
+        const list = (extras()[key === K.respawn ? 'respawns' : 'revives'] ??= []);
+        if (list.length < MAX_TRACKED_EVENTS) list.push(at);
+        return true;
+      }
+      if (key === K.gameExit) {
+        extras().gameExitAt = at;
+        return true;
+      }
+    }
+    return false;
   }
 
   /** The local player's team, from the roster so far — the side fallback when a tick lacks `is_teammate`. */
@@ -424,14 +472,15 @@ export class MatchAggregator {
       const played = windowMinutes(playWindowsOf(rounds, this.mapModeOf(rec.mapName ?? '')));
       if (played > 0) {
         rec.playedMinutes = played;
-        // The displayed match length is the match CLOCK, the same one the live
-        // board shows: stopped through hero select (~28 s before the first
-        // round), through every round's setup until the doors open, and after
-        // the last round (the post-match scoreboard) — exactly the play
-        // windows. A round whose doors went unseen falls back to its mode's
-        // lock here, which beats the live board's mode-blind fallback.
-        // Unrounded — the views show it as mm:ss, like the in-game clock.
-        rec.durationMinutes = played;
+        // The displayed match length is what the game's own history/replay
+        // list shows: the summed round time, `round_start` → `round_end` of
+        // every round, setup lock INCLUDED (checked against five ranked games on
+        // 2026-11-02: the replay time exceeds the play windows by exactly each
+        // round's setup — ~40 s per round, 47 s on Escort/Hybrid). Hero select
+        // before round 1 and the post-match scoreboard stay out. The per-10
+        // divisor is `playedMinutes`, which cuts the setup off.
+        // Unrounded — the views show it as mm:ss.
+        rec.durationMinutes = rounds.reduce((ms, r) => ms + Math.max(0, r.endedAt - r.startedAt), 0) / 60000;
       }
     }
 
@@ -458,6 +507,8 @@ export class MatchAggregator {
           player.isLocal || isLocal(player.battleTag, rec.battleTag) ? { ...player, isLocal: true } : player,
         );
     }
+
+    if (this.gepVersion) (rec.gepExtras ??= {}).gepVersion = this.gepVersion;
 
     if (!rec.matchId) {
       // No pseudo_match_id seen — synthesize so dedupe still has a key this session.
@@ -526,6 +577,21 @@ export const LATE_ROUND_START_MS = 5_000;
 /** True when a roster row shows any fight already scored. */
 function hasFought(p: RosterPlayer): boolean {
   return (p.kills ?? 0) > 0 || (p.deaths ?? 0) > 0 || (p.damage ?? 0) > 0;
+}
+
+/** Upper bound on tracked respawn/revive timestamps per match — a runaway feed can't bloat the history file. */
+const MAX_TRACKED_EVENTS = 500;
+
+/**
+ * `version_info` arrives as a bare string or as `{ gep_internal: { version_info } }`
+ * / `{ version }`-style objects depending on the GEP release; take the string form.
+ */
+function versionOf(value: unknown): string | undefined {
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    return asString(o.version_info ?? o.version);
+  }
+  return asString(value);
 }
 
 /** How old a checkpoint may be and still be the match running now — longer than any real match. */

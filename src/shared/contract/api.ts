@@ -10,6 +10,7 @@ import type { StalenessSettings } from '../../core/staleness';
 import type { ReadinessSettings } from '../../core/readiness';
 import type { SessionSettings } from '../../core/sessionSettings';
 import type { CoachingSettings } from '../../core/coachingSettings';
+import type { SessionMode, SessionModeState } from '../../core/practice/sessionMode';
 import type { GradingSettings } from '../../core/gradingSettings';
 import type { ThresholdSuggestion } from '../../core/targets';
 import type { DashboardFilters, DashboardData, HeroDetail, MatchRow, PendingChangedPayload } from './dashboard';
@@ -27,8 +28,9 @@ import type {
 } from './inputs';
 import type {
   AccountSummary, AccountInput, GameLoggedPayload, RankAnchorInput, RankSummary,
-  RankEntryPreviewInput, RankEntryPreview,
+  RankEntryPreviewInput, RankEntryPreview, RankAdjustmentInput, RankAdjustmentResult,
 } from './accounts';
+import type { RankAdjustment } from '../../core/rank/types';
 import type {
   PlacementRunSummary, PlacementStartInput, PlacementPredictionInput, PlacementCompleteInput,
   PlacementTrackInput, PlacementOffer, PlacementDeclineInput,
@@ -142,6 +144,19 @@ export interface OwStatsApi {
    * there, entering a rank sets the anchor instead (see {@link setRankAnchor}).
    */
   rankEntryPreview(input: RankEntryPreviewInput): Promise<RankEntryPreview>;
+  /** Every stored rank adjustment (cheater compensation, manual corrections), newest first. */
+  listRankAdjustments(): Promise<RankAdjustment[]>;
+  /**
+   * Record a rank change that is not a match — cheater compensation or a manual
+   * correction. It moves the computed rank of its (account, role) like a match's
+   * ±% would when it lands after that track's anchor, but never counts as a game.
+   * Throws on an invalid input (0, out of range, unknown role).
+   */
+  addRankAdjustment(input: RankAdjustmentInput): Promise<RankAdjustmentResult>;
+  /** Remove one adjustment by id; `adjustment` is the removed record (for Undo), or null. */
+  removeRankAdjustment(id: string): Promise<RankAdjustmentResult>;
+  /** Put a removed adjustment back under its own id — the Undo behind the remove toast. */
+  restoreRankAdjustment(adjustment: RankAdjustment): Promise<RankAdjustmentResult>;
   /** Open and completed placement runs across every (account, role) track. */
   getPlacements(): Promise<PlacementRunSummary[]>;
   /** Start a placement run for an (account, role); returns the refreshed full list. */
@@ -238,6 +253,18 @@ export interface OwStatsApi {
   getSessionSettings(): Promise<SessionSettings>;
   /** Persist a new session-gap threshold; returns the persisted (clamped) value. */
   setSessionSettings(input: SessionSettings): Promise<SessionSettings>;
+  /**
+   * Switch the Stats / Training session mode (issue #342); persisted until
+   * changed. Matches recorded from now on are stamped with it. Returns the
+   * persisted state.
+   */
+  setSessionMode(mode: SessionMode): Promise<SessionModeState>;
+  /**
+   * Reclassify recorded matches as Training or Stats (a row's or a whole
+   * sitting's "Mark as training / stats"). Returns how many stored matches
+   * changed — a demo match is never in real history, so it counts 0.
+   */
+  setMatchSessionMode(input: { matchIds: string[]; mode: SessionMode }): Promise<{ updated: number }>;
   /** The currently persisted coaching (practice focus / check-in / break) settings. */
   getCoaching(): Promise<CoachingSettings>;
   /** Persist new coaching settings; returns the persisted (normalized) value. */
@@ -436,6 +463,10 @@ export const IPC_CHANNELS = {
   mostPlayedHeroes: 'hero:most-played',
   setRankAnchor: 'rank:set-anchor',
   rankEntryPreview: 'rank:entry-preview',
+  listRankAdjustments: 'rank:list-adjustments',
+  addRankAdjustment: 'rank:add-adjustment',
+  removeRankAdjustment: 'rank:remove-adjustment',
+  restoreRankAdjustment: 'rank:restore-adjustment',
   getPlacements: 'placements:list',
   startPlacementRun: 'placements:start',
   setPlacementPrediction: 'placements:set-prediction',
@@ -471,6 +502,8 @@ export const IPC_CHANNELS = {
   setReadiness: 'settings:set-readiness',
   getSessionSettings: 'settings:get-session',
   setSessionSettings: 'settings:set-session',
+  setSessionMode: 'settings:set-session-mode',
+  setMatchSessionMode: 'manual:set-match-session-mode',
   getCoaching: 'settings:get-coaching',
   setCoaching: 'settings:set-coaching',
   getGrading: 'settings:get-grading',

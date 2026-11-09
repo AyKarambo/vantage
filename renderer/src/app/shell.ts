@@ -7,7 +7,8 @@
 import { h, render } from '../dom';
 import type { AppState, ViewId, ViewParams } from '../store';
 import { sameParams } from '../backStack';
-import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, ProAccess, Role } from '../../../src/shared/contract';
+import { captureFocus } from '../focusMemory';
+import type { AppUiSettings, DashboardData, GameLoggedPayload, GepStatusPayload, LogLevel, ProAccess, Role, SessionTraining } from '../../../src/shared/contract';
 import type { BreakReminderSettings } from '../../../src/core/breakReminder';
 import { shouldAutoSwitch } from '../../../src/core/accountsManage';
 import { demoTransition } from '../../../src/core/demoPreference';
@@ -27,7 +28,7 @@ import { skeletonView } from '../components/skeleton';
 import { button } from '../components/primitives';
 import { clickableRow } from '../components/clickableRow';
 import { matchClock, pct, relTime, roleLabel, signed, streakText } from '../format';
-import { getWinrateScheme, setWinrateScheme } from '../theme';
+import { getWinrateScheme, setWinrateScheme, wrHsl } from '../theme';
 import { WINRATE_SCHEME_OPTIONS } from '../winrateScheme';
 import { getDensity, setDensity, DENSITY_OPTIONS } from '../density';
 import { initZoom, zoomIn, zoomOut, zoomReset } from '../zoom';
@@ -35,6 +36,7 @@ import { accountPlacementNote, rankParts } from '../../../src/core/rankDisplay';
 import { classifyGameType } from '../../../src/core/matchFilter';
 import { RECENT_REVIEW_WINDOW_MS } from '../../../src/core/dashboardData';
 import { maybeOfferPlacements } from './placementOffer';
+import { openRankAdjustment } from './rankAdjustment';
 import { roleStatus } from '../roleStatus';
 import { sidebarChip } from '../sidebarChip';
 import {
@@ -73,6 +75,7 @@ import { openDataLocationPrompt } from './dataLocationPrompt';
 import { openWhatsNewPrompt } from './whatsNewPrompt';
 import { changelogSince, shouldShowWhatsNew } from '../../../src/core/whatsNew';
 import { CHANGELOG } from '../generated/changelog';
+import { sessionModeToggle, setSessionMode, trainingAvailable } from '../components/sessionModeToggle';
 
 // matchDetail, playerHistory and targetDetail are parameterized views: registered
 // here (routable) but not in NAV — the sidebar keeps their parent list highlighted.
@@ -705,6 +708,9 @@ export class App {
     // refresh is seamless. Real navigation keeps both the animation and the
     // per-route scroll memory.
     const priorScroll = this.contentHost.scrollTop;
+    // Same idea for keyboard focus (#339): flipping a Settings toggle refreshes
+    // the snapshot and rebuilds the view, which used to drop focus to <body>.
+    const focus = navigated ? null : captureFocus(this.contentHost);
     render(this.contentHost, this.renderView(state));
     this.lastRendered = key;
     if (navigated) {
@@ -713,6 +719,7 @@ export class App {
       const view = this.contentHost.firstElementChild as HTMLElement | null;
       if (view) view.style.animation = 'none';
       this.contentHost.scrollTop = priorScroll;
+      focus?.restore();
     }
   }
 
@@ -775,7 +782,11 @@ export class App {
     this.updateReviewBadge(pendingReviews, d?.pendingReviews ?? 0, d?.isSample ?? false);
     this.updateProBadges(d?.pro);
 
-    render(this.sessionBody, this.sessionSummary(state));
+    render(this.sessionBody,
+      this.sessionSummary(state),
+      // Stats ↔ Training (issue #342) — outside the summary's click-through so
+      // flipping the mode never also navigates to Matches.
+      d ? sessionModeToggle(this.context(), { compact: true }) : null);
   }
 
   /**
@@ -1082,8 +1093,11 @@ export class App {
       // gap threshold is a real, user-configurable number nothing here used
       // to surface.
       return h('div', { class: 'u-muted', style: { fontSize: '11.5px', marginTop: '4px', lineHeight: '1.4' }, title: tip },
-        `No games in the last ${gapText} — your next game starts a new sitting`);
+        state.data?.sessionMode.mode === 'training'
+          ? `No games in the last ${gapText} — your next game starts a training sitting`
+          : `No games in the last ${gapText} — your next game starts a new sitting`);
     }
+    if (s.training) return this.trainingSessionSummary(s.training, s.date, tip);
     const topMap = s.topMaps[0];
     return h('div', {
       style: { marginTop: '5px', cursor: 'pointer' },
@@ -1100,6 +1114,41 @@ export class App {
       h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '3px' } },
         h('span', { class: `mono ${s.streak.type === 'W' ? 'is-win' : s.streak.type === 'L' ? 'is-loss' : 'u-dim'}`, style: { fontSize: '11px' } }, streakText(s.streak)),
         topMap ? h('span', { class: 'u-dim', style: { fontSize: '11px' } }, `${topMap.key} ×${topMap.games}`) : null,
+      ),
+    );
+  }
+
+  /**
+   * The Current session card for a training sitting (issue #342): how many
+   * graded games hit every focus target, the sitting's execution and its
+   * Hit / Partial / Miss tally — in place of the W–L, which a training sitting
+   * isn't judged by (it still counts everywhere else).
+   */
+  private trainingSessionSummary(t: SessionTraining, date: string, tip: string): HTMLElement {
+    const ungraded = t.games - t.graded;
+    return h('div', {
+      class: 'session-training',
+      style: { marginTop: '5px', cursor: 'pointer' },
+      title: `${tip}
+A game counts as hit when every target you worked on in it was a Hit. Execution: Hit 1 · Partial ½ · Miss 0.`,
+      ...clickableRow(() => store.setView('matches', { day: date })),
+    },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } },
+        h('span', { class: 'mono', style: { fontSize: '17px', fontWeight: '600' } }, t.graded ? `${t.hitGames}/${t.graded}` : '—'),
+        h('span', { class: 'u-muted', style: { fontSize: '11px' } }, t.graded ? 'targets hit' : 'nothing graded yet'),
+        t.score != null
+          ? h('span', { class: 'mono', style: { fontSize: '11px', color: wrHsl(t.score) } }, `· ${pct(t.score)}`)
+          : null,
+      ),
+      t.score != null
+        ? h('span', { class: 'exec-bar session-training-bar' },
+            h('span', { class: 'exec-bar-fill', style: { width: `${Math.round(t.score * 100)}%`, background: wrHsl(t.score) } }))
+        : null,
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '3px', flexWrap: 'wrap' } },
+        t.attempts
+          ? h('span', { class: 'mono u-dim', style: { fontSize: '10.5px', whiteSpace: 'nowrap' } }, `${t.hits} hit · ${t.partials} partial · ${t.misses} miss`)
+          : null,
+        ungraded ? h('span', { style: { fontSize: '11px', color: 'var(--accent-text)' } }, `${ungraded} to grade`) : null,
       ),
     );
   }
@@ -1309,6 +1358,24 @@ export class App {
           }))),
           actions: [
             { label: 'Log match', kbd: 'Ctrl L', run: () => openLogMatch(ctx) },
+            {
+              label: 'Add cheater compensation…',
+              hint: 'rank refund after a ban',
+              run: () => {
+                const f = store.get().filters;
+                openRankAdjustment({
+                  ...(f.account !== 'all' ? { account: f.account } : {}),
+                  ...(f.role !== 'all' ? { role: f.role as Role } : {}),
+                });
+              },
+            },
+            // Stats ↔ Training (issue #342): the palette names the mode it switches TO.
+            // Training is Vantage Pro (#337).
+            ...(!ctx.data.pro.full ? [] : [ctx.data.sessionMode.mode === 'training'
+              ? { label: 'Session mode: Stats', hint: 'Matches leads with win/loss again', run: () => setSessionMode(ctx, 'stats') }
+              : trainingAvailable(ctx)
+                ? { label: 'Session mode: Training', hint: 'judge this sitting by your targets, not the result', run: () => setSessionMode(ctx, 'training') }
+                : { label: 'Session mode: Training — pick a target first', hint: 'opens Targets', run: () => ctx.navigate('targets') }]),
             { label: 'Keyboard shortcuts', kbd: '?', run: () => this.openCheatsheet() },
             { label: 'Replay the intro tour', hint: 'also on the FAQ screen', run: () => openOnboarding() },
             { label: 'Report a bug', hint: 'on the About screen', run: () => store.setView('about') },

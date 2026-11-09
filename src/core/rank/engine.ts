@@ -100,6 +100,17 @@ export function applyMatch(state: RankState, match: RankMatchInput): RankState {
 }
 
 /**
+ * Apply one rank adjustment (cheater compensation, a manual correction) exactly
+ * the way a match with that ±% would move the ladder: a positive amount behaves
+ * like a win (pays down a protection buffer, promotes across divisions), a
+ * negative one like a loss (protection, then demotion). It is still not a match
+ * — no caller ever counts it as one.
+ */
+export function applyAdjustment(state: RankState, deltaPct: number): RankState {
+  return applyMatch(state, { result: deltaPct < 0 ? 'Loss' : 'Win', srDelta: deltaPct });
+}
+
+/**
  * Start a fresh live state from an anchor position. A negative `progressPct` is
  * a rank-protection carry (the buffer Overwatch shows as e.g. "-19%") — it is kept as
  * the true negative value and marks the state `protected`, so the next match's

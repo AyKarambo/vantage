@@ -243,6 +243,7 @@ function statPresence(dir: string): DataArtifactPresence {
     manualLog: has('manual.json'),
     outbox: has('outbox.json'),
     rankAnchors: has('rankAnchors.json'),
+    rankAdjustments: has('rankAdjustments.json'),
     placements: has('placements.json'),
     checkIns: has('checkIns.json'),
     friends: has('friends.json'),

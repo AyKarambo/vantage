@@ -26,16 +26,56 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   is deleted: your targets stay visible read-only and come back when you renew.
 - **Settings → Vantage Pro** shows your plan, the trial or renewal date, and a **Re-check** button.
 
+- **Training mode.** For sittings about drilling a target rather than winning, switch the session from
+  **Stats** to **Training** (sidebar, Matches header or Ctrl K). Matches you play while it's on show how well
+  you hit your targets — Hit / Partial / Missed per target, an execution score and a "Grade targets" shortcut —
+  with the result hidden until you click it. The sidebar's Current session card shows how many games hit your
+  targets instead of the win–loss. Wins and losses still count for rank, readiness and Trends, Stats
+  mode looks exactly as before, and any match or sitting can be re-marked from its ⋯ menu.
+
+- **Training mode is now a real view switch.** On Matches, **Training** shows only your training games and
+  grades each by ✓ Hit, ◐ Partial or ✕ Miss in the win / draw / loss colours instead of a number; **Stats**
+  brings every game back with its win/loss. The optional Performance field is now a Loss → Draw → Win meter
+  (the 0–100 sits in its tooltip).
+
+- **Cheater compensation.** When Overwatch bans a cheater from one of your matches and gives back the rank
+  you lost, add it in **Settings → Accounts → Manage ranks… → Cheater refund** (or **Add cheater
+  compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never
+  counts as a game. Recent refunds are listed there so you can remove a typo, and the Trends rank chart marks them.
+
+### Changed
+
+- **Log match works from the keyboard.** `W`/`L`/`D` picks the result and jumps to the map; type a few
+  letters and `Tab` takes the top map and moves on. Role, heroes, flags and grades are one Tab stop each,
+  with the arrow keys inside, and `Enter` in the hero search picks the top hero. A whole match can be
+  logged as `W`, map, `Tab`, `Enter`.
+- **Log match and Edit match no longer close by accident.** Clicking beside the dialog does nothing.
+  ✕, Cancel and `Esc` close it straight away when it's empty, and ask "Discard this match?" once you've
+  entered something.
+
 ### Fixed
 
-- **Match time is closer to the in-game clock.** Every round now counts from the moment the doors open,
-  the first round included. Before, about 40 seconds of setup in the first round were counted as play,
-  which made match length and per-10 stats slightly off on Push, Control, Flashpoint and Clash.
+- **Match length matches the game's history list.** The duration is the summed round time with each
+  round's setup included, exactly what Overwatch shows under History → Replays. Per-10 stats still divide
+  by the played time, with every round's setup (about 40 s, 47 s on Escort/Hybrid) taken out.
 - **Duration shows minutes and seconds.** Match pages, the Matches list and Review show `mm:ss` instead of
   whole minutes.
 - **A match Vantage joined late is marked.** If the app or the game feed only caught a match after it had
   started, the match page now says its time is short and links straight to **Played time** in **Edit
   match**, so you can type in the time from the scoreboard.
+- **Settings stays put when you change something.** Flipping a toggle or picking an option no longer
+  jumps the page to a different spot, and keyboard focus stays on the control you just used.
+- **More maps and the newest heroes are recognised.** Redwood Dam, the Stadium maps and the maps the game
+  now reports under new ids show up by name instead of as a number, and the newest heroes (Vendetta, Sierra,
+  Shion, D.Mon and others) are named even when the game feed hasn't caught up yet. Vantage also quietly
+  keeps a few extra signals from the feed (game mode, respawns, game exit) for future stats — nothing in
+  the app uses them yet.
+
+### Changed
+
+- **Settings is easier to scan.** The longer explanations moved behind a small ⓘ next to each setting
+  (hover, focus or click it), so each row is just the label, the control and at most one short line.
+  The tooltips themselves are larger and easier to read, and no longer get cut off at the window's edge.
 
 ## 0.42.0 — 27 October 2026
 

@@ -289,10 +289,11 @@ describe('MatchAggregator round timing (played time)', () => {
     // Each round counts from its observed doors: 4:20 + 4:45.
     const played = ((5 * MIN - 40_000) + (5 * MIN + 3 - 15_000)) / MIN;
     expect(rec.playedMinutes).toBeCloseTo(played, 9);
-    // The displayed duration is the match clock — hero select, every round's
-    // setup until the doors open and the scoreboard tail excluded: 9:05,
-    // unrounded, where the wall clock would read ~11:09.
-    expect(rec.durationMinutes).toBeCloseTo(played, 9);
+    // The displayed duration is the summed round time like the game's own
+    // history list — setup lock included, hero select and the scoreboard tail
+    // excluded: 10:00, unrounded, where the wall clock would read ~11:09.
+    expect(rec.durationMinutes).toBeCloseTo((10 * MIN + 3) / MIN, 9);
+    expect(rec.durationMinutes!).toBeGreaterThan(rec.playedMinutes!);
     expect(rec.joinedLate).toBeUndefined();
     // The single hero's minutes are the played minutes (its segment ran from
     // match start to match end, clipped to the play windows).
@@ -389,7 +390,7 @@ describe('MatchAggregator round timing (played time)', () => {
     // The hero minutes sum to the match's played minutes.
     expect(ph.Tracer.minutes! + ph.Genji.minutes!).toBeCloseTo(rec.playedMinutes!, 9);
     expect(rec.playedMinutes).toBeCloseTo((328_003 - windowStart) / MIN, 9);
-    expect(rec.durationMinutes).toBeCloseTo(rec.playedMinutes!, 9); // the clock from the doors (the wall clock was 6.13)
+    expect(rec.durationMinutes).toBeCloseTo((328_003 - 28_000) / MIN, 9); // round time incl. setup (the wall clock was 6.13)
   });
 
   it('a swap while a round is still open clips against the open round too (setup offset applied)', () => {
@@ -517,7 +518,7 @@ describe('MatchAggregator round timing (played time)', () => {
     expect(rec!.rounds).toEqual([{ startedAt: SIM_TIMING.roundStartMs, endedAt: SIM_TIMING.roundEndMs }]);
     expect(rec!.playedMinutes).toBeCloseTo((roundMs - ROUND_SETUP_SECONDS.Hybrid.first * 1000) / MIN, 9);
     expect(rec!.perHero![0].minutes).toBeCloseTo(rec!.playedMinutes!, 9);
-    expect(rec!.durationMinutes).toBeCloseTo(rec!.playedMinutes!, 9); // round time from the doors, not the wall clock
+    expect(rec!.durationMinutes).toBeCloseTo(roundMs / MIN, 9); // round time incl. setup, not the wall clock
     expect(rec!.outcome).toBe('Victory');
     // The bare message list keeps match_end last (the roster-retention test slices it off).
     const messages = buildCompetitiveMatch({ battleTag: 'Karambo#21234', map: "King's Row" }, 'sim-rt');
@@ -825,5 +826,50 @@ describe('MatchAggregator.clearPartyCount (review fix)', () => {
     agg.handle({ kind: 'info', feature: 'match_info', key: 'match_outcome', value: 'victory' });
     const rec = agg.handle({ kind: 'event', feature: 'match_info', key: 'match_end', value: null });
     expect(rec?.groupSize).toBeUndefined();
+  });
+});
+
+describe('MatchAggregator — tracked-but-unevaluated GEP signals (gepExtras)', () => {
+  it('stores game_mode, objective_kills, respawns, revives, game_exit and the GEP version', () => {
+    let clock = 1_000_000;
+    const agg = new MatchAggregator(() => (clock += 1_000));
+    agg.handle(info('gep_internal', 'version_info', '317.3.1'));
+    agg.handle(event('match_start'));
+    agg.handle(info('game_info', 'game_mode', '258'));
+    agg.handle(info('kill', 'objective_kills', '2'));
+    agg.handle(event('respawn', null));
+    agg.handle(event('respawn', null));
+    agg.handle(event('revive', null));
+    agg.handle(event('game_exit', ''));
+    agg.handle(info('match_info', 'match_outcome', 'victory'));
+    const rec = agg.handle(event('match_end', null));
+    expect(rec?.gepExtras).toMatchObject({ gameMode: '258', objectiveKills: 2, gepVersion: '317.3.1' });
+    expect(rec?.gepExtras?.respawns).toHaveLength(2);
+    expect(rec?.gepExtras?.revives).toHaveLength(1);
+    expect(rec?.gepExtras?.gameExitAt).toBeTypeOf('number');
+    expect(matchToGame(rec!, {})!.gepExtras).toEqual(rec!.gepExtras);
+  });
+
+  it('leaves gepExtras absent when none arrived, and does not leak into the next match', () => {
+    const agg = new MatchAggregator(() => 1_000_000);
+    agg.handle(event('match_start'));
+    agg.handle(event('respawn', null));
+    agg.handle(info('match_info', 'match_outcome', 'defeat'));
+    agg.handle(event('match_end', null));
+    agg.handle(event('match_start'));
+    agg.handle(info('match_info', 'match_outcome', 'victory'));
+    const second = agg.handle(event('match_end', null));
+    expect(second?.gepExtras).toBeUndefined();
+  });
+
+  it('does not disturb map or outcome handling', () => {
+    const agg = new MatchAggregator(() => 1_000_000);
+    agg.handle(event('match_start'));
+    agg.handle(event('revive', null));
+    agg.handle(info('match_info', 'map', '4704'));
+    agg.handle(info('match_info', 'match_outcome', 'victory'));
+    const rec = agg.handle(event('match_end', null));
+    expect(rec?.mapName).toBe('Redwood Dam');
+    expect(rec?.outcome).toBe('victory');
   });
 });

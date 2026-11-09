@@ -166,8 +166,10 @@ function manualData(provider: DataProvider, targets: AuthoredTarget[] = provider
     readiness: provider.getReadiness(),
     sessionSettings: provider.getSessionSettings(),
     coaching: provider.getCoaching(),
+    sessionMode: provider.getSessionMode?.(),
     grading: provider.getGrading(),
     rankAnchors: provider.rankAnchorMap(),
+    rankAdjustments: provider.listRankAdjustments(),
     placementRuns: provider.placementRuns(),
     checkIns: provider.getCheckIns(),
   };

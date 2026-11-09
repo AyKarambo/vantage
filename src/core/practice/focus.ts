@@ -3,6 +3,7 @@ import type { SessionCheckIn } from '../checkIn';
 import type { CoachingSettings, FocusStickiness } from '../coachingSettings';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../targets/notionBookkeeping';
 import { matchInTargetScope, type TargetScope } from '../targets/scope';
+import type { SessionMode } from './sessionMode';
 import { checkInForSitting, PRACTICE_SITTING_GAP_MINUTES, sittingsOf } from './sittings';
 
 /**
@@ -35,14 +36,17 @@ export function hasFocusChoice(review: MatchReview | undefined): boolean {
 
 /**
  * Whether Mental and Review lead with practice (target execution) instead of
- * win/loss: `on`/`off` force it; `auto` follows whether any SELF-RATED target
- * is active and not archived — measured targets grade every game by
- * themselves, so they give the player nothing to choose or practise here.
+ * win/loss: a Training session (issue #342) always does, as if the setting
+ * were `on`; otherwise `on`/`off` force it and `auto` follows whether any
+ * SELF-RATED target is active and not archived — measured targets grade every
+ * game by themselves, so they give the player nothing to choose or practise here.
  */
 export function practiceFocusOn(
   settings: Pick<CoachingSettings, 'practiceFocus'>,
   targets: ReadonlyArray<{ isActive: boolean; archivedAt?: number; mode?: string }>,
+  sessionMode: SessionMode = 'stats',
 ): boolean {
+  if (sessionMode === 'training') return true;
   if (settings.practiceFocus === 'on') return true;
   if (settings.practiceFocus === 'off') return false;
   return targets.some((t) => t.isActive && !t.archivedAt && t.mode !== 'measured');
@@ -85,6 +89,30 @@ export function focusPreselector(
   gapMinutes = PRACTICE_SITTING_GAP_MINUTES,
   scopes?: ReadonlyMap<string, TargetScope>,
 ): (game: GameRecord) => string[] {
+  const detailed = focusPreselectorDetailed(all, stickiness, checkIns, selectable, gapMinutes, scopes);
+  return (game) => detailed(game).ids;
+}
+
+/** A pre-selection: the targets to pick, or `nothing` when the carried-over choice was a deliberate "Nothing specific". */
+export interface FocusPreselection {
+  ids: string[];
+  nothing: boolean;
+}
+
+/**
+ * {@link focusPreselector} that also says whether the carried-over choice was
+ * "Nothing specific" — an empty `ids` alone can't tell that apart from "no
+ * choice to carry over", so the chooser would show nothing selected (or
+ * auto-pick a lone target) and the "keep this choice" setting seemed ignored.
+ */
+export function focusPreselectorDetailed(
+  all: readonly GameRecord[],
+  stickiness: FocusStickiness,
+  checkIns: readonly SessionCheckIn[],
+  selectable: ReadonlySet<string>,
+  gapMinutes = PRACTICE_SITTING_GAP_MINUTES,
+  scopes?: ReadonlyMap<string, TargetScope>,
+): (game: GameRecord) => FocusPreselection {
   const narrow = (ids: readonly string[]): string[] => ids.filter((id) => selectable.has(id));
   const sittingOf = new Map<string, GameRecord[]>();
   for (const s of sittingsOf(all, gapMinutes)) for (const g of s) sittingOf.set(g.matchId, s);
@@ -106,18 +134,24 @@ export function focusPreselector(
     const offered = [...selectable].filter((id) => inScope(game, id));
     return candidates.find((c) => offered.every((id) => inScope(c, id))) ?? candidates[0];
   };
+  // A saved choice with no targets at all is the deliberate "Nothing specific";
+  // one whose targets merely left the selectable set is not.
+  const carried = (g: GameRecord): FocusPreselection => {
+    const raw = focusOf(g.review);
+    return { ids: narrow(raw), nothing: raw.length === 0 };
+  };
   return (game) => {
     const sitting = sittingOf.get(game.matchId) ?? [game];
     if (stickiness === 'sitting') {
       const nearest = pick(sitting
         .filter((g) => g.matchId !== game.matchId && hasFocusChoice(g.review))
         .sort((a, b) => Math.abs(a.timestamp - game.timestamp) - Math.abs(b.timestamp - game.timestamp)), game);
-      if (nearest) return narrow(focusOf(nearest.review));
+      if (nearest) return carried(nearest);
     } else if (stickiness === 'sticky') {
       const latest = pick(chosen.filter((g) => g.matchId !== game.matchId), game);
-      if (latest) return narrow(focusOf(latest.review));
+      if (latest) return carried(latest);
     }
-    return narrow(checkInForSitting(sitting[0], sorted, gapMinutes)?.focusTargetIds ?? []);
+    return { ids: narrow(checkInForSitting(sitting[0], sorted, gapMinutes)?.focusTargetIds ?? []), nothing: false };
   };
 }
 

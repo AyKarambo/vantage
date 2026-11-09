@@ -373,6 +373,8 @@ function main(): void {
     getConfig: () => config,
     notify: (title, body) => tray.notify(title, body),
     log: log.adapter('pipeline'),
+    // Read lazily: the entitlement service is built further down, before any match can arrive.
+    trainingAllowed: () => dataProvider.proAccess().full,
     // Tell the renderer which account a newly recorded competitive match landed on
     // — drives the live dashboard refresh and the F4 account auto-switch.
     onGameLogged: (payload) => events.emit('onGameLogged', payload),

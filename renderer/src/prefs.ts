@@ -82,6 +82,8 @@ interface PrefsShape {
   matchColumns: MatchColumnsPref;
   /** Matches-list grouping (S4) — calendar day (default) or gap-based sitting. */
   matchGrouping: 'day' | 'sitting';
+  /** Matches view option (issue #342): show results in training sittings, muted and secondary. Off by default. */
+  trainingShowResults: boolean;
   /** How many "most played" heroes the Log Match hero picker shortlists (default 6, clamped 3-15). */
   suggestedHeroCount: number;
   /**

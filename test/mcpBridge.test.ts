@@ -51,6 +51,7 @@ function setup(over: { demo?: boolean; games?: GameRecord[] } = {}) {
     getCoaching: () => DEFAULT_COACHING,
     getGrading: () => DEFAULT_GRADING_SETTINGS,
     rankAnchorMap: () => ({}),
+    listRankAdjustments: () => [],
     placementRuns: () => [],
     getCheckIns: () => [],
     getRanks: () => [],

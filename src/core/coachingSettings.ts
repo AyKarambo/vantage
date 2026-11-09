@@ -26,6 +26,12 @@ export interface CoachingSettings {
   breakDetection: BreakDetection;
   /** Gap that counts as a break when detection is automatic; minutes (5..60). */
   breakMinutes: number;
+  /**
+   * Training session mode (issue #342) lapses back to Stats by itself once a
+   * new sitting starts (by the Current session gap). Off by default: Training
+   * stays on until the player switches it off.
+   */
+  trainingAutoReset: boolean;
 }
 
 export const DEFAULT_COACHING: CoachingSettings = {
@@ -34,6 +40,7 @@ export const DEFAULT_COACHING: CoachingSettings = {
   focusStickiness: 'sitting',
   breakDetection: 'auto',
   breakMinutes: 15,
+  trainingAutoReset: false,
 };
 
 const clampBreakMinutes = (n: number): number => Math.max(5, Math.min(60, Math.round(n)));
@@ -60,5 +67,6 @@ export function normalizeCoachingSettings(s: Partial<CoachingSettings> | undefin
     focusStickiness: oneOf(raw.focusStickiness, ['game', 'sitting', 'sticky'], DEFAULT_COACHING.focusStickiness),
     breakDetection: oneOf(raw.breakDetection, ['auto', 'manual'], DEFAULT_COACHING.breakDetection),
     breakMinutes: minutes,
+    trainingAutoReset: raw.trainingAutoReset === true,
   };
 }

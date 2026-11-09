@@ -16,7 +16,7 @@ export { button, confirmButton, segmented, select, toggleRow, toggleSwitch } fro
 export type { BtnOpts, ConfirmBtnOpts, SegOption, SelectOption, ToggleRowOpts, ToggleSwitchOpts } from './controls';
 
 // Small coloured labels
-export { pill, RESULT_STATE, RESULT_LETTER, resultPill, badge, chip } from './labels';
+export { pill, RESULT_STATE, RESULT_LETTER, resultPill, badge, chip, fieldLabel } from './labels';
 export type { PillState } from './labels';
 
 // Numeric/statistical display

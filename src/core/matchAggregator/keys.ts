@@ -24,6 +24,19 @@ export const K = {
   /** `match_info.round_start` / `round_end` events — delimit the GEP rounds the played time is measured from. */
   roundStart: 'round_start',
   roundEnd: 'round_end',
+  /** `game_info.game_mode` — tracked into `gepExtras`, not evaluated. */
+  gameMode: 'game_mode',
+  /** `gep_internal.version_info` — the GEP package version. */
+  gepInternal: 'gep_internal',
+  versionInfo: 'version_info',
+  /** `kill.objective_kills` info-update. */
+  killFeature: 'kill',
+  objectiveKills: 'objective_kills',
+  /** `match_info` events, tracked into `gepExtras`, not evaluated. */
+  respawn: 'respawn',
+  revive: 'revive',
+  /** GEP 312+: the player quit the game / to desktop. */
+  gameExit: 'game_exit',
   eliminations: 'eliminations',
   deaths: 'deaths',
   assists: 'assists',

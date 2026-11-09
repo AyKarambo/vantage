@@ -8,10 +8,13 @@
 import { applyStyle, h, render } from '../dom';
 import type { MatchDetail, MatchDetailHeroStat, MatchMental, MatchRow, PlacementRunSummary, PlayerEncounter, RankEntryPreview, RankSummary, Role, TargetGrade, TargetSummary, UsualPer10 } from '../../../src/shared/contract';
 import { bridge } from '../bridge';
-import { dateLong, fmt, fmt1, formatPlayedTime, isToday, parsePlayedTime, prettyDay, rankLabel, relTime, roleLabel, signed, time, toDatetimeLocal, RELATION_LABEL } from '../format';
+import { executionScore } from '../../../src/core/practice/sessionMode';
+import { dateLong, fmt, fmt1, formatPlayedTime, pct, isToday, parsePlayedTime, prettyDay, rankLabel, relTime, roleLabel, signed, time, toDatetimeLocal, RELATION_LABEL } from '../format';
 import { rankParts } from '../../../src/core/rankDisplay';
 import { badge, button, card, confirmButton, pill, RESULT_LETTER, RESULT_STATE, segmented, statBar, statBox } from '../components/primitives';
 import { openModal } from '../components/overlay';
+import { discardGuard } from '../components/discardGuard';
+import { enableRovingGroups } from '../components/rovingFocus';
 import { maybeConfirmPlacementRank } from '../app/placementComplete';
 import { openManageRanks } from './settings/accounts';
 import { srEntryMode } from '../../../src/core/placements';
@@ -190,6 +193,7 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
   const showMode = classifyGameType(d.gameType) !== 'competitive';
   const meta = h('div', { class: 'detail-meta' },
     pill(d.mapType, 'accent'),
+    d.sessionMode === 'training' ? trainingTag() : null,
     showMode ? h('span', null, d.gameType) : null,
     showMode ? h('span', null, '·') : null,
     h('span', null, roleLabel(d.role), ' · ', accountLink(d.account, ctx)),
@@ -268,6 +272,13 @@ function header(d: MatchDetail, ctx: ViewContext): HTMLElement {
 }
 
 /** The account name as a click-through to filter the whole app to it (M4) — mirrors the map/hero links right beside it. */
+/** The subtle Training tag (issue #342) — same look as the Matches row's. */
+function trainingTag(): HTMLElement {
+  const p = pill('Training', undefined, { title: 'Played in a Training session — judged by target execution, not the result' });
+  p.classList.add('pill--training');
+  return p;
+}
+
 function accountLink(account: string, ctx: ViewContext): HTMLElement {
   return inlineLink(account, {
     title: `Filter to ${account}`,
@@ -566,12 +577,23 @@ function gradesSection(d: MatchDetail, ctx: ViewContext): HTMLElement | null {
         color: wrHsl(d.performance / 100),
       })
     : null;
+  // A training match (issue #342) is read by how well its targets were
+  // executed — Hit 1 / Partial ½ / Miss 0 over its self-rated grades — not by
+  // the result, so that score leads, above the self-rating.
+  const selfIds = new Set(ctx.data.targets.filter((t) => t.mode !== 'measured').map((t) => t.id));
+  const execution = d.sessionMode === 'training'
+    ? executionScore(Object.entries(selfGrades).filter(([id]) => selfIds.has(id)).map(([, g]) => g))
+    : null;
+  const exec = execution != null
+    ? statBar({ label: 'Execution', frac: execution, valueText: pct(execution), color: wrHsl(execution) })
+    : null;
   const flags = mentalFlags(d);
-  if (!rows.length && !perf && !flags) return null;
+  if (!rows.length && !perf && !flags && !exec) return null;
   return card(
     { title: 'Grades', sub: 'measured targets auto-graded from stats · self targets your manual read (✎ Edit match)' },
     h('div', { class: 'stack', style: { gap: '12px' } },
       rows.length ? h('div', { class: 'stack', style: { gap: '11px' } }, ...rows) : null,
+      exec,
       perf,
       flags,
     ),
@@ -1066,17 +1088,20 @@ function buildMatchEditor(
     // same treatment as the log card's Save row — root carries no padding of
     // its own now (L5, dialogHeader), so this sits flush without a negative-
     // margin hack to cancel it.
+    // #340: Cancel / ✕ / Escape go through the discard guard (bound below).
+    let requestClose = (): void => close();
+    const footerContent = h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flex: '1' } },
+      saveBtn,
+      button('Cancel', { variant: 'ghost', onClick: () => requestClose() }),
+      h('span', { style: { flex: '1' } }),
+      d.review ? button('Clear grades', { variant: 'ghost', onClick: clear }) : null,
+    );
     const actions = h('div', {
       style: {
         display: 'flex', gap: '10px', alignItems: 'center', padding: '14px 18px',
         borderTop: '1px solid var(--border)', position: 'sticky', bottom: '0', background: 'var(--card)',
       },
-    },
-      saveBtn,
-      button('Cancel', { variant: 'ghost', onClick: close }),
-      h('span', { style: { flex: '1' } }),
-      d.review ? button('Clear grades', { variant: 'ghost', onClick: clear }) : null,
-    );
+    }, footerContent);
 
     // tabindex -1: focusable via script (for the mount-time focus below) but not
     // part of the natural Tab order — mirrors the log card's keyboard handling.
@@ -1087,14 +1112,7 @@ function buildMatchEditor(
     // Header and footer sit OUTSIDE the padded content (L5, matching the log
     // card's own form structure) rather than the old single stack-with-padding
     // root a negative-margin hack had to cancel just for the footer.
-    const root = h('div', { tabindex: '-1', style: { outline: 'none' } },
-      dialogHeader({
-        title: 'Edit match',
-        extra: [h('span', { class: 'u-muted', style: { fontSize: '12px' } }, `${d.map} · ${roleLabel(d.role)}`)],
-        badge: timeBadgeHost,
-        onClose: close,
-      }),
-      h('div', { style: { padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' } },
+    const body = h('div', { style: { padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' } },
         // Two columns mirroring the log card: match facts + Skill rating on the
         // left, the manual self-report (Performance / Comms / Flags / Targets) on
         // the right. Collapses to one column on a narrow viewport (shared .log-grid).
@@ -1117,9 +1135,20 @@ function buildMatchEditor(
               )),
           ),
         ),
-      ),
+      );
+    const root = h('div', { tabindex: '-1', style: { outline: 'none' } },
+      dialogHeader({
+        title: 'Edit match',
+        extra: [h('span', { class: 'u-muted', style: { fontSize: '12px' } }, `${d.map} · ${roleLabel(d.role)}`)],
+        badge: timeBadgeHost,
+        onClose: () => requestClose(),
+      }),
+      body,
       actions,
     );
+    const guard = discardGuard({ root, body, footerContent, close, noun: 'your changes' });
+    actions.append(guard.confirmEl);
+    requestClose = guard.request;
 
     // W/L/D drive the result chooser (every match is editable now) — the same
     // shared binding as the log card. Enter/Ctrl+Enter save (L5, bindSaveKeys
@@ -1128,12 +1157,15 @@ function buildMatchEditor(
     // Review's own keyboard grading model). openModal appends the panel after
     // build returns, so defer the focus to the next frame once it's actually
     // in the DOM.
-    bindResultKeys(root, resultRow);
+    const mapInput = mapField.querySelector('input');
+    bindResultKeys(root, resultRow, () => mapInput?.focus());
     bindSaveKeys(root, { save });
     bindTargetGradeKeys(root, rows);
-    requestAnimationFrame(() => root.focus());
+    enableRovingGroups(root);
+    requestAnimationFrame(() => (resultRow.querySelector<HTMLElement>('button.is-active') ?? root).focus());
     return root;
-  }, { panelClass: 'modal-card--wide' });
+    // #340: only ✕ / Cancel / Escape (via the discard guard) or Save close it.
+  }, { panelClass: 'modal-card--wide', dismissOnBackdrop: false, dismissOnEscape: false });
 }
 
 // --- player history -------------------------------------------------------------

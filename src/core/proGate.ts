@@ -24,6 +24,9 @@ export function gateDashboard(full: DashboardData, empty: DashboardData, access:
     // The verdict is withheld; the main-account pick (free — Settings › Accounts) is kept.
     readiness: { ...empty.readiness, mainAccount: full.readiness.mainAccount },
     practice: empty.practice,
+    // Training mode (#342) judges a sitting by target execution — Pro too.
+    sessionMode: { ...full.sessionMode, mode: 'stats' },
+    session: full.session ? withoutKey(full.session, 'training') : full.session,
     targets: keepTargets ? full.targets : empty.targets,
     focusItems: full.focusItems.map((e) => withoutKey(e, 'progress')),
     matches: full.matches.map(stripMatchRow),
@@ -43,7 +46,7 @@ export function gateDashboard(full: DashboardData, empty: DashboardData, access:
 
 /** A match row without the target/practice layer. */
 export function stripMatchRow(row: MatchRow): MatchRow {
-  const { measuredGrades: _m, targetGrades: _t, suggestedFocus: _s, autoBreak: _b, ...rest } = row;
+  const { measuredGrades: _m, targetGrades: _t, suggestedFocus: _s, autoBreak: _b, sessionMode: _sm, ...rest } = row;
   return rest;
 }
 

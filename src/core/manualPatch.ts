@@ -6,6 +6,7 @@ export type ManualPatch =
   { srDelta?: number | null; performance?: number | null; factsEditedAt?: number | null;
     playedMinutesOverride?: number | null;
     party?: GameRecord['party'] | null;
+    sessionMode?: GameRecord['sessionMode'] | null;
     rankAtStart?: GameRecord['rankAtStart'] | null };
 
 /** Apply a {@link ManualPatch} to a record in place. */

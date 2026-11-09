@@ -69,4 +69,12 @@ describe('gateDashboard', () => {
     expect(d.readiness).toEqual({ ...empty.readiness, mainAccount: full.readiness.mainAccount });
     expect(d.practice).toEqual(empty.practice);
   });
+
+  it('free: Training mode reads as Stats, with no training stamps or session read', () => {
+    const training = { ...full, sessionMode: { ...full.sessionMode, mode: 'training' as const }, matches: full.matches.map((m) => ({ ...m, sessionMode: 'training' as const })) };
+    const d = gateDashboard(training, empty, free);
+    expect(d.sessionMode.mode).toBe('stats');
+    expect(d.matches.every((m) => m.sessionMode === undefined)).toBe(true);
+    expect(d.session?.training).toBeUndefined();
+  });
 });
