@@ -108,6 +108,14 @@ describe('resolveHero (hero id fallback)', () => {
     expect(resolveHero(undefined, null)).toBeUndefined();
   });
 
+  it('resolves the documented ids of the newest heroes when GEP reports them as UNKNOWN', () => {
+    expect(resolveHero('UNKNOWN', 1138)).toBe('Vendetta');
+    expect(resolveHero('UNKNOWN', '1234')).toBe('Sierra');
+    expect(resolveHero('UNKNOWN', 1324)).toBe('Shion');
+    expect(resolveHero('UNKNOWN', 1346)).toBe('D.Mon');
+    expect(resolveHero('DMON', undefined)).toBe('D.Mon');
+  });
+
   it('maps every id to a hero in the canonical list', () => {
     for (const name of Object.values(HERO_ID_TO_NAME)) expect(ALL_HEROES).toContain(name);
   });
