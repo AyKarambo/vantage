@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  winLoss, byMap, byRole, byHero, byGroupSize, byDuration, scoreSplits, focusBy, trend, heroStats, heroDetail, weightedWinLoss, rollingWinrate, windowCompare, type GameRecord,
+  winLoss, byMap, byRole, byHero, byGroupSize, byPartyMember, byDuration, scoreSplits, focusBy, trend, heroStats, heroDetail, weightedWinLoss, rollingWinrate, windowCompare, type GameRecord,
 } from '../src/core/analytics';
 import { generateSampleGames } from '../src/core/sampleData';
 import { PLAYED_TIME_ESTIMATE, setupMinutes, type MapModeResolver } from '../src/core/playedTime';
@@ -169,6 +169,37 @@ describe('byGroupSize (H9)', () => {
     expect(g.Duo).toMatchObject({ games: 1, wins: 1 });
     expect(g.Solo).toMatchObject({ games: 1, wins: 1 });
     expect(g['Trio+']).toMatchObject({ games: 1, losses: 1 });
+  });
+});
+
+describe('byPartyMember (#355)', () => {
+  const party = (...members: string[]) => ({ members, source: 'manual' as const });
+
+  it('counts a game once for each recorded member, most games first', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', party: party('Pal#1', 'Sam#2') }),
+      game({ result: 'Loss', map: 'A', role: 'damage', party: party('Pal#1') }),
+      game({ result: 'Win', map: 'A', role: 'damage', party: party('Pal#1') }),
+      game({ result: 'Win', map: 'A', role: 'damage' }), // solo: no member to credit
+    ];
+    const rows = byPartyMember(games);
+    expect(rows.map((x) => x.key)).toEqual(['Pal#1', 'Sam#2']);
+    expect(rows[0]).toMatchObject({ games: 3, wins: 2, losses: 1 });
+    expect(rows[1]).toMatchObject({ games: 1, wins: 1 });
+  });
+
+  it('treats differently typed names as one person and keeps the first spelling', () => {
+    const games = [
+      game({ result: 'Win', map: 'A', role: 'damage', party: party('Pal#1234') }),
+      game({ result: 'Loss', map: 'A', role: 'damage', party: party('pal') }),
+    ];
+    const rows = byPartyMember(games);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ key: 'Pal#1234', games: 2 });
+  });
+
+  it('is empty when nobody was recorded', () => {
+    expect(byPartyMember([game({ result: 'Win', map: 'A', role: 'damage', groupSize: 2 })])).toEqual([]);
   });
 });
 

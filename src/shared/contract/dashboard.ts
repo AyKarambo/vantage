@@ -310,6 +310,8 @@ export interface DashboardData {
   byHero: Group[];
   /** Winrate split by queued party size — Solo / Duo / Trio+ / Unknown (H9). */
   byGroupSize: Group[];
+  /** Winrate per teammate in a recorded party, most games first (#355). */
+  byPartyMember: Group[];
   /** Winrate split by game length, mode-relative — Short / Typical / Long / Unknown (H9). */
   byDuration: Group[];
   /** Win/loss split by score margin, round-tally modes only (H9). */

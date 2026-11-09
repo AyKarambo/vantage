@@ -43,6 +43,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never
   counts as a game. Recent refunds are listed there so you can remove a typo, and the Trends rank chart marks them.
 
+- **Solo vs grouped is back on Trends, with who you queued with.** Once you have grouped games, a card compares
+  Solo, Duo and Trio+ and lists your winrate with each teammate you recorded in "Queued with". Rows with few
+  games stay dimmed until there are enough to read.
+
 ### Changed
 
 - **Log match works from the keyboard.** `W`/`L`/`D` picks the result and jumps to the map; type a few

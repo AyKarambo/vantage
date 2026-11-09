@@ -54,6 +54,7 @@ export function trends(ctx: ViewContext): HTMLElement {
       gameLengthCard(d.byDuration),
     ),
     bySeasonCard(ctx),
+    queuedWithCard(d.byGroupSize, d.byPartyMember, d.overall.winrate),
     h('div', { class: 'grid-2' },
       timeOfDayCard(d.timeOfDay, d.overall.winrate),
       sessionPositionCard(d.sessionPosition, d.overall.winrate),
@@ -290,6 +291,25 @@ function breakdown(groups: Group[], overallWinrate: number, label: (key: string)
 /** Pull `keys` out of `groups` in that fixed order (not winrate-sorted) — a story order, not a ranking. */
 function inOrder(groups: Group[], keys: string[]): Group[] {
   return keys.map((k) => groups.find((g) => g.key === k)).filter((g): g is Group => g != null);
+}
+
+/**
+ * "Do I win more solo or with a group, and with whom?" (#355) — Solo → Duo →
+ * Trio+ in the order a player reasons about it, then one row per teammate
+ * recorded in a party. Only shown once at least one grouped game exists:
+ * an all-Solo history has nothing to compare.
+ */
+function queuedWithCard(sizes: Group[], members: Group[], overallWinrate: number): HTMLElement | null {
+  const ordered = inOrder(sizes, ['Solo', 'Duo', 'Trio+']);
+  if (!ordered.some((g) => g.key !== 'Solo')) return null;
+  return card({ title: 'Solo vs grouped', sub: 'and who you queue with' },
+    breakdownOrdered(ordered, { minGames: BREAKDOWN_MIN_GAMES, marker: overallWinrate }),
+    members.length
+      ? h('div', { style: { marginTop: '12px' } },
+          h('div', { class: 'field-label' }, 'Queued with'),
+          breakdown(members.slice(0, 8), overallWinrate))
+      : null,
+  );
 }
 
 /**

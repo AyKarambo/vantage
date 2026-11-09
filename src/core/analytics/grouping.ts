@@ -4,7 +4,7 @@
  * chart. Pure and I/O-free — consumed by both main and the browser preview.
  */
 import type { GameRecord, WinLoss, Group, FocusItem, TrendGroup, Momentum } from './types';
-import { effectiveGroupSize } from '../party';
+import { effectiveGroupSize, partyKey } from '../party';
 import { heroTimeShares, parseScore, ROUND_TALLY_MODES, type MapModeResolver } from '../playedTime';
 
 // --- core aggregation -------------------------------------------------------
@@ -251,6 +251,24 @@ function groupSizeLabel(size: number): string {
 
 /** Winrate split by the party size the player queued with (H9). */
 export const byGroupSize = (g: GameRecord[], opts?: GroupOpts) => groupBy(g, (x) => groupSizeLabel(effectiveGroupSize(x)), opts);
+
+/**
+ * Winrate per teammate you recorded in a party, most games first. A game counts
+ * once for every member in it; a member is one person however their name was
+ * typed (see {@link partyKey}), labelled with the first spelling seen.
+ */
+export function byPartyMember(g: GameRecord[], opts: GroupOpts = {}): Group[] {
+  const buckets = new Map<string, { name: string; games: GameRecord[] }>();
+  for (const game of g) {
+    for (const name of game.party?.members ?? []) {
+      const key = partyKey(name);
+      (buckets.get(key) ?? buckets.set(key, { name, games: [] }).get(key)!).games.push(game);
+    }
+  }
+  return [...buckets.values()]
+    .map(({ name, games }) => ({ key: name, ...winLoss(games), ...srSum(games.map((game) => ({ game, weight: 1 })), opts.suppressed) }))
+    .sort((a, b) => b.games - a.games);
+}
 
 /** The `[lo, hi]` tercile boundaries of a sorted duration list; `[0, 0]` for an empty one. */
 function durationTerciles(sorted: number[]): [number, number] {

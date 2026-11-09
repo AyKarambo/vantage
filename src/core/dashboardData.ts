@@ -4,7 +4,7 @@
  * drive the browser preview harness. The main process only wires it to IPC.
  */
 import {
-  byAccount, byHero, byMap, byRole, byGroupSize, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
+  byAccount, byHero, byMap, byRole, byGroupSize, byPartyMember, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
   decided, type GameRecord,
@@ -314,6 +314,7 @@ export function computeDashboard(
     // Party size, game length and score-margin splits (H9) — previously
     // captured/stored but never surfaced.
     byGroupSize: byGroupSize(games, { suppressed }),
+    byPartyMember: byPartyMember(games, { suppressed }),
     byDuration: byDuration(games, mapModeOf, { suppressed }),
     scoreSplits: scoreSplits(games, mapModeOf),
     trend: rollingWinrate(trend(games, weekly ? 'week' : 'day'), weekly ? 'week' : 'day'),
