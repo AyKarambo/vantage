@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createEntitlementService } from '../src/main/entitlement/service';
-import { noneSource, simulatedSource, type EntitlementSource } from '../src/main/entitlement/source';
+import { noneSource, type EntitlementSource } from '../src/main/entitlement/source';
 import type { EntitlementRecord } from '../src/core/entitlement';
 import { generateSampleGames } from '../src/core/sampleData';
 import { dashboardRead, proPreviewRead, matchesPageRead } from '../src/main/dashboard/reads';
-import { providerHarness } from './providerFixtures';
+import { fixedSource, providerHarness } from './providerFixtures';
 
 const DAY = 86_400_000;
 const NOW = 1_000_000_000_000;
@@ -25,7 +25,7 @@ describe('EntitlementService', () => {
 
   it('the simulator drives the tier and the cache is written', async () => {
     const doc = memDoc();
-    const svc = createEntitlementService({ source: simulatedSource({ plan: 'pro', lastCheckedAt: NOW }), doc, now: () => NOW });
+    const svc = createEntitlementService({ source: fixedSource({ plan: 'pro', lastCheckedAt: NOW }), doc, now: () => NOW });
     await svc.refresh();
     expect(svc.entitlement().tier).toBe('pro');
     expect(doc.get()).toMatchObject({ plan: 'pro', everPro: true });
@@ -54,7 +54,7 @@ describe('EntitlementService', () => {
     const onChange = vi.fn();
     const onResume = vi.fn();
     const svc = createEntitlementService({
-      source: simulatedSource({ plan: 'pro', lastCheckedAt: NOW }),
+      source: fixedSource({ plan: 'pro', lastCheckedAt: NOW }),
       doc: memDoc({ plan: 'none', everPro: true, lapsedSince: NOW - 3 * DAY }),
       now: () => NOW, onChange, onResume,
     });
@@ -76,7 +76,7 @@ describe('dashboard reads under Pro gating', () => {
 
   function harness(record: EntitlementRecord | undefined) {
     const svc = record
-      ? createEntitlementService({ source: simulatedSource(record), doc: memDoc(record) })
+      ? createEntitlementService({ source: fixedSource(record), doc: memDoc(record) })
       : undefined;
     return providerHarness({ games, deps: svc ? { entitlement: svc } : {} });
   }

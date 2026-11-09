@@ -5,11 +5,12 @@ import { purchaseButtons, purchaseHint, runProAction } from '../../components/pr
 import { toast } from '../../components/toast';
 import { purchaseAvailable, tierDetail, tierLabel } from '../../proAccess';
 import type { ViewContext } from '../view';
+import { isProTier } from '../../../../src/core/entitlement';
 
 /** Settings › Vantage Pro (#337): tier status, purchase / manage buttons, and a manual entitlement re-check. */
 export function proCard(ctx: ViewContext): HTMLElement {
   const access = ctx.data.pro;
-  const paid = access.tier === 'trial' || access.tier === 'pro';
+  const paid = isProTier(access.tier);
 
   const recheck = button('Re-check', {
     variant: 'ghost',

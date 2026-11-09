@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createEntitlementService } from '../src/main/entitlement/service';
-import { simulatedSource } from '../src/main/entitlement/source';
 import { PRO_TARGET_WRITES, ProRequiredError } from '../src/main/entitlement/guard';
 import { createDispatcher, McpOpError } from '../src/main/mcp/dispatch';
 import { READ_OPS, ADDITIVE_WRITE_OPS, DESTRUCTIVE_OPS, type McpOp } from '../src/shared/mcp/ops';
 import type { EntitlementRecord } from '../src/core/entitlement';
 import type { GameRecord } from '../src/core/analytics';
 import { generateSampleGames } from '../src/core/sampleData';
-import { providerHarness } from './providerFixtures';
+import { fixedSource, providerHarness } from './providerFixtures';
 import { dashboardRead, matchDetailRead } from '../src/main/dashboard/reads';
 
 const NOW = Date.now();
@@ -17,7 +16,7 @@ const PRO: EntitlementRecord = { plan: 'pro', lastCheckedAt: NOW };
 
 function harness(record: EntitlementRecord, games: GameRecord[] = generateSampleGames(40, 3)) {
   const entitlement = createEntitlementService({
-    source: simulatedSource(record), doc: { read: () => record, write: () => {} },
+    source: fixedSource(record), doc: { read: () => record, write: () => {} },
   });
   return providerHarness({ games, deps: { entitlement } });
 }

@@ -82,12 +82,14 @@ export function resolveTier(record: EntitlementRecord | undefined, now: number):
   }
 
   // plan === 'pro'
-  if (expired || !withinGrace(r, now)) return { tier: 'lapsed' };
-  return { tier: 'pro', until: r.validUntil, graceEndsAt: (r.lastCheckedAt ?? now) + PRO_GRACE_MS };
+  const graceEndsAt = graceEnd(r);
+  if (expired || graceEndsAt === undefined || now > graceEndsAt) return { tier: 'lapsed' };
+  return { tier: 'pro', until: r.validUntil, graceEndsAt };
 }
 
-function withinGrace(r: EntitlementRecord, now: number): boolean {
-  return r.lastCheckedAt !== undefined && now - r.lastCheckedAt <= PRO_GRACE_MS;
+/** When a cached paid plan's offline grace runs out without a re-check. */
+function graceEnd(r: EntitlementRecord): number | undefined {
+  return r.plan === 'pro' && r.lastCheckedAt !== undefined ? r.lastCheckedAt + PRO_GRACE_MS : undefined;
 }
 
 export function isProTier(tier: ProTier): boolean {
@@ -131,18 +133,6 @@ export function simulatedRecord(tier: ProTier, now: number): EntitlementRecord {
 }
 
 /**
- * Dev-only `OW_PRO_SIMULATE=free|trial|pro|lapsed` → a synthetic record that
- * resolves to that tier at `now`. Anything else (or unset) → `undefined`.
- */
-export function parseProSimulation(
-  env: Record<string, string | undefined>,
-  now: number,
-): EntitlementRecord | undefined {
-  const tier = parseProTier(env.OW_PRO_SIMULATE);
-  return tier ? simulatedRecord(tier, now) : undefined;
-}
-
-/**
  * Fold a fresh source answer into the cached record, tracking the lapse window:
  * `lapsedSince` is stamped when access stops and cleared when it returns, and
  * `everPro` is sticky. Returns the next record plus, on a lapsed→pro return,
@@ -170,8 +160,7 @@ export function nextRecord(
 /** When a cached paid plan stopped granting access by itself — period end or grace end, whichever came first. */
 function expiredAt(r: EntitlementRecord): number | undefined {
   if (r.plan !== 'pro') return undefined;
-  const grace = r.lastCheckedAt !== undefined ? r.lastCheckedAt + PRO_GRACE_MS : undefined;
-  const ends = [r.validUntil, grace].filter((t): t is number => t !== undefined);
+  const ends = [r.validUntil, graceEnd(r)].filter((t): t is number => t !== undefined);
   return ends.length ? Math.min(...ends) : undefined;
 }
 
@@ -180,8 +169,7 @@ function expiredAt(r: EntitlementRecord): number | undefined {
  * end), so a running app can re-render then instead of at the next check.
  */
 export function nextTierChange(record: EntitlementRecord, now: number): number | undefined {
-  const at = [record.validUntil, record.plan === 'pro' && record.lastCheckedAt !== undefined
-    ? record.lastCheckedAt + PRO_GRACE_MS : undefined]
+  const at = [record.validUntil, graceEnd(record)]
     .filter((t): t is number => t !== undefined && t > now);
   return at.length ? Math.min(...at) : undefined;
 }
