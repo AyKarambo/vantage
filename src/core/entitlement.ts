@@ -42,8 +42,11 @@ export interface Entitlement {
   graceEndsAt?: number;
 }
 
-/** Which kind of source produced the record — the UI says "coming soon" while it is `none`. */
-export type EntitlementSourceKind = 'none' | 'simulated' | 'overwolf';
+/**
+ * Which kind of source produced the record — the UI says "coming soon" while
+ * it is `none`. `developer` = the offline developer key (`<userData>/developer.key`).
+ */
+export type EntitlementSourceKind = 'none' | 'simulated' | 'overwolf' | 'developer';
 
 /**
  * Everything the app needs to gate on, shipped in the dashboard payload.

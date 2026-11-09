@@ -49,5 +49,8 @@ export function proCard(ctx: ViewContext): HTMLElement {
     access.source === 'simulated'
       ? h('div', { class: 'hint mono', style: { marginTop: '8px' } }, 'Simulated via OW_PRO_SIMULATE (dev)')
       : null,
+    access.source === 'developer'
+      ? h('div', { class: 'hint mono', style: { marginTop: '8px' } }, 'Activated by developer key')
+      : null,
   );
 }

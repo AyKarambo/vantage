@@ -37,9 +37,9 @@ export function targetsReadOnly(access: ProAccess): boolean {
   return access.targets === 'read-only';
 }
 
-/** The purchase buttons can't work until a real source exists (the Overwolf source is pending DevRel). */
+/** The purchase buttons can't work until a real source exists (the Overwolf source is pending DevRel); a developer key has nothing to buy. */
 export function purchaseAvailable(access: ProAccess): boolean {
-  return access.source !== 'none';
+  return access.source !== 'none' && access.source !== 'developer';
 }
 
 /** Whole days left until `until`, rounded up (a trial ending in 3h still reads "1 day left"). */
