@@ -29,6 +29,8 @@ const SETTINGS_SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> 
   { key: 'diagnostics', label: 'Diagnostics' },
   { key: 'dataStorage', label: 'Data storage' },
   { key: 'import', label: 'Import' },
+  // Dev builds only — compiled out of the release bundle (renderer/src/buildFlags.d.ts).
+  ...(__DEV_TOOLS__ ? [{ key: 'developer' as const, label: 'Developer' }] : []),
 ];
 
 // Module-level (not per-render) so a same-view remount — e.g. a master-data

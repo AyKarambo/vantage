@@ -1046,8 +1046,9 @@ npm run start:dev  # always forces Dev Mode on, ignoring the Settings toggle
 Env helpers: `OW_SYNC_SIMULATE=1` replays a synthetic match through the live pipeline — with
 round events, paced at 60× real time; `OW_SYNC_SIM_SPEED=1` runs it at real speed so the measured
 played-time path is exercised like a live match; `OW_SYNC_SENSOR=gep|counterwatch` switches the
-sensor; `OW_PRO_SIMULATE=free|trial|pro|lapsed` previews a Vantage Pro tier (dev builds only —
-`npm run preview` takes `?pro=` the same way).
+sensor; `OW_PRO_SIMULATE=free|trial|pro|lapsed` starts a dev run on a Vantage Pro tier (`npm run
+preview` takes `?pro=` the same way). Dev builds and the preview also show **Settings › Developer**,
+where the tier can be switched live; the release build (`npm run release`) compiles that card out.
 
 ## Importing match history
 

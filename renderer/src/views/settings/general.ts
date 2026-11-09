@@ -14,6 +14,7 @@ import { prefs, DEFAULT_SUGGESTED_HEROES, clampSuggestedHeroCount } from '../../
 import { store, type ViewId } from '../../store';
 import type { ViewContext } from '../view';
 import { proCard } from './pro';
+import { developerCard } from './developer';
 import { accountsCard } from './accounts';
 import { appBehaviorCard } from './appBehavior';
 import { diagnosticsCard } from './diagnostics';
@@ -81,6 +82,8 @@ function quickLogBlock(ctx: ViewContext): HTMLElement {
 export function generalTab(ctx: ViewContext): HTMLElement {
   const full = ctx.data.pro.full;
   return h('div', { class: 'stack', style: { gap: '18px' } },
+    // Dev builds only: the release bundle compiles this branch (and developer.ts) out.
+    __DEV_TOOLS__ ? section(developerCard(ctx), 'developer') : null,
     section(proCard(ctx), 'pro'),
     section(accountsCard(ctx), 'accounts'),
     h('div', { class: 'grid-2' },

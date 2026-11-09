@@ -62,8 +62,12 @@ Per-machine prerequisite: **`uv`** (provisions Python 3.13 + Serena on first run
 - Dev-only env flags: `OW_SYNC_SIMULATE=1`, `OW_SYNC_SENSOR=gep|counterwatch`,
   `OW_SYNC_RECORD=1`, `OW_SYNC_REPLAY=<file>`, `OW_SYNC_SIM_SPEED=<multiplier>` (simulation
   pace; `1` replays the simulated match at real speed so the measured played-time path runs),
-  `OW_PRO_SIMULATE=free|trial|pro|lapsed` (Vantage Pro tier; ignored in packaged builds — the
-  browser preview takes `?pro=` the same way).
+  `OW_PRO_SIMULATE=free|trial|pro|lapsed` (the Vantage Pro tier a dev run starts on; ignored in
+  packaged builds — the browser preview takes `?pro=` the same way).
+- **Settings › Developer** (dev builds + preview only): switch the Pro tier live (Real/Free/Trial/Pro/
+  Lapsed). Gated by the `__DEV_TOOLS__` compile flag — `npm run release` builds the renderer with
+  `--release`, which compiles it to `false` and drops the card; main also refuses the override when
+  packaged. Put any future dev-only UI behind the same flag (`renderer/src/buildFlags.d.ts`).
 
 ## Conventions
 - **Formatting:** 2-space indent, single quotes, semicolons. Match surrounding files.

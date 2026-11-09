@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // Renderer compile-time flags (renderer/src/buildFlags.d.ts) — tests see a dev build.
+  define: { __DEV_TOOLS__: 'true' },
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],

@@ -22,6 +22,8 @@ const options = {
   sourcemap: true,
   logLevel: 'info',
   legalComments: 'none',
+  // The preview is a dev tool: Settings › Developer is always in it.
+  define: { __DEV_TOOLS__: 'true' },
 };
 
 if (watch) {

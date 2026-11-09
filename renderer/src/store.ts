@@ -38,7 +38,7 @@ export type ViewId =
 
 /** A Settings → General card the section rail can jump to and flash (W1). */
 export type SettingsSection =
-  | 'accounts' | 'quickLog' | 'coaching' | 'appBehavior' | 'appearance' | 'diagnostics' | 'dataStorage' | 'import' | 'pro';
+  | 'accounts' | 'quickLog' | 'coaching' | 'appBehavior' | 'appearance' | 'diagnostics' | 'dataStorage' | 'import' | 'pro' | 'developer';
 
 /** Parameters for parameterized views (the match detail drill-down). */
 export interface ViewParams {

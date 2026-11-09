@@ -112,6 +112,24 @@ export function proAccess(
   };
 }
 
+export const PRO_TIERS: readonly ProTier[] = ['free', 'trial', 'pro', 'lapsed'];
+
+/** A tier name from untrusted input (env var, IPC); anything else → `undefined`. */
+export function parseProTier(value: unknown): ProTier | undefined {
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return (PRO_TIERS as readonly string[]).includes(v) ? (v as ProTier) : undefined;
+}
+
+/** A synthetic record that resolves to `tier` at `now` — for the dev override and the simulator. */
+export function simulatedRecord(tier: ProTier, now: number): EntitlementRecord {
+  switch (tier) {
+    case 'free': return { plan: 'none', lastCheckedAt: now };
+    case 'trial': return { plan: 'trial', validUntil: now + TRIAL_MS, lastCheckedAt: now };
+    case 'pro': return { plan: 'pro', lastCheckedAt: now, everPro: true };
+    case 'lapsed': return { plan: 'none', lastCheckedAt: now, everPro: true, lapsedSince: now };
+  }
+}
+
 /**
  * Dev-only `OW_PRO_SIMULATE=free|trial|pro|lapsed` → a synthetic record that
  * resolves to that tier at `now`. Anything else (or unset) → `undefined`.
@@ -120,13 +138,8 @@ export function parseProSimulation(
   env: Record<string, string | undefined>,
   now: number,
 ): EntitlementRecord | undefined {
-  switch (env.OW_PRO_SIMULATE?.trim().toLowerCase()) {
-    case 'free': return { plan: 'none', lastCheckedAt: now };
-    case 'trial': return { plan: 'trial', validUntil: now + TRIAL_MS, lastCheckedAt: now };
-    case 'pro': return { plan: 'pro', lastCheckedAt: now, everPro: true };
-    case 'lapsed': return { plan: 'none', lastCheckedAt: now, everPro: true, lapsedSince: now };
-    default: return undefined;
-  }
+  const tier = parseProTier(env.OW_PRO_SIMULATE);
+  return tier ? simulatedRecord(tier, now) : undefined;
 }
 
 /**

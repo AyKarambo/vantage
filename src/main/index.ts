@@ -35,9 +35,9 @@ import { createDevModeAuthMonitor } from './devModeAuthMonitor';
 import { resolveMapId } from '../core/resolvers/mapId';
 import { UNKNOWN_ACCOUNT, recoverableAccount } from '../core/accountsManage';
 import { safeReadiness } from '../core/readiness';
-import { parseProSimulation, resumeActivation } from '../core/entitlement';
+import { parseProTier, resumeActivation } from '../core/entitlement';
 import { createEntitlementService } from './entitlement/service';
-import { noneSource, simulatedSource } from './entitlement/source';
+import { noneSource } from './entitlement/source';
 import { currentSession } from '../core/analytics';
 import { isCompetitive } from '../core/matchFilter';
 import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
@@ -418,14 +418,15 @@ function main(): void {
   // Overwolf/Tebex one waits on DevRel) and resolve to free; OW_PRO_SIMULATE
   // drives the tier in dev. The cache lives in userData (per machine), and the
   // source is the only thing that may ever talk to the network for it.
-  const simulatedPro = app.isPackaged ? undefined : parseProSimulation(process.env, Date.now());
+  // Unpackaged dev runs get the developer tier override (Settings › Developer);
+  // OW_PRO_SIMULATE picks the tier it starts on. It sits on top of the real
+  // cache and never writes it, so turning it off restores the real state.
+  const devTools = !app.isPackaged;
   const entitlement = createEntitlementService({
-    source: simulatedPro ? simulatedSource(simulatedPro) : noneSource,
-    // A simulation never touches the real cache — it would otherwise leave a
-    // sticky `everPro` behind and turn the next unsimulated run into "lapsed".
-    doc: simulatedPro
-      ? { read: () => simulatedPro, write: () => {} }
-      : jsonFiles(app.getPath('userData'))('entitlement.json'),
+    source: noneSource,
+    doc: jsonFiles(app.getPath('userData'))('entitlement.json'),
+    devOverrides: devTools,
+    initialOverride: devTools ? parseProTier(process.env.OW_PRO_SIMULATE) : undefined,
     onChange: () => events.emit('onDataChanged', undefined),
     onResume: (lapsedSince, resumedAt) =>
       manual.shiftActivations((at) => resumeActivation(at, lapsedSince, resumedAt)),
@@ -442,6 +443,7 @@ function main(): void {
     history,
     manual,
     entitlement,
+    devTools,
     rankAnchors,
     placements,
     checkIns,

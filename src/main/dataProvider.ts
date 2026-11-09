@@ -12,7 +12,7 @@ import { normalizeCoachingSettings } from '../core/coachingSettings';
 import { DEFAULT_SESSION_MODE, normalizeSessionMode } from '../core/practice/sessionMode';
 import { normalizeGradingSettings } from '../core/gradingSettings';
 import { effectiveDemo } from '../core/demoPreference';
-import { FULL_PRO_ACCESS } from '../core/entitlement';
+import { FULL_PRO_ACCESS, parseProTier } from '../core/entitlement';
 import type { EntitlementService } from './entitlement/service';
 import { proGuarded } from './entitlement/guard';
 import { openIfAllowed } from '../core/externalLink';
@@ -135,7 +135,13 @@ export interface DataProviderDeps {
    * Vantage Pro entitlement (#337). Optional: tests and the browser preview
    * omit it and the provider stays ungated, exactly as it was before.
    */
-  entitlement?: Pick<EntitlementService, 'access' | 'refresh' | 'action'>;
+  entitlement?: Pick<EntitlementService, 'access' | 'refresh' | 'action' | 'devOverride' | 'setDevOverride'>;
+  /**
+   * Settings › Developer is live (unpackaged dev runs and the browser preview).
+   * False in a packaged build — the renderer card is compiled out there too,
+   * this is the main-side half so a forged IPC call can't pin a tier.
+   */
+  devTools?: boolean;
   /** The release log: viewer ring, session level, renderer error sink. */
   logger: Pick<Logger, 'entries' | 'getLevel' | 'setLevel' | 'error'>;
   /**
@@ -237,6 +243,14 @@ export function createDataProvider(deps: DataProviderDeps): DataProvider {
     refreshEntitlement: async () => {
       await deps.entitlement?.refresh();
       return provider.proAccess();
+    },
+    getDevTools: () => ({
+      available: Boolean(deps.devTools && deps.entitlement),
+      proOverride: deps.devTools ? deps.entitlement?.devOverride() ?? null : null,
+    }),
+    setDevProOverride: (tier) => {
+      if (deps.devTools) deps.entitlement?.setDevOverride(parseProTier(tier) ?? null);
+      return provider.getDevTools();
     },
     proAction: async (kind) =>
       deps.entitlement ? deps.entitlement.action(kind) : { ok: false, reason: 'unavailable' },

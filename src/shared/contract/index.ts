@@ -106,7 +106,7 @@ export type { DevModeAuthOutcome, DevModeAuthStatusPayload } from './devModeAuth
 
 // App-behavior settings + metadata (Settings screen)
 export type { AppInfo, AppUiSettings, DataLocation, DataLocationResult } from './appSettings';
-export type { ProAction, ProActionResult } from './pro';
+export type { ProAction, ProActionResult, DevToolsState } from './pro';
 
 // The API surface and its channel maps
 export type { OwStatsApi } from './api';

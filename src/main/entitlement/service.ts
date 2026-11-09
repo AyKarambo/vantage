@@ -1,6 +1,6 @@
 import {
-  NO_ENTITLEMENT, nextRecord, nextTierChange, proAccess, resolveTier,
-  type Entitlement, type EntitlementRecord, type ProAccess,
+  NO_ENTITLEMENT, nextRecord, nextTierChange, proAccess, resolveTier, simulatedRecord,
+  type Entitlement, type EntitlementRecord, type ProAccess, type ProTier,
 } from '../../core/entitlement';
 import type { ProAction, ProActionResult } from '../../shared/contract';
 import type { JsonDoc } from '../../store/jsonDocs';
@@ -16,6 +16,13 @@ export interface EntitlementServiceDeps {
   /** Access came back after a lapse: pause active targets' staleness across it (spec §5). */
   onResume?(lapsedSince: number, resumedAt: number): void;
   log?(message: string, fields?: Record<string, string | number | boolean>): void;
+  /**
+   * Allow the developer tier override (Settings › Developer). False in a
+   * packaged build, so a forged IPC call can't grant Pro there.
+   */
+  devOverrides?: boolean;
+  /** The override to start with (`OW_PRO_SIMULATE`); ignored without `devOverrides`. */
+  initialOverride?: ProTier;
 }
 
 export interface EntitlementService {
@@ -29,6 +36,10 @@ export interface EntitlementService {
   tick(): void;
   /** When the tier next changes by time alone, if it will. */
   nextChange(): number | undefined;
+  /** The developer tier override in effect, or null for the real entitlement. */
+  devOverride(): ProTier | null;
+  /** Pin the tier for testing (null = back to the real one). In memory only; a no-op unless `devOverrides`. */
+  setDevOverride(tier: ProTier | null): void;
 }
 
 /**
@@ -42,13 +53,20 @@ export interface EntitlementService {
 export function createEntitlementService(deps: EntitlementServiceDeps): EntitlementService {
   const now = deps.now ?? Date.now;
   let record: EntitlementRecord = readRecord(deps.doc.read());
+  // The developer override sits ON TOP of the real record and never touches it
+  // or the cache, so switching it off restores exactly the real state.
+  let override: { tier: ProTier; record: EntitlementRecord } | null =
+    deps.devOverrides && deps.initialOverride
+      ? { tier: deps.initialOverride, record: simulatedRecord(deps.initialOverride, now()) }
+      : null;
+  const effective = (): EntitlementRecord => override?.record ?? record;
 
   const tierOf = (r: EntitlementRecord) => resolveTier(r, now()).tier;
   // The tier the app was last told about — time alone can move it (a trial or
   // the offline grace running out), and `tick` announces that.
-  let announced = tierOf(record);
+  let announced = tierOf(effective());
   const announceIfChanged = (): void => {
-    const tier = tierOf(record);
+    const tier = tierOf(effective());
     if (tier === announced) return;
     announced = tier;
     deps.onChange?.();
@@ -56,9 +74,19 @@ export function createEntitlementService(deps: EntitlementServiceDeps): Entitlem
 
   return {
     tick: announceIfChanged,
-    nextChange: () => nextTierChange(record, now()),
-    entitlement: () => resolveTier(record, now()),
-    access: (demoActive) => proAccess(resolveTier(record, now()), demoActive, deps.source.kind),
+    nextChange: () => nextTierChange(effective(), now()),
+    entitlement: () => resolveTier(effective(), now()),
+    access: (demoActive) =>
+      proAccess(resolveTier(effective(), now()), demoActive, override ? 'simulated' : deps.source.kind),
+    devOverride: () => override?.tier ?? null,
+    setDevOverride: (tier) => {
+      if (!deps.devOverrides) return;
+      override = tier ? { tier, record: simulatedRecord(tier, now()) } : null;
+      deps.log?.('developer tier override', { tier: tier ?? 'off' });
+      // Always refetch: flipping trial ↔ pro keeps `full` but changes what Settings shows.
+      announced = tierOf(effective());
+      deps.onChange?.();
+    },
     refresh: async () => {
       let fresh: EntitlementRecord | undefined;
       try {

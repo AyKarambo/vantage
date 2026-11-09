@@ -151,3 +151,43 @@ describe('EntitlementService.tick — time-only tier changes', () => {
     expect(svc.nextChange()).toBeUndefined();
   });
 });
+
+describe('developer tier override (Settings › Developer)', () => {
+  it('pins a tier on top of the real record and restores it when cleared', () => {
+    const doc = memDoc();
+    const onChange = vi.fn();
+    const svc = createEntitlementService({ source: noneSource, doc, now: () => NOW, devOverrides: true, onChange });
+    expect(svc.entitlement().tier).toBe('free');
+    svc.setDevOverride('pro');
+    expect(svc.devOverride()).toBe('pro');
+    expect(svc.access(false)).toMatchObject({ tier: 'pro', full: true, source: 'simulated' });
+    svc.setDevOverride(null);
+    expect(svc.entitlement().tier).toBe('free');
+    expect(svc.access(false).source).toBe('none');
+    expect(doc.get()).toBeUndefined(); // the real cache was never written
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts on the initial override (OW_PRO_SIMULATE)', () => {
+    const svc = createEntitlementService({ source: noneSource, doc: memDoc(), now: () => NOW, devOverrides: true, initialOverride: 'lapsed' });
+    expect(svc.entitlement().tier).toBe('lapsed');
+  });
+
+  it('is a no-op without devOverrides (packaged build)', () => {
+    const svc = createEntitlementService({ source: noneSource, doc: memDoc(), now: () => NOW, initialOverride: 'pro' });
+    svc.setDevOverride('pro');
+    expect(svc.devOverride()).toBeNull();
+    expect(svc.entitlement().tier).toBe('free');
+  });
+
+  it('the provider refuses it unless devTools is on', () => {
+    const svc = () => createEntitlementService({ source: noneSource, doc: memDoc(), devOverrides: true });
+    const off = providerHarness({ deps: { entitlement: svc() } }).provider;
+    expect(off.setDevProOverride('pro')).toEqual({ available: false, proOverride: null });
+    expect(off.proAccess().full).toBe(false);
+    const on = providerHarness({ deps: { entitlement: svc(), devTools: true } }).provider;
+    expect(on.setDevProOverride('pro')).toEqual({ available: true, proOverride: 'pro' });
+    expect(on.proAccess().full).toBe(true);
+    expect(on.setDevProOverride('gold' as never)).toEqual({ available: true, proOverride: null });
+  });
+});
