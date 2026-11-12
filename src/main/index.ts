@@ -45,6 +45,7 @@ import { NOTION_IMPROVEMENT_TARGET_ID } from '../core/targets';
 import type { NetErrorKind } from '../core/netError';
 import { CounterwatchReader } from './counterwatch';
 import { DashboardWindow } from './dashboard';
+import { APP_USER_MODEL_ID } from './appId';
 import { createMatchPipeline } from './matchPipeline';
 import { MatchCheckpointStore } from '../store/matchCheckpoint';
 import { createDataProvider } from './dataProvider';
@@ -93,7 +94,7 @@ export function shouldToastNetError(kind: NetErrorKind | undefined): boolean {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.setAppUserModelId('com.timoseikel.vantage');
+  app.setAppUserModelId(APP_USER_MODEL_ID);
   app.on('window-all-closed', () => {}); // tray app — keep running with no windows
   app.whenReady().then(main).catch((err: unknown) => console.error('startup failed', err));
 }
@@ -695,7 +696,7 @@ function main(): void {
   };
 
   const tray = new TrayController(iconPath, handlers);
-  const dashboard = new DashboardWindow(dataProvider, iconPath, {
+  const dashboard = new DashboardWindow(dataProvider, path.join(app.getAppPath(), 'assets', 'appicon.png'), {
     closeToTray: () => config.ui.closeToTray,
     savedBounds: () => config.ui.windowBounds,
     saveBounds: (windowBounds) => {

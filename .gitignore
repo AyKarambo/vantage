@@ -34,6 +34,7 @@ secrets/
 # generated icons (created by scripts/make-tray-icon.mjs)
 assets/tray.png
 assets/appicon.png
+assets/appicon.ico
 
 # generated Overwolf store assets (npm run assets:store / assets:screens)
 assets/store/

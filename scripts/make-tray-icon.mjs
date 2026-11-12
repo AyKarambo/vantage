@@ -3,6 +3,7 @@
 //
 //   assets/appicon.png         512x512  → ow-electron-builder converts to launcher_icon.ico
 //                                          (Windows installer / taskbar); also the window icon
+//   assets/appicon.ico         16–256   → the dev-run taskbar button (setAppDetails)
 //   assets/tray.png            32x32    → the Windows tray icon (no game / base)
 //   assets/tray-connected.png  32x32    → GEP attached, waiting for events (grey dot)
 //   assets/tray-live.png       32x32    → receiving data (green dot)
@@ -47,6 +48,30 @@ for (const [name, size] of [['appicon.png', 512], ['tray.png', 32]]) {
   writeFileSync(join(assets, name), renderBadgeIcon(size).toPngBuffer());
   console.log(`wrote assets/${name} (${size})`);
 }
+
+// A multi-size .ico of PNG-encoded frames (supported since Vista). Dev runs point
+// the taskbar button at it (BrowserWindow.setAppDetails only takes .ico/.exe).
+function toIco(sizes) {
+  const pngs = sizes.map((size) => renderBadgeIcon(size).toPngBuffer());
+  const header = Buffer.alloc(6 + 16 * sizes.length);
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(sizes.length, 4);
+  let offset = header.length;
+  sizes.forEach((size, i) => {
+    const e = 6 + 16 * i;
+    header.writeUInt8(size % 256, e); // 256 is stored as 0
+    header.writeUInt8(size % 256, e + 1);
+    header.writeUInt16LE(1, e + 4); // planes
+    header.writeUInt16LE(32, e + 6); // bits per pixel
+    header.writeUInt32LE(pngs[i].length, e + 8);
+    header.writeUInt32LE(offset, e + 12);
+    offset += pngs[i].length;
+  });
+  return Buffer.concat([header, ...pngs]);
+}
+
+writeFileSync(join(assets, 'appicon.ico'), toIco([16, 24, 32, 48, 64, 256]));
+console.log('wrote assets/appicon.ico (16-256)');
 
 for (const [state, color] of Object.entries(DOT)) {
   const name = `tray-${state}.png`;

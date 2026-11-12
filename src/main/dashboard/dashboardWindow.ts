@@ -6,6 +6,7 @@ import { registerDashboardIpc, registerWindowControls } from './ipcHandlers';
 import { hardenWebContents } from './webContentsSecurity';
 import { shouldEnableDevTools } from '../../core/devMode';
 import { fitBounds, type Rect } from './windowBounds';
+import { APP_USER_MODEL_ID } from '../appId';
 
 /**
  * The dashboard BrowserWindow lifecycle: a frameless, CSP-friendly window
@@ -102,6 +103,19 @@ export class DashboardWindow {
     // from the loaded page (defense-in-depth behind Guardrail 1). Registered
     // before loadFile — programmatic loads don't trip these guards.
     hardenWebContents(this.win.webContents);
+    // A dev run is hosted by ow-electron's electron.exe, which embeds the Overwolf
+    // icon, and Windows draws our AUMID's taskbar button from that exe rather than
+    // from the window icon. Give the button Vantage's own icon. Packaged builds
+    // need nothing here: Vantage.exe already embeds the Vantage icon.
+    if (process.platform === 'win32' && !app.isPackaged) {
+      this.win.setAppDetails({
+        appId: APP_USER_MODEL_ID,
+        appIconPath: path.join(app.getAppPath(), 'assets', 'appicon.ico'),
+        // Windows ignores the relaunch icon unless a relaunch command is set too.
+        relaunchCommand: `"${process.execPath}" "${app.getAppPath()}"`,
+        relaunchDisplayName: 'Vantage',
+      });
+    }
     if (fitted.maximize) this.win.maximize();
     // The persisted text-size zoom (W7) — set on the webContents before load
     // so it's already in effect for the very first paint, not a visible jump
