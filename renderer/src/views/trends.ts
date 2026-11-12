@@ -113,31 +113,44 @@ function patterns(ctx: ViewContext): Node[] {
 }
 
 /**
- * "Which maps am I getting better or worse on?" — each map's recent half of
- * games vs its earlier half, split into two lists. Flat maps are only counted,
- * not listed: they are the ones not worth a second look. A row opens that map
- * on the Maps screen.
+ * "Which maps am I getting better or worse on?" — each map's winrate over its
+ * earlier half of games vs its recent half, split into two lists. Shown as the
+ * two winrates themselves ("50% → 85%"), not a bare delta — a "+35" read like
+ * rank points. Flat maps are only counted, not listed. A map under
+ * {@link MAP_FORM_SOLID_GAMES} renders dimmed: at 3 vs 3 games one result
+ * swings a half by 33%. A row opens that map on the Maps screen.
  */
+/** Games a Map form row needs before it reads as solid rather than faded (5 vs 5). */
+const MAP_FORM_SOLID_GAMES = 10;
+
 function mapFormCard(ctx: ViewContext, trends: MapTrend[]): HTMLElement {
   const better = trends.filter((t) => t.trend === 'improving');
   const worse = trends.filter((t) => t.trend === 'declining').reverse();
   const steady = trends.length - better.length - worse.length;
-  const row = (t: MapTrend): HTMLElement => h('div', {
-    class: 'row is-clickable', style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' },
-    title: `Show ${t.key} on Maps`,
-    ...clickableRow(() => ctx.navigate('maps', { highlight: t.key })),
-  },
-    h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, t.key),
-    h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${pct(t.earlier)} → ${pct(t.recent)} · ${t.games}g`),
-    h('span', { class: 'mono', style: { fontSize: '12px', width: '56px', textAlign: 'right', color: t.pts > 0 ? PALETTE.win : PALETTE.loss } }, `${signed(Math.round(t.pts))} pts`),
-  );
+  const row = (t: MapTrend): HTMLElement => {
+    const earlierGames = Math.floor(t.games / 2);
+    const thin = t.games < MAP_FORM_SOLID_GAMES;
+    return h('div', {
+      class: 'row is-clickable',
+      style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', opacity: thin ? '0.55' : '1' },
+      title: `${t.key}: ${pct(t.earlier)} winrate in your first ${earlierGames} games, ${pct(t.recent)} in your last ${t.games - earlierGames}${thin ? ' — small sample' : ''}. Click to show it on Maps.`,
+      ...clickableRow(() => ctx.navigate('maps', { highlight: t.key })),
+    },
+      h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, t.key),
+      h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${t.games}g`),
+      h('span', { class: 'mono', style: { fontSize: '12px', width: '96px', textAlign: 'right' } },
+        h('span', { class: 'u-dim' }, `${pct(t.earlier)} → `),
+        h('span', { style: { color: t.pts > 0 ? PALETTE.win : PALETTE.loss } }, pct(t.recent)),
+      ),
+    );
+  };
   const column = (title: string, list: MapTrend[], empty: string): HTMLElement => h('div', null,
     h('div', { class: 'field-label' }, title),
     list.length
       ? h('div', { class: 'stack', style: { gap: '2px' } }, ...list.map(row))
       : h('div', { class: 'hint' }, empty),
   );
-  return card({ title: 'Map form', sub: 'recent half of each map\'s games vs the earlier half · 6+ games' },
+  return card({ title: 'Map form', sub: 'winrate in your earlier games on a map → your recent ones · 6+ games, faded under 10' },
     trends.length
       ? h('div', null,
           h('div', { class: 'grid-2' },
@@ -145,7 +158,7 @@ function mapFormCard(ctx: ViewContext, trends: MapTrend[]): HTMLElement {
             column('Getting worse', worse, 'No map is trending down.'),
           ),
           steady > 0
-            ? h('div', { class: 'hint', style: { marginTop: '10px' } }, `${steady} ${steady === 1 ? 'map is' : 'maps are'} holding steady (within ±5 pts).`)
+            ? h('div', { class: 'hint', style: { marginTop: '10px' } }, `${steady} ${steady === 1 ? 'map is' : 'maps are'} holding steady (winrate moved less than 5%).`)
             : null,
         )
       : h('div', { class: 'hint' }, 'Needs a map with 6+ games in this range to compare its recent games with earlier ones.'),
@@ -397,7 +410,9 @@ function queuedWithCard(sizes: Group[], members: Group[], overallWinrate: number
     members.length
       ? h('div', { style: { marginTop: '12px' } },
           h('div', { class: 'field-label' }, 'Queued with'),
-          breakdown(members.slice(0, 8), overallWinrate))
+          // Wider name column, BattleTag number dropped — 76px cut every name
+          // to "Lampenlich…"; the full tag stays in the row's tooltip.
+          h('div', { class: 'queued-with' }, breakdown(members.slice(0, 8), overallWinrate, (k) => k.split('#')[0])))
       : null,
   );
 }
