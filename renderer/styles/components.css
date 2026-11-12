@@ -916,6 +916,10 @@ table.data tbody tr:focus-visible {
 .hbars--compact .hbar-label {
   text-align: left;
 }
+/* Trends › Lineup's "Queued with": player names need more room than role/day-part labels. */
+.queued-with .hbars--compact .hbar-row {
+  grid-template-columns: 140px 1fr auto;
+}
 
 /* Map scatter (charts/plots/scatterChart.ts) --------------------------------
    Every colour is a token, so the winrate scheme re-tints the band, the focus

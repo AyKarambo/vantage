@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { focusEntries, focusTrend, mapTrends, heroForm, linkFocusTargets, qualifiedMapCount, type GameRecord } from '../src/core/analytics';
+import { focusEntries, focusTrend, mapTrends, rollingByGame, heroForm, linkFocusTargets, qualifiedMapCount, type GameRecord } from '../src/core/analytics';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { Result } from '../src/core/model';
@@ -593,5 +593,30 @@ describe('byMapType leaves the Unknown map out', () => {
     const d = computeDashboard(games, { days: 'all' }, { active: false, preference: 'off', hasRealHistory: true });
     expect(d.byMapType.map((g) => g.key)).toEqual(['Control']);
     expect(d.overall.games).toBe(2);
+  });
+});
+
+describe('rollingByGame (Trends › Maps detail)', () => {
+  it('gives one point per game, oldest first, with the winrate over its last N games', () => {
+    const games = [
+      game({ result: 'Loss', timestamp: T0 + 3 * HOUR }),
+      game({ result: 'Win', timestamp: T0 + 1 * HOUR }),
+      game({ result: 'Win', timestamp: T0 + 2 * HOUR }),
+    ];
+    const pts = rollingByGame(games, 2);
+    expect(pts.map((p) => p.result)).toEqual(['Win', 'Win', 'Loss']);
+    expect(pts.map((p) => p.rolling)).toEqual([1, 1, 0.5]);
+    expect(pts[0].date).toBe('2026-06-01');
+  });
+});
+
+describe('DashboardData.mapTrends detail', () => {
+  it('attaches each map\'s own timeline and by-season record', () => {
+    const now = Date.now();
+    const games = [0, 1, 2, 3, 4, 5].map((i) => game({ result: i < 3 ? 'Loss' : 'Win', map: 'Busan', timestamp: now - (10 - i) * HOUR }));
+    const d = computeDashboard(games, { days: 'all' }, { active: false, preference: 'off', hasRealHistory: true });
+    const busan = d.mapTrends.find((t) => t.key === 'Busan');
+    expect(busan?.timeline).toHaveLength(6);
+    expect(busan?.bySeason.reduce((n, s) => n + s.games, 0)).toBe(6);
   });
 });

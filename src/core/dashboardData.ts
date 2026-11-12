@@ -6,7 +6,7 @@
 import {
   byAccount, byHero, byMap, byRole, byGroupSize, byPartyMember, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
   focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, mapTrends, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
-  trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
+  trend, rollingWinrate, rollingByGame, windowCompare, winLoss, groupBy, srSum,
   decided, UNKNOWN_MAP, type GameRecord, type Group,
 } from './analytics';
 import { effectiveGroupSize } from './party';
@@ -310,7 +310,15 @@ export function computeDashboard(
     // comparable to a normal match's (same stance sessionHistory already takes).
     byMap: byMap(games, { suppressed }),
     byMapType: byGameMode(games, mapModeOf, suppressed),
-    mapTrends: mapTrends(games),
+    // Map form (Trends › Maps): each row expands into that map's own
+    // game-by-game line over the filtered range and its by-season record
+    // (account/role-scoped, all dates — the same scope as `bySeason`).
+    mapTrends: mapTrends(games).map((t) => ({
+      ...t,
+      timeline: rollingByGame(games.filter((g) => g.map === t.key)),
+      bySeason: bySeasonOf(accountRoleGames.filter((g) => g.map === t.key), seasonStartsList, suppressed, now)
+        .filter((s) => s.games > 0),
+    })),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     // Party size, game length and score-margin splits (H9) — previously
     // captured/stored but never surfaced.

@@ -7,7 +7,7 @@ import type { Role, Result, MatchParty } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
 import type { RankAdjustmentMark } from '../../core/rank/adjustments';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit, MapTrend } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit, MapTrend, GamePoint } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { PracticeSummary } from '../../core/practice';
@@ -195,6 +195,14 @@ export interface PreviousWindow {
 }
 
 /** One season's win/loss (C5) — a row of `DashboardData.bySeason`. */
+/** One Map form row (Trends › Maps) plus what its expanded detail draws. */
+export interface MapFormEntry extends MapTrend {
+  /** Every game on the map in the filtered range, oldest first, with a 5-game rolling winrate. */
+  timeline: GamePoint[];
+  /** The map's record per season with games, newest first — account/role-scoped, not date-scoped. */
+  bySeason: SeasonBreakdown[];
+}
+
 export interface SeasonBreakdown {
   /** Addressable season id, e.g. `S:2026-06-16` — pass to `setFilter({ days: { season: id } })`. */
   id: string;
@@ -333,7 +341,7 @@ export interface DashboardData {
   /** Map-only ranking that annotates the Overview scatter ("Top priority" callout). */
   focusMaps: FocusItem[];
   /** Every map's recent-half vs earlier-half winrate (Trends › Maps), most-improved first; maps under the split floor are omitted. */
-  mapTrends: MapTrend[];
+  mapTrends: MapFormEntry[];
   /**
    * How many distinct maps have reached `MAP_MIN_GAMES` in the filtered range
    * (F4) — the honest gate behind Focus's and Overview's empty states, so

@@ -4,14 +4,14 @@
 export type {
   HeroStat, MatchMental, CommsTone, TargetGrade, MatchReview, GameRecord,
   WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry, MapTrend,
-  HeroSummary, HeroForm, Streak, TrendGroup, Momentum,
+  HeroSummary, HeroForm, Streak, TrendGroup, Momentum, GamePoint,
 } from './types';
 
 // Grouping + win/loss aggregation
 export {
   decided, winrateOf, winLoss, groupBy, byMap, byRole, byAccount, byHero, byMode, byGroupSize, byPartyMember, byDuration, scoreSplits, focusBy, trend, dayKey,
   UNKNOWN_MAP, splitUnknownMap, modeGroups,
-  weightedWinLoss, weightedGroupBy, heroWeightedGames, rollingWinrate, windowCompare, bucketStart, srSum,
+  weightedWinLoss, weightedGroupBy, heroWeightedGames, rollingWinrate, rollingByGame, windowCompare, bucketStart, srSum,
 } from './grouping';
 export type { WeightedGame, ScoreSplit } from './grouping';
 
