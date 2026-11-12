@@ -1,6 +1,7 @@
 import type { GepMessage, RosterPlayer, Role } from '../core/model';
 import {
-  INITIAL_LIVE_MATCH, liveClock, liveMatchDetached, liveRoster, liveTeamTotals, localTeam, reduceLiveMatch,
+  INITIAL_LIVE_MATCH, liveClock, liveMatchDetached, liveRoundRoster, liveRoster, liveTeamTotals, localTeam,
+  reduceLiveMatch,
   type LiveMatchState,
 } from '../core/liveMatch';
 import { resolveRole } from '../core/resolvers/role';
@@ -92,6 +93,7 @@ export function createLiveMatchMonitor(deps: {
 export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): LiveMatchPayload {
   const roster = liveRoster(state);
   const mine = localTeam(roster);
+  const roundRoster = state.phase === 'live' ? liveRoundRoster(state) : undefined;
   return {
     live: state.phase === 'live',
     ...(state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
@@ -105,6 +107,13 @@ export function toPayload(state: LiveMatchState, killFeedEnabled: boolean): Live
     // the one you open afterwards can't read differently for the same match.
     roster: orderScoreboard(roster.map(toScoreboardEntry)),
     totals: liveTeamTotals(roster),
+    ...(roundRoster ? {
+      round: {
+        number: state.rounds?.length ?? 1,
+        roster: orderScoreboard(roundRoster.map(toScoreboardEntry)),
+        totals: liveTeamTotals(roundRoster),
+      },
+    } : {}),
     // With the kill feed off, the per-kill strip does not cross the bridge at
     // all — withheld at the source rather than hidden in the view, so the data
     // genuinely does not reach the window. The team totals above stay: they are

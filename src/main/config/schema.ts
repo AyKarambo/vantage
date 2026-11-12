@@ -68,6 +68,8 @@ export interface UiConfig {
   gepNotifications: boolean;
   /** Show the kill feed on the live-match screen (default true). */
   liveKillFeed: boolean;
+  /** Live scoreboard counts the current round only instead of the whole match (default false). */
+  liveRoundStats: boolean;
   /** Switch to the Live screen when a match starts (default false). Never focuses the window. */
   autoSwitchToLive: boolean;
   /** Switch to the finished game's Review page once it is recorded (default false). Never focuses the window. */
@@ -163,7 +165,7 @@ export function defaultConfig(): AppConfig {
     masterData: { overfastBaseUrl: 'https://overfast-api.tekrop.fr' },
     ui: {
       closeToTray: true, demoPreference: 'unset', devMode: true, gepNotifications: true,
-      liveKillFeed: true, autoSwitchToLive: false, autoSwitchToReview: false, mcpEnabled: false,
+      liveKillFeed: true, liveRoundStats: false, autoSwitchToLive: false, autoSwitchToReview: false, mcpEnabled: false,
     },
   };
 }

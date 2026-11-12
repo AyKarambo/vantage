@@ -36,6 +36,14 @@ export interface LiveKillEntry {
   deployable?: { hero: string; label: string };
 }
 
+/** Per-side sums off the roster — see {@link LiveMatchPayload.totals}. */
+export interface LiveTotals {
+  yours: { damage: number; healing: number; deaths: number };
+  theirs: { damage: number; healing: number; deaths: number };
+  known: boolean;
+  deathsKnown: boolean;
+}
+
 export interface LiveMatchPayload {
   /** Whether a match is in progress right now. */
   live: boolean;
@@ -82,12 +90,16 @@ export interface LiveMatchPayload {
    * to have reported at least one `deaths` value, so an unreported side is never
    * shown as a confident 0.
    */
-  totals: {
-    yours: { damage: number; healing: number; deaths: number };
-    theirs: { damage: number; healing: number; deaths: number };
-    known: boolean;
-    deathsKnown: boolean;
-  };
+  totals: LiveTotals;
+  /**
+   * The same scoreboard and totals counted from the start of the CURRENT round
+   * only (Overwatch's TAB numbers run for the whole match). Between rounds it
+   * still holds the round that just ended. Absent until a round start has been
+   * seen — a match joined mid-round can't say what happened earlier in it.
+   * Always sent; the renderer picks it or the whole-match numbers from the
+   * `liveRoundStats` setting.
+   */
+  round?: { number: number; roster: ScoreboardEntry[]; totals: LiveTotals };
   /** Recent kill-feed entries, newest first. Empty when the user turned it off. */
   feed: LiveKillEntry[];
   /**

@@ -97,6 +97,13 @@ export interface LiveMatchState {
    */
   rounds?: LiveRound[];
   /**
+   * The roster as it stood when the latest round STARTED — what the per-round
+   * board subtracts from the cumulative TAB numbers (see {@link liveRoundRoster}).
+   * Absent until a `round_start` is seen: a match joined mid-round has no
+   * baseline for the round it joined, so it can't say what happened in it.
+   */
+  roundBaseline?: Record<string, RosterPlayer>;
+  /**
    * Match facts reported while IDLE, held for a mid-match join. GEP's attach
    * snapshot sends `map`, `game_type`, `battle_tag` … BEFORE the `game_state`
    * that reveals a match is running, so without this the joined board would
@@ -289,7 +296,7 @@ function applyRoundBoundary(state: LiveMatchState, start: boolean, now: number):
     // Every round — the first one too — begins behind its setup lock, so the
     // clock waits for the doors (see roundClock).
     rounds.push({ startedAt: now, waitsForDoors: true });
-    return { ...state, rounds };
+    return { ...state, rounds, roundBaseline: state.roster };
   }
   if (!open) return state;
   rounds[rounds.length - 1] = { ...open, endedAt: now };
@@ -467,6 +474,36 @@ export function liveRoster(state: LiveMatchState): RosterPlayer[] {
       const isLocal = Boolean(p.isLocal) || (localTag.length > 0 && battleTagName(p.battleTag ?? '') === localTag);
       return isLocal ? { ...p, isLocal: true } : p;
     });
+}
+
+/** The cumulative scoreboard counters a per-round view resets. */
+const ROUND_COUNTERS = ['kills', 'deaths', 'assists', 'damage', 'healing', 'mitigation'] as const;
+
+/**
+ * The roster for the CURRENT round only: each counter minus where it stood at
+ * the round's start. Overwatch's TAB numbers run for the whole match, so this
+ * is the only way to see a round on its own. Between rounds it still shows the
+ * round that just ended, until the next one starts.
+ *
+ * `undefined` when there is no baseline (no `round_start` seen yet — a match
+ * joined mid-round). A counter that went DOWN means the slot was refilled by a
+ * backfill, whose numbers started from zero — so it is taken as-is, never a
+ * negative.
+ */
+export function liveRoundRoster(state: LiveMatchState): RosterPlayer[] | undefined {
+  const baseline = state.roundBaseline;
+  if (!baseline) return undefined;
+  const roster: Record<string, RosterPlayer> = {};
+  for (const [slot, p] of Object.entries(state.roster)) {
+    const round: RosterPlayer = { ...p };
+    for (const k of ROUND_COUNTERS) {
+      const current = p[k];
+      const atStart = baseline[slot]?.[k];
+      if (current !== undefined && atStart !== undefined && current >= atStart) round[k] = current - atStart;
+    }
+    roster[slot] = round;
+  }
+  return liveRoster({ ...state, roster });
 }
 
 /** The tracked player's own team number, when the feed reported one. */

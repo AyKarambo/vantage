@@ -31,6 +31,14 @@ export interface AppUiSettings {
    */
   liveKillFeed: boolean;
   /**
+   * Whether the live scoreboard and team totals count only the CURRENT round
+   * (resetting at every round change) instead of the whole match (default
+   * **off** — whole match, as the game's own TAB screen shows). Toggled from
+   * Settings and from the Live screen itself; purely a renderer choice, since
+   * every live push carries both views.
+   */
+  liveRoundStats: boolean;
+  /**
    * Whether the window switches to the Live screen the moment a match starts
    * (default **off**). It only changes the screen inside Vantage — it never
    * shows, focuses or restores the window, because Vantage must not pull focus

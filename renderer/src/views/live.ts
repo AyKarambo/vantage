@@ -28,7 +28,7 @@ import { bridge } from '../bridge';
 import { getLiveMatch, subscribeLiveMatch } from '../liveMatch';
 import { getGepStatus, subscribeGepStatus } from '../gepStatus';
 import { scoreboard } from '../components/scoreboard';
-import { button, card, emptyState, pill, resultPill } from '../components/primitives';
+import { button, card, emptyState, pill, resultPill, segmented } from '../components/primitives';
 import { inlineLink } from '../components/inlineLink';
 import { clockText, fmt, games, matchClock, net, pct, relTime, roleLabel, RELATION_LABEL } from '../format';
 import { wrColor } from '../theme';
@@ -95,17 +95,25 @@ export function live(ctx: ViewContext): HTMLElement {
   // live payload for one flag. Optimistic-true until the real value loads —
   // the tally/feed cards themselves already degrade honestly from `p.totals`.
   let killFeedEnabled = true;
-  void bridge.getAppSettings().then((s) => { killFeedEnabled = s.liveKillFeed; paint(); });
+  // Same cache for "this round vs whole match" — both views ride every push,
+  // so flipping it repaints at once without waiting for the next tick.
+  let roundStats = false;
+  void bridge.getAppSettings().then((s) => { killFeedEnabled = s.liveKillFeed; roundStats = s.liveRoundStats; paint(); });
   const setKillFeed = (enabled: boolean): void => {
     killFeedEnabled = enabled;
     void bridge.setAppSettings({ liveKillFeed: enabled });
+    paint();
+  };
+  const setRoundStats = (enabled: boolean): void => {
+    roundStats = enabled;
+    void bridge.setAppSettings({ liveRoundStats: enabled });
     paint();
   };
 
   function paint(): void {
     if (pressed) { pendingPaint = true; return; }
     const payload = getLiveMatch();
-    render(host, ...sections(payload, records, recordsLoading, killFeedEnabled, setKillFeed, ctx));
+    render(host, ...sections(payload, records, recordsLoading, killFeedEnabled, setKillFeed, roundStats, setRoundStats, ctx));
   }
 
   const unsubscribe = subscribeLiveMatch((payload) => {
@@ -144,6 +152,8 @@ function sections(
   recordsLoading: boolean,
   killFeedEnabled: boolean,
   setKillFeed: (enabled: boolean) => void,
+  roundStats: boolean,
+  setRoundStats: (enabled: boolean) => void,
   ctx: ViewContext,
 ): Node[] {
   if (!p?.live) {
@@ -161,15 +171,30 @@ function sections(
       ...preQueueCards(ctx),
     ];
   }
+  // The scoreboard and team totals follow the round/match switch; the
+  // briefing and known-players cards only need who is playing, so keep `p`.
+  const shown = roundStats && p.round ? { ...p, roster: p.round.roster, totals: p.round.totals } : p;
   return [
     viewHead('Live', liveSubtitle(p)),
     getGepStatus()?.state === 'stale' ? staleCard(ctx) : null,
     briefingCard(p, ctx),
-    tallyCard(p, killFeedEnabled, setKillFeed),
+    tallyCard(shown, killFeedEnabled, setKillFeed),
     card({ variant: 'raised' },
-      h('div', { class: 'review-section-label' }, 'Scoreboard'),
-      p.roster.length
-        ? scoreboard(p.roster, (name) => ctx.navigate('playerHistory', { playerName: name }))
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } },
+        h('div', { class: 'review-section-label' },
+          roundStats && p.round ? `Scoreboard · round ${p.round.number}` : 'Scoreboard'),
+        segmented({
+          options: [{ value: 'match', label: 'Whole match' }, { value: 'round', label: 'This round' }],
+          value: roundStats ? 'round' : 'match',
+          onChange: (v) => setRoundStats(v === 'round'),
+        }),
+      ),
+      roundStats && !p.round
+        ? h('div', { class: 'hint', style: { marginBottom: '8px' } },
+            'Per-round numbers start with the next round — showing the whole match until then.')
+        : null,
+      shown.roster.length
+        ? scoreboard(shown.roster, (name) => ctx.navigate('playerHistory', { playerName: name }))
         : h('div', { class: 'hint' }, 'Waiting for the game to report the scoreboard…'),
     ),
     knownPlayersCard(p, records, recordsLoading, ctx),

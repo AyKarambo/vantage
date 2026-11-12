@@ -121,6 +121,11 @@ account's per-role lines beneath it.
   card's tooltip spells this out) rather than inventing a scoreline. The kill feed can
   be switched off in **Settings → General** — off means it isn't sent to the window at all,
   not merely hidden; the scoreboard, the team totals and the with/vs records are unaffected.
+  **Whole match / This round** (a switch on the Scoreboard card, also **Live stats per round** in
+  Settings → App behavior, off by default) resets the scoreboard and the team totals at every
+  round change, so each round reads on its own: every counter minus where it stood when the
+  round started. Between rounds it keeps the round that just ended; a match joined mid-round
+  shows the whole match until the next round starts.
   **Open Live on match start** (Settings → App behavior, off by default) switches to this screen
   as a match begins — inside Vantage only: it never raises the window or takes focus from the
   game, and opening Vantage mid-match doesn't trigger it. **Open Review on match end** (same

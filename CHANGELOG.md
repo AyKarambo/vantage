@@ -38,6 +38,10 @@ Releases before 0.32.0 predate this file. Their notes are auto-generated per PR 
   brings every game back with its win/loss. The optional Performance field is now a Loss → Draw → Win meter
   (the 0–100 sits in its tooltip).
 
+- **Live stats per round.** The Live scoreboard and team totals can now reset at every round change, so
+  you see each round on its own. Switch between **Whole match** and **This round** right on the Scoreboard
+  card, or set the default in **Settings → App behavior → Live stats per round** (off by default).
+
 - **Cheater compensation.** When Overwatch bans a cheater from one of your matches and gives back the rank
   you lost, add it in **Settings → Accounts → Manage ranks… → Cheater refund** (or **Add cheater
   compensation…** in Ctrl K). Type the %, press Enter: your rank moves like it would after a match, but it never
