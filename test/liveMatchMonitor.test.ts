@@ -228,6 +228,19 @@ describe('toPayload', () => {
     expect(published.at(-1)).toMatchObject({ live: true, startedAt: 5000, joinedMidMatch: true, gameType: 'RANKED' });
     expect(toPayload(reduceLiveMatch(INITIAL_LIVE_MATCH, event('match_start', null), 1), true).joinedMidMatch).toBeUndefined();
   });
+
+  it('carries the current round alongside the whole match once a round has started', () => {
+    let s = reduceLiveMatch(INITIAL_LIVE_MATCH, event('match_start', null), 0);
+    expect(toPayload(s, true).round).toBeUndefined();
+    s = reduceLiveMatch(s, event('round_start', null), 10);
+    s = reduceLiveMatch(s, info('roster', 'roster_0', JSON.stringify({ battle_tag: 'Me#1', is_local: true, team: 0, damage: 900 })), 20);
+    s = reduceLiveMatch(s, event('round_end', null), 30);
+    s = reduceLiveMatch(s, event('round_start', null), 40);
+    s = reduceLiveMatch(s, info('roster', 'roster_0', JSON.stringify({ damage: 1000 })), 50);
+    const p = toPayload(s, true);
+    expect(p.roster[0].damage).toBe(1000);
+    expect(p.round).toMatchObject({ number: 2, roster: [{ name: 'Me#1', damage: 100 }] });
+  });
 });
 
 describe('liveMatchMonitor — 5v5 ordering and team totals', () => {

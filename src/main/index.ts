@@ -488,6 +488,7 @@ function main(): void {
         devMode: config.ui.devMode,
         gepNotifications: config.ui.gepNotifications,
         liveKillFeed: config.ui.liveKillFeed,
+        liveRoundStats: config.ui.liveRoundStats,
         autoSwitchToLive: config.ui.autoSwitchToLive,
         autoSwitchToReview: config.ui.autoSwitchToReview,
         lastSeenVersion: config.ui.lastSeenVersion,
@@ -524,6 +525,12 @@ function main(): void {
         // no restart, and nothing to filter out on the renderer side.
         if (patch.liveKillFeed !== undefined) {
           saveLocalUiConfig({ liveKillFeed: patch.liveKillFeed });
+          config = loadConfig();
+        }
+        // Pure renderer choice: every live push already carries both the
+        // whole-match and the current-round numbers.
+        if (patch.liveRoundStats !== undefined) {
+          saveLocalUiConfig({ liveRoundStats: patch.liveRoundStats });
           config = loadConfig();
         }
         // Pure preference: the renderer reads it when a match start arrives, so
@@ -566,6 +573,7 @@ function main(): void {
           devMode: config.ui.devMode,
           gepNotifications: config.ui.gepNotifications,
           liveKillFeed: config.ui.liveKillFeed,
+          liveRoundStats: config.ui.liveRoundStats,
           autoSwitchToLive: config.ui.autoSwitchToLive,
           autoSwitchToReview: config.ui.autoSwitchToReview,
           lastSeenVersion: config.ui.lastSeenVersion,

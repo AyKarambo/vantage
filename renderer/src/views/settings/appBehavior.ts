@@ -126,6 +126,13 @@ function mcpBridgeBlock(bridgePath: string): HTMLElement {
           + 'scoreboard, per-team totals and players-you’ve-met section stay as they are.',
       }),
       toggleRow({
+        label: 'Live stats per round',
+        on: s.liveRoundStats,
+        onChange: () => apply({ liveRoundStats: !s.liveRoundStats }),
+        info: 'The Live scoreboard and team totals reset at every round change, so each round reads on its own. '
+          + 'Off shows the whole match, like the game’s own scoreboard. You can also switch it on the Live screen.',
+      }),
+      toggleRow({
         label: 'Open Live on match start',
         on: s.autoSwitchToLive,
         onChange: () => apply({ autoSwitchToLive: !s.autoSwitchToLive }),

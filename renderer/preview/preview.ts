@@ -496,8 +496,14 @@ function buildLiveMatch(tick: number): LiveMatchPayload {
       mitigation: i % 4 === 0 ? 2000 + tick * 80 : 0,
     })),
   ];
+  const third = (n: number): number => Math.floor(n / 3);
+  const roundRows = roster.map((r) => ({
+    ...r,
+    eliminations: third(r.eliminations), deaths: third(r.deaths), assists: third(r.assists),
+    damage: third(r.damage), healing: third(r.healing), mitigation: third(r.mitigation),
+  }));
   // Summed the way the real monitor sums the live roster.
-  const side = (t: number): { damage: number; healing: number; deaths: number } => roster
+  const side = (t: number, rows = roster): { damage: number; healing: number; deaths: number } => rows
     .filter((r) => r.team === t)
     .reduce((a, r) => ({
       damage: a.damage + (r.damage ?? 0),
@@ -514,6 +520,13 @@ function buildLiveMatch(tick: number): LiveMatchPayload {
       : { phase: 'round', bankedMs: 0, runningSince: liveStartedAt + 5_000 },
     map: 'Ilios',
     totals: { yours: side(0), theirs: side(1), known: true, deathsKnown: true },
+    // Stands in for "round 2": a third of each counter, so the per-round
+    // switch visibly changes the board.
+    round: {
+      number: 2,
+      roster: orderScoreboard(roundRows),
+      totals: { yours: side(0, roundRows), theirs: side(1, roundRows), known: true, deathsKnown: true },
+    },
     gameType: 'competitive',
     roster: orderScoreboard(roster),
     // Withheld at the source when the setting is off, as the real monitor does.

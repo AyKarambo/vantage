@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   FRESH_MATCH_START_MS, INITIAL_LIVE_MATCH, LIVE_FEED_CAP, clockElapsedMs, isMatchStart, liveClock, reduceLiveMatch, liveMatchDetached,
-  liveRoster, liveOpponentNames, liveTrueDamage, liveTeamKills, liveTeamTotals, localTeam, type LiveMatchState,
+  liveRoster, liveRoundRoster, liveOpponentNames, liveTrueDamage, liveTeamKills, liveTeamTotals, localTeam,
+  type LiveMatchState,
 } from '../src/core/liveMatch';
 import { DOORS_FALLBACK_MS } from '../src/core/roundClock';
 import type { GepMessage } from '../src/core/model';
@@ -752,5 +753,52 @@ describe('liveClock — the match clock runs only inside rounds, like the game�
     expect(liveClock(s)).toEqual({ phase: 'hero-select', bankedMs: 0, runningSince: 25_000 + DOORS_FALLBACK_MS });
     s = reduceLiveMatch(s, enemyReveal, 65_000);
     expect(liveClock(s)).toEqual({ phase: 'round', bankedMs: 0, runningSince: 65_000 });
+  });
+});
+
+describe('liveRoundRoster — the board counted from the current round only', () => {
+  const roundStart = event('round_start', null);
+  const roundEnd = event('round_end', null);
+  const me = (p: Record<string, unknown>): GepMessage =>
+    roster(0, { battle_tag: 'Me#1', is_local: true, team: 0, hero_name: 'Ana', ...p });
+
+  it('has no per-round view before a round_start (nothing to count from)', () => {
+    const s = reduceLiveMatch(live(0), me({ kills: 3 }), 1);
+    expect(liveRoundRoster(s)).toBeUndefined();
+  });
+
+  it('subtracts where each counter stood when the round started', () => {
+    let s = reduceLiveMatch(live(0), roundStart, 10);
+    s = reduceLiveMatch(s, me({ kills: 4, deaths: 2, assists: 5, damage: 3000, healing: 6000, mitigation: 0 }), 20);
+    s = reduceLiveMatch(s, roundEnd, 30);
+    s = reduceLiveMatch(s, roundStart, 40);
+    s = reduceLiveMatch(s, me({ kills: 6, deaths: 3, damage: 3500, healing: 7000 }), 50);
+    const [row] = liveRoundRoster(s)!;
+    expect(row).toMatchObject({ kills: 2, deaths: 1, assists: 0, damage: 500, healing: 1000, mitigation: 0, isLocal: true });
+    // The whole-match view is untouched.
+    expect(liveRoster(s)[0]).toMatchObject({ kills: 6, deaths: 3, damage: 3500 });
+  });
+
+  it('keeps showing the round that just ended until the next one starts', () => {
+    let s = reduceLiveMatch(live(0), roundStart, 10);
+    s = reduceLiveMatch(s, me({ kills: 1 }), 20);
+    s = reduceLiveMatch(s, roundEnd, 30);
+    s = reduceLiveMatch(s, roundStart, 40);
+    s = reduceLiveMatch(s, me({ kills: 4 }), 50);
+    s = reduceLiveMatch(s, roundEnd, 60);
+    expect(liveRoundRoster(s)![0].kills).toBe(3);
+  });
+
+  it('takes a counter that went DOWN (a backfill in the slot) as-is, never negative', () => {
+    let s = reduceLiveMatch(live(0), me({ kills: 8 }), 5);
+    s = reduceLiveMatch(s, roundStart, 10);
+    s = reduceLiveMatch(s, me({ battle_tag: 'Backfill#2', kills: 1 }), 20);
+    expect(liveRoundRoster(s)![0].kills).toBe(1);
+  });
+
+  it('counts a player who joined mid-round from zero', () => {
+    let s = reduceLiveMatch(live(0), roundStart, 10);
+    s = reduceLiveMatch(s, roster(5, { battle_tag: 'New#5', team: 1, kills: 2 }), 20);
+    expect(liveRoundRoster(s)![0].kills).toBe(2);
   });
 });
