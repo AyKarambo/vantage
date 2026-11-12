@@ -9,7 +9,8 @@
 import { decided, focusBy, srSum, winLoss } from './grouping';
 import { wilson } from '../targets/wilson';
 import { heroMatchKey } from '../heroes';
-import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm } from './types';
+import { UNKNOWN_MAP } from './grouping';
+import type { FocusDimension, FocusEntry, FocusItem, FocusTrend, GameRecord, HeroForm, MapTrend } from './types';
 import type { AuthoredTarget } from '../targets/types';
 // Leaf import (not the '../targets' barrel) — the barrel's scoring path imports
 // analytics back, and this keeps the module graph cycle-free at runtime.
@@ -126,6 +127,8 @@ function sampleAwareDeficit(e: FocusItem): number {
 interface FocusTrendDetail {
   trend: FocusTrend;
   pts: number;
+  earlier: number;
+  recent: number;
 }
 
 /**
@@ -146,12 +149,31 @@ function focusTrendDetail(entryGames: GameRecord[]): FocusTrendDetail | undefine
   // a hair above 0.05) right at the dead-band boundary.
   const pts = Math.round((recent.winrate - earlier.winrate) * 1000) / 10;
   const trend = Math.abs(pts) <= TREND_DEADBAND * 100 ? 'flat' : pts > 0 ? 'improving' : 'declining';
-  return { trend, pts };
+  return { trend, pts, earlier: earlier.winrate, recent: recent.winrate };
 }
 
 /** Public trend-only read — the {@link FocusTrendDetail} wrapper used everywhere that only needs the verdict (Heroes table/drawer, H6). */
 export function focusTrend(entryGames: GameRecord[]): FocusTrend | undefined {
   return focusTrendDetail(entryGames)?.trend;
+}
+
+/**
+ * Every map's recent-half vs earlier-half verdict (the Trends › Maps "map
+ * form" read), most-improved first. Maps with too few games to split into
+ * halves are left out, as is the {@link UNKNOWN_MAP} placeholder.
+ */
+export function mapTrends(games: GameRecord[]): MapTrend[] {
+  const byKey = new Map<string, GameRecord[]>();
+  for (const g of games) {
+    if (g.map === UNKNOWN_MAP) continue;
+    byKey.set(g.map, [...(byKey.get(g.map) ?? []), g]);
+  }
+  const out: MapTrend[] = [];
+  for (const [key, mapGames] of byKey) {
+    const detail = focusTrendDetail(mapGames);
+    if (detail) out.push({ key, games: mapGames.length, ...detail });
+  }
+  return out.sort((a, b) => b.pts - a.pts);
 }
 
 /**
@@ -236,7 +258,7 @@ export function linkFocusTargets(
  * (games logged without a map id) — a placeholder can't be practiced.
  */
 function focusByMap(games: GameRecord[], suppressed?: ReadonlySet<string>): FocusItem[] {
-  return focusBy(games, (g) => g.map, MAP_MIN_GAMES, { suppressed }).filter((g) => g.key !== 'Unknown');
+  return focusBy(games, (g) => g.map, MAP_MIN_GAMES, { suppressed }).filter((g) => g.key !== UNKNOWN_MAP);
 }
 
 /**

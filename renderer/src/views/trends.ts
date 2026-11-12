@@ -1,25 +1,56 @@
-/** Trends — winrate over time, splits by role/mode/account, and when you play. Objective, tracked facts only (#321): the self-rating card lives on Mental. */
+/** Trends — four tabs: Progress (rank, winrate over time, seasons), Maps (game modes, map form, close games), Lineup (role, account, who you queue with) and Patterns (when and how long you play). Objective, tracked facts only (#321): the self-rating card lives on Mental. */
 import { h } from '../dom';
-import type { Group, Momentum, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup } from '../../../src/shared/contract';
+import type { Group, MapTrend, Momentum, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup } from '../../../src/shared/contract';
 import { sessionFade, bucketStart, decided } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
 import { horizontalBars, lineChart, rankChart, type WrPoint, type RankSeries } from '../charts/plots';
-import { card, statBox, unlockHint } from '../components/primitives';
+import { card, segmented, statBox, unlockHint } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { clickableRow } from '../components/clickableRow';
 import { PALETTE, wrColor } from '../theme';
 import { pct } from '../format';
+import { prefs } from '../prefs';
+import { store } from '../store';
 import { viewHead, type ViewContext } from './view';
 
+type TrendsTab = 'progress' | 'maps' | 'lineup' | 'patterns';
+
+const TABS: Array<{ value: TrendsTab; label: string }> = [
+  { value: 'progress', label: 'Progress' },
+  { value: 'maps', label: 'Maps' },
+  { value: 'lineup', label: 'Lineup' },
+  { value: 'patterns', label: 'Patterns' },
+];
+
+const TAB_SUBTITLE: Record<TrendsTab, string> = {
+  progress: 'Am I climbing? Rank and winrate over time',
+  maps: 'Which modes and maps are getting better or worse',
+  lineup: 'Role, account and who you queue with',
+  patterns: 'When and how long you play — and how close games go',
+};
+
 export function trends(ctx: ViewContext): HTMLElement {
+  const tab = prefs.get('trendsTab') ?? 'progress';
+  const tabs = segmented<TrendsTab>({
+    options: TABS,
+    value: tab,
+    onChange: (v) => { prefs.set('trendsTab', v); store.rerender(); },
+  });
+  const TAB_BODY: Record<TrendsTab, (c: ViewContext) => Node[]> = { progress, maps, lineup, patterns };
+  return h('div', { class: 'view' },
+    viewHead('Trends', TAB_SUBTITLE[tab], tabs),
+    ...TAB_BODY[tab](ctx),
+  );
+}
+
+function progress(ctx: ViewContext): Node[] {
   const d = ctx.data;
   const byWeek = d.filters.days === 'all' || (typeof d.filters.days === 'number' && d.filters.days > 90);
   // C7: a day label opens that day's matches — a week label isn't a
   // Matches-recognized day yet, so the click-through stays daily-mode only.
   const openDay = byWeek ? undefined : (label: string) => ctx.navigate('matches', { day: label });
-  return h('div', { class: 'view' },
-    viewHead('Trends', 'Momentum over time and where your winrate concentrates'),
+  return [
     rankTrendCard(ctx),
     chartCard({
       title: 'Winrate over time',
@@ -44,21 +75,80 @@ export function trends(ctx: ViewContext): HTMLElement {
       lineChart(d.trend.map(toPoint(byWeek)), openDay, d.masterData.seasons),
       extremesRow(ctx, d.extremes),
     )),
-    h('div', { class: 'grid-3' },
-      card({ title: 'By role' }, breakdown(d.byRole, d.overall.winrate, roleLabel)),
+    bySeasonCard(ctx),
+  ].filter((n): n is HTMLElement => n !== null);
+}
+
+function maps(ctx: ViewContext): Node[] {
+  const d = ctx.data;
+  return [
+    h('div', { class: 'grid-2' },
       card({ title: 'By game mode' }, breakdown(d.byMapType, d.overall.winrate)),
+      closeGamesCard(d.scoreSplits),
+    ),
+    mapFormCard(ctx, d.mapTrends),
+  ];
+}
+
+function lineup(ctx: ViewContext): Node[] {
+  const d = ctx.data;
+  return [
+    h('div', { class: 'grid-2' },
+      card({ title: 'By role' }, breakdown(d.byRole, d.overall.winrate, roleLabel)),
       card({ title: 'By account' }, breakdown(d.byAccount, d.overall.winrate)),
     ),
-    h('div', { class: 'grid-2' },
-      closeGamesCard(d.scoreSplits),
-      gameLengthCard(d.byDuration),
-    ),
-    bySeasonCard(ctx),
     queuedWithCard(d.byGroupSize, d.byPartyMember, d.overall.winrate),
+  ].filter((n): n is HTMLElement => n !== null);
+}
+
+function patterns(ctx: ViewContext): Node[] {
+  const d = ctx.data;
+  return [
     h('div', { class: 'grid-2' },
       timeOfDayCard(d.timeOfDay, d.overall.winrate),
       sessionPositionCard(d.sessionPosition, d.overall.winrate),
     ),
+    gameLengthCard(d.byDuration),
+  ].filter((n): n is HTMLElement => n !== null);
+}
+
+/**
+ * "Which maps am I getting better or worse on?" — each map's recent half of
+ * games vs its earlier half, split into two lists. Flat maps are only counted,
+ * not listed: they are the ones not worth a second look. A row opens that map
+ * on the Maps screen.
+ */
+function mapFormCard(ctx: ViewContext, trends: MapTrend[]): HTMLElement {
+  const better = trends.filter((t) => t.trend === 'improving');
+  const worse = trends.filter((t) => t.trend === 'declining').reverse();
+  const steady = trends.length - better.length - worse.length;
+  const row = (t: MapTrend): HTMLElement => h('div', {
+    class: 'row is-clickable', style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' },
+    title: `Show ${t.key} on Maps`,
+    ...clickableRow(() => ctx.navigate('maps', { highlight: t.key })),
+  },
+    h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, t.key),
+    h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${pct(t.earlier)} → ${pct(t.recent)} · ${t.games}g`),
+    h('span', { class: 'mono', style: { fontSize: '12px', width: '56px', textAlign: 'right', color: t.pts > 0 ? PALETTE.win : PALETTE.loss } }, `${signed(Math.round(t.pts))} pts`),
+  );
+  const column = (title: string, list: MapTrend[], empty: string): HTMLElement => h('div', null,
+    h('div', { class: 'field-label' }, title),
+    list.length
+      ? h('div', { class: 'stack', style: { gap: '2px' } }, ...list.map(row))
+      : h('div', { class: 'hint' }, empty),
+  );
+  return card({ title: 'Map form', sub: 'recent half of each map\'s games vs the earlier half · 6+ games' },
+    trends.length
+      ? h('div', null,
+          h('div', { class: 'grid-2' },
+            column('Getting better', better, 'No map is trending up yet.'),
+            column('Getting worse', worse, 'No map is trending down.'),
+          ),
+          steady > 0
+            ? h('div', { class: 'hint', style: { marginTop: '10px' } }, `${steady} ${steady === 1 ? 'map is' : 'maps are'} holding steady (within ±5 pts).`)
+            : null,
+        )
+      : h('div', { class: 'hint' }, 'Needs a map with 6+ games in this range to compare its recent games with earlier ones.'),
   );
 }
 

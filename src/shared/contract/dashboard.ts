@@ -7,7 +7,7 @@ import type { Role, Result, MatchParty } from '../../core/model';
 import type { RankPosition } from '../../core/rank/types';
 import type { RankSeriesPoint } from '../../core/rank/series';
 import type { RankAdjustmentMark } from '../../core/rank/adjustments';
-import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit } from '../../core/analytics';
+import type { WinLoss, Group, FocusItem, FocusEntry, HeroSummary, PerformanceStats, SessionDebrief, SessionSummary, Streak, StreakStats, TargetGrade, TrendGroup, Momentum, ScoreSplit, MapTrend } from '../../core/analytics';
 import type { MentalSummary, MatchFlagKey } from '../../core/mental';
 import type { MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide } from '../../core/mentalAnalytics';
 import type { PracticeSummary } from '../../core/practice';
@@ -332,6 +332,8 @@ export interface DashboardData {
   calendar: CalendarDay[];
   /** Map-only ranking that annotates the Overview scatter ("Top priority" callout). */
   focusMaps: FocusItem[];
+  /** Every map's recent-half vs earlier-half winrate (Trends › Maps), most-improved first; maps under the split floor are omitted. */
+  mapTrends: MapTrend[];
   /**
    * How many distinct maps have reached `MAP_MIN_GAMES` in the filtered range
    * (F4) — the honest gate behind Focus's and Overview's empty states, so

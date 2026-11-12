@@ -2,13 +2,12 @@
 import { h } from '../dom';
 import type { DashboardData, Group, ScoreSplit } from '../../../src/shared/contract';
 import { MAP_MIN_GAMES, modeGroups, splitUnknownMap } from '../../../src/core/analytics';
-import { makeMapMode, makeMapActive, type MapModeResolver } from '../../../src/core/masterData';
+import { makeMapMode, type MapModeResolver } from '../../../src/core/masterData';
 import { fmt, int, pct, signed } from '../format';
 import { wrColor, CATEGORICAL, OTHER_COLOR } from '../theme';
 import { donutChart, horizontalBars, type DonutSlice } from '../charts/plots';
 import { card, chip, statBar } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
-import { trendArrow } from '../components/trendArrow';
 import { clickableRow } from '../components/clickableRow';
 import { prefs } from '../prefs';
 import { store } from '../store';
@@ -23,7 +22,6 @@ let scrollToRanking = false;
 export function maps(ctx: ViewContext): HTMLElement {
   const d = ctx.data;
   const mapModeOf = makeMapMode(d.masterData.maps);
-  const isMapActive = makeMapActive(d.masterData.maps);
   const minMapGames = prefs.get('minMapGames') ?? MAP_MIN_GAMES;
   const modeFilter = prefs.get('mapModeFilter');
   // 'Unknown' (a game GEP never reported a map for) is a placeholder, not a
@@ -128,7 +126,6 @@ export function maps(ctx: ViewContext): HTMLElement {
       initialSort: { key: 'winrate', dir: -1 },
     }, horizontalBars(ranked.map((m) => ({
       label: m.key, winrate: m.winrate, games: m.games,
-      meta: mapMeta(m, d, mapModeOf, isMapActive),
       dimmed: floorActive && m.games < effectiveMinGames,
     })))),
   );
@@ -189,31 +186,6 @@ function modeBestWorst(
   if (!pool.length) return {};
   const sorted = [...pool].sort((a, b) => b.winrate - a.winrate);
   return { best: sorted[0].key, worst: sorted[sorted.length - 1].key };
-}
-
-/**
- * A ranking row's extra small badges (H4) — a trend arrow (Focus's own per-map
- * read, absent for a map with too few games to split into halves), the
- * average self-rating next to it, a ⚑ when an active target is linked to this
- * map, and a dimmed 'out of pool' tag when master data marks it inactive.
- * Renderer-side joins on map key only — no core/contract change.
- */
-function mapMeta(m: Group, d: DashboardData, mapModeOf: MapModeResolver, isMapActive: (name: string) => boolean): Node[] {
-  const nodes: Node[] = [];
-  const entry = d.focusItems.find((e) => e.dimension === 'map' && e.key === m.key);
-  const arrow = entry?.trend ? trendArrow(entry.trend) : null;
-  if (arrow) nodes.push(arrow);
-  if (entry?.progress) {
-    const p = entry.progress;
-    const title = p.deltaPts !== undefined
-      ? `Tracking "${p.targetName}" — ${signed(p.deltaPts)} pts since you flagged it`
-      : `Tracking "${p.targetName}"`;
-    nodes.push(h('span', { style: { fontSize: '10.5px' }, title }, '⚑'));
-  }
-  if (!isMapActive(m.key)) {
-    nodes.push(h('span', { class: 'u-dim', style: { fontSize: '9.5px' }, title: 'Not in the current competitive map pool' }, 'out of pool'));
-  }
-  return nodes;
 }
 
 /**

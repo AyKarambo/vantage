@@ -259,6 +259,16 @@ export type FocusDimension = 'map' | 'hero' | 'role';
 /** Recent-half vs earlier-half winrate verdict for a focus entry's games. */
 export type FocusTrend = 'improving' | 'flat' | 'declining';
 
+/** One map's recent-half vs earlier-half winrate (Trends › Maps). Winrates are 0..1; `pts` is the point delta behind `trend`. */
+export interface MapTrend {
+  key: string;
+  games: number;
+  earlier: number;
+  recent: number;
+  pts: number;
+  trend: FocusTrend;
+}
+
 /**
  * Feedback for a focus entry the player is already working on via a linked
  * improvement target — "is focusing this actually helping?".

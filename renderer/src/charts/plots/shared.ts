@@ -13,13 +13,6 @@ export interface WrPoint {
   /** Trailing rolling winrate (C6), precomputed in core (`rollingWinrate`) — calendar-true, unlike a naive last-N-points mean. */
   rolling?: number;
   /**
-   * Extra small badges {@link horizontalBars} renders on their own line under
-   * the bar (H4 — Maps' per-row trend/rating/target/pool-status reads). The
-   * caller builds whatever nodes it wants; this module stays data-shape-
-   * agnostic about what they mean.
-   */
-  meta?: Node[];
-  /**
    * Renders this row muted, with its bar in a neutral colour instead of the
    * winrate tint (F4) — below whatever sample floor the caller is applying,
    * so it stays visible (no cliff at the threshold the moment a sibling row
