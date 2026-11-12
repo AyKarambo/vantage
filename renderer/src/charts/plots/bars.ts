@@ -34,7 +34,6 @@ export function horizontalBars(data: WrPoint[], opts: { compact?: boolean; minGa
         h('div', { class: 'hbar-label', title: d.label }, d.label),
         h('div', { class: 'hbar-track' }, fill, marker),
         h('div', { class: 'hbar-value' }, `${pct(d.winrate)}  ${d.games}g`),
-        d.meta?.length ? h('div', { class: 'hbar-meta' }, ...d.meta) : null,
       );
       tips.attach(row, dimmed
         ? `${d.label} · ${d.games} games (small sample)`

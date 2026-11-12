@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { focusEntries, focusTrend, heroForm, linkFocusTargets, qualifiedMapCount, type GameRecord } from '../src/core/analytics';
+import { focusEntries, focusTrend, mapTrends, heroForm, linkFocusTargets, qualifiedMapCount, type GameRecord } from '../src/core/analytics';
 import { NOTION_IMPROVEMENT_TARGET_ID, type AuthoredTarget } from '../src/core/targets';
 import { computeDashboard } from '../src/core/dashboardData';
 import type { Result } from '../src/core/model';
@@ -566,5 +566,32 @@ describe('dashboard focusItems payload', () => {
     const ana = d.heroStats.find((h) => h.hero === 'Ana');
     expect(ana?.trend).toBe('improving');
     expect(ana?.form?.results).toEqual(['Loss', 'Loss', 'Loss', 'Loss', 'Win', 'Win', 'Win']);
+  });
+});
+
+describe('mapTrends (Trends › Maps)', () => {
+  const at = (i: number, result: Result, map: string): GameRecord =>
+    game({ result, map, timestamp: T0 + i * HOUR });
+
+  it('reports each map\'s earlier vs recent winrate, most-improved first, skipping small samples and Unknown', () => {
+    const games = [
+      ...[0, 1, 2].map((i) => at(i, 'Loss', 'Busan')), ...[3, 4, 5].map((i) => at(i, 'Win', 'Busan')),
+      ...[0, 1, 2].map((i) => at(i, 'Win', 'Ilios')), ...[3, 4, 5].map((i) => at(i, 'Loss', 'Ilios')),
+      ...[0, 1, 2, 3, 4, 5].map((i) => at(i, 'Win', 'Unknown')),
+      ...[0, 1, 2].map((i) => at(i, 'Win', 'Oasis')),
+    ];
+    expect(mapTrends(games)).toEqual([
+      { key: 'Busan', games: 6, earlier: 0, recent: 1, pts: 100, trend: 'improving' },
+      { key: 'Ilios', games: 6, earlier: 1, recent: 0, pts: -100, trend: 'declining' },
+    ]);
+  });
+});
+
+describe('byMapType leaves the Unknown map out', () => {
+  it('never reports an "Unknown" game mode', () => {
+    const games = [game({ result: 'Win', map: 'Unknown' }), game({ result: 'Loss', map: 'Busan' })];
+    const d = computeDashboard(games, { days: 'all' }, { active: false, preference: 'off', hasRealHistory: true });
+    expect(d.byMapType.map((g) => g.key)).toEqual(['Control']);
+    expect(d.overall.games).toBe(2);
   });
 });

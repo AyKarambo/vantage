@@ -5,9 +5,9 @@
  */
 import {
   byAccount, byHero, byMap, byRole, byGroupSize, byPartyMember, byDuration, scoreSplits, bySessionPosition, byTimeOfDay, calendar, currentSession, dayKey,
-  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
+  focusBy, focusEntries, focusGamesFor, focusTrend, heroForm, heroStats, linkFocusTargets, mapTrends, performanceStats, qualifiedMapCount, sessionDebrief, sessionHistory, streak, streakStats,
   trend, rollingWinrate, windowCompare, winLoss, groupBy, srSum,
-  decided, type GameRecord,
+  decided, UNKNOWN_MAP, type GameRecord, type Group,
 } from './analytics';
 import { effectiveGroupSize } from './party';
 import { isCompetitive } from './matchFilter';
@@ -221,7 +221,7 @@ export function computeDashboard(
         label: previousRange.label,
         overall: winLoss(prevGames),
         byRole: byRole(prevGames),
-        byMapType: groupBy(prevGames, (g) => mapModeOf(g.map), { suppressed }),
+        byMapType: byGameMode(prevGames, mapModeOf, suppressed),
         heroStats: heroStats(prevGames, { mapModeOf, suppressed }),
       };
     })()
@@ -309,7 +309,8 @@ export function computeDashboard(
     // only the SR sum excludes placement-run matches, whose swing isn't
     // comparable to a normal match's (same stance sessionHistory already takes).
     byMap: byMap(games, { suppressed }),
-    byMapType: groupBy(games, (g) => mapModeOf(g.map), { suppressed }),
+    byMapType: byGameMode(games, mapModeOf, suppressed),
+    mapTrends: mapTrends(games),
     byHero: byHero(games).filter((h) => h.games >= 2).slice(0, 14),
     // Party size, game length and score-margin splits (H9) — previously
     // captured/stored but never surfaced.
@@ -1001,6 +1002,15 @@ const distinct = <T>(arr: T[]): T[] => [...new Set(arr)];
  * — tracks with an anchor but nothing played in the active window are simply
  * absent, same convention as every other "in range" map here.
  */
+/**
+ * Winrate per game mode. A game GEP never reported a map for ('Unknown') has
+ * no mode either, so it is left out rather than shown as an "Unknown" mode —
+ * the same stance the Maps screen takes; it still counts in every total.
+ */
+function byGameMode(games: GameRecord[], mapModeOf: MapModeResolver, suppressed: ReadonlySet<string>): Group[] {
+  return groupBy(games.filter((g) => g.map !== UNKNOWN_MAP), (g) => mapModeOf(g.map), { suppressed });
+}
+
 function rankTrendOf(
   all: GameRecord[],
   inRange: GameRecord[],

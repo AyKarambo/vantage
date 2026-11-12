@@ -3,7 +3,7 @@
 // Vocabulary types
 export type {
   HeroStat, MatchMental, CommsTone, TargetGrade, MatchReview, GameRecord,
-  WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry,
+  WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry, MapTrend,
   HeroSummary, HeroForm, Streak, TrendGroup, Momentum,
 } from './types';
 
@@ -16,7 +16,7 @@ export {
 export type { WeightedGame, ScoreSplit } from './grouping';
 
 // Cross-dimension focus ranking (the Focus screen's "work on these" hub)
-export { focusEntries, focusTrend, focusGamesFor, heroForm, linkFocusTargets, qualifiedMapCount, MAP_MIN_GAMES } from './focus';
+export { focusEntries, focusTrend, mapTrends, focusGamesFor, heroForm, linkFocusTargets, qualifiedMapCount, MAP_MIN_GAMES } from './focus';
 export type { FocusEntriesOptions } from './focus';
 
 // Per-hero stat rollups (per-10 over played time, time-share game credit)

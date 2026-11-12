@@ -255,9 +255,9 @@ account's per-role lines beneath it.
   actual round tally (H9). The old fixed
   3-game floor is now a **min. games** chip row (`1+ · 3+ · 5+`, same pattern as Heroes/Players),
   the subtitle says how many maps that floor is hiding, and the ranking's **Table** view gains a
-  **Mode** column. Each bar can carry a small **▴/▾ trend** read, your **RTG** on that map, a
-  **⚑** when an active target is tracking it, and a dimmed **out of pool** tag — all joined onto
-  data the dashboard already had. A cross-link from anywhere else in the app (the Overview scatter,
+  **Mode** column. Rows stay one bar each — which maps are getting better or worse lives on
+  **Trends › Maps** (*Map form*). Games without a recorded map ('Unknown') never show up as a
+  game mode, here or on Trends. A cross-link from anywhere else in the app (the Overview scatter,
   a Focus row, a hero drawer's By-map rows, the palette) always lands on the map it points at now,
   even if it's below the current floor or outside the current mode filter — that filter state is
   never silently changed, just set aside for the one map you just asked to see.
@@ -318,7 +318,11 @@ account's per-role lines beneath it.
   one game, F6) plus **when-you-tilt triggers** — by time of day, right after a loss vs
   a win, and by map — flag counts with leavers split by team, and a **break-reminder setting**
   (on/off + loss threshold) that fires a tray notification after N consecutive losses.
-- **Trends** — **rank over time**, above everything else: one line per tracked (account, role)
+- **Trends** — split into four tabs (remembered between visits): **Progress** (rank, winrate
+  over time, by season), **Maps** (by game mode, close games, and **Map form** — every map with
+  6+ games, its recent half vs its earlier half, listed as *getting better* / *getting worse*;
+  click one to open it on Maps), **Lineup** (role, account, solo vs grouped) and **Patterns**
+  (time of day, game # in session, game length). **Rank over time** leads Progress: one line per tracked (account, role)
   you have a rank anchor for, plotted by real date so a stretch with no known rank (an open
   placement run, a pre-reset match) shows as a real gap rather than a guessed interpolation; a
   hollow point marks a reconstructed (rather than recorded or replayed) rank, and a small diamond
