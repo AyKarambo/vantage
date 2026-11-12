@@ -3,7 +3,7 @@
  * account, hero, mode or time bucket — the building blocks of every dashboard
  * chart. Pure and I/O-free — consumed by both main and the browser preview.
  */
-import type { GameRecord, WinLoss, Group, FocusItem, TrendGroup, Momentum } from './types';
+import type { GameRecord, WinLoss, Group, FocusItem, TrendGroup, Momentum, GamePoint } from './types';
 import { effectiveGroupSize, partyKey } from '../party';
 import { heroTimeShares, parseScore, ROUND_TALLY_MODES, type MapModeResolver } from '../playedTime';
 
@@ -349,6 +349,21 @@ export function dayKey(ts: number): string {
  * mode, 7 ISO weeks in weekly mode) of the current bucket — a real calendar
  * window, weighted by the games actually behind it.
  */
+/**
+ * One point per game, oldest first, each carrying the winrate over its last
+ * `window` games (itself included) — the per-map line on Trends › Maps, where
+ * a calendar-day window would sit empty most days for a single map.
+ */
+export function rollingByGame(games: GameRecord[], window = 5): GamePoint[] {
+  const sorted = [...games].sort((a, b) => a.timestamp - b.timestamp);
+  return sorted.map((g, i) => ({
+    timestamp: g.timestamp,
+    date: dayKey(g.timestamp),
+    result: g.result,
+    rolling: winLoss(sorted.slice(Math.max(0, i - window + 1), i + 1)).winrate,
+  }));
+}
+
 export function rollingWinrate(buckets: Group[], bucket: 'day' | 'week', window = 7): TrendGroup[] {
   const periodMs = (bucket === 'day' ? 1 : 7) * 86_400_000;
   const starts = buckets.map((b) => bucketStart(b.key, bucket));

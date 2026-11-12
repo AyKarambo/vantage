@@ -1,6 +1,6 @@
 /** Trends — four tabs: Progress (rank, winrate over time, seasons), Maps (game modes, map form, close games), Lineup (role, account, who you queue with) and Patterns (when and how long you play). Objective, tracked facts only (#321): the self-rating card lives on Mental. */
 import { h } from '../dom';
-import type { Group, MapTrend, Momentum, Role, RankSeriesPoint, ScoreSplit, StreakStats, TrendGroup } from '../../../src/shared/contract';
+import type { Group, MapFormEntry, Momentum, Role, RankSeriesPoint, ScoreSplit, SeasonBreakdown, StreakStats, TrendGroup } from '../../../src/shared/contract';
 import { sessionFade, bucketStart, decided } from '../../../src/core/analytics';
 import { shortRankLabelOf } from '../../../src/core/rankDisplay';
 import { roleLabel, signed } from '../format';
@@ -8,6 +8,7 @@ import { horizontalBars, lineChart, rankChart, type WrPoint, type RankSeries } f
 import { card, segmented, statBox, unlockHint } from '../components/primitives';
 import { chartCard } from '../components/chartCard';
 import { clickableRow } from '../components/clickableRow';
+import { inlineLink } from '../components/inlineLink';
 import { PALETTE, wrColor } from '../theme';
 import { pct } from '../format';
 import { prefs } from '../prefs';
@@ -118,25 +119,32 @@ function patterns(ctx: ViewContext): Node[] {
  * two winrates themselves ("50% → 85%"), not a bare delta — a "+35" read like
  * rank points. Flat maps are only counted, not listed. A map under
  * {@link MAP_FORM_SOLID_GAMES} renders dimmed: at 3 vs 3 games one result
- * swings a half by 33%. A row opens that map on the Maps screen.
+ * swings a half by 33%. Clicking a row expands that map's own detail below
+ * the lists (game-by-game winrate, by season); clicking it again closes it.
  */
 /** Games a Map form row needs before it reads as solid rather than faded (5 vs 5). */
 const MAP_FORM_SOLID_GAMES = 10;
 
-function mapFormCard(ctx: ViewContext, trends: MapTrend[]): HTMLElement {
+/** The Map form row currently expanded — view-local, cleared when its map leaves the list. */
+let openMapForm: string | undefined;
+
+function mapFormCard(ctx: ViewContext, trends: MapFormEntry[]): HTMLElement {
+  const open = trends.find((t) => t.key === openMapForm);
   const better = trends.filter((t) => t.trend === 'improving');
   const worse = trends.filter((t) => t.trend === 'declining').reverse();
   const steady = trends.length - better.length - worse.length;
-  const row = (t: MapTrend): HTMLElement => {
+  const row = (t: MapFormEntry): HTMLElement => {
     const earlierGames = Math.floor(t.games / 2);
     const thin = t.games < MAP_FORM_SOLID_GAMES;
+    const isOpen = t === open;
     return h('div', {
-      class: 'row is-clickable',
+      class: `row is-clickable${isOpen ? ' is-active' : ''}`,
       style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', opacity: thin ? '0.55' : '1' },
-      title: `${t.key}: ${pct(t.earlier)} winrate in your first ${earlierGames} games, ${pct(t.recent)} in your last ${t.games - earlierGames}${thin ? ' — small sample' : ''}. Click to show it on Maps.`,
-      ...clickableRow(() => ctx.navigate('maps', { highlight: t.key })),
+      title: `${t.key}: ${pct(t.earlier)} winrate in your first ${earlierGames} games, ${pct(t.recent)} in your last ${t.games - earlierGames}${thin ? ' — small sample' : ''}. Click for details.`,
+      ...clickableRow(() => { openMapForm = isOpen ? undefined : t.key; store.rerender(); }),
     },
-      h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, t.key),
+      h('span', { class: 'u-dim', style: { fontSize: '10px', width: '8px' } }, isOpen ? '▾' : '▸'),
+      h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1', fontWeight: isOpen ? '600' : '400' } }, t.key),
       h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${t.games}g`),
       h('span', { class: 'mono', style: { fontSize: '12px', width: '96px', textAlign: 'right' } },
         h('span', { class: 'u-dim' }, `${pct(t.earlier)} → `),
@@ -144,7 +152,7 @@ function mapFormCard(ctx: ViewContext, trends: MapTrend[]): HTMLElement {
       ),
     );
   };
-  const column = (title: string, list: MapTrend[], empty: string): HTMLElement => h('div', null,
+  const column = (title: string, list: MapFormEntry[], empty: string): HTMLElement => h('div', null,
     h('div', { class: 'field-label' }, title),
     list.length
       ? h('div', { class: 'stack', style: { gap: '2px' } }, ...list.map(row))
@@ -160,8 +168,30 @@ function mapFormCard(ctx: ViewContext, trends: MapTrend[]): HTMLElement {
           steady > 0
             ? h('div', { class: 'hint', style: { marginTop: '10px' } }, `${steady} ${steady === 1 ? 'map is' : 'maps are'} holding steady (winrate moved less than 5%).`)
             : null,
+          open ? mapFormDetail(ctx, open) : null,
         )
       : h('div', { class: 'hint' }, 'Needs a map with 6+ games in this range to compare its recent games with earlier ones.'),
+  );
+}
+
+/** One map's expanded Map form detail: its game-by-game winrate line over the range, then its record per season. */
+function mapFormDetail(ctx: ViewContext, t: MapFormEntry): HTMLElement {
+  const resultOf = (wr: number): string => (wr === 1 ? 'Win' : wr === 0 ? 'Loss' : 'Draw');
+  const points: WrPoint[] = t.timeline.map((p) => ({
+    label: p.date, winrate: p.result === 'Win' ? 1 : p.result === 'Loss' ? 0 : 0.5, games: 1, rolling: p.rolling,
+  }));
+  return h('div', { style: { marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border)' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+      h('div', { style: { fontWeight: '600', fontSize: '13.5px' } }, t.key),
+      inlineLink('Open on Maps ›', { onClick: () => ctx.navigate('maps', { highlight: t.key }) }),
+    ),
+    h('div', { class: 'field-label', style: { marginTop: '10px' } }, 'Winrate over time · a dot per game, line = your last 5 games'),
+    lineChart(points, undefined, ctx.data.masterData.seasons, (p) => `${p.label} · ${resultOf(p.winrate)} · last 5: ${pct(p.rolling ?? 0)}`),
+    t.bySeason.length
+      ? h('div', { style: { marginTop: '12px' } },
+          h('div', { class: 'field-label' }, 'By season · all your history on this map'),
+          seasonRows(ctx, t.bySeason))
+      : null,
   );
 }
 
@@ -354,19 +384,24 @@ function bySeasonCard(ctx: ViewContext): HTMLElement | null {
   const seasons = ctx.data.bySeason.filter((s) => s.games > 0);
   if (seasons.length < 2) return null;
   return card({ title: 'By season', sub: 'across all your history · click a season to jump to it' },
-    h('div', { class: 'stack', style: { gap: '2px', marginTop: '4px' } },
-      ...seasons.map((s) => h('div', {
-        class: 'row is-clickable', style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' },
-        ...clickableRow(() => ctx.setFilter({ days: { season: s.id } })),
-      },
-        h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, s.label),
-        s.srNet !== undefined
-          ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(Math.round(s.srNet))}%`)
-          : null,
-        h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${s.wins}W ${s.losses}L`),
-        h('span', { class: 'mono', style: { fontSize: '12.5px', color: wrColor(s.winrate), width: '42px', textAlign: 'right' } }, pct(s.winrate)),
-      )),
-    ),
+    seasonRows(ctx, seasons),
+  );
+}
+
+/** One row per season (label, ±SR, W-L, winrate); a click jumps the filter to that season. Shared by By season and the Map form detail. */
+function seasonRows(ctx: ViewContext, seasons: SeasonBreakdown[]): HTMLElement {
+  return h('div', { class: 'stack', style: { gap: '2px', marginTop: '4px' } },
+    ...seasons.map((s) => h('div', {
+      class: 'row is-clickable', style: { padding: '6px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' },
+      ...clickableRow(() => ctx.setFilter({ days: { season: s.id } })),
+    },
+      h('span', { class: 'row-main', style: { fontSize: '12.5px', flex: '1' } }, s.label),
+      s.srNet !== undefined
+        ? h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${signed(Math.round(s.srNet))}%`)
+        : null,
+      h('span', { class: 'u-dim mono', style: { fontSize: '11px' } }, `${s.wins}W ${s.losses}L`),
+      h('span', { class: 'mono', style: { fontSize: '12.5px', color: wrColor(s.winrate), width: '42px', textAlign: 'right' } }, pct(s.winrate)),
+    )),
   );
 }
 

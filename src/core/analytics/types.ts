@@ -237,6 +237,16 @@ export interface TrendGroup extends Group {
   rolling: number;
 }
 
+/** One game on a per-game winrate line (Trends › Maps detail), oldest first. */
+export interface GamePoint {
+  timestamp: number;
+  /** Local-agnostic YYYY-MM-DD of the game, same key `dayKey` gives. */
+  date: string;
+  result: Result;
+  /** Winrate over this game and the ones just before it (see `rollingByGame`'s window). */
+  rolling: number;
+}
+
 /** The winrate-chart momentum read (C6): a trailing window compared against the one before it. */
 export interface Momentum {
   /** Window length in days behind each side (7 daily, 28 = 4 ISO weeks in weekly mode). */

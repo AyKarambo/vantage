@@ -15,7 +15,7 @@ export type {
   WinLoss, Group, FocusItem, FocusDimension, FocusTrend, FocusProgress, FocusEntry,
   HeroSummary, MatchMental, CommsTone, MatchReview, TargetGrade, Streak, StreakStats,
   DayGroup, SessionDebrief, SessionSummary, PerformanceStats, PerformanceBucket, PerformanceTrendPoint,
-  TrendGroup, Momentum, ScoreSplit, MapTrend,
+  TrendGroup, Momentum, ScoreSplit, MapTrend, GamePoint,
 } from '../../core/analytics';
 export type { MentalSummary } from '../../core/mental';
 export type { ProAccess, ProTier, EntitlementSourceKind } from '../../core/entitlement';
@@ -52,7 +52,7 @@ export { FACTOR_LEVELS, FACTOR_LABELS } from '../../core/practice';
 // Dashboard payloads
 export type {
   DashboardFilters, Session, CalendarDay, MatchRow, MatchFlagKey, DashboardData, HeroDetail,
-  PendingMatch, PendingChangedPayload, MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide, PreviousWindow, SeasonBreakdown,
+  PendingMatch, PendingChangedPayload, MentalCosts, RatedSide, TiltBucket, TiltPositionBucket, TiltTrendPoint, WinrateSide, PreviousWindow, SeasonBreakdown, MapFormEntry,
 } from './dashboard';
 
 // Editable master data (heroes/maps/seasons)
